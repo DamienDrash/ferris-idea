@@ -1,0 +1,8 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Run maven" type="Application" factoryName="Application">
+    <option name="MAIN_CLASS_NAME" value="com.example.App" />
+    <module name="mvn" />
+    <option name="PROGRAM_PARAMETERS" value="one two" />
+    <option name="VM_PARAMETERS" value="-Dx=1" />
+  </configuration>
+</component>

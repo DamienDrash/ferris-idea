@@ -1,0 +1,53 @@
+# CI of the public repository. Rules: GitHub-hosted runners only, no secrets, read-only token, no
+# pull_request_target. Every `uses:` names a full commit id, with its release tag in a comment
+# (actions/checkout v4.4.0, looked up on 2026-11-16).
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: System libraries of the window toolkit
+        run: sudo apt-get update -q && sudo apt-get install -y -q libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libfontconfig-dev libfreetype-dev libx11-xcb-dev libxcb1-dev libvulkan-dev
+      - run: rustup show
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: scripts/check-docs.sh
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: System libraries of the window toolkit
+        run: sudo apt-get update -q && sudo apt-get install -y -q libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libfontconfig-dev libfreetype-dev libx11-xcb-dev libxcb1-dev libvulkan-dev
+      - run: rustup show
+      # Tests that need a language server, a debug adapter or a database return early without
+      # them, so a green run does not prove those.
+      - run: cargo test --workspace
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - run: rustup show
+      - run: cargo build -p idecraft
+      - run: target/debug/idecraft --version

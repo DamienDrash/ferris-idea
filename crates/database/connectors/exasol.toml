@@ -1,0 +1,12 @@
+format = 1
+id = "exasol"
+name = "Exasol"
+family = "odbc"
+category = "analytics"
+status = "beta"
+note = "Listed for the ODBC route (ADR-0020), which IDECraft does not have yet; not connectable."
+aliases = ["exa"]
+
+[connection]
+schemes = ["exasol"]
+default_port = 8563

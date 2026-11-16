@@ -1,0 +1,43 @@
+[package]
+name = "idecraft-pairing"
+description = "The paired channel of IDECraft: hybrid Noise handshake with ML-KEM-1024, encrypted channel, key store, pairing and the listener of `idecraft serve --pair` (SPEC-0321)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+getrandom = "0.3"
+hkdf = "0.12"
+idecraft-session.workspace = true
+keyring.workspace = true
+# Pre-release, so pinned exactly (ADR-0025 section 10).
+libcrux-ml-kem = { version = "=0.0.11", default-features = false, features = ["mlkem1024"] }
+serde.workspace = true
+serde_json = "1"
+sha2 = "0.10"
+snow = "0.10"
+thiserror.workspace = true
+toml.workspace = true
+zeroize = "1"
+
+[target."cfg(unix)".dependencies]
+libc = "0.2"
+nix = { version = "0.28", default-features = false, features = ["user", "fs"] }
+
+# Secret Service over D-Bus in pure Rust (zbus), `SPEC-0321` behaviour 20. The same release and
+# runtime feature as GPUI's Linux build (async-io, not tokio: oo7 refuses both at once), so the
+# window links one copy and the backend adds nothing GPUI does not already bring.
+[target.'cfg(target_os = "linux")'.dependencies]
+futures-lite = "2"
+oo7 = { version = "0.5", default-features = false, features = ["async-std", "native_crypto"] }
+
+[dev-dependencies]
+curve25519-dalek = "4"
+ml-kem = { version = "0.3", features = ["getrandom"] }
+tempfile = "3"
+
+[lints]
+workspace = true

@@ -1,0 +1,13 @@
+format = 1
+id = "starrocks"
+name = "StarRocks"
+family = "mysql"
+category = "analytics"
+status = "beta"
+note = "Speaks the MySQL protocol on the FE query port; catalogue not verified."
+aliases = ["starrocks fe"]
+
+[connection]
+schemes = ["starrocks"]
+default_port = 9030
+default_user = "root"

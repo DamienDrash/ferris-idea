@@ -1,0 +1,27 @@
+name: Shared file
+description: Share an IDECraft file (run configuration, keymap, theme, data sources, settings, connector).
+labels: [shared-file]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        IDECraft filled in this form with the file's text (SPEC-0303). Check it before you submit:
+        exported files leave out passwords, tokens and agent rights, but read it once yourself.
+  - type: input
+    id: kind
+    attributes:
+      label: Kind
+      description: The `kind` of the file's `[idecraft]` table.
+    validations:
+      required: true
+  - type: textarea
+    id: content
+    attributes:
+      label: File
+      description: The file's text. If it is empty, attach the file (renamed to `.toml` if GitHub refuses the extension).
+      render: toml
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: What the file is for, and anything others should know.

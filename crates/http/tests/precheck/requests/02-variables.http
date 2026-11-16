@@ -1,0 +1,42 @@
+# Variables and environment files (SPEC-0046 behaviour 3, SPEC-0102). Environment "local".
+
+@base = http://{{host}}:{{port}}
+@greeting = file-greeting
+@composed = {{api}}-{{where}}
+
+### environment values
+GET {{base}}/{{api}}/env
+X-Where: {{where}}
+X-Flag: {{flag}}
+X-Port: {{port}}
+
+### private file wins over public file
+GET {{base}}/echo/private-wins
+X-Both: {{both}}
+
+### file variable wins over environment
+GET {{base}}/echo/file-wins
+X-Greeting: {{greeting}}
+
+### variable refers to variables
+GET {{base}}/echo/composed
+X-Composed: {{composed}}
+
+### private token in a header
+GET {{base}}/echo/token
+Authorization: Bearer {{token}}
+
+### private token in the url
+GET {{base}}/echo/token-in-url?access_token={{token}}
+
+### missing variable is not sent
+GET {{base}}/echo/missing
+X-Missing: {{does_not_exist}}
+
+### nested object is not a variable
+GET {{base}}/echo/nested
+X-Nested: {{nested}}
+
+### spaces inside the braces
+GET {{base}}/echo/spaces
+X-Where: {{ where }}

@@ -1,0 +1,13 @@
+format = 1
+id = "azure-sql-mi"
+name = "Azure SQL Managed Instance"
+family = "sqlserver"
+category = "cloud"
+status = "beta"
+note = "Cloud only; SQL Server authentication only. Not tested."
+aliases = ["azure", "managed instance"]
+
+[connection]
+schemes = ["azuresql-mi"]
+default_port = 1433
+ssl = "require"

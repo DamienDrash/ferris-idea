@@ -1,0 +1,15 @@
+format = 1
+id = "mongodb"
+name = "MongoDB"
+family = "mongodb"
+category = "document"
+status = "supported"
+aliases = ["mongo", "nosql", "document"]
+homepage = "https://www.mongodb.com/"
+tested = "8.2.12 (official container image mongo:8.2)"
+
+[connection]
+schemes = ["mongodb", "mongodb+srv"]
+default_port = 27017
+default_database = "test"
+fields = ["host", "port", "database", "user", "password", "ssl"]

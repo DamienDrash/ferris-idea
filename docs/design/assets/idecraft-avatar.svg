@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="IDECraft avatar">
+  <!-- GitHub avatar, brand v1.1.5: Primary Master B symbol (32 grid x 8) centred on background-primary; visible symbol 192 px, safe for circular crops. -->
+  <rect width="512" height="512" fill="#2E3440"/>
+  <g transform="translate(128 128) scale(8)">
+    <path d="M28 4H4V28H28V23H10V9H28V4Z" fill="#ECEFF4"/>
+    <path d="M15 12H19V20H15V12Z" fill="#88C0D0"/>
+  </g>
+</svg>

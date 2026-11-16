@@ -1,0 +1,23 @@
+[package]
+name = "idecraft-uidriver"
+description = "UI driver of the IDECraft window: semantic tree in AccessKit's schema, locators, auto-waiting, actions, assertions, traces and the security rules of ADR-0027 (toolkit-free)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+# The node schema of the semantic tree (ADR-0027 section 1): the version of the upstream GPUI pin
+# of spike #277, so phase 3 brings no second one. `enumn` lists the roles for locators.
+accesskit = { version = "0.24.1", features = ["enumn"] }
+regex = "1"
+serde.workspace = true
+serde_json = "1"
+
+[dev-dependencies]
+futures = "0.3"
+
+[lints]
+workspace = true

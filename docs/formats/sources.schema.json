@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Exchange file `.idcsources` (SPEC-0303). TOML; validated on import with every problem and its key path.",
+  "properties": {
+    "connection": {
+      "description": "The data sources.",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "database": {
+            "description": "Database name.",
+            "type": "string"
+          },
+          "dialect": {
+            "description": "Protocol family: postgresql, mysql, mariadb, sqlserver, oracle, sqlite, duckdb.",
+            "type": "string"
+          },
+          "host": {
+            "description": "Server host.",
+            "type": "string"
+          },
+          "id": {
+            "description": "Id of the connection.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Name shown.",
+            "type": "string"
+          },
+          "path": {
+            "description": "Database file, relative to the workspace.",
+            "type": "string"
+          },
+          "port": {
+            "description": "Server port.",
+            "maximum": 65535,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "read_only": {
+            "description": "Open read-only.",
+            "type": "boolean"
+          },
+          "ssl": {
+            "description": "TLS mode.",
+            "enum": [
+              "disable",
+              "prefer",
+              "require",
+              "verify-full"
+            ]
+          },
+          "system": {
+            "description": "Connector id (SPEC-0300).",
+            "type": "string"
+          },
+          "user": {
+            "description": "User name.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "dialect"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "idecraft": {
+      "additionalProperties": false,
+      "properties": {
+        "author": {
+          "description": "Who wrote the file.",
+          "type": "string"
+        },
+        "format": {
+          "description": "Format version; older ones are migrated when read.",
+          "maximum": 1,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "homepage": {
+          "description": "Web page of the file (https://); shown, never fetched.",
+          "type": "string"
+        },
+        "id": {
+          "description": "Stable id chosen by the author.",
+          "type": "string"
+        },
+        "kind": {
+          "const": "sources",
+          "description": "The kind of file."
+        },
+        "licence": {
+          "description": "SPDX licence expression.",
+          "type": "string"
+        },
+        "min_version": {
+          "description": "Oldest IDECraft version the author expects.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name shown in the import preview.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "format"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "idecraft",
+    "connection"
+  ],
+  "title": "IDECraft data sources (kind `sources`, format 1)",
+  "type": "object"
+}

@@ -1,0 +1,9 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="http server" type="PythonConfigurationType" factoryName="Python">
+    <option name="INTERPRETER_OPTIONS" value="-u" />
+    <option name="SCRIPT_NAME" value="http.server" />
+    <option name="PARAMETERS" value="8000" />
+    <option name="MODULE_MODE" value="true" />
+    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+  </configuration>
+</component>

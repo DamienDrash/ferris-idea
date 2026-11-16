@@ -1,0 +1,8 @@
+format = 1
+id = "mariadb"
+name = "MariaDB"
+family = "mariadb"
+category = "relational"
+status = "supported"
+tested = "MariaDB 12.3.3 (local reference server)"
+aliases = ["maria"]

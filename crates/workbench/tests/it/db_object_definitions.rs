@@ -1,0 +1,133 @@
+//! `SPEC-0089` v13 behaviour 18, headless on SQLite: the Database window lists a connection's
+//! triggers in their own folder, and Show DDL on one opens its definition read-only.
+
+#![cfg(target_os = "macos")]
+
+use gpui::{Entity, TestAppContext, VisualTestContext};
+use idecraft_workbench::WorkbenchView;
+
+fn sqlite(db: &std::path::Path, sql: &str) -> bool {
+    std::process::Command::new("sqlite3")
+        .arg(db)
+        .arg(sql)
+        .status()
+        .is_ok_and(|s| s.success())
+}
+
+/// A workspace with the SQLite connection `shop`: a table and a trigger. `None` without the
+/// `sqlite3` program.
+fn workspace() -> Option<std::path::PathBuf> {
+    let root = std::env::temp_dir().join(format!("idecraft-db-defs-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join(".idecraft")).unwrap();
+    let shop = root.join("shop.db");
+    let made = sqlite(
+        &shop,
+        "CREATE TABLE stock (sku TEXT, qty INTEGER); \
+         CREATE TRIGGER stock_check BEFORE INSERT ON stock BEGIN SELECT 1; END;",
+    );
+    if !made {
+        let _ = std::fs::remove_dir_all(&root);
+        return None;
+    }
+    std::fs::write(
+        root.join(".idecraft/connections.toml"),
+        format!(
+            "[[connection]]\nid = \"shop\"\nname = \"shop\"\ndialect = \"sqlite\"\npath = \"{}\"\n",
+            shop.display()
+        ),
+    )
+    .unwrap();
+    Some(root)
+}
+
+/// Runs the background reads until `done` holds; panics after five seconds.
+fn wait(
+    view: &Entity<idecraft_workbench::DatabaseView>,
+    cx: &mut VisualTestContext,
+    what: &str,
+    done: impl Fn(&idecraft_workbench::DatabaseView) -> bool,
+) {
+    for _ in 0..200 {
+        cx.run_until_parked();
+        if view.read_with(cx, |v, _| done(v)) {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+    panic!("{what}");
+}
+
+/// SPEC-0089 AK-28 (v13): the trigger folder with its count, the trigger with table and timing,
+/// Show DDL opens `stock_check (DDL).sql` read-only with SQLite's statement.
+#[gpui::test]
+fn show_ddl_opens_the_definition_of_a_trigger(cx: &mut TestAppContext) {
+    let Some(root) = workspace() else {
+        eprintln!("skipped: no sqlite3 program");
+        return;
+    };
+    cx.executor().allow_parking();
+    let dir = root.clone();
+    let window = cx.add_window(move |_, cx| WorkbenchView::new(&dir, cx));
+    let bench = window.root(cx).unwrap();
+    let cx = VisualTestContext::from_window(window.into(), cx).into_mut();
+    bench.update_in(cx, |b, window, cx| b.toggle_database(window, cx));
+    let view = bench
+        .read_with(cx, |b, _| b.database_view())
+        .expect("the Database window is open");
+    let row = |v: &idecraft_workbench::DatabaseView, name: &str| {
+        v.visible().iter().position(|(_, n, _)| n == name)
+    };
+    view.update(cx, |v, cx| {
+        v.expand(idecraft_workbench::db_tree_model::Node::Conn(0), cx)
+    });
+    wait(&view, cx, "shop lists its triggers", |v| {
+        row(v, "triggers").is_some()
+    });
+    view.update(cx, |v, cx| {
+        v.expand(
+            idecraft_workbench::db_tree_model::Node::Objects(0, "trigger".into()),
+            cx,
+        )
+    });
+    let (_, _, detail) = view.read_with(cx, |v, _| {
+        v.visible()
+            .into_iter()
+            .find(|(_, n, _)| n == "stock_check")
+            .expect("the trigger is listed")
+    });
+    assert_eq!(detail, "stock · BEFORE INSERT");
+    view.update(cx, |v, cx| {
+        let at = row(v, "stock_check").unwrap();
+        v.select(at, cx);
+        v.show_ddl(cx);
+    });
+    let mut opened = None;
+    for _ in 0..200 {
+        cx.run_until_parked();
+        opened = bench.read_with(cx, |b, _| b.active_path());
+        if opened
+            .as_ref()
+            .is_some_and(|p| p.ends_with("stock_check (DDL).sql"))
+        {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+    let path = opened.expect("a tab is open");
+    assert!(
+        path.ends_with("stock_check (DDL).sql"),
+        "{}",
+        path.display()
+    );
+    let editor = bench
+        .read_with(cx, |b, _| b.active_editor_entity())
+        .unwrap();
+    let text = editor.read_with(cx, |e, _| e.state.buffer.text());
+    assert!(
+        text.starts_with("CREATE TRIGGER stock_check BEFORE INSERT ON stock"),
+        "{text}"
+    );
+    assert!(editor.read_with(cx, |e, _| e.is_read_only()));
+    let _ = std::fs::remove_dir_all(&root);
+}

@@ -1,0 +1,27 @@
+name: Feature request
+description: Propose a capability for IDECraft.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the behaviour you want in your own words. Do not paste code, help texts or
+        screenshots from other products — see the [research boundaries](https://github.com/DamienDrash/idecraft/blob/main/docs/legal/README.md).
+  - type: textarea
+    id: need
+    attributes:
+      label: What you want to do
+      description: The task or workflow, from a user's point of view.
+    validations:
+      required: true
+  - type: textarea
+    id: behaviour
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+  - type: input
+    id: matrix
+    attributes:
+      label: Feature matrix row
+      description: The matching F-number in docs/research/FEATURE_MATRIX.md, if any.

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="RunManager" selected="Shell Script.hello">
+    <configuration name="hello" type="ShConfigurationType">
+      <option name="SCRIPT_TEXT" value="echo hello" />
+      <option name="EXECUTE_SCRIPT_FILE" value="false" />
+      <option name="SCRIPT_WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+    </configuration>
+  </component>
+  <component name="PropertiesComponent">secret-looking personal state</component>
+</project>

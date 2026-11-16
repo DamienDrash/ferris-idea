@@ -1,0 +1,45 @@
+@startuml
+hide circle
+skinparam linetype ortho
+
+entity "item" as item {
+    sku : TEXT <<PK>>
+    --
+    name : TEXT NOT NULL
+    unit_price_cents : INTEGER NOT NULL
+}
+
+entity "warehouse" as warehouse {
+    id : INTEGER <<PK>>
+    --
+    city : TEXT NOT NULL
+}
+
+entity "movement" as movement {
+    id : INTEGER <<PK>>
+    --
+    warehouse_id : INTEGER <<FK>> NOT NULL
+    sku : TEXT <<FK>> NOT NULL
+    delta : INTEGER NOT NULL
+    moved_at : TEXT NOT NULL
+}
+
+entity "stock" as stock {
+    warehouse_id : INTEGER <<PK>> <<FK>> NOT NULL
+    sku : TEXT <<PK>> <<FK>> NOT NULL
+    --
+    qty : INTEGER NOT NULL
+}
+
+entity "stock_value" as stock_value <<view>> {
+    warehouse_id : INTEGER
+    value_cents
+}
+
+item ||--o{ movement : sku
+warehouse ||--o{ movement : warehouse_id
+item ||--o{ stock : sku
+warehouse ||--o{ stock : warehouse_id
+stock_value ..> item : uses
+stock_value ..> stock : uses
+@enduml

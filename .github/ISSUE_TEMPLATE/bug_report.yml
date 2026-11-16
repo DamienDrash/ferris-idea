@@ -1,0 +1,37 @@
+name: Bug report
+description: Something in IDECraft does not work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        IDECraft is in alpha. Do not report security problems here; see SECURITY.md. Please check the [status](https://github.com/DamienDrash/idecraft#development-status) first.
+        Do not attach screenshots or code from other products.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. cargo run -p idecraft -- open ...
+        2. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: "idecraft --version, or git rev-parse --short HEAD"
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Operating system
+      placeholder: "macOS 27, Ubuntu 26.04, ..."

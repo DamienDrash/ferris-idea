@@ -1,0 +1,18 @@
+format = 1
+id = "timescaledb"
+name = "TimescaleDB"
+family = "postgresql"
+category = "time-series"
+status = "supported"
+tested = "TimescaleDB 2.31.0 on PostgreSQL 17.11 (local container, timescale/timescaledb:latest-pg17-oss)"
+aliases = ["timescale", "tsdb", "tiger"]
+homepage = "https://www.timescale.com/"
+
+[connection]
+schemes = ["timescaledb", "timescale"]
+default_port = 5432
+default_database = "postgres"
+default_user = "postgres"
+[sql]
+keywords = ["time_bucket", "hypertable", "continuous"]
+version_query = "SELECT version() || coalesce(' / TimescaleDB ' || (SELECT extversion FROM pg_extension WHERE extname = 'timescaledb'), '')"

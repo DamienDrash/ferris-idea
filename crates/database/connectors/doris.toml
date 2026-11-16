@@ -1,0 +1,13 @@
+format = 1
+id = "doris"
+name = "Apache Doris"
+family = "mysql"
+category = "analytics"
+status = "beta"
+note = "Speaks the MySQL protocol on the FE query port; catalogue not verified."
+aliases = ["doris", "selectdb"]
+
+[connection]
+schemes = ["doris"]
+default_port = 9030
+default_user = "root"

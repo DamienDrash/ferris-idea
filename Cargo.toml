@@ -1,0 +1,72 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+exclude = ["fuzz", "vendor/gpui"]
+
+[workspace.package]
+version = "0.18.0"
+edition = "2024"
+rust-version = "1.89"
+license = "LicenseRef-PolyForm-Shield-1.0.0"
+repository = "https://github.com/DamienDrash/idecraft"
+publish = false
+
+[workspace.dependencies]
+idecraft-core = { path = "crates/core" }
+idecraft-editor = { path = "crates/editor" }
+idecraft-languages = { path = "crates/languages" }
+idecraft-ai = { path = "crates/ai" }
+idecraft-database = { path = "crates/database" }
+idecraft-nosql = { path = "crates/nosql" }
+idecraft-mcp = { path = "crates/mcp" }
+idecraft-ui = { path = "crates/ui" }
+idecraft-workbench = { path = "crates/workbench" }
+idecraft-debugger = { path = "crates/debugger" }
+idecraft-http = { path = "crates/http" }
+idecraft-containers = { path = "crates/containers" }
+idecraft-profiler = { path = "crates/profiler" }
+idecraft-remote = { path = "crates/remote" }
+idecraft-pairing = { path = "crates/pairing" }
+idecraft-web = { path = "crates/web" }
+idecraft-serve = { path = "crates/serve" }
+idecraft-session = { path = "crates/session" }
+idecraft-host = { path = "crates/host" }
+idecraft-terminal = { path = "crates/terminal" }
+idecraft-vcs = { path = "crates/vcs" }
+idecraft-plugins = { path = "crates/plugins" }
+idecraft-formats = { path = "crates/formats" }
+idecraft-uidriver = { path = "crates/uidriver" }
+mysql_async = { version = "0.37", default-features = false, features = ["minimal-rust", "native-tls-tls"] }
+native-tls = "0.2"
+postgres-native-tls = "0.5"
+keyring = { version = "3.6", features = ["apple-native", "windows-native", "linux-native"] }
+ropey = "1.6"
+rusqlite = { version = "0.41", features = ["bundled"] }
+duckdb = { version = "1.20000", default-features = false, features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+tokio = "1"
+tokio-postgres = "0.7"
+tiberius = { version = "0.13", default-features = false, features = ["tds80", "native-tls", "chrono"] }
+tokio-util = { version = "0.7", features = ["compat"] }
+toml = "0.9"
+toml_edit = "0.25"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+
+# SHA-256 of a backend build is computed before every remote open (SPEC-0317 behaviour 4). Built
+# unoptimised, it took 29 s for a 605 MB debug build (`sha256sum`: 1.5 s), which made the remote
+# tests slow enough to time out under load; the digest is built optimised in every profile.
+[profile.dev.package.sha2]
+opt-level = 3
+
+# The UI toolkit with one addition: a pointer event delivered into a window in process, for the
+# window self-test on Linux without the X server (SPEC-0319 behaviour 20c, UISEC-9). What differs
+# from the published crate: vendor/gpui/IDECRAFT.md.
+[patch.crates-io]
+gpui = { path = "vendor/gpui" }

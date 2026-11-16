@@ -1,0 +1,6 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="outside" type="PythonConfigurationType" factoryName="Python">
+    <option name="SCRIPT_NAME" value="$PROJECT_DIR$/scripts/tool.py" />
+    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/../elsewhere" />
+  </configuration>
+</component>

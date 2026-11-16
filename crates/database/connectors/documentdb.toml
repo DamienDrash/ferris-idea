@@ -1,0 +1,13 @@
+format = 1
+id = "documentdb"
+name = "Amazon DocumentDB"
+family = "mongodb"
+category = "document"
+status = "beta"
+note = "Cloud only; speaks a subset of the MongoDB protocol, not verified. Use a mongodb:// URL with tls=true."
+aliases = ["aws", "mongo", "docdb"]
+homepage = "https://aws.amazon.com/documentdb/"
+
+[connection]
+default_port = 27017
+fields = ["host", "port", "database", "user", "password", "ssl"]

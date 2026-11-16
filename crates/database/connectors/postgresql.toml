@@ -1,0 +1,8 @@
+format = 1
+id = "postgresql"
+name = "PostgreSQL"
+family = "postgresql"
+category = "relational"
+status = "supported"
+tested = "PostgreSQL 18.6 (local reference server)"
+aliases = ["postgres", "pg"]

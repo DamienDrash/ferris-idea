@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Exchange file `.idckeymap` (SPEC-0303). TOML; validated on import with every problem and its key path.",
+  "properties": {
+    "idecraft": {
+      "additionalProperties": false,
+      "properties": {
+        "author": {
+          "description": "Who wrote the file.",
+          "type": "string"
+        },
+        "format": {
+          "description": "Format version; older ones are migrated when read.",
+          "maximum": 1,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "homepage": {
+          "description": "Web page of the file (https://); shown, never fetched.",
+          "type": "string"
+        },
+        "id": {
+          "description": "Stable id chosen by the author.",
+          "type": "string"
+        },
+        "kind": {
+          "const": "keymap",
+          "description": "The kind of file."
+        },
+        "licence": {
+          "description": "SPDX licence expression.",
+          "type": "string"
+        },
+        "min_version": {
+          "description": "Oldest IDECraft version the author expects.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name shown in the import preview.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "format"
+      ],
+      "type": "object"
+    },
+    "keymap": {
+      "additionalProperties": false,
+      "description": "The keymap.",
+      "properties": {
+        "actions": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "description": "Shortcuts by action id: \"control alt S\", \"control K, control C\", \"mouse: …\", \"gesture: dblClick shift SHIFT\"; an empty array removes them.",
+          "type": "object"
+        },
+        "name": {
+          "description": "Keymap name.",
+          "type": "string"
+        },
+        "parent": {
+          "description": "Bundled keymap it changes.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "idecraft",
+    "keymap"
+  ],
+  "title": "IDECraft keymap (kind `keymap`, format 1)",
+  "type": "object"
+}

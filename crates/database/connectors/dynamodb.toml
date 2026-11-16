@@ -1,0 +1,9 @@
+format = 1
+id = "dynamodb"
+name = "Amazon DynamoDB"
+family = "dynamodb"
+category = "key-value"
+status = "beta"
+note = "Planned (ADR-0022); not connectable yet."
+aliases = ["aws", "nosql", "partiql"]
+homepage = "https://aws.amazon.com/dynamodb/"

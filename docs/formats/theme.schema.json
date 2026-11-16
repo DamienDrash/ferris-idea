@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Exchange file `.idctheme` (SPEC-0303). TOML; validated on import with every problem and its key path.",
+  "properties": {
+    "idecraft": {
+      "additionalProperties": false,
+      "properties": {
+        "author": {
+          "description": "Who wrote the file.",
+          "type": "string"
+        },
+        "format": {
+          "description": "Format version; older ones are migrated when read.",
+          "maximum": 1,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "homepage": {
+          "description": "Web page of the file (https://); shown, never fetched.",
+          "type": "string"
+        },
+        "id": {
+          "description": "Stable id chosen by the author.",
+          "type": "string"
+        },
+        "kind": {
+          "const": "theme",
+          "description": "The kind of file."
+        },
+        "licence": {
+          "description": "SPDX licence expression.",
+          "type": "string"
+        },
+        "min_version": {
+          "description": "Oldest IDECraft version the author expects.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name shown in the import preview.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "format"
+      ],
+      "type": "object"
+    },
+    "theme": {
+      "additionalProperties": false,
+      "description": "The theme.",
+      "properties": {
+        "compact_mode": {
+          "description": "Compact mode (SPEC-0165).",
+          "type": "boolean"
+        },
+        "name": {
+          "description": "A bundled theme, e.g. \"IDECraft Light\".",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "idecraft",
+    "theme"
+  ],
+  "title": "IDECraft theme (kind `theme`, format 1)",
+  "type": "object"
+}

@@ -1,0 +1,13 @@
+format = 1
+id = "aurora-mysql"
+name = "Amazon Aurora MySQL"
+family = "mysql"
+category = "cloud"
+status = "beta"
+note = "Cloud only; MySQL-compatible. Not tested."
+aliases = ["aws", "aurora", "rds"]
+
+[connection]
+schemes = ["aurora-mysql"]
+default_port = 3306
+ssl = "require"

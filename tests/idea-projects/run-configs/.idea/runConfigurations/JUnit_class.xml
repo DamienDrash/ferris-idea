@@ -1,0 +1,7 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Test class" type="JUnit" factoryName="JUnit">
+    <module name="mvn" />
+    <option name="MAIN_CLASS_NAME" value="com.example.AppTest" />
+    <option name="TEST_OBJECT" value="class" />
+  </configuration>
+</component>

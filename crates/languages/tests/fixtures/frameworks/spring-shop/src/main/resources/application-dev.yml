@@ -1,0 +1,5 @@
+shop:
+  debug-banner: "DEV MODE"
+logging:
+  level:
+    com.example.shop: DEBUG

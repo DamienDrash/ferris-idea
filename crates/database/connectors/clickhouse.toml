@@ -1,0 +1,13 @@
+format = 1
+id = "clickhouse"
+name = "ClickHouse"
+family = "mysql"
+category = "analytics"
+status = "beta"
+note = "Through ClickHouse's MySQL interface (port 9004); catalogue, editing and plans not verified."
+aliases = ["ch", "yandex clickhouse"]
+
+[connection]
+schemes = ["clickhouse"]
+default_port = 9004
+default_user = "default"

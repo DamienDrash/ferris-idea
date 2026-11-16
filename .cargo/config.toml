@@ -1,0 +1,7 @@
+# Linux on 64-bit ARM links with lld (package `lld`). The debug build of `idecraft` has more code
+# than an AArch64 call can reach (±128 MiB), and GNU ld fails on it with "relocation truncated to
+# fit: R_AARCH64_CALL26"; lld inserts the range-extension thunks. Found by the Linux window
+# self-test in a Lima VM (docs/quality/QG-1-LINUX-WINDOW.md). Other targets keep their default
+# linker. RUSTFLAGS in the environment replaces this setting.
+[target.aarch64-unknown-linux-gnu]
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]

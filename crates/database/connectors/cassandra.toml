@@ -1,0 +1,12 @@
+format = 1
+id = "cassandra"
+name = "Apache Cassandra"
+family = "cassandra"
+category = "wide-column"
+status = "beta"
+note = "Planned (ADR-0022); not connectable yet."
+aliases = ["cql", "scylla", "nosql"]
+homepage = "https://cassandra.apache.org/"
+
+[connection]
+default_port = 9042

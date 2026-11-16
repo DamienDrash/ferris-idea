@@ -1,0 +1,29 @@
+[package]
+name = "idecraft-remote"
+description = "Remote hosts over the system ssh: files, commands, a local mirror for editing"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+idecraft-core.workspace = true
+idecraft-pairing.workspace = true
+idecraft-debugger.workspace = true
+idecraft-session.workspace = true
+serde.workspace = true
+sha2 = "0.10"
+serde_json = "1"
+thiserror.workspace = true
+
+[dev-dependencies]
+idecraft-host.workspace = true
+tempfile = "3"
+idecraft-languages.workspace = true
+# The CPU time of the typing thread (SPEC-0317 v7 AK-8).
+nix = { version = "0.28", default-features = false, features = ["time"] }
+
+[lints]
+workspace = true

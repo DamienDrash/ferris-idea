@@ -1,0 +1,12 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: IDECraft private listener for java-debug
+Bundle-SymbolicName: dev.idecraft.javadebug.private;singleton:=true
+Bundle-Version: 1.0.0
+Bundle-Vendor: IDECraft
+Bundle-License: LicenseRef-PolyForm-Shield-1.0.0
+Bundle-RequiredExecutionEnvironment: JavaSE-17
+Bundle-ActivationPolicy: lazy
+Import-Package: org.osgi.framework,org.osgi.framework.wiring
+Require-Bundle: org.eclipse.core.runtime,org.eclipse.jdt.ls.core,com.
+ microsoft.java.debug.plugin;bundle-version="[0.53.1,0.54)"

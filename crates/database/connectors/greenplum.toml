@@ -1,0 +1,13 @@
+format = 1
+id = "greenplum"
+name = "Greenplum"
+family = "postgresql"
+category = "analytics"
+status = "beta"
+note = "Based on an older PostgreSQL; catalogue and plans not verified, no free build to test."
+aliases = ["gpdb", "vmware greenplum"]
+
+[connection]
+schemes = ["greenplum"]
+default_port = 5432
+default_database = "postgres"

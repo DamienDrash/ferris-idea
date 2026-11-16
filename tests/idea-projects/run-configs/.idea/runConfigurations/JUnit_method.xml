@@ -1,0 +1,8 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Test method" type="JUnit" factoryName="JUnit">
+    <module name="grd" />
+    <option name="MAIN_CLASS_NAME" value="com.example.CalcTest" />
+    <option name="METHOD_NAME" value="adds" />
+    <option name="TEST_OBJECT" value="method" />
+  </configuration>
+</component>

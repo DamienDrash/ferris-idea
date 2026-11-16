@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "State file of the user (SPEC-0333): window-layouts.json in the settings folder. JSON; unknown keys and unknown tool window ids are ignored when it is read.",
+  "properties": {
+    "active": {
+      "description": "Name of the selected layout; missing means the default layout.",
+      "type": "string"
+    },
+    "layouts": {
+      "description": "The saved layouts.",
+      "items": {
+        "properties": {
+          "active_window": {
+            "description": "Id of the tool window that had the keyboard focus; one of `shown`.",
+            "type": "string"
+          },
+          "layout": {
+            "description": "The arrangement, in the form of .idecraft/tool-windows.json (SPEC-0167).",
+            "properties": {
+              "stripes": {
+                "description": "Whether the stripes are shown.",
+                "type": "boolean"
+              },
+              "version": {
+                "description": "Version of the tool window layout form.",
+                "type": "integer"
+              },
+              "windows": {
+                "description": "The tool windows in stripe order.",
+                "items": {
+                  "properties": {
+                    "bounds": {
+                      "description": "Last frame as a Float or Window window: x, y, width, height.",
+                      "items": {
+                        "type": "integer"
+                      },
+                      "maxItems": 4,
+                      "minItems": 4,
+                      "type": "array"
+                    },
+                    "id": {
+                      "description": "Tool window id, e.g. project, terminal.",
+                      "type": "string"
+                    },
+                    "mode": {
+                      "description": "View mode other than docked and pinned.",
+                      "enum": [
+                        "docked",
+                        "unpinned",
+                        "undocked",
+                        "float",
+                        "window"
+                      ]
+                    },
+                    "removed": {
+                      "description": "No stripe button.",
+                      "type": "boolean"
+                    },
+                    "side": {
+                      "enum": [
+                        "left",
+                        "bottom",
+                        "right"
+                      ]
+                    },
+                    "size": {
+                      "description": "Width (left, right) or height (bottom) in pixels, if the user set one.",
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "split": {
+                      "description": "The second half of the side.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "side"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "name": {
+            "description": "1 to 64 characters without / and \\ and control characters, not \"Default\"; unique when capitals are ignored.",
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "shown": {
+            "description": "Ids of the shown tool windows.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "maxItems": 50,
+      "type": "array"
+    },
+    "version": {
+      "description": "Format version; a file of a newer version is not read and not overwritten.",
+      "maximum": 1,
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "version"
+  ],
+  "title": "IDECraft window layouts",
+  "type": "object"
+}

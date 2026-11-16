@@ -1,0 +1,73 @@
+[package]
+name = "idecraft"
+description = "Command-line entry point of IDECraft"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "idecraft"
+path = "src/main.rs"
+
+[dependencies]
+idecraft-core.workspace = true
+idecraft-containers.workspace = true
+idecraft-remote.workspace = true
+idecraft-session.workspace = true
+idecraft-serve.workspace = true
+idecraft-host.workspace = true
+idecraft-debugger.workspace = true
+idecraft-editor.workspace = true
+idecraft-formats.workspace = true
+idecraft-languages.workspace = true
+idecraft-mcp.workspace = true
+idecraft-vcs.workspace = true
+idecraft-terminal.workspace = true
+idecraft-workbench.workspace = true
+idecraft-ai.workspace = true
+idecraft-ui.workspace = true
+# The UI driver (ADR-0027, SPEC-0319): the window's host and `idecraft drive`.
+idecraft-uidriver.workspace = true
+tokio = { version = "1", features = ["rt-multi-thread", "signal", "macros", "sync"] }
+# `idecraft call` reads the arguments and prints the result (SPEC-0281).
+serde_json = "1"
+# `idecraft drive run` reads UI scripts (ADR-0021).
+serde.workspace = true
+toml.workspace = true
+
+# The login shell asked for its environment gets a session of its own (SPEC-0328 behaviour 4).
+[target."cfg(unix)".dependencies]
+nix = { version = "0.28", default-features = false, features = ["process"] }
+
+# Functional tests per feature-matrix row (M7.4), black-box through the binary and MCP.
+[[test]]
+name = "functional"
+path = "../../tests/functional/main.rs"
+
+# UI toolkit (ADR-0003). macOS: shaders compiled at run time (no Metal toolchain needed);
+# Linux: X11 and Wayland backends.
+[target.'cfg(target_os = "macos")'.dependencies]
+gpui = { version = "0.2.2", default-features = false, features = ["font-kit", "runtime_shaders"] }
+# The Dock icon of a bare binary (SPEC-0060 v6 behaviour 12); already in the tree through GPUI.
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSButton", "NSControl", "NSEvent", "NSGraphicsContext", "NSImage", "NSResponder", "NSView", "NSWindow"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSData", "NSGeometry"] }
+# The window buttons' pitch (SPEC-0061 v7 behaviour 44): GPUI's own window handle version.
+raw-window-handle = "0.6"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+gpui = { version = "0.2.2", default-features = false, features = ["font-kit", "x11", "wayland"] }
+
+# The window tests of the hand tests (`src/f084_handtests.rs`): the window's MCP server over HTTP
+# with a window of GPUI's test platform, no screen.
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+gpui = { version = "0.2.2", default-features = false, features = ["font-kit", "runtime_shaders", "test-support"] }
+
+# The test that in-process pointer input reaches no other X client (native_click, UISEC-9): an
+# observer with its own X connection watches the raw input of every device. Already in the tree
+# through GPUI, with these features.
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+x11rb = { version = "0.13", default-features = false, features = ["xinput"] }

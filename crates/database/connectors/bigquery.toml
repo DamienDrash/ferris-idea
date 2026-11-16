@@ -1,0 +1,13 @@
+format = 1
+id = "bigquery"
+name = "Google BigQuery"
+family = "odbc"
+category = "cloud"
+status = "beta"
+note = "Listed for the ODBC route (ADR-0020), which IDECraft does not have yet; not connectable."
+aliases = ["gcp", "google cloud"]
+
+[connection]
+schemes = ["bigquery"]
+default_port = 443
+ssl = "verify-full"

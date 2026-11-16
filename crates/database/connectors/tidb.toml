@@ -1,0 +1,21 @@
+format = 1
+id = "tidb"
+name = "TiDB"
+family = "mysql"
+category = "distributed"
+status = "supported"
+tested = "TiDB v8.5.3 (local container, pingcap/tidb:v8.5.3)"
+aliases = ["pingcap", "tikv"]
+homepage = "https://www.pingcap.com/"
+
+[connection]
+schemes = ["tidb"]
+default_port = 4000
+default_database = "test"
+default_user = "root"
+[sql]
+keywords = ["split", "placement", "flashback"]
+version_query = "SELECT tidb_version()"
+explain = "EXPLAIN {statement}"
+explain_analyze = "EXPLAIN ANALYZE {statement}"
+plan_format = "text"

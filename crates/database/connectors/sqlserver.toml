@@ -1,0 +1,9 @@
+format = 1
+id = "sqlserver"
+name = "SQL Server"
+family = "sqlserver"
+category = "relational"
+status = "supported"
+tested = "SQL Server 2022 Developer Edition (local VM)"
+note = "Live tests need the local SQL Server VM and do not run on every build; cancelling a running statement is not available yet."
+aliases = ["mssql", "microsoft sql server", "t-sql"]

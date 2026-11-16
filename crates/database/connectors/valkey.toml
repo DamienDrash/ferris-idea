@@ -1,0 +1,14 @@
+format = 1
+id = "valkey"
+name = "Valkey"
+family = "redis"
+category = "key-value"
+status = "beta"
+note = "Speaks the Redis protocol; not yet verified against a server. Use a redis:// URL."
+aliases = ["redis", "key-value"]
+homepage = "https://valkey.io/"
+
+[connection]
+default_port = 6379
+default_database = "0"
+fields = ["host", "port", "database", "user", "password", "ssl"]

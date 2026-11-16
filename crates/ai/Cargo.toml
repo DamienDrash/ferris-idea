@@ -1,0 +1,21 @@
+[package]
+name = "idecraft-ai"
+description = "Optional AI Assistant: chat with an OpenAI-compatible endpoint the user names (off by default)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+idecraft-core.workspace = true
+idecraft-database.workspace = true
+idecraft-http.workspace = true
+regex = "1"
+serde.workspace = true
+serde_json = "1"
+thiserror.workspace = true
+
+[lints]
+workspace = true

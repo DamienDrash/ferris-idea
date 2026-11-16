@@ -1,0 +1,13 @@
+# Cookies (out of scope in SPEC-0046: no cookie jar). Environment "local".
+
+@base = http://{{host}}:{{port}}
+
+### set cookies
+GET {{base}}/cookies/set
+
+### cookies are not kept between requests
+GET {{base}}/cookies/show
+
+### cookie header written by hand
+GET {{base}}/cookies/show
+Cookie: session=by-hand; theme=light

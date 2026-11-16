@@ -1,0 +1,14 @@
+format = 1
+id = "aurora-postgresql"
+name = "Amazon Aurora PostgreSQL"
+family = "postgresql"
+category = "cloud"
+status = "beta"
+note = "Cloud only; PostgreSQL-compatible. Not tested."
+aliases = ["aws", "aurora", "rds"]
+
+[connection]
+schemes = ["aurora-postgresql"]
+default_port = 5432
+default_database = "postgres"
+ssl = "require"

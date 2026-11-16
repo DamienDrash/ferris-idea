@@ -1,0 +1,44 @@
+[package]
+name = "idecraft-database"
+description = "Database tooling: dialects, connection profiles, SQL script handling"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+# The file envelope of `connections.toml` and `sql-files.toml` (`SPEC-0303`).
+idecraft-core.workspace = true
+# SSH tunnels go through the system `ssh` exactly as remote hosts do (`SPEC-0108` v4, ADR-0025).
+idecraft-remote.workspace = true
+keyring.workspace = true
+mysql_async.workspace = true
+native-tls.workspace = true
+postgres-native-tls.workspace = true
+rusqlite.workspace = true
+duckdb.workspace = true
+serde.workspace = true
+serde_json = { version = "1", features = ["preserve_order"] }
+sha2 = "0.10"
+thiserror.workspace = true
+toml.workspace = true
+tokio = { workspace = true, features = ["rt", "sync", "time", "net"] }
+tokio-postgres.workspace = true
+oracle = "0.6.3"
+tiberius.workspace = true
+chrono = { version = "0.4", default-features = false, features = ["std"] }
+futures-util = { version = "0.3", default-features = false }
+roxmltree = "0.20"
+# Same version and features as GPUI's, so no new crates (SVG → PNG for the ER diagram export).
+resvg = { version = "0.45", default-features = false, features = ["text", "system-fonts", "memmap-fonts"] }
+tokio-util.workspace = true
+
+[dev-dependencies]
+rusqlite.workspace = true
+duckdb.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true

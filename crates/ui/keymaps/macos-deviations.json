@@ -1,0 +1,128 @@
+[
+  {
+    "action": "CheckinProject",
+    "change": "add",
+    "shortcut": "meta K",
+    "decided_by": "SPEC-0063",
+    "reason": "Commit has its key in the reference from the version control plugin's own declaration, which the keymap files do not hold."
+  },
+  {
+    "action": "CodeCompletion",
+    "change": "add",
+    "shortcut": "alt ESCAPE",
+    "decided_by": "IMP-0032",
+    "reason": "macOS takes Control+Space to switch the input source on Macs with several keyboard layouts, so completion gets a second key; Control+Space stays."
+  },
+  {
+    "action": "ExternalSystem.ProjectRefreshAction",
+    "change": "add",
+    "shortcut": "shift meta I",
+    "decided_by": "SPEC-0100",
+    "reason": "Sync of the changed build files has its key in the reference from the Maven and Gradle plugins, not from the keymap files."
+  },
+  {
+    "action": "Hotswap",
+    "change": "add",
+    "shortcut": "control alt shift F9",
+    "decided_by": "SPEC-0091",
+    "reason": "Reload Changed Classes has no key in the keymap files; IDECraft gives it a free one."
+  },
+  {
+    "action": "IDECraft.Database.ShowDdl",
+    "change": "add",
+    "shortcut": "alt shift meta D",
+    "decided_by": "SPEC-0089",
+    "reason": "An action of IDECraft's own: the key of Edit Source already opens the properties in the Database tool window."
+  },
+  {
+    "action": "MaximizeEditorInSplit",
+    "change": "add",
+    "shortcut": "shift meta QUOTE",
+    "decided_by": "SPEC-0059",
+    "reason": "Shares the key of Maximize Tool Window; the focused part decides which of the two runs."
+  },
+  {
+    "action": "NextInlineCompletionSuggestionAction",
+    "change": "add",
+    "shortcut": "alt CLOSE_BRACKET",
+    "decided_by": "SPEC-0162",
+    "reason": "The reference declares this key with the action itself, not in the keymap files."
+  },
+  {
+    "action": "NextInlineCompletionSuggestionAction",
+    "change": "add",
+    "shortcut": "control alt PERIOD",
+    "decided_by": "IMP-0050",
+    "reason": "On German and other layouts the bracket keys are typed with Option and cannot be part of a shortcut."
+  },
+  {
+    "action": "PrevInlineCompletionSuggestionAction",
+    "change": "add",
+    "shortcut": "alt OPEN_BRACKET",
+    "decided_by": "SPEC-0162",
+    "reason": "The reference declares this key with the action itself, not in the keymap files."
+  },
+  {
+    "action": "PrevInlineCompletionSuggestionAction",
+    "change": "add",
+    "shortcut": "control alt COMMA",
+    "decided_by": "IMP-0050",
+    "reason": "On German and other layouts the bracket keys are typed with Option and cannot be part of a shortcut."
+  },
+  {
+    "action": "ReformatWithPrettierAction",
+    "change": "add",
+    "shortcut": "alt shift meta P",
+    "decided_by": "SPEC-0123",
+    "reason": "Reformat with Prettier has its key in the reference from the Prettier plugin, not from the keymap files."
+  },
+  {
+    "action": "ReopenClosedTab",
+    "change": "add",
+    "shortcut": "shift meta T",
+    "decided_by": "SPEC-0059",
+    "reason": "Reopen Closed Tab has no key in the keymap files; it takes the key of Go to Test, which yields the chord and runs from the Navigate menu and Find Action (SPEC-0071), and of the Services action, which IDECraft does not carry out."
+  },
+  {
+    "action": "StepOutOfBlock",
+    "change": "add",
+    "shortcut": "control alt shift F10",
+    "decided_by": "SPEC-0091",
+    "reason": "Step Out of Code Block has no key in the keymap files; IDECraft gives it a free one."
+  },
+  {
+    "action": "ToggleInSelection",
+    "change": "add",
+    "shortcut": "control alt E",
+    "decided_by": "SPEC-0028",
+    "reason": "The find bar's search in selection under IDECraft's id shares the key the keymap files give to the same command, ToggleFindInSelection."
+  },
+  {
+    "action": "UsageView.Exclude",
+    "change": "add",
+    "shortcut": "BACK_SPACE",
+    "decided_by": "SPEC-0293",
+    "reason": "Exclude of the Find tool window has no key in the keymap files; it shares the Delete keys, which act on the window's selected row while it has the focus."
+  },
+  {
+    "action": "UsageView.Exclude",
+    "change": "add",
+    "shortcut": "DELETE",
+    "decided_by": "SPEC-0293",
+    "reason": "Exclude of the Find tool window has no key in the keymap files; it shares the Delete keys, which act on the window's selected row while it has the focus."
+  },
+  {
+    "action": "Vcs.Push",
+    "change": "add",
+    "shortcut": "shift meta K",
+    "decided_by": "SPEC-0109",
+    "reason": "Push has its key in the reference from the version control plugin's own declaration, not from the keymap files."
+  },
+  {
+    "action": "Vcs.UpdateProject",
+    "change": "add",
+    "shortcut": "meta T",
+    "decided_by": "SPEC-0109",
+    "reason": "Update Project has its key in the reference from the version control plugin's own declaration, not from the keymap files."
+  }
+]

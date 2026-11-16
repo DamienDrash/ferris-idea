@@ -1,0 +1,20 @@
+format = 1
+id = "materialize"
+name = "Materialize"
+family = "postgresql"
+category = "analytics"
+status = "beta"
+note = "Speaks the PostgreSQL protocol with its own catalogue; sources, sinks and indexes not verified."
+aliases = ["mz"]
+homepage = "https://materialize.com/"
+
+[connection]
+schemes = ["materialize"]
+default_port = 6875
+default_database = "materialize"
+default_user = "materialize"
+ssl = "require"
+[sql]
+keywords = ["source", "sink", "subscribe", "cluster"]
+explain = "EXPLAIN {statement}"
+plan_format = "text"

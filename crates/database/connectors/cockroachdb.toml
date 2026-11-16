@@ -1,0 +1,20 @@
+format = 1
+id = "cockroachdb"
+name = "CockroachDB"
+family = "postgresql"
+category = "distributed"
+status = "supported"
+tested = "CockroachDB v26.3.5 (local single-node container, cockroachdb/cockroach:v26.3.5, no outbound network)"
+aliases = ["crdb", "cockroach"]
+homepage = "https://www.cockroachlabs.com/"
+
+[connection]
+schemes = ["cockroachdb", "cockroach"]
+default_port = 26257
+default_database = "defaultdb"
+default_user = "root"
+[sql]
+keywords = ["upsert", "changefeed", "backup", "restore"]
+explain = "EXPLAIN {statement}"
+explain_analyze = "EXPLAIN ANALYZE {statement}"
+plan_format = "text"

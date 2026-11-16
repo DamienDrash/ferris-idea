@@ -1,0 +1,57 @@
+# cargo-nextest settings (https://nexte.st). The CI on the project's own server
+# runs the tests with the `ci` profile when cargo-nextest is installed; elsewhere `cargo test` stays
+# the way to run them.
+
+[profile.default]
+# Name a test as slow after a minute; never stop it (local runs keep cargo test's behaviour).
+slow-timeout = { period = "60s" }
+
+[profile.ci]
+# Every test, also after a failure, so one run lists all of them.
+fail-fast = false
+# A test that runs longer than five minutes is stopped and counts as failed, instead of holding up
+# the whole run until the job's limit: 60 s periods, ended after the fifth.
+slow-timeout = { period = "60s", terminate-after = 5 }
+# A failed test is reported once; flaky tests are fixed, not retried.
+retries = 0
+# Output of failed tests at the end, where the log is read.
+failure-output = "final"
+status-level = "fail"
+final-status-level = "slow"
+
+# A test that measures a time budget runs alone: it takes every test thread, so the other tests of
+# the run do not slow it down. Budget tests are named `…within_budget…` (ADR-0030; a run on the
+# shared server failed with "blame took 28 s" while 2,700 other tests ran beside it).
+[[profile.ci.overrides]]
+filter = 'test(~within_budget)'
+threads-required = 'num-cpus'
+
+[[profile.default.overrides]]
+filter = 'test(~within_budget)'
+threads-required = 'num-cpus'
+
+# Tests that start a heavy language server or build tool — jdtls, kotlin-language-server,
+# rust-analyzer, Gradle, Maven, intelephense — run at most two at a time. Each such server takes
+# one or two cores and up to 1.5 GB for a minute after it starts; a server CI run with the tools
+# started six JVM tests at once, and with the rest of the run beside them jdtls answered
+# `textDocument/implementation` after more than 60 s and an inline refactoring missed its 15 s,
+# two tests failing by load alone (OBS: queue/day-10, 2026-11-13). In the group they run beside the
+# light tests but not beside each other, and get eight minutes instead of five.
+[test-groups]
+heavy-servers = { max-threads = 2 }
+
+[[profile.ci.overrides]]
+filter = 'kind(test) & (binary(/^(java_|pool_java$)/) | test(/(^|[_:])(java|jvm|jdk|jdtls|kotlin|gradle|maven|intelephense)([_:]|$)|rust_analyzer/))'
+test-group = 'heavy-servers'
+slow-timeout = { period = "120s", terminate-after = 4 }
+
+[[profile.default.overrides]]
+filter = 'kind(test) & (binary(/^(java_|pool_java$)/) | test(/(^|[_:])(java|jvm|jdk|jdtls|kotlin|gradle|maven|intelephense)([_:]|$)|rust_analyzer/))'
+test-group = 'heavy-servers'
+
+# A JUnit report with the output of every test, also of the passed ones: a script of the build
+# server reads from it the live tests that ended early with `skipped: <reason>` because a tool is
+# missing, so the server CI names them (they pass, and would otherwise hide a gap).
+[profile.ci.junit]
+path = "junit.xml"
+store-success-output = true

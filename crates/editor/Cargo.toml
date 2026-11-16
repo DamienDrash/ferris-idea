@@ -1,0 +1,16 @@
+[package]
+name = "idecraft-editor"
+description = "Text buffer, edit history and cursor model"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+ropey.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

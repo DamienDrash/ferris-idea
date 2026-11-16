@@ -1,0 +1,13 @@
+format = 1
+id = "singlestore"
+name = "SingleStore"
+family = "mysql"
+category = "analytics"
+status = "beta"
+note = "Speaks the MySQL protocol; needs a licence key, not tested."
+aliases = ["memsql", "singlestoredb"]
+
+[connection]
+schemes = ["singlestore"]
+default_port = 3306
+default_user = "root"

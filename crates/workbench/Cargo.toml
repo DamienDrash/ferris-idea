@@ -1,0 +1,56 @@
+[package]
+name = "idecraft-workbench"
+description = "Desktop views on GPUI (ADR-0003): the editor view first"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "LicenseRef-PolyForm-Shield-1.0.0 AND OFL-1.1"
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+idecraft-ai.workspace = true
+idecraft-core.workspace = true
+idecraft-containers.workspace = true
+idecraft-database.workspace = true
+idecraft-nosql.workspace = true
+idecraft-debugger.workspace = true
+# The semantic tree and the UI driver (ADR-0027, SPEC-0319).
+idecraft-uidriver.workspace = true
+serde.workspace = true
+serde_json = "1"
+regex = "1"
+# Time zone rules for commit dates (SPEC-0086 v6 behaviour 2a); already in the tree through gix.
+jiff = "0.2"
+idecraft-editor.workspace = true
+idecraft-formats.workspace = true
+idecraft-http.workspace = true
+idecraft-languages.workspace = true
+idecraft-plugins.workspace = true
+idecraft-profiler.workspace = true
+idecraft-remote.workspace = true
+idecraft-session.workspace = true
+idecraft-terminal.workspace = true
+idecraft-vcs.workspace = true
+tokio = { workspace = true, features = ["rt"] }
+idecraft-ui = { workspace = true, features = ["view"] }
+
+# UI toolkit (ADR-0003), same features as the app.
+[target.'cfg(target_os = "macos")'.dependencies]
+gpui = { version = "0.2.2", default-features = false, features = ["font-kit", "runtime_shaders"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+gpui = { version = "0.2.2", default-features = false, features = ["font-kit", "x11", "wayland"] }
+# Own X connection that wakes gpui's event loop until a new window's first frame (x11_wake).
+x11rb = { version = "0.13", default-features = false }
+
+[lints]
+workspace = true
+
+# Window-free tests of views with the GPUI test platform (window check of #485, D1).
+[dev-dependencies]
+duckdb.workspace = true
+wat = "1"
+
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+gpui = { version = "0.2.2", default-features = false, features = ["font-kit", "runtime_shaders", "test-support"] }

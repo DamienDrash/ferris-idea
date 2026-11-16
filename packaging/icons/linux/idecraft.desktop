@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=IDECraft
+GenericName=Integrated Development Environment
+Comment=Experimental Rust-native IDE for code and databases
+Exec=idecraft launch %f
+Icon=idecraft
+Terminal=false
+Categories=Development;IDE;
+StartupWMClass=idecraft

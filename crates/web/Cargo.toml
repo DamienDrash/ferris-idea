@@ -1,0 +1,35 @@
+[package]
+name = "idecraft-web"
+description = "The secure WebSocket endpoint of idecraft serve: TLS 1.3 with a post-quantum hybrid, origin checks and authenticated sessions (SPEC-0325)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+httparse = "1"
+idecraft-session.workspace = true
+# Pre-release, so pinned exactly (ADR-0025 section 10).
+libcrux-ml-kem = { version = "=0.0.11", default-features = false, features = ["mlkem768"] }
+ring = "0.17"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
+serde_json = "1"
+thiserror.workspace = true
+tokio = { workspace = true, features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring"] }
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
+zeroize = "1"
+
+[dev-dependencies]
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+ml-kem = { version = "0.3", features = ["getrandom"] }
+rcgen = { version = "0.14", default-features = false, features = ["crypto", "pem", "ring"] }
+# Only so that the test can offer TLS 1.2 and see it refused.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+tempfile = "3"
+
+[lints]
+workspace = true

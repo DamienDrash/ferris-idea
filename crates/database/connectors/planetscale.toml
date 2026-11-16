@@ -1,0 +1,13 @@
+format = 1
+id = "planetscale"
+name = "PlanetScale (Vitess)"
+family = "mysql"
+category = "cloud"
+status = "beta"
+note = "Cloud only; Vitess has no foreign keys by default and limits some statements. Not tested."
+aliases = ["vitess"]
+
+[connection]
+schemes = ["planetscale", "vitess"]
+default_port = 3306
+ssl = "verify-full"

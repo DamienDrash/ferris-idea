@@ -1,0 +1,6 @@
+### Stock value per warehouse (spring-basic must be running on port 8089)
+GET http://127.0.0.1:8089/stock/value
+Accept: application/json
+
+### Same endpoint, unknown path (expect 404)
+GET http://127.0.0.1:8089/stock/missing

@@ -1,0 +1,144 @@
+# Coverage-guided fuzzing of the M8.2 targets with libFuzzer (nightly): docs/testing/HARDENING.md.
+# A workspace of its own, so the nightly-only build never touches the main workspace.
+[package]
+name = "idecraft-fuzz-targets"
+version = "0.0.0"
+edition = "2024"
+license = "LicenseRef-PolyForm-Shield-1.0.0"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+members = ["."]
+
+[dependencies]
+idecraft-hardening = { path = "../crates/hardening" }
+libfuzzer-sys = "0.4"
+
+[[bin]]
+name = "lsp_frame"
+path = "fuzz_targets/lsp_frame.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "dap_frame"
+path = "fuzz_targets/dap_frame.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "mcp_jsonrpc"
+path = "fuzz_targets/mcp_jsonrpc.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "sql_split"
+path = "fuzz_targets/sql_split.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "terminal_vte"
+path = "fuzz_targets/terminal_vte.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "text_buffer"
+path = "fuzz_targets/text_buffer.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "diff_merge"
+path = "fuzz_targets/diff_merge.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "plugin_module"
+path = "fuzz_targets/plugin_module.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "plugin_answers"
+path = "fuzz_targets/plugin_answers.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "keymap"
+path = "fuzz_targets/keymap.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "theme"
+path = "fuzz_targets/theme.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "settings"
+path = "fuzz_targets/settings.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "idea_project"
+path = "fuzz_targets/idea_project.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "project_model"
+path = "fuzz_targets/project_model.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "http_file"
+path = "fuzz_targets/http_file.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "test_report"
+path = "fuzz_targets/test_report.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "profiler_formats"
+path = "fuzz_targets/profiler_formats.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "misc_formats"
+path = "fuzz_targets/misc_formats.rs"
+test = false
+doc = false
+bench = false

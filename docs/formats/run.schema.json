@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Exchange file `.idcrun` (SPEC-0303). TOML; validated on import with every problem and its key path.",
+  "properties": {
+    "idecraft": {
+      "additionalProperties": false,
+      "properties": {
+        "author": {
+          "description": "Who wrote the file.",
+          "type": "string"
+        },
+        "format": {
+          "description": "Format version; older ones are migrated when read.",
+          "maximum": 1,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "homepage": {
+          "description": "Web page of the file (https://); shown, never fetched.",
+          "type": "string"
+        },
+        "id": {
+          "description": "Stable id chosen by the author.",
+          "type": "string"
+        },
+        "kind": {
+          "const": "run",
+          "description": "The kind of file."
+        },
+        "licence": {
+          "description": "SPDX licence expression.",
+          "type": "string"
+        },
+        "min_version": {
+          "description": "Oldest IDECraft version the author expects.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name shown in the import preview.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "format"
+      ],
+      "type": "object"
+    },
+    "run": {
+      "additionalProperties": false,
+      "description": "The run configuration.",
+      "properties": {
+        "before": {
+          "description": "Configurations to run first.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "command": {
+          "description": "Program and arguments; may be empty with `url`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "cwd": {
+          "description": "Working directory, relative to the workspace.",
+          "type": "string"
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Extra environment variables.",
+          "type": "object"
+        },
+        "kind": {
+          "description": "A program or tests with a report.",
+          "enum": [
+            "run",
+            "test"
+          ]
+        },
+        "name": {
+          "description": "Unique name.",
+          "type": "string"
+        },
+        "report": {
+          "description": "Report format of a test configuration.",
+          "enum": [
+            "libtest",
+            "tap",
+            "junit"
+          ]
+        },
+        "report_file": {
+          "description": "JUnit file written by the tool, relative to the workspace.",
+          "type": "string"
+        },
+        "timeout": {
+          "description": "Timeout in seconds.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "url": {
+          "description": "A page to open (http:// or https://).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "idecraft",
+    "run"
+  ],
+  "title": "IDECraft run configuration (kind `run`, format 1)",
+  "type": "object"
+}

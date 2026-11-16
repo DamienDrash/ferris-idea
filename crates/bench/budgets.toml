@@ -1,0 +1,203 @@
+# Performance budgets of SPEC-0260 (docs/specifications/SPEC-0260-performance-budgets.md), the
+# machine-readable form the checks read. A metric above `max` is reported; above
+# `max × (1 + tolerance_pct / 100)` CI fails. `bar` names the reference measurement or the
+# improvement target the budget comes from. Change budgets only together with the spec.
+
+# --- Typing in a 100 000-line file -------------------------------------------------------------
+
+[[budget]]
+metric = "typing_sync_ms_p99"
+max = 4.0
+tolerance_pct = 50
+mode = "headless"
+bar = "a quarter of a 60 Hz frame for edit, snapshot and the visible highlight"
+
+[[budget]]
+metric = "typing_sync_ms_p50"
+max = 1.0
+tolerance_pct = 50
+mode = "headless"
+bar = "typical keystroke leaves the frame almost entirely to layout and paint"
+
+[[budget]]
+metric = "typing_background_ms_p95"
+max = 500.0
+tolerance_pct = 30
+mode = "headless"
+bar = "colours, problems and folds follow within 0.5 s; the reference drops code insight above 2.5 MB (DOC)"
+
+[[budget]]
+metric = "typing_frame_ms_p50"
+max = 8.0
+tolerance_pct = 50
+mode = "window"
+bar = "keystroke to painted frame, half a 60 Hz frame"
+
+[[budget]]
+metric = "typing_frame_ms_p95"
+max = 16.0
+tolerance_pct = 25
+mode = "window"
+bar = "ADR-0003 criterion 2: one 60 Hz frame"
+
+[[budget]]
+metric = "typing_frame_ms_p99"
+max = 25.0
+tolerance_pct = 25
+mode = "window"
+bar = "no keystroke waits more than one extra frame"
+
+# --- Start, idle and memory (empty project) ----------------------------------------------------
+
+[[budget]]
+metric = "start_window_ms"
+max = 1000.0
+tolerance_pct = 30
+mode = "window"
+bar = "reference 1.5 s (empty project) / 1.9 s warm (OBS-0002)"
+
+[[budget]]
+metric = "start_idle_s"
+max = 10.0
+tolerance_pct = 20
+mode = "window"
+bar = "IMP-0063: idle within 10 s of the project window; reference 87-164 s"
+
+[[budget]]
+metric = "start_rss_mib"
+max = 300.0
+tolerance_pct = 10
+mode = "window"
+bar = "IMP-0003: < 300 MiB; reference 2.2-2.6 GB (OBS-0002)"
+
+[[budget]]
+metric = "idle_rss_mib"
+max = 300.0
+tolerance_pct = 10
+mode = "window"
+bar = "IMP-0003 after 10 min idle; reference ~3.0 GB (OBS-0001)"
+
+[[budget]]
+metric = "idle_growth_mib"
+max = 10.0
+tolerance_pct = 50
+mode = "window"
+bar = "IMP-0003: no idle growth"
+
+# --- A file over 50 MB (server log, SQL dump) --------------------------------------------------
+
+[[budget]]
+metric = "large_log_open_ms"
+max = 2000.0
+tolerance_pct = 30
+mode = "headless"
+bar = "editable at once; the reference opens such files read-only in parts (DOC)"
+
+[[budget]]
+metric = "large_sql_open_ms"
+max = 2000.0
+tolerance_pct = 30
+mode = "headless"
+bar = "same, for a language file (plain text above 8 MiB)"
+
+[[budget]]
+metric = "large_log_scroll_ms_p95"
+max = 4.0
+tolerance_pct = 50
+mode = "headless"
+bar = "page jump laid out in a quarter frame"
+
+[[budget]]
+metric = "large_sql_scroll_ms_p95"
+max = 4.0
+tolerance_pct = 50
+mode = "headless"
+bar = "page jump laid out in a quarter frame"
+
+[[budget]]
+metric = "large_log_search_ms"
+max = 1000.0
+tolerance_pct = 50
+mode = "headless"
+bar = "find all in 50 MB within a second"
+
+[[budget]]
+metric = "large_log_regex_ms"
+max = 1500.0
+tolerance_pct = 50
+mode = "headless"
+bar = "regex find all in 50 MB"
+
+[[budget]]
+metric = "large_sql_search_ms"
+max = 1000.0
+tolerance_pct = 50
+mode = "headless"
+bar = "find all in 50 MB within a second"
+
+[[budget]]
+metric = "large_peak_rss_mib"
+max = 1024.0
+tolerance_pct = 25
+mode = "headless"
+bar = "two 50 MB files one after the other below 1 GiB"
+
+# --- Indexing a large project (java-large: 5000 files, 485 000 lines) --------------------------
+
+[[budget]]
+metric = "index_files_ms"
+max = 1000.0
+tolerance_pct = 50
+mode = "headless"
+bar = "file list of 5000 files"
+
+[[budget]]
+metric = "index_symbols_ms"
+max = 5000.0
+tolerance_pct = 30
+mode = "headless"
+bar = "reference ~10 s main load on first open (OBS-0003)"
+
+[[budget]]
+metric = "index_query_ms"
+max = 100.0
+tolerance_pct = 50
+mode = "headless"
+bar = "every further symbol query answers while typing"
+
+[[budget]]
+metric = "index_cpu_s"
+max = 11.9
+tolerance_pct = 20
+mode = "headless"
+bar = "reference 56 CPU-s first open, 11.9 warm (OBS-0003); file list, both symbol searches and the reference index (SPEC-0260 v6)"
+
+[[budget]]
+metric = "index_peak_rss_mib"
+max = 500.0
+tolerance_pct = 20
+mode = "headless"
+bar = "reference grows 0.2-0.5 GB for java-large (OBS-0003)"
+
+# --- Unused declarations in the editor, own phase (SPEC-0260 v4-v6, SPEC-0098 v12 behaviour 26)
+
+[[budget]]
+metric = "editor_unused_ms_p95"
+max = 500.0
+tolerance_pct = 30
+mode = "headless"
+bar = "problems follow an edit within 0.5 s, as the re-parse budget; 100 000-line Java file against the index of java-large"
+
+[[budget]]
+metric = "editor_unused_kotlin_ms_p95"
+max = 500.0
+tolerance_pct = 30
+mode = "headless"
+bar = "as the Java row (SPEC-0260 v5, SPEC-0098 v13 behaviour 27); 100 000-line Kotlin file against the index of java-large"
+
+[[budget]]
+metric = "editor_peak_rss_mib"
+max = 500.0
+tolerance_pct = 20
+mode = "headless"
+bar = "the bound these steps had inside the indexing phase before their own phase (SPEC-0260 v6)"

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="RunManager" selected="Python.personal py">
+    <configuration name="Run plain" type="Application" factoryName="Application">
+      <option name="MAIN_CLASS_NAME" value="Other" />
+      <module name="plain" />
+    </configuration>
+    <configuration name="personal py" type="PythonConfigurationType" factoryName="Python" folderName="Personal">
+      <module name="plain" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/scripts/tool.py" />
+      <option name="PARAMETERS" value="--fast" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/scripts" />
+      <envs>
+        <env name="SECRET_TOKEN" value="abc-not-for-agents" />
+      </envs>
+    </configuration>
+    <configuration default="true" type="Application" factoryName="Application">
+      <option name="MAIN_CLASS_NAME" value="Template" />
+    </configuration>
+    <list>
+      <item itemvalue="Python.personal py" />
+    </list>
+  </component>
+  <component name="ChangeListManager">
+    <configuration name="not a run configuration" type="Application">
+      <option name="MAIN_CLASS_NAME" value="Ignored" />
+    </configuration>
+  </component>
+</project>

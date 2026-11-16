@@ -1,0 +1,15 @@
+format = 1
+id = "yugabytedb"
+name = "YugabyteDB (YSQL)"
+family = "postgresql"
+category = "distributed"
+status = "supported"
+tested = "YugabyteDB 2.25.2.0 YSQL, PostgreSQL 15.12 (local container)"
+aliases = ["yugabyte", "ysql", "yb"]
+homepage = "https://www.yugabyte.com/"
+
+[connection]
+schemes = ["yugabytedb", "yugabyte"]
+default_port = 5433
+default_database = "yugabyte"
+default_user = "yugabyte"

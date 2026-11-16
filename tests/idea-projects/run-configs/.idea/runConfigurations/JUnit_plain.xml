@@ -1,0 +1,7 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Test plain" type="JUnit" factoryName="JUnit">
+    <module name="plain" />
+    <option name="MAIN_CLASS_NAME" value="HelloTest" />
+    <option name="TEST_OBJECT" value="class" />
+  </configuration>
+</component>

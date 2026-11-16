@@ -1,0 +1,7 @@
+# Append-only files: nearly every pull request adds lines at the same place. A union merge keeps
+# the added lines of both sides, so a local `git merge origin/main` does not stop there. GitHub's
+# own mergeability check ignores this, and a line added under `## Unreleased` on a branch cut
+# before a version was released can land in the released section: check after merging
+# (scripts/check-batch.sh prints where the added changelog lines ended up).
+CHANGELOG.md merge=union
+docs/specifications/TRACEABILITY.md merge=union

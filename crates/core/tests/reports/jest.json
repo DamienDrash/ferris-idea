@@ -1,0 +1,80 @@
+{
+ "numFailedTestSuites": 2,
+ "numFailedTests": 1,
+ "numPassedTestSuites": 0,
+ "numPassedTests": 1,
+ "numPendingTestSuites": 0,
+ "numPendingTests": 0,
+ "numRuntimeErrorTestSuites": 1,
+ "numTodoTests": 0,
+ "numTotalTestSuites": 2,
+ "numTotalTests": 2,
+ "openHandles": [],
+ "startTime": 1793519704634,
+ "success": false,
+ "testResults": [
+  {
+   "assertionResults": [
+    {
+     "ancestorTitles": [
+      "sum"
+     ],
+     "duration": 2,
+     "failureDetails": [],
+     "failureMessages": [],
+     "fullName": "sum adds",
+     "invocations": 1,
+     "location": null,
+     "numPassingAsserts": 1,
+     "retryReasons": [],
+     "status": "passed",
+     "title": "adds"
+    },
+    {
+     "ancestorTitles": [
+      "sum"
+     ],
+     "duration": 1,
+     "failureDetails": [
+      {
+       "matcherResult": {
+        "actual": 3,
+        "expected": 4,
+        "message": "expect(received).toBe(expected) // Object.is equality\n\nExpected: 4\nReceived: 3",
+        "name": "toBe",
+        "pass": false
+       }
+      }
+     ],
+     "failureMessages": [
+      "Error: expect(received).toBe(expected) // Object.is equality\n\nExpected: 4\nReceived: 3\n    at Object.toBe (/work/app/sum.test.js:3:39)\n    at Promise.then.completed (/work/app/node_modules/jest-circus/build/utils.js:298:28)\n    at new Promise (<anonymous>)\n    at callAsyncCircusFn (/work/app/node_modules/jest-circus/build/utils.js:231:10)\n    at _callCircusTest (/work/app/node_modules/jest-circus/build/run.js:316:40)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at _runTest (/work/app/node_modules/jest-circus/build/run.js:252:3)\n    at _runTestsForDescribeBlock (/work/app/node_modules/jest-circus/build/run.js:126:9)\n    at _runTestsForDescribeBlock (/work/app/node_modules/jest-circus/build/run.js:121:9)\n    at run (/work/app/node_modules/jest-circus/build/run.js:71:3)\n    at runAndTransformResultsToJestFormat (/work/app/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)\n    at jestAdapter (/work/app/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)\n    at runTestInternal (/work/app/node_modules/jest-runner/build/runTest.js:367:16)\n    at runTest (/work/app/node_modules/jest-runner/build/runTest.js:444:34)\n    at Object.worker (/work/app/node_modules/jest-runner/build/testWorker.js:106:12)"
+     ],
+     "fullName": "sum fails",
+     "invocations": 1,
+     "location": null,
+     "numPassingAsserts": 0,
+     "retryReasons": [],
+     "status": "failed",
+     "title": "fails"
+    }
+   ],
+   "endTime": 1793519704995,
+   "message": "  \u25cf sum \u203a fails\n\n    expect(received).toBe(expected) // Object.is equality\n\n    Expected: 4\n    Received: 3\n\n      1 | describe('sum', () => {\n      2 |   test('adds', () => { expect(1 + 2).toBe(3); });\n    > 3 |   test('fails', () => { expect(1 + 2).toBe(4); });\n        |                                       ^\n      4 | });\n      5 |\n\n      at Object.toBe (sum.test.js:3:39)\n",
+   "name": "/work/app/sum.test.js",
+   "startTime": 1793519704756,
+   "status": "failed",
+   "summary": ""
+  },
+  {
+   "assertionResults": [],
+   "coverage": {},
+   "endTime": 1793519705053,
+   "message": "  \u25cf Test suite failed to run\n\n    Jest encountered an unexpected token\n\n    Jest failed to parse a file. This happens e.g. when your code or its dependencies use non-standard JavaScript syntax, or when Jest is not configured to support such syntax.\n\n    Out of the box Jest supports Babel, which will be used to transform your files into valid JS based on your Babel configuration.\n\n    By default \"node_modules\" folder is ignored by transformers.\n\n    Here's what you can do:\n     \u2022 If you are trying to use ECMAScript Modules, see https://jestjs.io/docs/ecmascript-modules for how to enable it.\n     \u2022 If you are trying to use TypeScript, see https://jestjs.io/docs/getting-started#using-typescript\n     \u2022 To have some of your \"node_modules\" files transformed, you can specify a custom \"transformIgnorePatterns\" in your config.\n     \u2022 If you need a custom transformation specify a \"transform\" option in your config.\n     \u2022 If you simply want to mock your non-JS modules (e.g. binary assets) you can stub them out with the \"moduleNameMapper\" config option.\n\n    You'll find more details and examples of these config options in the docs:\n    https://jestjs.io/docs/configuration\n    For information about custom transformations, see:\n    https://jestjs.io/docs/code-transformation\n\n    Details:\n\n    SyntaxError: /work/app/broken.test.js: Unexpected token (2:0)\n\n      1 | test(\"broken\", () => { expect(1).toBe(1) \n    > 2 |\n        | ^\n\n      at constructor (node_modules/@babel/parser/src/parse-error.ts:96:45)\n          at parser.next (<anonymous>)\n          at normalizeFile.next (<anonymous>)\n          at run.next (<anonymous>)\n          at transform.next (<anonymous>)\n",
+   "name": "/work/app/broken.test.js",
+   "startTime": 1793519705053,
+   "status": "failed",
+   "summary": ""
+  }
+ ],
+ "wasInterrupted": false
+}

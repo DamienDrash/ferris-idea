@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Project file (SPEC-0303). TOML; files without [idecraft] are format 0 and still read.",
+  "properties": {
+    "breakpoint": {
+      "description": "Line breakpoints.",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "condition": {
+            "description": "Stop only when this is true.",
+            "type": "string"
+          },
+          "enabled": {
+            "description": "false: kept but not set.",
+            "type": "boolean"
+          },
+          "file": {
+            "description": "File, relative to the workspace.",
+            "type": "string"
+          },
+          "hit_condition": {
+            "description": "Pass count.",
+            "type": "string"
+          },
+          "line": {
+            "description": "1-based line.",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "log_message": {
+            "description": "Log instead of stopping.",
+            "type": "string"
+          },
+          "rules": {
+            "additionalProperties": false,
+            "description": "Further options (SPEC-0127 v3).",
+            "properties": {
+              "caller_filter": {
+                "description": "Only when called from these methods.",
+                "type": "string"
+              },
+              "class_filter": {
+                "description": "Only in these classes.",
+                "type": "string"
+              },
+              "depends_keep": {
+                "description": "Stay active after that hit.",
+                "type": "boolean"
+              },
+              "depends_on": {
+                "description": "Inactive until this breakpoint (file:line) is hit.",
+                "type": "string"
+              },
+              "instance_filter": {
+                "description": "Only for these object ids.",
+                "type": "string"
+              },
+              "log_hit": {
+                "description": "Log that the breakpoint was hit.",
+                "type": "boolean"
+              },
+              "log_stack": {
+                "description": "Log the call stack.",
+                "type": "boolean"
+              },
+              "remove_once_hit": {
+                "description": "Remove after the first hit.",
+                "type": "boolean"
+              },
+              "suspend": {
+                "description": "Which threads stop; none logs and goes on.",
+                "enum": [
+                  "all",
+                  "thread",
+                  "none"
+                ]
+              }
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "file",
+          "line"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "idecraft": {
+      "additionalProperties": false,
+      "properties": {
+        "author": {
+          "description": "Who wrote the file.",
+          "type": "string"
+        },
+        "format": {
+          "description": "Format version; older ones are migrated when read.",
+          "maximum": 1,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "homepage": {
+          "description": "Web page of the file (https://); shown, never fetched.",
+          "type": "string"
+        },
+        "id": {
+          "description": "Stable id chosen by the author.",
+          "type": "string"
+        },
+        "kind": {
+          "const": "breakpoints",
+          "description": "The kind of file."
+        },
+        "licence": {
+          "description": "SPDX licence expression.",
+          "type": "string"
+        },
+        "min_version": {
+          "description": "Oldest IDECraft version the author expects.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name shown in the import preview.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "format"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "idecraft"
+  ],
+  "title": "IDECraft breakpoints (kind `breakpoints`, format 1)",
+  "type": "object"
+}

@@ -1,0 +1,12 @@
+format = 1
+id = "sap-ase"
+name = "SAP ASE (Sybase)"
+family = "odbc"
+category = "relational"
+status = "beta"
+note = "Listed for the ODBC route (ADR-0020), which IDECraft does not have yet; not connectable."
+aliases = ["sybase", "ase", "adaptive server"]
+
+[connection]
+schemes = ["sybase", "sapase"]
+default_port = 5000

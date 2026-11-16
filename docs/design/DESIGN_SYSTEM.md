@@ -1,0 +1,117 @@
+# IDECraft design system (repository and documentation)
+
+**Status:** v2 · 2026-11-03 (brand package v1.1.5) · domain: README, docs, diagrams, social images, future website.
+The desktop application uses only the colour tokens, through its themes `IDECraft Dark` and
+`IDECraft Light` (ADR-0018, [APPLICATION_UI.md](APPLICATION_UI.md)); the rest of this file does not
+apply to it.
+Machine-readable tokens: [`tokens.json`](tokens.json).
+
+## 1. Principles
+
+Prefer minimal layouts, strong typography, clear hierarchy, generous whitespace, neutral
+backgrounds, one restrained accent, functional diagrams, authentic screenshots, consistent
+spacing. Avoid decorative gradients, badge walls, emoji headings, generic AI artwork, fake IDE
+screenshots, animation without purpose, and anything that imitates JetBrains or ArtCraft branding.
+
+## 2. Colour tokens
+
+Use token names in assets and docs, never raw values. The palette is the Nord colour scheme
+(Arctic Ice Studio, MIT), as fixed by brand package v1.1.5; the Nord name of each value is given.
+
+### Dark surfaces (default)
+
+| Token | Value | Nord | Purpose | Contrast on `background-primary` |
+|---|---|---|---|---|
+| `background-primary` | `#2E3440` | Polar Night 0 | page and image background, app icon | — |
+| `background-secondary` | `#3B4252` | Polar Night 1 | cards, code blocks, app icon rim | — |
+| `border-default` | `#4C566A` | Polar Night 3 | dividers (decorative only) | 1.7 : 1 |
+| `foreground-primary` | `#ECEFF4` | Snow Storm 2 | main text, symbol bracket, "IDE" in the wordmark | 10.8 : 1 |
+| `foreground-secondary` | `#D8DEE9` | Snow Storm 0 | supporting text | 9.3 : 1 |
+| `accent-primary` | `#88C0D0` | Frost 2 | links, focus, symbol core, "Craft" in the wordmark | 6.2 : 1 |
+| `success` | `#A3BE8C` | Aurora green | "Works" status | 6.1 : 1 |
+| `warning` | `#EBCB8B` | Aurora yellow | "Experimental" status | 8.0 : 1 |
+| `error` | `#DE8C93` | Aurora red, lightened | errors, "Not supported" | 4.9 : 1 |
+
+### Light surfaces
+
+| Token | Value | Nord | Purpose | Contrast on `background-light` |
+|---|---|---|---|---|
+| `background-light` | `#ECEFF4` | Snow Storm 2 | light documentation pages | — |
+| `border-default-light` | `#D8DEE9` | Snow Storm 0 | dividers (decorative only) | 1.2 : 1 |
+| `foreground-primary-light` | `#2E3440` | Polar Night 0 | main text, symbol bracket | 10.8 : 1 |
+| `foreground-secondary-light` | `#4C566A` | Polar Night 3 | supporting text | 6.4 : 1 |
+| `accent-mark-light` | `#5E81AC` | Frost 3 | symbol core on light surfaces; graphics only, never text | 3.5 : 1 |
+| `accent-primary-light` | `#4C6A91` | Frost 3, darkened | links, focus | 4.8 : 1 |
+| `success-light` | `#4F6E3A` | Aurora green, darkened | status | 5.0 : 1 |
+| `warning-light` | `#7A5C14` | Aurora yellow, darkened | status | 5.4 : 1 |
+| `error-light` | `#A3434C` | Aurora red, darkened | status | 5.3 : 1 |
+
+**Adjustments, with justification:** the brand package defines seven colours and no status or
+light-text colours. All values were checked against WCAG 2.2 (relative luminance, 2026-11-03).
+Nord's Aurora red `#BF616A` reaches only 3.1 : 1 on `background-primary`, so `error` is a lighter
+red. On `background-light`, Frost 3 `#5E81AC` (3.5 : 1) passes for graphics (≥ 3 : 1) but not for
+text, so it stays the symbol colour (`accent-mark-light`) and links use the darker
+`accent-primary-light`. The Aurora status colours fail on light surfaces (1.4–3.6 : 1), so the
+`*-light` status variants are darker tones of the same hues. The package colours are unchanged.
+
+**Comparison with ArtCraft:** the reference uses near-black `#121316`, off-white `#f2f1ee` and a
+blue accent `#2d81ff` (analysis §8).
+IDECraft keeps the same restraint with a blue-grey base and a frost accent of its own.
+
+## 3. Typography
+
+| Role | Font | Size | Weight | Notes |
+|---|---|---|---|---|
+| Hero | Inter | 48–64 px | 600 | tracking −2 % |
+| Section heading | Inter | 28–36 px | 600 | |
+| Subheading | Inter | 20–24 px | 600 | |
+| Body | Inter | 15–17 px | 400 | line height 1.5 |
+| Caption | Inter | 12–14 px | 400 | `foreground-secondary` |
+| Code | JetBrains Mono | 13–14 px | 400 | |
+
+The wordmark is not set in a font: it is the outlined path master
+[`assets/idecraft-wordmark.svg`](assets/idecraft-wordmark.svg) and is never retyped.
+
+Fallbacks: `Inter, "Helvetica Neue", Arial, sans-serif`; `"JetBrains Mono", Menlo, monospace`.
+Licences: Inter and JetBrains Mono are SIL OFL 1.1 (checked 2026-10-31); bundle unmodified with
+their licence file. On GitHub the README uses GitHub's own fonts — only images use these fonts.
+
+## 4. Layout
+
+- 8 px spacing grid; image margins 96 px at 1280 px width.
+- One idea per section; a section is a heading, one or two sentences, then a table, list or image.
+- Centre only the README head block (symbol, title, tagline, link row). Everything else left-aligned.
+- Tables for comparisons and status; bullet lists for "under the hood" facts.
+
+## 5. Screenshots and demos
+
+- Only real application states, produced from a commit that is named in the caption.
+- Caption pattern: `<sub>What is shown · example file or command · commit</sub>`.
+- Prefer the dark theme; crop to the relevant area; no mock data that looks like real customer data.
+- No screenshots of other products. Until the desktop UI exists, show real terminal output as text.
+- Store images in `docs/images/` with ordered names (`shot-1-<topic>.png`). Keep each under 1 MB.
+
+## 6. Diagrams
+
+- Purpose first: architecture layers, data flow, protocol sequences.
+- Prefer text-based sources (Mermaid in Markdown or ASCII in code blocks) so diagrams stay diffable.
+- Boxes `background-secondary` with `border-default`, labels `foreground-primary`, at most one
+  `accent-primary` highlight per diagram.
+
+## 7. Accessibility
+
+- Text contrast ≥ 4.5 : 1 (large text ≥ 3 : 1), using the token pairs above.
+- Every image has `alt` text that states what it shows; decorative images use `alt=""`.
+- Never convey status by colour alone — always with a word ("Works", "Planned").
+- Headings in order (one H1, then H2, H3); link text describes the target.
+- Prefer real text over text in images.
+
+## 8. Badges
+
+At most three static, factual badges, each answering a question a reader has in the first seconds:
+stage (`status: alpha`), license (`license: PolyForm Shield 1.0.0`) and the verified desktop
+platform (`desktop: macOS (Apple Silicon)`). Raised from two on 2026-11-14: the platform badge
+stops a reader on another system before they try to build. Colours from the tokens (`warning`
+for the stage, `border-default` for the others), style `flat-square`, static shields.io URLs
+only. Each badge links to the README section that explains it. No badge carries a number that can go stale (version, tool count, tests). No CI, coverage,
+download or star badges unless the number is public and real. No logos in badges.

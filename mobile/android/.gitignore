@@ -1,0 +1,9 @@
+/.gradle/
+/build/
+/app/build/
+/local.properties
+/.kotlin/
+# Signing keys never enter the repository; scripts/build-mobile.sh makes a throwaway one per build.
+*.keystore
+*.jks
+*.apk

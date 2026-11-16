@@ -1,0 +1,19 @@
+shop:
+  currency: EUR
+  maxItems: 20
+  payment:
+    providers:
+      - name: stripe
+        url: https://stripe.example
+      - name: paypal
+        url: https://paypal.example
+spring:
+  jpa:
+    open-in-view: false
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+shop:
+  currency: USD

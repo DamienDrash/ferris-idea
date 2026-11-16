@@ -1,0 +1,8 @@
+format = 1
+id = "mysql"
+name = "MySQL"
+family = "mysql"
+category = "relational"
+status = "supported"
+tested = "MySQL 8.4.13 (local reference server)"
+aliases = ["oracle mysql"]

@@ -1,0 +1,8 @@
+format = 1
+id = "sqlite"
+name = "SQLite"
+family = "sqlite"
+category = "embedded"
+status = "supported"
+tested = "SQLite bundled with rusqlite"
+aliases = ["sqlite3"]

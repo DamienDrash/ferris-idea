@@ -1,0 +1,14 @@
+format = 1
+id = "neon"
+name = "Neon"
+family = "postgresql"
+category = "cloud"
+status = "beta"
+note = "Cloud only; serverless PostgreSQL. Not tested."
+aliases = ["neon.tech", "serverless postgres"]
+
+[connection]
+schemes = ["neon"]
+default_port = 5432
+default_database = "neondb"
+ssl = "require"

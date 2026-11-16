@@ -1,0 +1,33 @@
+erDiagram
+    item {
+        TEXT sku PK
+        TEXT name
+        INTEGER unit_price_cents
+    }
+    warehouse {
+        INTEGER id PK
+        TEXT city
+    }
+    movement {
+        INTEGER id PK
+        INTEGER warehouse_id FK
+        TEXT sku FK
+        INTEGER delta
+        TEXT moved_at
+    }
+    stock {
+        INTEGER warehouse_id PK, FK
+        TEXT sku PK, FK
+        INTEGER qty
+    }
+    stock_value {
+        %% view
+        INTEGER warehouse_id
+        unknown value_cents
+    }
+    item ||--o{ movement : "sku"
+    warehouse ||--o{ movement : "warehouse_id"
+    item ||--o{ stock : "sku"
+    warehouse ||--o{ stock : "warehouse_id"
+    item ||..o{ stock_value : "used by view"
+    stock ||..o{ stock_value : "used by view"

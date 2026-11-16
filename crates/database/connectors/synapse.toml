@@ -1,0 +1,15 @@
+format = 1
+id = "synapse"
+name = "Azure Synapse (dedicated SQL pool)"
+family = "sqlserver"
+category = "cloud"
+status = "beta"
+note = "Cloud only; dedicated pools lack some catalogue views and plans differ. Not tested."
+aliases = ["azure synapse", "sql dw"]
+
+[connection]
+schemes = ["synapse"]
+default_port = 1433
+ssl = "require"
+[sql]
+keywords = ["distribution", "replicate", "round_robin", "hash"]

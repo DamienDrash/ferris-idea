@@ -1,0 +1,4 @@
+# Binding options (ADR-0029). `android`: the Kotlin bindings check the API level before using
+# `java.lang.ref.Cleaner` (Android 13+) instead of probing for the class, which Android lint accepts.
+[bindings.kotlin]
+android = true

@@ -1,0 +1,25 @@
+body {
+  margin: 0;
+}
+
+.banner {
+  color: navy;
+}
+
+#masthead {
+  padding: 4px;
+}
+
+.button.primary {
+  color: white;
+}
+
+#prices {
+  margin: 8px;
+}
+.card {
+  border: 1px solid;
+}
+.card:hover {
+  border: 2px solid;
+}

@@ -1,0 +1,79 @@
+# Request bodies (SPEC-0046 behaviours 2 and 11). Environment "local".
+# A body file is read only from inside the project; the requests marked "refused" are never sent.
+
+@base = http://{{host}}:{{port}}
+
+### json
+POST {{base}}/echo/json
+Content-Type: application/json
+
+{"id": 7, "text": "zwölf ✓"}
+
+### form over several lines
+POST {{base}}/echo/form
+Content-Type: application/x-www-form-urlencoded
+
+name=Ada
+&lang=en
+
+### multipart written by hand
+POST {{base}}/echo/multipart
+Content-Type: multipart/form-data; boundary=precheck-boundary
+
+--precheck-boundary
+Content-Disposition: form-data; name="title"
+
+A title
+--precheck-boundary
+Content-Disposition: form-data; name="file"; filename="note.txt"
+Content-Type: text/plain
+
+file text
+--precheck-boundary--
+
+### body from a file beside the request file
+POST {{base}}/echo/file
+Content-Type: application/json
+
+< ./payload.json
+
+### body from a file in a sub-folder
+POST {{base}}/echo/file-nested
+Content-Type: application/json
+
+< nested/payload.json
+
+### body file outside the project is refused
+POST {{base}}/echo/file-outside
+Content-Type: text/plain
+
+< ../server.py
+
+### body file with an absolute path is refused
+POST {{base}}/echo/file-absolute
+Content-Type: text/plain
+
+< /etc/hosts
+
+### body file that does not exist
+POST {{base}}/echo/file-missing
+Content-Type: text/plain
+
+< ./no-such-file.txt
+
+### private environment file is never a body
+POST {{base}}/echo/file-private
+Content-Type: application/json
+
+< ./http-client.private.env.json
+
+### multipart with a part from a file
+POST {{base}}/echo/multipart-file
+Content-Type: multipart/form-data; boundary=precheck-boundary
+
+--precheck-boundary
+Content-Disposition: form-data; name="file"; filename="payload.json"
+Content-Type: application/json
+
+< ./payload.json
+--precheck-boundary--

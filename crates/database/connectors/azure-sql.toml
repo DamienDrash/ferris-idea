@@ -1,0 +1,13 @@
+format = 1
+id = "azure-sql"
+name = "Azure SQL Database"
+family = "sqlserver"
+category = "cloud"
+status = "beta"
+note = "Cloud only; SQL Server authentication only (no Entra ID yet). Not tested."
+aliases = ["azure", "microsoft"]
+
+[connection]
+schemes = ["azuresql", "azure-sql"]
+default_port = 1433
+ssl = "require"

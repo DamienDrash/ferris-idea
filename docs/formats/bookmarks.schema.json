@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Project file (SPEC-0303). TOML; files without [idecraft] are format 0 and still read.",
+  "properties": {
+    "bookmark": {
+      "description": "Line bookmarks, newest first.",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "description": "One line, at most 200 characters.",
+            "type": "string"
+          },
+          "file": {
+            "description": "File, relative to the project, `/` between the parts.",
+            "type": "string"
+          },
+          "line": {
+            "description": "1-based line.",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "mnemonic": {
+            "description": "One of 1-9, 0, A-Z; unique in the project.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file",
+          "line"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "idecraft": {
+      "additionalProperties": false,
+      "properties": {
+        "author": {
+          "description": "Who wrote the file.",
+          "type": "string"
+        },
+        "format": {
+          "description": "Format version; older ones are migrated when read.",
+          "maximum": 1,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "homepage": {
+          "description": "Web page of the file (https://); shown, never fetched.",
+          "type": "string"
+        },
+        "id": {
+          "description": "Stable id chosen by the author.",
+          "type": "string"
+        },
+        "kind": {
+          "const": "bookmarks",
+          "description": "The kind of file."
+        },
+        "licence": {
+          "description": "SPDX licence expression.",
+          "type": "string"
+        },
+        "min_version": {
+          "description": "Oldest IDECraft version the author expects.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name shown in the import preview.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "format"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "idecraft"
+  ],
+  "title": "IDECraft bookmarks (kind `bookmarks`, format 1)",
+  "type": "object"
+}

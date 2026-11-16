@@ -1,0 +1,12 @@
+format = 1
+id = "duckdb"
+name = "DuckDB"
+family = "duckdb"
+category = "embedded"
+status = "supported"
+tested = "DuckDB 1.4.5 (bundled engine, CI)"
+aliases = ["duck", "motherduck file", "parquet"]
+homepage = "https://duckdb.org/"
+
+[connection]
+fields = ["file"]

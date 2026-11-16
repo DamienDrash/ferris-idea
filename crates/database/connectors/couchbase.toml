@@ -1,0 +1,12 @@
+format = 1
+id = "couchbase"
+name = "Couchbase Server"
+family = "couchbase"
+category = "document"
+status = "beta"
+note = "Planned (ADR-0022); not connectable yet."
+aliases = ["sql++", "n1ql", "nosql"]
+homepage = "https://www.couchbase.com/"
+
+[connection]
+default_port = 8091

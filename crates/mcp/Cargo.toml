@@ -1,0 +1,53 @@
+[package]
+name = "idecraft-mcp"
+description = "Model Context Protocol server exposing IDE capabilities to LLM agents"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+regex = "1"
+idecraft-core.workspace = true
+idecraft-containers.workspace = true
+idecraft-editor.workspace = true
+idecraft-languages.workspace = true
+idecraft-plugins.workspace = true
+idecraft-profiler.workspace = true
+idecraft-remote.workspace = true
+idecraft-web.workspace = true
+idecraft-session.workspace = true
+idecraft-ui.workspace = true
+idecraft-debugger.workspace = true
+idecraft-http.workspace = true
+idecraft-terminal.workspace = true
+idecraft-vcs.workspace = true
+idecraft-ai.workspace = true
+idecraft-database.workspace = true
+idecraft-formats.workspace = true
+idecraft-nosql.workspace = true
+# The UI driver's types and rules (ADR-0027, SPEC-0319).
+idecraft-uidriver.workspace = true
+rmcp = { version = "3.9", features = ["server", "macros", "transport-io", "transport-streamable-http-server"] }
+# Streamable HTTP for the running window (SPEC-0221).
+bytes = "1"
+getrandom = "0.3"
+http-body-util = "0.1"
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio", "service"] }
+tokio-util = { workspace = true }
+tower-service = "0.3"
+serde = { workspace = true }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std", "io-util", "net", "time", "sync"] }
+
+[dev-dependencies]
+wat = "1"
+idecraft-host.workspace = true
+duckdb.workspace = true
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-util"] }
+
+[lints]
+workspace = true

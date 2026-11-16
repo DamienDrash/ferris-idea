@@ -1,0 +1,9 @@
+format = 1
+id = "oracle"
+name = "Oracle"
+family = "oracle"
+category = "relational"
+status = "supported"
+tested = "Oracle Database Free 23 (local container)"
+note = "Needs Oracle Instant Client; live tests need the local Oracle container and do not run on every build; no cancel yet."
+aliases = ["oracle database", "plsql"]

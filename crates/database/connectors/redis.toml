@@ -1,0 +1,15 @@
+format = 1
+id = "redis"
+name = "Redis"
+family = "redis"
+category = "key-value"
+status = "supported"
+aliases = ["nosql", "cache", "key-value"]
+homepage = "https://redis.io/"
+tested = "8.2.11 (official container image redis:8.2-alpine)"
+
+[connection]
+schemes = ["redis", "rediss"]
+default_port = 6379
+default_database = "0"
+fields = ["host", "port", "database", "user", "password", "ssl"]

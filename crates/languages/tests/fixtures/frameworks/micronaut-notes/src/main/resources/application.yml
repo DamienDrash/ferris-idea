@@ -1,0 +1,9 @@
+micronaut:
+  application:
+    name: notes
+  server:
+    port: 8090
+notes:
+  title: My notes
+  pageSize: 25
+  owner: me

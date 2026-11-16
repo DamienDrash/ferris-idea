@@ -1,0 +1,7 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Test package" type="JUnit" factoryName="JUnit">
+    <module name="mvn" />
+    <option name="PACKAGE_NAME" value="com.example" />
+    <option name="TEST_OBJECT" value="package" />
+  </configuration>
+</component>

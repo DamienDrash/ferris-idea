@@ -1,0 +1,359 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Exchange file `.idcsettings` (SPEC-0303). TOML; validated on import with every problem and its key path.",
+  "properties": {
+    "idecraft": {
+      "additionalProperties": false,
+      "properties": {
+        "author": {
+          "description": "Who wrote the file.",
+          "type": "string"
+        },
+        "format": {
+          "description": "Format version; older ones are migrated when read.",
+          "maximum": 1,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "homepage": {
+          "description": "Web page of the file (https://); shown, never fetched.",
+          "type": "string"
+        },
+        "id": {
+          "description": "Stable id chosen by the author.",
+          "type": "string"
+        },
+        "kind": {
+          "const": "settings",
+          "description": "The kind of file."
+        },
+        "licence": {
+          "description": "SPDX licence expression.",
+          "type": "string"
+        },
+        "min_version": {
+          "description": "Oldest IDECraft version the author expects.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name shown in the import preview.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "format"
+      ],
+      "type": "object"
+    },
+    "keymap": {
+      "additionalProperties": false,
+      "description": "The user keymap.",
+      "properties": {
+        "actions": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "description": "Shortcuts by action id: \"control alt S\", \"control K, control C\", \"mouse: …\", \"gesture: dblClick shift SHIFT\"; an empty array removes them.",
+          "type": "object"
+        },
+        "name": {
+          "description": "Keymap name.",
+          "type": "string"
+        },
+        "parent": {
+          "description": "Bundled keymap it changes.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "settings": {
+      "additionalProperties": false,
+      "description": "IDE settings.",
+      "properties": {
+        "appearance": {
+          "additionalProperties": false,
+          "description": "Appearance settings.",
+          "properties": {
+            "compact_mode": {
+              "type": "boolean"
+            },
+            "dark_theme": {
+              "type": "string"
+            },
+            "editor_scheme": {
+              "description": "The editor colour scheme; empty for the theme's own (SPEC-0337).",
+              "type": "string"
+            },
+            "light_theme": {
+              "type": "string"
+            },
+            "sync_with_os": {
+              "type": "boolean"
+            },
+            "theme": {
+              "description": "The chosen theme.",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "code_style": {
+          "additionalProperties": false,
+          "description": "Code style.",
+          "properties": {
+            "indents": {
+              "additionalProperties": {
+                "additionalProperties": false,
+                "properties": {
+                  "indent": {
+                    "description": "Indent size.",
+                    "type": "integer"
+                  },
+                  "tab": {
+                    "description": "Tab size.",
+                    "type": "integer"
+                  },
+                  "use_tabs": {
+                    "description": "Indent with tabs.",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "indent",
+                  "tab",
+                  "use_tabs"
+                ],
+                "type": "object"
+              },
+              "description": "Indents by language.",
+              "type": "object"
+            },
+            "right_margin": {
+              "type": "integer"
+            },
+            "show_right_margin": {
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
+        "editor": {
+          "additionalProperties": false,
+          "description": "Editor settings.",
+          "properties": {
+            "code_authors": {
+              "type": "boolean"
+            },
+            "config_values": {
+              "type": "boolean"
+            },
+            "ensure_line_break_at_end": {
+              "type": "boolean"
+            },
+            "fold_imports": {
+              "type": "boolean"
+            },
+            "fold_one_line_methods": {
+              "type": "boolean"
+            },
+            "folding_arrows": {
+              "description": "When the folding arrows in the gutter are shown (default: hover).",
+              "enum": [
+                "always",
+                "hover"
+              ]
+            },
+            "font_family": {
+              "description": "Editor font.",
+              "type": "string"
+            },
+            "font_size": {
+              "description": "Font size in pixels.",
+              "type": "number"
+            },
+            "highlight_usages_at_caret": {
+              "type": "boolean"
+            },
+            "ligatures": {
+              "description": "Font ligatures (off by default).",
+              "type": "boolean"
+            },
+            "line_spacing": {
+              "description": "Line height factor.",
+              "type": "number"
+            },
+            "parameter_hints": {
+              "type": "boolean"
+            },
+            "semantic_highlighting": {
+              "type": "boolean"
+            },
+            "spelling_dictionary": {
+              "type": "string"
+            },
+            "strip_trailing_spaces": {
+              "type": "boolean"
+            },
+            "tabs": {
+              "additionalProperties": false,
+              "description": "Editor Tabs (SPEC-0059 v9).",
+              "properties": {
+                "activate_on_close": {
+                  "enum": [
+                    "left",
+                    "right",
+                    "recent"
+                  ]
+                },
+                "close_button": {
+                  "enum": [
+                    "right",
+                    "left",
+                    "none"
+                  ]
+                },
+                "close_button_on_all": {
+                  "type": "boolean"
+                },
+                "limit": {
+                  "description": "Most tabs per group, 1–100.",
+                  "type": "integer"
+                },
+                "limit_rule": {
+                  "enum": [
+                    "close_unchanged",
+                    "close_unused"
+                  ]
+                },
+                "mark_modified": {
+                  "type": "boolean"
+                },
+                "open_at_end": {
+                  "type": "boolean"
+                },
+                "path_tooltip": {
+                  "type": "boolean"
+                },
+                "pinned_row": {
+                  "type": "boolean"
+                },
+                "placement": {
+                  "enum": [
+                    "top",
+                    "none"
+                  ]
+                },
+                "preview_tab": {
+                  "type": "boolean"
+                },
+                "rows": {
+                  "enum": [
+                    "scroll",
+                    "squeeze",
+                    "wrap"
+                  ]
+                },
+                "show_extension": {
+                  "type": "boolean"
+                },
+                "show_folder_for_equal_names": {
+                  "type": "boolean"
+                },
+                "show_icon": {
+                  "type": "boolean"
+                },
+                "sort_alphabetically": {
+                  "type": "boolean"
+                }
+              },
+              "type": "object"
+            },
+            "usage_counts": {
+              "type": "boolean"
+            },
+            "usage_counts_above": {
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
+        "notifications": {
+          "additionalProperties": false,
+          "description": "Notifications (SPEC-0337).",
+          "properties": {
+            "log_info": {
+              "description": "Keep informational notes in the Notifications tool window (on by default).",
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
+        "project_view": {
+          "additionalProperties": false,
+          "description": "The project tree (SPEC-0275 v10).",
+          "properties": {
+            "compact_middle_packages": {
+              "description": "Packages that hold only one sub-package share its row (on by default).",
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
+        "system": {
+          "additionalProperties": false,
+          "description": "System Settings (SPEC-0337).",
+          "properties": {
+            "confirm_quit": {
+              "description": "Ask before quitting (off by default).",
+              "type": "boolean"
+            },
+            "reopen_last_project": {
+              "description": "Open the last project at start-up (on by default).",
+              "type": "boolean"
+            },
+            "save_on_frame_deactivation": {
+              "description": "Save files when the window loses the focus (off by default).",
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        },
+        "vcs": {
+          "additionalProperties": false,
+          "description": "Version control settings.",
+          "properties": {
+            "allow_force_push": {
+              "type": "boolean"
+            },
+            "protected_branches": {
+              "type": "string"
+            },
+            "update_method": {
+              "enum": [
+                "merge",
+                "rebase"
+              ]
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "required": [
+    "idecraft",
+    "settings"
+  ],
+  "title": "IDECraft settings bundle (kind `settings`, format 1)",
+  "type": "object"
+}

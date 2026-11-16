@@ -1,0 +1,12 @@
+format = 1
+id = "db2"
+name = "IBM Db2"
+family = "odbc"
+category = "relational"
+status = "beta"
+note = "Listed for the ODBC route (ADR-0020), which IDECraft does not have yet; not connectable."
+aliases = ["db2 luw", "ibm"]
+
+[connection]
+schemes = ["db2"]
+default_port = 50000

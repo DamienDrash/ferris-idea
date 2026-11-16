@@ -1,0 +1,15 @@
+format = 1
+id = "supabase"
+name = "Supabase"
+family = "postgresql"
+category = "cloud"
+status = "beta"
+note = "Cloud service with PostgreSQL inside; port 6543 is the pooler. Not tested."
+aliases = ["supabase postgres"]
+
+[connection]
+schemes = ["supabase"]
+default_port = 5432
+default_database = "postgres"
+default_user = "postgres"
+ssl = "require"

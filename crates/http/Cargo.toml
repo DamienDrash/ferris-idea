@@ -1,0 +1,24 @@
+[package]
+name = "idecraft-http"
+description = "HTTP client: request files and sending"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+# Content codings of responses (SPEC-0046 behaviour 12); pure Rust (miniz_oxide).
+flate2 = "1"
+native-tls.workspace = true
+serde.workspace = true
+serde_json = "1"
+thiserror.workspace = true
+
+# Android has no system TLS that native-tls can use, so OpenSSL is compiled in (ADR-0029).
+[target.'cfg(target_os = "android")'.dependencies]
+openssl = { version = "0.10", features = ["vendored"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,30 @@
+[package]
+name = "idecraft-host"
+description = "Functions of a remote project on the host: language servers, inspections, search, Git, terminals, runs, port forwarding and the debug-adapter start, bound into `idecraft serve` (SPEC-0318)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+idecraft-core.workspace = true
+idecraft-debugger.workspace = true
+idecraft-languages.workspace = true
+idecraft-session.workspace = true
+idecraft-ui.workspace = true
+idecraft-vcs.workspace = true
+portable-pty = "0.9"
+serde.workspace = true
+serde_json = "1"
+tokio = { workspace = true, features = ["rt", "time"] }
+
+[target."cfg(unix)".dependencies]
+nix = { version = "0.28", default-features = false, features = ["signal", "process"] }
+
+[dev-dependencies]
+idecraft-editor.workspace = true
+
+[lints]
+workspace = true

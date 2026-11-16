@@ -1,0 +1,70 @@
+# Redirects (SPEC-0046 behaviour 4). Environment "local".
+
+@base = http://{{host}}:{{port}}
+
+### 301 get
+GET {{base}}/redirect/301
+
+### 302 get
+GET {{base}}/redirect/302
+
+### 303 post becomes get
+POST {{base}}/redirect/303
+Content-Type: application/json
+
+{"kept": false}
+
+### 301 post becomes get
+POST {{base}}/redirect/301
+Content-Type: application/json
+
+{"kept": false}
+
+### 307 post stays post
+POST {{base}}/redirect/307
+Content-Type: application/json
+
+{"kept": true}
+
+### 308 put stays put
+PUT {{base}}/redirect/308
+Content-Type: application/json
+
+{"kept": true}
+
+### chain
+GET {{base}}/redirect/302?to=/redirect/301
+
+### loop ends
+GET {{base}}/redirect/loop
+
+### relative location
+GET {{base}}/redirect/relative
+
+### other host keeps no credentials
+GET {{base}}/redirect/other-host
+Authorization: Bearer {{token}}
+Cookie: session=request-file-cookie
+Proxy-Authorization: Basic cHJlY2hlY2s6cHJlY2hlY2s=
+X-Kept: yes
+
+### other host 307 keeps the body
+POST {{base}}/redirect/other-host/307
+Authorization: Bearer {{token}}
+Content-Type: text/plain
+
+body for the other host
+
+### same host keeps credentials
+GET {{base}}/redirect/302
+Authorization: Bearer {{token}}
+
+### scheme relative location
+GET {{base}}/redirect/scheme-relative
+Authorization: Bearer {{token}}
+
+### no location
+GET {{base}}/redirect/no-location
+
+### location with another scheme is not followed
+GET {{base}}/redirect/file

@@ -1,0 +1,18 @@
+format = 1
+id = "redshift"
+name = "Amazon Redshift"
+family = "postgresql"
+category = "cloud"
+status = "beta"
+note = "Cloud only; based on PostgreSQL 8, so some catalogue queries may fail. Not tested."
+aliases = ["aws redshift", "amazon"]
+
+[connection]
+schemes = ["redshift"]
+default_port = 5439
+default_database = "dev"
+ssl = "require"
+[sql]
+keywords = ["distkey", "sortkey", "diststyle", "unload", "copy"]
+explain = "EXPLAIN {statement}"
+plan_format = "text"

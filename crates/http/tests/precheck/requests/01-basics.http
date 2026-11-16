@@ -1,0 +1,82 @@
+# Request file format (SPEC-0046 behaviours 1 and 2). Start the server first:
+#   python3 -I ../server.py --port 18079   (crates/http/tests/precheck/server.py)
+# and choose the environment "local" (http-client.env.json beside this file).
+// A comment with two slashes.
+
+@base = http://{{host}}:{{port}}
+
+### get with headers
+GET {{base}}/echo/basics
+Accept: application/json
+X-Request-Name: get with headers
+# a comment between headers is skipped
+X-After-Comment: yes
+
+### query over several lines
+GET {{base}}/echo/query
+    ?page=2
+    &size=10
+    &q=two%20words
+Accept: application/json
+
+###
+# @name named-by-comment
+POST {{base}}/echo/json HTTP/1.1
+Content-Type: application/json
+
+{
+  "name": "Ada",
+  "tags": ["a", "b"],
+  "nested": {"n": 1}
+}
+
+### form body
+POST {{base}}/echo/form
+Content-Type: application/x-www-form-urlencoded
+
+name=Ada+Lovelace&lang=en&note=a%26b
+
+### bare url means get
+{{base}}/echo/bare
+
+### put
+PUT {{base}}/echo/put
+Content-Type: text/plain
+
+replaced
+
+### patch
+PATCH {{base}}/echo/patch
+Content-Type: application/merge-patch+json
+
+{"name": null}
+
+### delete
+DELETE {{base}}/echo/delete
+
+### options
+OPTIONS {{base}}/echo/options
+
+### head has no body
+HEAD {{base}}/echo/head
+
+### no content
+GET {{base}}/status/204
+
+### not found
+GET {{base}}/status/404
+
+### post without a body
+POST {{base}}/echo/empty
+
+### fragment is not sent
+GET {{base}}/echo/fragment?x=1#section
+
+### body with comment-like lines
+POST {{base}}/echo/body-lines
+Content-Type: text/plain
+
+first line
+# not a comment inside a body
+// neither is this
+last line

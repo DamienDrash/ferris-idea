@@ -1,0 +1,60 @@
+# Response kinds. Environment "local".
+
+@base = http://{{host}}:{{port}}
+
+### chunked
+GET {{base}}/chunked
+
+### gzip when accepted
+GET {{base}}/gzip
+Accept-Encoding: gzip
+
+### gzip asked for by the client
+GET {{base}}/gzip
+
+### gzip refused
+GET {{base}}/gzip
+Accept-Encoding: identity
+
+### gzip forced
+GET {{base}}/gzip/forced
+Accept-Encoding: identity
+
+### slow two seconds
+GET {{base}}/slow?seconds=2
+
+### large one megabyte
+GET {{base}}/large?bytes=1048576
+
+### binary
+GET {{base}}/binary
+
+### json labelled text
+GET {{base}}/type/wrong
+
+### no content type
+GET {{base}}/type/missing
+
+### broken json
+GET {{base}}/type/broken-json
+
+### latin1 text
+GET {{base}}/type/latin1
+
+### close delimited
+GET {{base}}/close-delimited
+
+### interim response
+GET {{base}}/interim
+
+### server error
+GET {{base}}/status/500
+
+### unauthorised
+GET {{base}}/basic-auth
+
+### nothing listens
+GET http://127.0.0.1:1/
+
+### not a url
+GET ftp://127.0.0.1/file

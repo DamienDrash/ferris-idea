@@ -1,0 +1,14 @@
+format = 1
+id = "alloydb"
+name = "Google AlloyDB"
+family = "postgresql"
+category = "cloud"
+status = "beta"
+note = "Cloud only; PostgreSQL-compatible. Not tested."
+aliases = ["google cloud", "gcp"]
+
+[connection]
+schemes = ["alloydb"]
+default_port = 5432
+default_database = "postgres"
+ssl = "require"

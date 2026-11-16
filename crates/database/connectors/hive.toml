@@ -1,0 +1,12 @@
+format = 1
+id = "hive"
+name = "Apache Hive"
+family = "odbc"
+category = "analytics"
+status = "beta"
+note = "Listed for the ODBC route (ADR-0020), which IDECraft does not have yet; not connectable."
+aliases = ["hiveserver2", "hadoop"]
+
+[connection]
+schemes = ["hive2"]
+default_port = 10000

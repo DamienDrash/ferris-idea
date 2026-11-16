@@ -1,0 +1,11 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Run plain" type="Application" factoryName="Application" folderName="Java">
+    <option name="MAIN_CLASS_NAME" value="Hello" />
+    <module name="plain" />
+    <option name="PROGRAM_PARAMETERS" value="a &quot;b c&quot;" />
+    <option name="VM_PARAMETERS" value="-Xmx64m" />
+    <envs>
+      <env name="GREETING" value="hi" />
+    </envs>
+  </configuration>
+</component>

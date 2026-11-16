@@ -1,0 +1,53 @@
+# Dynamic variables, continued headers, request settings (SPEC-0046 behaviours 2, 3 and 10) and the
+# parts of other request-file dialects that IDECraft recognises and never sends, runs or writes
+# (behaviour 9). Environment "local".
+
+@base = http://{{host}}:{{port}}
+
+### dynamic variables
+GET {{base}}/echo/dynamic
+X-Uuid: {{$uuid}}
+X-Other-Uuid: {{$random.uuid}}
+X-Timestamp: {{$timestamp}}
+X-Iso: {{$isoTimestamp}}
+X-Random: {{$randomInt}}
+
+### unknown dynamic variable is not sent
+GET {{base}}/echo/dynamic-unknown
+X-Unknown: {{$doesNotExist}}
+
+### header continued on the next line
+GET {{base}}/echo/folded
+X-Long: first part,
+  second part
+X-Next: yes
+
+### no-redirect setting
+# @no-redirect
+GET {{base}}/redirect/302
+
+### timeout setting
+# @timeout 1
+GET {{base}}/slow?seconds=3
+
+### response handler is not run
+GET {{base}}/echo/handler
+
+> {% client.global.set("seen", response.status); %}
+
+### handler over several lines after a body
+POST {{base}}/echo/handler-lines
+Content-Type: text/plain
+
+the body stays
+
+> {%
+  client.test("status", function() {
+    client.assert(response.status === 200);
+  });
+%}
+
+### response is not saved to a file
+GET {{base}}/echo/save
+
+>> ./saved-response.json

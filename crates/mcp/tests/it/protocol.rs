@@ -21009,6 +21009,15 @@ async fn find_usages_of_an_interface_method_lists_its_calls() {
         [("src/shape.ts".to_owned(), 8, "call".to_owned())],
         "{found}"
     );
+    // SPEC-0293 v11 behaviour 10a: without a TypeScript server the text answers, saying why.
+    if found["source"] == "text" {
+        let note = found["note"].as_str().unwrap_or_default();
+        assert!(
+            note.starts_with("No usable language server for typescript")
+                && note.ends_with("; showing text occurrences."),
+            "{found}"
+        );
+    }
 }
 
 /// SPEC-0330 v4, AK-16: Inline Variable and Extract Constant in a Python file through

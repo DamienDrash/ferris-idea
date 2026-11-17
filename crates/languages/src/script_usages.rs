@@ -1,7 +1,8 @@
 //! What a usage of a symbol in a JavaScript or TypeScript file is, from the syntax tree
 //! (`SPEC-0293` v4 behaviours 14a and 16): a call, a read, a write, an import, a use as a type or a
 //! declaration; and whether it declares a member, which is an implementation or an override of the
-//! searched member and no usage (OBS-0028 T5).
+//! searched member and no usage (OBS-0028 T5); and whether it lies in a string or a comment, which
+//! a text search finds and no usage is (`SPEC-0293` v11 behaviour 10a).
 
 use std::path::Path;
 
@@ -18,6 +19,9 @@ pub struct ScriptUsage {
     /// It is the name of a method, field, accessor or property signature of a class, interface or
     /// object literal: another member's declaration (an implementation or an override).
     pub member_declaration: bool,
+    /// It lies inside a string, a template string's text or a comment: a text occurrence, no
+    /// usage (`SPEC-0293` v11 behaviour 10a).
+    pub in_text: bool,
 }
 
 /// Kinds whose `name` declares a member.
@@ -90,7 +94,15 @@ fn of_node(n: Node) -> ScriptUsage {
     let usage = |kind| ScriptUsage {
         kind,
         member_declaration: false,
+        in_text: false,
     };
+    if in_text(n) {
+        return ScriptUsage {
+            kind: UsageKind::Other,
+            member_declaration: false,
+            in_text: true,
+        };
+    }
     let Some(p) = n.parent() else {
         return usage(UsageKind::Read);
     };
@@ -100,6 +112,7 @@ fn of_node(n: Node) -> ScriptUsage {
         return ScriptUsage {
             kind: UsageKind::Declaration,
             member_declaration: true,
+            in_text: false,
         };
     }
     // `{ area: () => 1 }` and `{ area() {} }` in an object literal.
@@ -107,6 +120,7 @@ fn of_node(n: Node) -> ScriptUsage {
         return ScriptUsage {
             kind: UsageKind::Declaration,
             member_declaration: true,
+            in_text: false,
         };
     }
     if DECLARATIONS.contains(&p.kind()) && is_field(p, "name", n) {
@@ -171,6 +185,20 @@ fn of_node(n: Node) -> ScriptUsage {
     usage(kind)
 }
 
+/// `n` lies in the text of a string, of a template string outside its `${…}`, or in a comment.
+fn in_text(n: Node) -> bool {
+    let mut up = Some(n);
+    while let Some(a) = up {
+        match a.kind() {
+            "template_substitution" => return false,
+            "string" | "string_fragment" | "template_string" | "comment" => return true,
+            _ => {}
+        }
+        up = a.parent();
+    }
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -194,10 +222,12 @@ mod tests {
         let member = ScriptUsage {
             kind: UsageKind::Declaration,
             member_declaration: true,
+            in_text: false,
         };
         let plain = |kind| ScriptUsage {
             kind,
             member_declaration: false,
+            in_text: false,
         };
         for path in ["a.ts", "a.tsx"] {
             assert_eq!(at(path, SHAPES, "area(): number;\n}"), member);
@@ -242,5 +272,26 @@ mod tests {
         // Not supported, or no name there.
         assert_eq!(classify(Path::new("a.py"), "x = 1\n", &[(0, 0)]), [None]);
         assert_eq!(classify(Path::new("a.ts"), "x\n", &[(5, 0)]), [None]);
+    }
+
+    /// SPEC-0293 v11 behaviour 10a: a name in a string, in a template string's text or in a
+    /// comment is text, no usage; inside `${…}` it is code again.
+    #[test]
+    fn strings_and_comments_are_no_usages() {
+        let text =
+            "const a = \"area\";\n// area here\n/* area */\nconst b = `area ${this.area()}`;\n";
+        let text_only = ScriptUsage {
+            kind: UsageKind::Other,
+            member_declaration: false,
+            in_text: true,
+        };
+        for path in ["a.ts", "a.js", "a.tsx"] {
+            assert_eq!(at(path, text, "area\";"), text_only, "{path}");
+            assert_eq!(at(path, text, "area here"), text_only, "{path}");
+            assert_eq!(at(path, text, "area */"), text_only, "{path}");
+            assert_eq!(at(path, text, "area ${"), text_only, "{path}");
+            assert!(!at(path, text, "area()}").in_text, "{path}");
+            assert_eq!(at(path, text, "area()}").kind, UsageKind::Call, "{path}");
+        }
     }
 }

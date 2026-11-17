@@ -185,6 +185,54 @@ pub fn with_own_index(root: &Path, mut search: UsageSearch, uses: Vec<Location>)
     search
 }
 
+/// The end of the note of a search answered with text occurrences (behaviours 10 and 10a).
+const TEXT_SHOWN: &str = "; showing text occurrences.";
+
+/// Why a search answered with text occurrences, from its `note`: the note without its end
+/// (`The language server did not answer within 20 s`, `No usable language server for …`).
+pub fn text_reason(note: &str) -> &str {
+    note.strip_suffix(TEXT_SHOWN).unwrap_or(note)
+}
+
+/// The reason to answer with text occurrences when opening the file's server failed with `e`:
+/// no usable server for the file, in the words of the server lookup (`SPEC-0293` v11 behaviour
+/// 10a); `None` for every other failure, which ends the search (behaviour 11).
+fn no_server(e: &LspError) -> Option<String> {
+    matches!(e, LspError::NoServer(_)).then(|| capitalized(&e.to_string()))
+}
+
+/// The answer from the whole-word text occurrences of `symbol` instead of the server's, with
+/// `reason` in the note (behaviours 10 and 10a): usages and kinds as [`usages_of`] and the syntax
+/// tree give them.
+fn text_answer(
+    root: &Path,
+    file: &Path,
+    text: Option<&str>,
+    symbol: &str,
+    target: Target,
+    reason: &str,
+) -> UsageSearch {
+    let found = text_occurrences(root, file, text, symbol, MAX_TEXT_OCCURRENCES);
+    let usages = usages_of(root, file, text, found, None);
+    let mut details = details(root, file, text, &usages, &std::collections::HashMap::new());
+    set_kinds(file, text, &usages, &mut details);
+    UsageSearch {
+        target,
+        details,
+        usages,
+        source: UsageSource::Text,
+        note: Some(format!("{reason}{TEXT_SHOWN}")),
+    }
+}
+
+/// `s` with its first letter in upper case.
+fn capitalized(s: &str) -> String {
+    let mut c = s.chars();
+    c.next()
+        .map(|f| f.to_uppercase().chain(c).collect())
+        .unwrap_or_default()
+}
+
 /// The search of [`find_usages_in`] with the file's language server alone.
 #[allow(clippy::too_many_arguments)]
 async fn server_usages_in(
@@ -205,22 +253,13 @@ async fn server_usages_in(
         outside: None,
         kind: None,
     };
-    let too_slow = |target: Target| {
-        let note = format!(
-            "The language server did not answer within {} s; showing text occurrences.",
+    let from_text =
+        |target: Target, reason: String| Ok(text_answer(root, file, text, symbol, target, &reason));
+    let too_slow = || {
+        format!(
+            "The language server did not answer within {} s",
             deadline.as_secs()
-        );
-        let found = text_occurrences(root, file, text, symbol, MAX_TEXT_OCCURRENCES);
-        let usages = usages_of(root, file, text, found, None);
-        let mut details = details(root, file, text, &usages, &std::collections::HashMap::new());
-        set_kinds(file, text, &usages, &mut details);
-        Ok(UsageSearch {
-            target,
-            details,
-            usages,
-            source: UsageSource::Text,
-            note: Some(note),
-        })
+        )
     };
     let stopped = until_stopped(stop.clone());
     let opened = tokio::select! {
@@ -229,8 +268,14 @@ async fn server_usages_in(
     };
     let mut o = match opened {
         Ok(Ok(o)) => o,
-        Ok(Err(LspError::Timeout(..))) | Err(_) => return too_slow(target),
-        Ok(Err(e)) => return Err(e),
+        Ok(Err(LspError::Timeout(..))) | Err(_) => return from_text(target, too_slow()),
+        // No server for the file: the text occurrences, with what is missing (v11 behaviour 10a).
+        Ok(Err(e)) => {
+            return match no_server(&e) {
+                Some(reason) => from_text(target, reason),
+                None => Err(e),
+            };
+        }
     };
     let result = async {
         let params = o.position(line, character);
@@ -295,7 +340,7 @@ async fn server_usages_in(
                     note: None,
                 })
             }
-            Err(LspError::Timeout(..)) => too_slow(target.clone()),
+            Err(LspError::Timeout(..)) => from_text(target.clone(), too_slow()),
             Err(e) => Err(e),
         }
     }
@@ -367,10 +412,12 @@ pub fn usages_of(
             });
         }
     }
+    // Member declarations, and in a text search the occurrences in strings and comments
+    // (`SPEC-0293` v11 behaviour 10a), are no usages.
     let syntax = syntax_of(file, text, &usages);
     let mut member = syntax
         .iter()
-        .map(|s| s.is_some_and(|u| u.member_declaration));
+        .map(|s| s.is_some_and(|u| u.member_declaration || u.in_text));
     usages.retain(|_| !member.next().unwrap_or(false));
     usages
 }
@@ -742,6 +789,103 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("src")).unwrap();
         dir.canonicalize().unwrap()
+    }
+
+    /// SPEC-0293 v11 AK-17 (behaviour 10a): without a usable language server the search answers
+    /// with the text occurrences, marked as such, and a note that names what is missing; in the
+    /// TypeScript project of AK-9 that is the call in `describe` only, the member declarations and
+    /// the occurrence in the template string's text left out. Other failures still end the search.
+    #[test]
+    fn without_a_server_text_occurrences_with_the_reason() {
+        let root = temp("no-server");
+        let shape = root.join("src/shape.ts");
+        std::fs::write(
+            &shape,
+            "export interface Shape {\n  area(): number;\n}\n\nexport abstract class Base implements Shape {\n  abstract area(): number;\n\n  describe(): string {\n    return `area ${this.area()}`;\n  }\n}\n",
+        )
+        .unwrap();
+        for (file, class) in [("src/circle.ts", "Circle"), ("src/square.ts", "Square")] {
+            std::fs::write(
+                root.join(file),
+                format!("import {{ Base }} from \"./shape\";\n\nexport class {class} extends Base {{\n  area(): number {{\n    return 4;\n  }}\n}}\n"),
+            )
+            .unwrap();
+        }
+        let missing = LspError::NoServer(
+            "typescript: typescript-language-server not found (install: npm i -g typescript-language-server typescript)".into(),
+        );
+        let reason = no_server(&missing).expect("no server gives the text occurrences");
+        let target = Target {
+            name: "area".into(),
+            declaration: None,
+            outside: None,
+            kind: None,
+        };
+        let found = text_answer(&root, &shape, None, "area", target, &reason);
+        let shown: Vec<(String, u64, UsageKind)> = found
+            .usages
+            .iter()
+            .zip(&found.details)
+            .map(|(u, d)| {
+                (
+                    u.path.file_name().unwrap().to_string_lossy().into_owned(),
+                    u.range.start_line,
+                    d.kind,
+                )
+            })
+            .collect();
+        assert_eq!(shown, [("shape.ts".into(), 8, UsageKind::Call)]);
+        assert_eq!(found.source, UsageSource::Text);
+        let note = found.note.unwrap();
+        assert_eq!(
+            note,
+            "No usable language server for typescript: typescript-language-server not found (install: npm i -g typescript-language-server typescript); showing text occurrences."
+        );
+        assert_eq!(
+            text_reason(&note),
+            "No usable language server for typescript: typescript-language-server not found (install: npm i -g typescript-language-server typescript)"
+        );
+        // A server error or a server that cannot start is no reason for text (behaviour 11).
+        for other in [
+            LspError::Start {
+                command: "x".into(),
+                message: "denied".into(),
+            },
+            LspError::Io("broken pipe".into()),
+        ] {
+            assert_eq!(no_server(&other), None, "{other}");
+        }
+        // The whole search, on a file whose language has no server: the text, not an error.
+        let notes = root.join("src/notes.txt");
+        std::fs::write(&notes, "area\nthe area\n").unwrap();
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let found = rt
+            .block_on(find_usages_in(
+                &root,
+                &notes,
+                None,
+                0,
+                0,
+                "area",
+                Duration::from_secs(5),
+                None,
+            ))
+            .expect("text occurrences, not an error");
+        assert_eq!(found.source, UsageSource::Text);
+        assert_eq!(found.usages.len(), 2);
+        assert!(
+            found
+                .note
+                .as_deref()
+                .is_some_and(|n| n.starts_with("No usable language server for")
+                    && n.ends_with("; showing text occurrences.")),
+            "{:?}",
+            found.note
+        );
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     /// SPEC-0293/AK-3: places outside the project are dropped, the rest sorted and each once.

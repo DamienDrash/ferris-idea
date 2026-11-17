@@ -18693,7 +18693,7 @@ impl IdeServer {
     }
 
     #[tool(
-        description = "Find Usages for the symbol at a position of a workspace file (saved content): its declaration and its usages in project files grouped by file (path, line, character, line text), from the language server within `timeout_s` (default 20); when the server is slower, the whole-word text occurrences in files of the same extension, marked with `source: text` and a note. On a class or id selector of a CSS, SCSS or Less file the `class` and `id` uses in the project's HTML files are added from IDECraft's own index, each marked with `source: own_index` (SPEC-0293 v5). `in_file: true` lists only the usages in the file of the position, as Find Usages in File does (SPEC-0293 v7)."
+        description = "Find Usages for the symbol at a position of a workspace file (saved content): its declaration and its usages in project files grouped by file (path, line, character, line text), from the language server within `timeout_s` (default 20); when the server is slower or no language server is installed for the file, the whole-word text occurrences in files of the same extension (in JavaScript and TypeScript not those in strings and comments), marked with `source: text` and a note giving the reason, e.g. which server is missing and how to install it (SPEC-0293 v11). On a class or id selector of a CSS, SCSS or Less file the `class` and `id` uses in the project's HTML files are added from IDECraft's own index, each marked with `source: own_index` (SPEC-0293 v5). `in_file: true` lists only the usages in the file of the position, as Find Usages in File does (SPEC-0293 v7)."
     )]
     async fn find_usages(
         &self,

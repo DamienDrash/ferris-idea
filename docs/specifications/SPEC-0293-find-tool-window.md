@@ -1,6 +1,6 @@
 # SPEC-0293: Find tool window for Find Usages
 
-- **Version:** 9 · **Date:** 2026-11-14 (v9: the filters by read access, write access and import statements, the nested folders, the module groups, Exclude and Include, and the export to a text file, under the ids of the bundled keymaps, behaviours 22–26, AK-14 and AK-15; sixth package of docs/research/KEYMAP_COVERAGE.md; v8: a place without a name is not searched and a search never stays in its searching state, behaviours 20 and 21, AK-13; window check of 2026-11-14: Find Usages in File at the first column of an annotated line opened the window searching for a symbol without a name); 2026-11-13 (v7: `FindUsagesInFile` shows only the usages in the file of the caret, behaviour 19, AK-12; v6: the grouping toggles under the ids of the bundled keymaps, behaviour 18, AK-11; docs/research/KEYMAP_COVERAGE.md; v5: a class or id selector of a stylesheet also lists its uses in HTML files, from IDECraft's own index and marked so, behaviour 17, AK-10; v4: in JavaScript and TypeScript the kinds come from the syntax tree and the members that implement or override the searched one are no usages, OBS-0028 T5, behaviours 14a and 16, AK-9); 2026-11-05 (v2: only the name is marked, OBS-0016; v3: grouped by usage kind, module, package, class and method, OBS-0016 defect F034-3)
+- **Version:** 11 · **Date:** 2026-11-17 (v11: without a language server for the file the window and MCP list the text occurrences with the reason, and in JavaScript and TypeScript a text occurrence inside a string or a comment is no usage, behaviours 10a and 11, AK-9 and AK-17; found on a CI runner without Node language servers, where `find_usages` failed instead of answering from the text as AK-9 asks); 2026-11-14 (v9: the filters by read access, write access and import statements, the nested folders, the module groups, Exclude and Include, and the export to a text file, under the ids of the bundled keymaps, behaviours 22–26, AK-14 and AK-15; sixth package of docs/research/KEYMAP_COVERAGE.md; v8: a place without a name is not searched and a search never stays in its searching state, behaviours 20 and 21, AK-13; window check of 2026-11-14: Find Usages in File at the first column of an annotated line opened the window searching for a symbol without a name); 2026-11-13 (v7: `FindUsagesInFile` shows only the usages in the file of the caret, behaviour 19, AK-12; v6: the grouping toggles under the ids of the bundled keymaps, behaviour 18, AK-11; docs/research/KEYMAP_COVERAGE.md; v5: a class or id selector of a stylesheet also lists its uses in HTML files, from IDECraft's own index and marked so, behaviour 17, AK-10; v4: in JavaScript and TypeScript the kinds come from the syntax tree and the members that implement or override the searched one are no usages, OBS-0028 T5, behaviours 14a and 16, AK-9); 2026-11-05 (v2: only the name is marked, OBS-0016; v3: grouped by usage kind, module, package, class and method, OBS-0016 defect F034-3)
 - **Sources:** OBS-0012 (side-by-side 2026-11-05 with `Inventory.java` of `java-basic`, record `Item`:
   ⌥F7 in the reference opens a tool window at the bottom, not a popup; its tab is named after the
   search, "<symbol> in Project Files"; a tree starts with the searched symbol, then a group of usages in
@@ -66,9 +66,21 @@ each use in view, without the list closing when you jump.
     (SPEC-0029 search, at most 1000), grouped like usages, under a group row `Text occurrences in
     Project Files` with a note that the language server did not answer within 20 s; without any
     occurrence it says that no usages were found and why. The status bar says the same. [GEN]
-11. **Stopped / failed:** after Stop the window says the search was stopped; when the search cannot run
-    (no language server for the file, server error) it gives the reason. Nothing stays in a searching
-    state after the deadline. [GEN]
+    10a. **No language server (v11):** when no usable language server is available for the file
+    (none of its servers is installed, or IDECraft knows none for its language), the window lists
+    the text occurrences as in behaviour 10, under the same group row and marked the same way (MCP
+    `source` `text`), with a note that gives the reason in the words of the server lookup — which
+    server is missing and how to install it, e.g. `No usable language server for typescript:
+    typescript-language-server not found (install: …); showing text occurrences.` — and the status
+    bar says the same. Without any occurrence it says that no usages were found and this reason.
+    Before v11 the search failed with the reason only, which contradicted AK-9. In `.ts`, `.tsx`,
+    `.mts`, `.cts`, `.js`, `.jsx`, `.mjs` and `.cjs` files a text occurrence (behaviours 10 and 10a)
+    inside a string, a template string's text or a comment is left out, like the member
+    declarations of behaviour 16: a language server never lists it as a usage. [GEN]
+11. **Stopped / failed:** after Stop the window says the search was stopped; when the search fails
+    for another reason (a server error, a server that cannot be started) it gives the reason (v11:
+    no language server for the file is behaviour 10a). Nothing stays in a searching state after the
+    deadline. [GEN]
 12. **MCP:** `find_usages` (path, line, character; optional `timeout_s`, 1–60, default 20) runs the same
     search on the saved file and returns the target, the usages grouped by file (path, line,
     character, line text), whether they came from the language server or the text fallback, and the
@@ -270,7 +282,8 @@ each use in view, without the list closing when you jump.
   typescript-language-server and with TypeScript 7's `tsc --lsp` (live test
   `crates/languages/tests/it/ts_usages.rs::usages_of_an_interface_method_are_its_calls`; without the
   filter both list the four places of OBS-0028); MCP `find_usages` the same, also from the text
-  without a server (`protocol.rs::find_usages_of_an_interface_method_lists_its_calls`).
+  without a server (`protocol.rs::find_usages_of_an_interface_method_lists_its_calls`; v11: with
+  `source` `text` when no TypeScript server is installed, behaviour 10a).
 - **AK-10 (v5, behaviour 17)** SPEC-0042 AK-32: with vscode-css-language-server, Find Usages on
   `.card` of `css/site.css` lists `class="card"` of `index.html` marked as from the own index,
   with the note (`crates/languages/tests/it/html_css.rs::css_selector_usages_include_html`,
@@ -316,6 +329,15 @@ each use in view, without the list closing when you jump.
   in a window of the test harness the file is written and named in the status bar, and without
   a result nothing is written (`sixth_package_keymap.rs::usages_are_exported_to_a_text_file`).
   The save dialog itself is not exercised by a test.
+- **AK-17 (v11, behaviour 10a)** Without a usable language server the search of `area` of the
+  interface of AK-9 answers with the call in `describe` only, kind `call`, source `text` and a
+  note that names the missing server, its install hint and that text occurrences are shown
+  (unit test `find_usages::tests::without_a_server_text_occurrences_with_the_reason`); a text
+  occurrence in a string or comment of a TypeScript file is left out
+  (`script_usages::tests::strings_and_comments_are_no_usages`); the MCP test of AK-9 passes with
+  a `PATH` without typescript-language-server, vtsls and tsc and with them. The window's words
+  for a search without occurrences name the reason
+  (`workbench_find_usages::tests::nothing_found_names_the_reason`).
 
 ## Out of scope
 Several result tabs side by side (each new search replaces the content), the settings dialog of Find

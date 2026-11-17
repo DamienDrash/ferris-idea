@@ -136,6 +136,7 @@ const TERMINAL_READ: Check = Check::Right(Grant::TerminalRead);
 const PORTS: Check = Check::Right(Grant::Ports);
 const UI: Check = Check::Right(Grant::Ui);
 const SETTINGS: Check = Check::Right(Grant::Settings);
+const RECENT_PROJECTS: Check = Check::Right(Grant::RecentProjects);
 const DATABASE: Check = Check::Database;
 const TRUSTED: Check = Check::Trusted;
 const ASKS: Check = Check::AsksUser;
@@ -368,7 +369,7 @@ pub const TOOLS: &[ToolEffect] = &[
     tool("quit_ide", &[Change::Files, Change::Ide], Dry::None, &[], &[WRITE, QUIT]),
     tool("read_file", &[], Dry::None, &[], &[]),
     tool("read_table_data", &[], Dry::None, &[Reach::Database, Reach::Network], &[SSH, DATABASE, TRUSTED]),
-    tool("recent_projects", &[], Dry::None, &[], &[]),
+    tool("recent_projects", &[], Dry::None, &[], &[RECENT_PROJECTS]),
     tool("redo_refactoring", &[Change::Files], Dry::None, &[], &[WRITE]),
     tool("reference_index", &[], Dry::None, &[], &[]),
     tool("related_files", &[], Dry::None, &[], &[]),

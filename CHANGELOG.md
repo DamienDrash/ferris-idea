@@ -2,14 +2,68 @@
 
 All notable changes to IDECraft. Format: [docs/design/CONTENT_STYLE_GUIDE.md](docs/design/CONTENT_STYLE_GUIDE.md) §7.
 
-IDECraft follows [Semantic Versioning](https://semver.org/) with `0.x` versions until 1.0. Each working
-day with merged user-visible changes gets a minor version; the date is the merge date on `main`
-(Europe/Berlin). Versions are annotated Git tags (`vX.Y.Z`) in the private repository; there are no
-GitHub releases or downloads yet. Versions up to v0.7.0 were cut retroactively on 2026-11-06. The
-stage line follows the project maturity criteria in CONTENT_STYLE_GUIDE §5. Numbers in parentheses
+IDECraft follows [Semantic Versioning](https://semver.org/); versions before 1.0.0 were `0.x`. Each
+working day with merged user-visible changes gets a minor version; the date is the merge date on
+`main` (Europe/Berlin). Versions are annotated Git tags (`vX.Y.Z`); from 1.0.0 on, released versions
+also have a GitHub release with a signed macOS download. Versions up to v0.7.0 were cut
+retroactively on 2026-11-06. The stage line follows the project maturity criteria in CONTENT_STYLE_GUIDE §5. Numbers in parentheses
 are pull requests; a short hash marks a commit made without one.
 
 ## Unreleased
+
+## IDECraft v1.0.0 — 2026-11-17
+
+Stage: stable
+
+Version 1.0: both priority workflows meet the beta criteria (v0.20.0), and this version is a
+published release: a GitHub release of the public repository with a macOS download signed with a
+Developer ID, notarized by Apple and stapled. From this version on, the interfaces listed in
+[STABILITY.md](docs/STABILITY.md) stay stable as that page describes.
+
+### Added
+- The database tree lists the procedures, functions and triggers of SQL Server and Oracle schemas and opens their source (SPEC-0116, SPEC-0142) (#960)
+- SQL completion offers SQLite's own words such as `RETURNING`, `PRAGMA` and `GLOB` (SPEC-0011) (#960)
+- Press ⌥ twice and hold it, then press ↑ or ↓ to add a caret on the line above or below, once per press (Ctrl twice on Windows and Linux) (SPEC-0025) (#896)
+- Drag with the middle mouse button to select a rectangle of text. With ⌥⇧ held, a middle click selects the rectangle from the caret to the click (SPEC-0130) (#896)
+- In the `class` and `id` values of an HTML file, Code Completion and the list that opens while typing offer the class names and ids of the linked and the project's other stylesheets, each with its file and line, and a name with `-` is typed and narrowed as a whole. The MCP tool `complete_code` returns them with `file:line` (SPEC-0042, SPEC-0072) (#878)
+- The View menu has Context Info (⌃⇧Q), Jump to Source (⌘↓), Recent Locations (⇧⌘E), Compare With… (⌘D), Compare with Clipboard and Increase/Decrease Font Size in All Editors, in the reference's order; Navigate has Previous and Next Occurrence (⌥⌘↑, ⌥⌘↓) and File Path (⌥⌘F12) (SPEC-0124) (#801)
+- A signed, notarized and stapled macOS download (DMG): Gatekeeper opens it without a warning (#963)
+- STABILITY.md says which interfaces stay stable from 1.0 (command line, MCP server, the session protocol of `idecraft serve`, files and formats) and how long a deprecated one keeps working (#974)
+- File › Manage IDE Settings › Export Settings… saves your editor, appearance, version control and code style settings and your keymap changes as one settings file; Import Settings… shows each change before anything is written (SPEC-0105) (#900)
+- Each Settings page says whether its settings apply to the IDE or to the project, and where they are kept; pages of the project are marked in the page list (SPEC-0105) (#900)
+- Focus Gutter (⌥⇧6 F) puts the keys on the editor's gutter icons: arrows move between them, Enter or Space acts as a click, Escape returns to the text (SPEC-0058) (#898)
+- Tab steps out of a closing bracket or quote, and expands a Python live template named as typed (SPEC-0056, SPEC-0072) (#891)
+- External Documentation (⇧F1) opens the documentation's https link, Find Usages with its settings (⌥⇧⌘F7) asks for the scope, and Quick Actions (⌥⌘↩) opens the context actions (SPEC-0077, SPEC-0293, SPEC-0076) (#891)
+- Jump to Type Source (⇧F4) in the debugger's Variables list, and Emoji & Symbols on macOS (SPEC-0091, SPEC-0061) (#891)
+
+### Changed
+- Menu shortcuts follow your keyboard layout as in other Mac apps: on a German keyboard Back and Forward show ⌘Ö and ⌘Ä. Edit › Duplicate Line shows no shortcut, and ⌘D shows at View › Compare With…, as in IntelliJ IDEA; ⌘D in the editor still duplicates (SPEC-0124) (#801)
+- Islands Light: method declarations in the text colour, parameter name hints on a grey pill in every theme, and the selected editor tab in its active colours only while the editor has the focus (SPEC-0060 v13, SPEC-0291 v9, SPEC-0061 v19) (#951)
+- When a Java file opens, a one-line method folds only if its name and parameter list are on one line and the folded line fits within the right margin, as in IntelliJ IDEA's defaults (SPEC-0083) (#807)
+
+### Fixed
+- Explain Plan works on read-only Oracle connections and through `explain_sql`; the explained statement still never runs (SPEC-0142) (#960)
+- DDL generated for an Oracle table runs again: defaults and identity columns come before `NOT NULL`, identity columns keep their clause instead of a system sequence, and comments are kept (SPEC-0135, SPEC-0142) (#960)
+- The Oracle tree no longer lists the hidden sequences behind identity columns (SPEC-0142) (#960)
+- `SELECT … FROM DUAL` is no longer marked as an unknown table on Oracle, MySQL and MariaDB (SPEC-0015) (#960)
+- A failed test of Node's built-in test runner (TAP) now shows its message and duration in the test results, and a failed Rust test the message and place of its panic; before, both were only in the raw output (SPEC-0045) (#947)
+- A completion chosen while the editor has several carets now goes in at every caret as one undo step. Before, it went in at one caret and the other carets were lost (SPEC-0025) (#896)
+- Bold and italic code keeps its font when it follows text of the same colour: calls of static methods such as `List.of(…)` are drawn in italics in Java, not only static fields in their own colour (SPEC-0290) (#971)
+- Rename (⇧F6) on a class selector such as `.card` in a CSS, SCSS or Less file keeps the dot and renames every use of the class with it: the `class` words in the project's HTML files and the same selector in other stylesheets and `<style>` blocks. It works the same when started on a class in an HTML file and for `#id` selectors and `id` values, and one ⌘Z takes back every file. A new name that is not a valid CSS class name or id is refused with the reason. The MCP tool `rename_symbol` does the same (SPEC-0042) (#878)
+- Go to Declaration (⌘B) on a class or id in an HTML file puts the caret on the name in the rule, no longer before the dot (SPEC-0042) (#878)
+- Find Usages without a language server for the file lists the text occurrences instead of failing, and says which server is missing and how to install it; `find_usages` answers the same with `source: text` (SPEC-0293) (#968)
+- Ruby files show their problems: ruby-lsp is asked for them, so syntax errors appear in the editor and through `file_diagnostics` instead of nothing after 30 seconds (SPEC-0042) (#950)
+- Problems of a PHP file appear within seconds of opening it, not after 30 seconds (SPEC-0042) (#950)
+- Code completion keeps the suggestions the language server ranks best: after `r.` in Rust the type's own fields and methods come first, and a PHP project's own function is no longer cut off behind built-in ones; `complete_code` returns them in that order (SPEC-0072) (#950)
+- The structure of a PHP file no longer lists function parameters (SPEC-0079) (#950)
+- Linux: saved database passwords and AI keys survive a restart. They are now kept in the desktop keyring (Secret Service, such as GNOME Keyring or KWallet), encrypted under your login, instead of the kernel keyring, which forgets them when the computer restarts. A password saved earlier in the current login session moves over the first time it is used; one already lost to a restart has to be entered once more (SPEC-0008) (#949)
+- Status messages, hints and links that name the key of an action (Find Usages, Rename, Inline, context actions, Debug, Undo, the first quick fix, the previous inline suggestion) take it from the keymap in use and write it for the platform; without a key they leave it out (SPEC-0028) (#892)
+- Outside macOS, the run configurations, Push, Update Project, stash, Go To, remote files, interactive rebase and profiler dialogs name their keys as Ctrl, Alt and Shift, and the remote file list and Recent Locations take Ctrl where macOS takes ⌘ (SPEC-0028) (#885)
+- On Linux and Windows the breakpoint popup and the breakpoint dialog name their keys as Ctrl+Shift+F8, Alt+K or Ctrl+Enter instead of the macOS symbols; "More" shows the shortcut of View Breakpoints from the keymap in use (SPEC-0127, SPEC-0028) (#876)
+
+### Security
+- Linux: without a desktop keyring (for example on a headless machine) saving a password fails and says why; IDECraft never falls back to a file or to a store that does not encrypt it at rest (SPEC-0008) (#949)
+- An agent connected to one project can no longer read the folders of your other recent projects unasked: the MCP tool `recent_projects` now needs the new agent right `recent-projects`, which is not granted unless you grant it, and each read is logged with the number of folders only. The project popup in the window is unchanged (SPEC-0094 v9) (#943)
 
 ## IDECraft v0.20.0 — 2026-11-17
 

@@ -246,6 +246,19 @@ pub async fn plan_rename_in(
     new_name: &str,
     wait: Duration,
 ) -> Result<RenamePlan, LspError> {
+    // A class or id of a stylesheet or an HTML file is renamed from IDECraft's own syntax trees,
+    // in every stylesheet and HTML file with its mark kept (`SPEC-0042` v22 behaviour 38).
+    if crate::html_css::is_stylesheet(file) || crate::html_css::is_html(file) {
+        let content = match text {
+            Some(t) => Some(t.to_owned()),
+            None => crate::shown::read(file).ok(),
+        };
+        if let Some(own) = content
+            .and_then(|t| crate::html_css::rename_plan(root, file, &t, line, character, new_name))
+        {
+            return own.map_err(LspError::Refused);
+        }
+    }
     let mut o = Opened::open_text(root, file, text, wait).await?;
     let result = async {
         let position = o.position(line, character);

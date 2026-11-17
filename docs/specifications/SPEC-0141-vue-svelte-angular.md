@@ -85,7 +85,7 @@ The front-end frameworks SPEC-0133 recognises get their language intelligence in
   and with the server pool (`crates/languages/tests/it/vue.rs`: `vue_diagnostics_are_complete`,
   `crates/languages/tests/vue_pool.rs`: `pooled_vue_diagnostics_are_complete`; real server,
   skipped when it is not installed); only the Vue server pulls (unit test
-  `servers::tests::only_vue_and_typescript_7_pull_diagnostics`).
+  `servers::tests::only_vue_typescript_7_and_ruby_lsp_pull_diagnostics`).
 - **AK-9 (v4)** Hover on the first character of a template name never shows a `__VLS_` declaration
   (`tests/vue.rs`: `vue_template_hover_names_the_prop`, real server); in a Vue project with its `node_modules`
   (`IDECRAFT_TEST_VUE`, e.g. a `npm create vue@latest` project) hover on `defineProps`, on `msg` in

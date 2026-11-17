@@ -639,7 +639,10 @@ pub struct Found {
     pub outside_places: Vec<(String, u64)>,
 }
 
-/// Reads a `CompletionList` or `CompletionItem[]`, keeping at most `limit` items.
+/// Reads a `CompletionList` or `CompletionItem[]`, keeping at most `limit` items: the best ones in
+/// the server's ranking, in that order — preselected first, then by sort text ignoring case first,
+/// items without sort text last, the server's order where nothing decides (`SPEC-0072` v17
+/// behaviour 54; rust-analyzer and intelephense hand out their lists unsorted).
 pub fn parse_completion(v: &Value, limit: usize) -> Vec<CompletionItem> {
     let items = match v {
         Value::Array(list) => list.as_slice(),
@@ -648,8 +651,19 @@ pub fn parse_completion(v: &Value, limit: usize) -> Vec<CompletionItem> {
             .and_then(Value::as_array)
             .map_or(&[][..], Vec::as_slice),
     };
-    items
-        .iter()
+    let rank = |i: &Value| {
+        let sort = i.get("sortText").and_then(Value::as_str);
+        (
+            i.get("preselect").and_then(Value::as_bool) != Some(true),
+            sort.is_none(),
+            sort.map(str::to_lowercase),
+            sort.map(str::to_owned),
+        )
+    };
+    let mut ranked: Vec<&Value> = items.iter().collect();
+    ranked.sort_by_cached_key(|i| rank(i));
+    ranked
+        .into_iter()
         .take(limit)
         .map(|i| {
             let s = |k: &str| i.get(k).and_then(Value::as_str).map(str::to_owned);
@@ -1605,6 +1619,23 @@ pub async fn complete_in(
     limit: usize,
     wait: Duration,
 ) -> Result<Vec<CompletionItem>, LspError> {
+    // In a `class` or `id` value of an HTML file: the stylesheets' names, without a server
+    // (`SPEC-0042` v22 behaviour 39).
+    if crate::html_css::is_html(file) {
+        let disk;
+        let content = match text {
+            Some(t) => Some(t),
+            None => {
+                disk = std::fs::read_to_string(file).ok();
+                disk.as_deref()
+            }
+        };
+        if let Some(items) = content
+            .and_then(|t| crate::html_css::completions(root, file, t, line, character, limit))
+        {
+            return Ok(items);
+        }
+    }
     // Configuration keys come from the bean model, not from a language server (`SPEC-0115` v7
     // behaviour 19, `SPEC-0134` v6 behaviour 8).
     {
@@ -1903,6 +1934,10 @@ pub async fn symbols_in(
                 crate::python_structure::structure(&o.text, symbols)
             } else if crate::script_structure::applies(file) {
                 crate::script_structure::structure(file, &o.text, symbols)
+            } else if LanguageId::detect(file) == Some(LanguageId::Php) {
+                // intelephense lists a function's parameters below it (`SPEC-0079` v8
+                // behaviour 15).
+                php_structure(symbols)
             } else {
                 symbols
             }
@@ -1911,9 +1946,46 @@ pub async fn symbols_in(
     result
 }
 
+/// The symbols of a PHP file as the structure shows them: below a function or method only nested
+/// functions and types, no parameters or variables (`SPEC-0079` v8 behaviour 15).
+fn php_structure(symbols: Vec<Symbol>) -> Vec<Symbol> {
+    crate::python_structure::without_locals(
+        symbols,
+        |s| matches!(s.kind.as_str(), "function" | "method" | "constructor"),
+        |s| matches!(s.kind.as_str(), "class" | "interface" | "enum" | "struct"),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// SPEC-0079 v8 AK-32: a PHP function's parameters and variables are left out; a method's
+    /// too; properties, constants and nested types stay.
+    #[test]
+    fn php_structure_without_parameters() {
+        let s = |name: &str, kind: &str, depth: usize| Symbol {
+            name: name.into(),
+            kind: kind.into(),
+            depth,
+            ..Default::default()
+        };
+        let symbols = vec![
+            s("greet", "function", 0),
+            s("$name", "variable", 1),
+            s("Greeter", "class", 0),
+            s("$prefix", "property", 1),
+            s("LIMIT", "constant", 1),
+            s("hello", "method", 1),
+            s("$who", "variable", 2),
+            s("$x", "variable", 0),
+        ];
+        let names: Vec<String> = php_structure(symbols).into_iter().map(|s| s.name).collect();
+        assert_eq!(
+            names,
+            ["greet", "Greeter", "$prefix", "LIMIT", "hello", "$x"]
+        );
+    }
 
     /// SPEC-0076 v8 AK-9: jdtls's list from its build (problems at character 0 with no width)
     /// is waited past; its refined list, an empty list and a list with one exact range are not.
@@ -2195,6 +2267,39 @@ mod tests {
         );
         assert_eq!(twice.len(), 2, "{twice:?}");
         assert_eq!(twice[0].path, PathBuf::from("/w/greeter.rb"));
+    }
+
+    /// SPEC-0072 v17 behaviour 54: an unsorted list is ranked before the limit cuts it.
+    #[test]
+    fn completion_is_ranked_before_the_limit() {
+        // rust-analyzer after `r.`: trait methods and snippets before the type's own members.
+        let list = json!([
+            {"label": "into()", "sortText": "7ffffffb"},
+            {"label": "try_into()", "sortText": "7ffffffb"},
+            {"label": "area()", "sortText": "7ffffff6", "preselect": true},
+            {"label": "plain"},
+            {"label": "w", "sortText": "7ffffff6", "preselect": true},
+            // Case is ignored first: `7FFFFFFC` comes after `7ffffffb`.
+            {"label": "Box", "sortText": "7FFFFFFC"},
+        ]);
+        let labels = |n| -> Vec<String> {
+            parse_completion(&list, n)
+                .into_iter()
+                .map(|i| i.label)
+                .collect()
+        };
+        assert_eq!(
+            labels(9),
+            ["area()", "w", "into()", "try_into()", "Box", "plain"]
+        );
+        // intelephense: the project's `greet` among a hundred stub functions is kept.
+        let mut many: Vec<Value> = (0..150)
+            .map(|n| json!({"label": format!("grapheme_{n:03}"), "sortText": format!("0002grapheme_{n:03}")}))
+            .collect();
+        many.push(json!({"label": "greet", "sortText": "0001greet"}));
+        let kept = parse_completion(&Value::Array(many), 100);
+        assert_eq!(kept.len(), 100);
+        assert_eq!(kept[0].label, "greet");
     }
 
     #[test]

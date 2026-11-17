@@ -211,6 +211,12 @@ impl WorkbenchView {
         self.focused_group
     }
 
+    /// Whether the last frame drew the focused group's selected tab in the active colours: the
+    /// keyboard focus is in its editor and the window is active (`SPEC-0061` v19 behaviour 6a).
+    pub fn editor_tabs_active(&self) -> bool {
+        self.tabs_have_focus
+    }
+
     /// Whether a group other than the main group has the focus.
     pub fn split_active(&self) -> bool {
         self.focused_group != MAIN
@@ -385,6 +391,10 @@ impl WorkbenchView {
                 | EditorEvent::Undid(..)
                 | EditorEvent::ProblemHover(_)
                 | EditorEvent::DocHover(_) => {}
+                EditorEvent::Note(note) => {
+                    this.status = Some(note.clone());
+                    cx.notify();
+                }
             }
         });
         if let Some(g) = self.group_mut(gid) {
@@ -1842,7 +1852,9 @@ impl WorkbenchView {
         // A file with errors is underlined on its tab (SPEC-0059 v4 behaviour 10).
         let problems = tabs.problem_flags(&self.problem_files(cx));
         let error_color = super::problem_mark_color();
-        let focused = self.focused_group == gid;
+        // Active colours only while the keyboard focus is in this group's editor (SPEC-0061 v19
+        // behaviour 6a).
+        let focused = self.focused_group == gid && self.tabs_have_focus;
         let diff_open = main && self.diff.is_some();
         let rel: Vec<String> = paths
             .iter()

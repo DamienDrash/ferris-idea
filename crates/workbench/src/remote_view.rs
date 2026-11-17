@@ -700,19 +700,10 @@ impl RemoteView {
         if in_field && !(plain && matches!(k.key.as_str(), "enter" | "escape" | "up" | "down")) {
             return;
         }
-        let key = match k.key.as_str() {
-            "up" if m.alt => "up-dir",
-            "n" if m.platform && m.shift => "new-dir",
-            "n" if m.platform => "new-file",
-            "f6" if m.shift => "rename",
-            "backspace" if m.platform => "delete",
-            other if m.platform || m.control || m.alt => {
-                let _ = other;
-                return;
-            }
-            other => other,
-        }
-        .to_owned();
+        let Some(key) = command(&k.key, m, cfg!(target_os = "macos")) else {
+            return;
+        };
+        let key = key.to_owned();
         if matches!(
             key.as_str(),
             "up" | "down"
@@ -744,7 +735,7 @@ impl Render for RemoteView {
         } else {
             "Host alias or user@host[:port], Enter connects"
         };
-        let help = if self.project_mode && connected.is_some() {
+        let help = keys(if self.project_mode && connected.is_some() {
             "Go to the project folder, then Enter on its Open row · Escape stops opening"
         } else if self.project_mode {
             "Recent remote projects and hosts from ~/.ssh/config · Enter opens or connects"
@@ -754,7 +745,7 @@ impl Render for RemoteView {
             "Enter opens · ⌥↑ up · F5 reads again · ⌘N file · ⇧⌘N folder · ⇧F6 rename · ⌘⌫ delete"
         } else {
             "Hosts from ~/.ssh/config · Enter connects with your SSH keys and agent"
-        };
+        });
         // Each button and row is annotated with its id, so window tests click it with real mouse
         // events (the semantic tree; nothing unless a consumer is active).
         let button = |id: &'static str, label: &'static str| {
@@ -1015,9 +1006,79 @@ fn row_matching(texts: &[String], text: &str) -> Option<usize> {
         .or_else(|| texts.iter().position(|t| t.starts_with(text)))
 }
 
+/// What a key does in the list: the key itself, or the dialog's command for a shortcut; `None`
+/// for any other key with a modifier. ⌘ is Ctrl outside macOS (`SPEC-0028` v8 behaviour 13).
+fn command<'a>(key: &'a str, m: &gpui::Modifiers, macos: bool) -> Option<&'a str> {
+    let primary = if macos { m.platform } else { m.control };
+    Some(match key {
+        "up" if m.alt => "up-dir",
+        "n" if primary && m.shift => "new-dir",
+        "n" if primary => "new-file",
+        "f6" if m.shift => "rename",
+        "backspace" if primary => "delete",
+        _ if m.platform || m.control || m.alt => return None,
+        other => other,
+    })
+}
+
+/// A shortcut of this dialog written for the platform: ⌘ is Ctrl and ⌥ is Alt outside macOS
+/// (`SPEC-0028` v8 behaviour 13).
+fn keys(text: &str) -> String {
+    idecraft_ui::keymap::local_keys(text, cfg!(target_os = "macos"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// SPEC-0028 v8 AK-15: the list's shortcuts take Ctrl outside macOS, and its help says so.
+    #[test]
+    fn shortcuts_follow_the_platform() {
+        let m = |control: bool, platform: bool, alt: bool, shift: bool| gpui::Modifiers {
+            control,
+            platform,
+            alt,
+            shift,
+            ..Default::default()
+        };
+        assert_eq!(
+            command("n", &m(true, false, false, false), false),
+            Some("new-file")
+        );
+        assert_eq!(
+            command("n", &m(true, false, false, true), false),
+            Some("new-dir")
+        );
+        assert_eq!(
+            command("backspace", &m(true, false, false, false), false),
+            Some("delete")
+        );
+        assert_eq!(
+            command("n", &m(false, true, false, false), true),
+            Some("new-file")
+        );
+        assert_eq!(
+            command("n", &m(true, false, false, false), true),
+            None,
+            "⌃N is not ⌘N"
+        );
+        assert_eq!(
+            command("up", &m(false, false, true, false), false),
+            Some("up-dir")
+        );
+        assert_eq!(command("x", &m(true, false, false, false), false), None);
+        assert_eq!(
+            command("down", &m(false, false, false, false), false),
+            Some("down")
+        );
+        assert_eq!(
+            idecraft_ui::keymap::local_keys(
+                "Enter opens · ⌥↑ up · ⌘N file · ⇧⌘N folder · ⌘⌫ delete",
+                false
+            ),
+            "Enter opens · Alt+↑ up · Ctrl+N file · Ctrl+Shift+N folder · Ctrl+Backspace delete"
+        );
+    }
 
     #[test]
     fn other_hosts_take_a_folder_after_the_host() {

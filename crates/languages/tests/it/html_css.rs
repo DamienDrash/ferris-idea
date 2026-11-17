@@ -1,12 +1,13 @@
 //! HTML and stylesheets from IDECraft's own syntax trees through the entry points the editor and
-//! the MCP server use (`SPEC-0042` v17 behaviours 28–33, OBS-0039 W1 to W3), on the sample of the
-//! observation: `index.html` linking `css/site.css`.
+//! the MCP server use (`SPEC-0042` v17 behaviours 28–33, OBS-0039 W1 to W3; v22 behaviours 38–40,
+//! OBS-0069 G1 to G3), on the sample of the observation: `index.html` linking `css/site.css`.
 
 use std::path::PathBuf;
 use std::time::Duration;
 
 use idecraft_languages::find_usages::find_usages_in;
-use idecraft_languages::insight::{LocationKind, found_in, symbols_in};
+use idecraft_languages::insight::{LocationKind, complete_in, found_in, symbols_in};
+use idecraft_languages::rename::{apply_edits, plan_rename_in};
 
 const INDEX: &str = include_str!("../fixtures/web/index.html");
 const SITE: &str = include_str!("../fixtures/web/css/site.css");
@@ -75,8 +76,8 @@ async fn html_answers_without_a_server() {
     assert_eq!(
         places,
         [
-            (PathBuf::from("css/site.css"), 19, 0),
-            (PathBuf::from("css/site.css"), 22, 0)
+            (PathBuf::from("css/site.css"), 19, 1),
+            (PathBuf::from("css/site.css"), 22, 1)
         ]
     );
     assert!(found.outside.is_empty());
@@ -205,6 +206,76 @@ async fn css_selector_usages_include_html() {
             .is_some_and(|n| n.contains("1 usage in HTML files")),
         "{:?}",
         found.note
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// SPEC-0042/AK-39, AK-42, AK-44 (v22, behaviours 38–40; OBS-0069 G1, G2): rename and completion
+/// through the entry points of the editor and the MCP server answer with no time for a language
+/// server: `.card` becomes `.box` in the stylesheet and `class="box"` in the page, from either
+/// side; `1box` is refused; an empty `class` value offers the stylesheet's classes.
+#[tokio::test]
+async fn rename_and_completion_without_a_server() {
+    let root = project("own-rename");
+    let css = root.join("css/site.css");
+    let index = root.join("index.html");
+    let none = Duration::ZERO;
+    for (file, text, line, character) in [(&css, SITE, 19, 2), (&index, INDEX, 12, 28)] {
+        let plan = plan_rename_in(&root, file, Some(text), line, character, "box", none)
+            .await
+            .unwrap();
+        assert_eq!(plan.old_name, "card");
+        let files: Vec<PathBuf> = plan
+            .files
+            .iter()
+            .map(|f| f.path.strip_prefix(&root).unwrap().to_path_buf())
+            .collect();
+        assert_eq!(
+            files,
+            [PathBuf::from("css/site.css"), PathBuf::from("index.html")]
+        );
+        let site = apply_edits(SITE, &plan.files[0].edits).unwrap();
+        assert!(
+            site.contains("\n.box {\n") && site.contains("\n.box:hover {\n"),
+            "{site}"
+        );
+        let page = apply_edits(INDEX, &plan.files[1].edits).unwrap();
+        assert!(
+            page.contains("<main id=\"prices\" class=\"box\">"),
+            "{page}"
+        );
+    }
+    let refused = plan_rename_in(&root, &css, Some(SITE), 19, 2, "1box", none)
+        .await
+        .unwrap_err();
+    assert!(
+        refused
+            .to_string()
+            .contains("is not a valid CSS class name"),
+        "{refused}"
+    );
+
+    let typed = INDEX.replace("class=\"card\"", "class=\"\"");
+    let items = complete_in(&root, &index, Some(&typed), 12, 27, 50, none)
+        .await
+        .unwrap();
+    let offered: Vec<(&str, &str)> = items
+        .iter()
+        .map(|i| {
+            (
+                i.label.as_str(),
+                i.description.as_deref().unwrap_or_default(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        offered,
+        [
+            ("banner", "css/site.css:5"),
+            ("button", "css/site.css:13"),
+            ("primary", "css/site.css:13"),
+            ("card", "css/site.css:20"),
+        ]
     );
     let _ = std::fs::remove_dir_all(&root);
 }

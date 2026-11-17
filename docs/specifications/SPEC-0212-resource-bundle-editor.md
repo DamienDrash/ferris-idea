@@ -1,6 +1,6 @@
 # SPEC-0212: Resource bundle editor
 
-- **Version:** 1 · **Date:** 2026-11-03
+- **Version:** 2 · **Date:** 2026-11-15 (v2: the hand test's steps in a window test, AK-5; v1: 2026-11-03)
 - **Sources:** GEN (IDEs with the open Properties plugin edit a resource bundle in one view: the keys
   of all its files in a list, and for the selected key one value per locale; keys missing in a
   locale are marked; F-081), STD (`.properties` format of `java.util.Properties`, file naming of
@@ -43,6 +43,13 @@ Translate and maintain a resource bundle in one place instead of opening each lo
   removes it.
 - **AK-4** Hand test (round 4, no. 152): edit a bundle of three locales in the dialog and compare
   with the reference's bundle editor.
+
+- **AK-5 (v2)** Hand test 152, IDECraft's side, in a window of the test harness
+  (`crates/workbench/tests/it/open_plugin_handtests.rs`: `hand_test_152_resource_bundle_editor`):
+  the editor lists the keys of three files with the missing one marked; a value typed with an
+  umlaut and Enter add one line to the open German file, escaped as the file is ASCII; a new key
+  goes into the default file only; Delete twice removes it again. AK-4, next to the reference,
+  follows `docs/research/PLAN-F081.md`.
 
 ## Out of scope
 Renaming a key across the bundle and its usages, adding a locale, sorting, the reference's

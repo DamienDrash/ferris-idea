@@ -148,6 +148,9 @@ pub fn quote(arg: &str) -> String {
 
 /// Folder of the shared connections, one per host (`ControlMaster`), private to the user.
 pub(crate) fn control_dir() -> PathBuf {
+    if let Some(dir) = crate::testing::CONTROL_DIR.get() {
+        return dir.clone();
+    }
     let user = std::env::var("USER").unwrap_or_else(|_| "user".into());
     // Short on purpose: Unix socket paths are limited to about 100 bytes.
     PathBuf::from(format!("/tmp/idecraft-ssh-{user}"))
@@ -210,6 +213,15 @@ impl Remote {
     /// and the route over jump hosts first, then keep-alive, the shared connection, `-t` for a
     /// terminal and the target's own extra arguments.
     pub fn line(&self, purpose: crate::SshPurpose) -> Result<crate::SshLine, RemoteError> {
+        self.line_with(purpose, &[])
+    }
+
+    /// [`Remote::line`] with the further `ssh` options `options` (before the host).
+    fn line_with(
+        &self,
+        purpose: crate::SshPurpose,
+        options: &[&str],
+    ) -> Result<crate::SshLine, RemoteError> {
         let dir = control_dir();
         let mut cmd = crate::SshCommand::new(purpose)
             .program(self.program())
@@ -222,6 +234,9 @@ impl Remote {
         }
         if purpose == crate::SshPurpose::Terminal {
             cmd = cmd.args(["-t"]);
+        }
+        if !options.is_empty() {
+            cmd = cmd.args(options.iter().copied());
         }
         cmd.port(self.target.port)
             .extra(&self.target.extra)
@@ -308,7 +323,63 @@ impl Remote {
         input: Option<&[u8]>,
         limit: Duration,
     ) -> Result<RemoteOutput, RemoteError> {
+        // In tests a session process of the test server that stalled before running the command
+        // is ended (`testing::watch_stalled_sessions`). The command never ran, so it is started
+        // again over a new connection (the stalled process's parent, the server side of the
+        // shared connection, stalls its next sessions too), as long as the call's own time limit
+        // lasts: stalls come in spells that outlast one or two new connections (three in a row
+        // on 2026-11-17). Outside tests no session is ever ended this way.
+        let start = Instant::now();
+        loop {
+            let stalls = crate::testing::stalls();
+            let result = self.raw_once(line, input, limit);
+            let ended_by_watch = crate::testing::stalls() > stalls;
+            if ended_by_watch
+                && result.is_err()
+                && start.elapsed() < crate::testing::stretched(limit)
+            {
+                self.close_shared();
+                std::thread::sleep(Duration::from_secs(1));
+                continue;
+            }
+            return result;
+        }
+    }
+
+    /// Ends the shared connection to the host (`ssh -O exit`), if there is one; the next call
+    /// opens a new one. Waits at most 10 s.
+    fn close_shared(&self) {
+        let Ok(ssh) = self.line_with(crate::SshPurpose::Host, &["-O", "exit"]) else {
+            return;
+        };
+        let Ok(mut child) = ssh
+            .command()
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+        else {
+            return;
+        };
+        let start = Instant::now();
+        while start.elapsed() < Duration::from_secs(10) {
+            if !matches!(child.try_wait(), Ok(None)) {
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+
+    fn raw_once(
+        &self,
+        line: &str,
+        input: Option<&[u8]>,
+        limit: Duration,
+    ) -> Result<RemoteOutput, RemoteError> {
         let host = self.target.host.clone();
+        let limit = crate::testing::stretched(limit);
         let ssh = self.line(crate::SshPurpose::Host)?;
         let mut child = ssh
             .command()

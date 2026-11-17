@@ -24,8 +24,8 @@ refusing silently when a client of the running window lacks a right.
    SPEC-0054), `remote` (fetch, pull and push Git remotes, SPEC-0055), `ssh` (list, read and write files
    on SSH hosts; running commands there also needs `run`, SPEC-0121), `trust` (SPEC-0278), and `write`,
    `vcs-write` and `quit` (behaviour 6), `secret-read` (behaviour 10), `settings` (behaviour 12),
-   and `terminal-read`, `ports` and `ui` of their own specifications (SPEC-0313, SPEC-0318,
-   SPEC-0319). Reading tools, dry runs and previews need no right, except for the text of files
+   and `terminal-read`, `ports`, `ui` and `recent-projects` of their own specifications (SPEC-0313,
+   SPEC-0318, SPEC-0319, SPEC-0094 v9). Reading tools, dry runs and previews need no right, except for the text of files
    whose names commonly hold secrets (behaviour 10). Database connections have their own four
    permissions per connection (SPEC-0012 v3), kept in the same grant file. [GEN, READINESS A3]
 2. Rights are granted per workspace in the user's own settings folder, file `agent-permissions.toml`

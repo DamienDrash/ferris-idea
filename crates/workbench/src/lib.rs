@@ -14,6 +14,7 @@ pub mod breakpoint_dialog;
 pub mod breakpoint_popup;
 pub mod build_sync_model;
 pub mod build_tools_model;
+pub mod caret_gesture;
 pub mod change_bar_model;
 pub mod changelist_model;
 pub mod chrome;

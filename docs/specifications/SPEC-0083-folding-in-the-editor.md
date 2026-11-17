@@ -1,6 +1,7 @@
 # SPEC-0083: Code folding in the editor
 
-- **Version:** 9 · **Date:** 2026-11-14 (v9: Custom Folding… (`GotoCustomRegion`), a list of the
+- **Version:** 10 · **Date:** 2026-11-15 (v10: the default of behaviours 7 and 8 checked against the
+  open platform after OBS-0056; the name-and-parameters and right-margin conditions, behaviour 7a; v9: Custom Folding… (`GotoCustomRegion`), a list of the
   file's custom regions that puts the caret on the chosen one, behaviour 24, AK-30; seventh
   package of docs/research/KEYMAP_COVERAGE.md; v8: Collapse All leaves the outermost container open,
   custom regions between comment markers, folding the documentation comments, placeholders that
@@ -96,6 +97,20 @@ Hide the parts of a file you are not working on.
    one also its foreground); nothing else of the line is greyed. A click on the placeholder, a caret moving in, or
    ⌘= unfolds it as any fold (behaviours 2–4). Only opening the file folds; edits never fold again.
    [OBS-0011, OBS-0013, GEN]
+7a. **Default checked (v10):** the open platform folds one-line methods on open by default
+   (`JavaCodeFoldingSettingsBase`: `COLLAPSE_ONE_LINE_METHODS = true`; `JavaBackendFoldings`: one
+   statement on one line, the braces on the lines next to it, name and parameter list on one line,
+   and the folded line within the right margin). IDECraft keeps the default and, since v10, also the
+   two conditions it lacked: the method's name and the end of its parameter list stand on one line,
+   and the folded line — the brace line up to `{` and the placeholder — is no wider than the right
+   margin of Code Style (SPEC-0150, default 120). A method such as `int totalCents() {` /
+   `return qty * unitPriceCents;` / `}` is still folded on open.
+   [OSS, `JetBrains/intellij-community` at `d4018fb`, read only for the default and the
+   conditions] OBS-0056 (Nebenbefund) saw the reference show `Inventory.java` of `cmp-java-ij`
+   unfolded, while OBS-0011 saw it fold such methods. The project's `.idea` holds no folding
+   option and no remembered folding of the file; the difference is taken to come from the
+   reference's own state (its folding setting or the folding it remembers for the file), not from
+   its defaults. Behaviour unchanged; whether the reference has its setting switched on is still an open question.
 8. **Setting (v2):** Editor › General › Code Folding › *One-line methods* (on by default); also
    `fold_one_line_methods` in `set_ide_settings`. `folding_ranges` (SPEC-0030) marks these regions with
    `collapsed_text`, the placeholder. [GEN, ADR-0008]
@@ -468,6 +483,11 @@ Hide the parts of a file you are not working on.
   (`security::tests::seventh_package_actions_declare_their_effects`). On screen and next to
   the reference: not checked.
 
+- **AK-31 (v10, behaviour 7a)** `syntax::tests::one_line_bodies_follow_the_open_conditions`: a
+  body whose folded line passes the right margin and a method whose parameter list ends on another
+  line than its name stay open; `int totalCents() { return qty * unitPriceCents; }` folds; the open
+  default of the setting is on (`ide_settings` default).
+
 ## Out of scope
 Folding comments (a licence header) by default when a file opens (one-line methods are folded since v2, imports of Java and Kotlin files since v4), import folds on open for other languages, remembering folds across sessions.
 v7: a fold that begins or ends inside a line, `CollapseBlock` for languages other than Java,
@@ -485,6 +505,10 @@ not repeat the region's brackets. Not compared side by side yet.
 v4 (OBS-0027 L19): the reference shows the folded imports as the word `import` and an ellipsis; IDECraft
 keeps the whole first import line and puts the ellipsis after it. An import added while the block is
 folded opens the block.
+
+v10: OBS-0056 saw the reference show short Java methods unfolded where IDECraft folds them;
+IDECraft follows the open platform's default (behaviour 7a). Whether the reference's own folding
+setting is switched off was not read (PO-STATUS question 44).
 
 v6: not compared with the reference. Open there: whether its levels count the same regions (IDECraft
 counts every foldable region of the syntax tree, also comments and import blocks), and which region

@@ -235,13 +235,21 @@ impl Drop for Cleanup {
 
 #[test]
 fn a_folder_on_an_ssh_host_opens_survives_breaks_and_stays_private() {
+    // One test at a time uploads and starts a backend on a test host (see the helper).
+    let _turn = idecraft_remote::testing::one_host_at_a_time();
     let base = std::env::temp_dir().join(format!("idecraft-rproj-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
-    let Some(host) = TestHost::start(&base.join("ssh")) else {
+    std::fs::create_dir_all(base.join("home")).unwrap();
+    let base = std::fs::canonicalize(&base).unwrap();
+    // The sessions' home folder is the test's own: the uploaded backend never lands in the
+    // user's home folder, and a run beside this one never shares it.
+    let home = base.join("home");
+    let Some(host) =
+        TestHost::start_with_env(&base.join("ssh"), &[("HOME", &home.display().to_string())])
+    else {
         eprintln!("skipped: no sshd");
         return;
     };
-    let base = std::fs::canonicalize(&base).unwrap();
     let project = base.join("project");
     std::fs::create_dir_all(&project).unwrap();
     std::fs::write(project.join("notes.txt"), "remote notes\n").unwrap();
@@ -269,7 +277,6 @@ fn a_folder_on_an_ssh_host_opens_survives_breaks_and_stays_private() {
     };
     let binary = Path::new(env!("CARGO_BIN_EXE_idecraft"));
     let folder = project.display().to_string();
-    let home = std::env::var_os("HOME").map(PathBuf::from).unwrap();
     // The uploaded backend (a debug build is gigabytes), the run folder and the test's folder go
     // also when the test fails.
     let _cleanup = Cleanup(vec![

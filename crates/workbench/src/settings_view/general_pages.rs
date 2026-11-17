@@ -40,7 +40,13 @@ impl SettingsView {
             (
                 "Confirm before quitting",
                 s.confirm_quit,
-                "⌘Q and the menu ask first also with nothing unsaved; agents and scripts are not asked",
+                // ⌘Q is a fixed key of the macOS application menu; other systems have no quit
+                // key in the bundled keymap (`SPEC-0028` v9 behaviour 14).
+                if cfg!(target_os = "macos") {
+                    "⌘Q and the menu ask first also with nothing unsaved; agents and scripts are not asked"
+                } else {
+                    "the menu asks first also with nothing unsaved; agents and scripts are not asked"
+                },
             ),
             (
                 "Reopen the last project at start-up",

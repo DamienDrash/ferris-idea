@@ -3396,7 +3396,10 @@ impl ServicesView {
                             div()
                                 .id("services-value-apply")
                                 .text_color(c(p.link))
-                                .child("Apply (⌘↩)")
+                                .child(idecraft_ui::keymap::local_keys(
+                                    "Apply (⌘↩)",
+                                    cfg!(target_os = "macos"),
+                                ))
                                 .on_click(cx.listener(|this, _: &gpui::ClickEvent, window, cx| {
                                     this.finish_value_edit(false, window, cx)
                                 })),

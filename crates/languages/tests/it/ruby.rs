@@ -131,3 +131,39 @@ async fn solargraph_through_bundler() {
     check("solargraph", &root, false).await;
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// SPEC-0042 v25 AK-48: ruby-lsp gives a file's problems only when asked for them
+/// (`textDocument/diagnostic`) and publishes none; asked so, a syntax error is found at once, and
+/// a file without problems has an empty list long before the wait is over (before v25 every Ruby
+/// file waited the whole wait and got an empty list, also with a syntax error).
+#[tokio::test]
+async fn ruby_lsp_reports_problems_when_asked() {
+    let root = project("diagnostics");
+    match resolve_for(LanguageId::Ruby, &root) {
+        Ok(r) if r.candidate.program == "ruby-lsp" => {}
+        _ => {
+            skip("ruby-lsp not installed");
+            return;
+        }
+    }
+    let broken = root.join("broken.rb");
+    std::fs::write(&broken, "class Broken\n  def area(\n    1 +\n  end\n").unwrap();
+    let good = root.join("greeter.rb");
+    std::fs::write(&good, TEXT).unwrap();
+    let wait = Duration::from_secs(60);
+    let started = std::time::Instant::now();
+    let found = idecraft_languages::lsp::file_diagnostics(&root, &broken, wait)
+        .await
+        .unwrap();
+    assert!(found.iter().any(|d| d.severity == "error"), "{found:?}");
+    let found = idecraft_languages::lsp::file_diagnostics(&root, &good, wait)
+        .await
+        .unwrap();
+    assert!(found.is_empty(), "{found:?}");
+    assert!(
+        started.elapsed() < Duration::from_secs(45),
+        "two files took {:?}",
+        started.elapsed()
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}

@@ -40,6 +40,12 @@ fn first_selection(stashes: usize) -> usize {
     if stashes == 0 { 0 } else { COMMANDS.len() }
 }
 
+/// A shortcut of this dialog written for the platform: ⌘ is Ctrl and ⌥ is Alt outside macOS
+/// (`SPEC-0028` v8 behaviour 13).
+fn keys(text: &str) -> String {
+    idecraft_ui::keymap::local_keys(text, cfg!(target_os = "macos"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::first_selection;
@@ -171,11 +177,11 @@ impl Render for StashView {
                     .pb_1()
                     .text_xs()
                     .text_color(c(p.ui_dim))
-                    .child(if self.stashes.is_empty() {
+                    .child(keys(if self.stashes.is_empty() {
                         "No stashes"
                     } else {
                         "Stashes · Enter applies, Shift+Enter pops, ⌘D shows changes, Delete drops"
-                    }),
+                    })),
             )
             .children(
                 self.stashes
@@ -341,7 +347,11 @@ impl Render for StashDialog {
                     .child(
                         div()
                             .id("stash-keep-index")
-                            .child(format!("{} Keep index (⌥K)", check(self.keep_index)))
+                            .child(format!(
+                                "{} {}",
+                                check(self.keep_index),
+                                keys("Keep index (⌥K)")
+                            ))
                             .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
                                 this.toggle_keep_index(cx)
                             })),
@@ -350,8 +360,9 @@ impl Render for StashDialog {
                         div()
                             .id("stash-untracked")
                             .child(format!(
-                                "{} Include untracked files (⌥U)",
-                                check(self.include_untracked)
+                                "{} {}",
+                                check(self.include_untracked),
+                                keys("Include untracked files (⌥U)")
                             ))
                             .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
                                 this.toggle_untracked(cx)

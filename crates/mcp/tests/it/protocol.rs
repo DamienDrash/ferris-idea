@@ -172,6 +172,8 @@ async fn connect_database(
         // Beside the workspace, never the user's own file (SPEC-0276 behaviour 7).
         .with_plugin_run_file(root.with_extension("run-permissions.toml"))
         .with_theme_file(root.join(".test-theme"))
+        // Beside the workspace, never the user's own list (SPEC-0094 v9).
+        .with_recent_projects_file(root.with_extension("recent-projects"))
         .with_log_dir(root.join(".test-logs"))
         .with_ide_settings_file(root.join(".test-settings.toml"))
         .with_keymap_file(root.join(".test-keymap.toml"))
@@ -15545,6 +15547,60 @@ async fn mcp_over_http_is_off_by_default_and_agents_cannot_switch_it_on() {
     assert_eq!(unchanged["settings"]["mcp"]["http"], false, "{unchanged}");
 }
 
+/// SPEC-0094 v9 AK-20: `recent_projects` hands out the folders of other projects only with the
+/// `recent-projects` right; without it the call is refused as "not granted" naming the right, and
+/// with it the read is logged with the number of folders, never their paths.
+#[tokio::test]
+async fn recent_projects_needs_its_right_and_logs_the_read() {
+    let (mut client, root) = connect_exact(&[], |s, _| s).await;
+    let other = root.with_extension("other-project");
+    std::fs::create_dir_all(&other).unwrap();
+    std::fs::write(
+        root.with_extension("recent-projects"),
+        format!("{}\n", other.display()),
+    )
+    .unwrap();
+    let refused = client.call("recent_projects", json!({})).await;
+    assert!(is_error(&refused), "{refused}");
+    let message = error_message(&refused);
+    assert!(message.starts_with("not granted:"), "{message}");
+    assert!(message.contains("`recent-projects`"), "{message}");
+    assert!(!message.contains("other-project"), "{message}");
+    assert!(!tool_log(&root).contains("recent_projects"));
+    // The grants of `connect_custom` (write, vcs-write, settings) do not include it.
+    drop(client);
+    let (mut client, _root) = connect_custom(&[], |s, _| s).await;
+    assert!(is_error(&client.call("recent_projects", json!({})).await));
+    drop(client);
+
+    let (mut client, root) = connect_exact(&[idecraft_core::Grant::RecentProjects], |s, _| s).await;
+    let other = root.with_extension("other-project");
+    std::fs::create_dir_all(&other).unwrap();
+    std::fs::write(
+        root.with_extension("recent-projects"),
+        format!(
+            "{}\n{}\n",
+            other.display(),
+            root.with_extension("gone").display()
+        ),
+    )
+    .unwrap();
+    let listed = json_text(&client.call("recent_projects", json!({})).await);
+    // Compared resolved: the list may name a folder by its canonical path.
+    let folders: Vec<PathBuf> = listed
+        .as_array()
+        .unwrap_or_else(|| panic!("{listed}"))
+        .iter()
+        .map(|p| std::fs::canonicalize(p.as_str().unwrap()).unwrap())
+        .collect();
+    assert_eq!(folders, vec![other.canonicalize().unwrap()], "{listed}");
+    let log = tool_log(&root);
+    assert!(log.contains("\"tool\":\"recent_projects\""), "{log}");
+    assert!(log.contains("\"count\":1"), "{log}");
+    assert!(log.contains("\"right\":\"recent-projects\""), "{log}");
+    assert!(!log.contains("other-project"), "{log}");
+}
+
 /// SPEC-0313 AK-5: `terminal_read` lists the window's tabs, reads one only with the
 /// `terminal-read` right, masks secrets and logs the read; `run_output` reads the Run tabs.
 #[tokio::test]
@@ -21736,6 +21792,9 @@ async fn java_unused_local_is_removed_through_mcp() {
 /// SPEC-0042/AK-33 (v17), OBS-0039 W1 to W3: on `index.html` linking `css/site.css`,
 /// `find_symbol_locations` leads from a class to its rule and from a jump link to the id, and
 /// `document_symbols` lists the elements nested with id and classes; no language server is needed.
+/// SPEC-0042/AK-43 and AK-44 (v22, OBS-0069 G1 to G3): the rule's target is the name after the
+/// dot, `rename_symbol` keeps the dot and renames the page too, refuses a name that is no CSS
+/// identifier, and `complete_code` offers the stylesheet's classes in a `class` value.
 #[tokio::test]
 async fn html_navigation_and_structure() {
     let (mut client, root) = connect().await;
@@ -21776,11 +21835,87 @@ async fn html_navigation_and_structure() {
     assert_eq!(
         places(&class),
         [
-            ("web/css/site.css".to_owned(), 19, 0),
-            ("web/css/site.css".to_owned(), 22, 0)
+            ("web/css/site.css".to_owned(), 19, 1),
+            ("web/css/site.css".to_owned(), 22, 1)
         ],
         "{class}"
     );
+    // OBS-0069 G2: `.card` renamed from the stylesheet keeps its dot; the page follows.
+    let rename = json!({"path": "web/css/site.css", "line": 19, "character": 2, "new_name": "box"});
+    let preview = json_text(&client.call("rename_symbol", rename.clone()).await);
+    assert_eq!(preview["applied"], false, "{preview}");
+    let files: Vec<&str> = preview["plan"]["files"]
+        .as_array()
+        .unwrap_or_else(|| panic!("{preview}"))
+        .iter()
+        .map(|f| f["path"].as_str().unwrap())
+        .collect();
+    assert_eq!(files, ["web/css/site.css", "web/index.html"], "{preview}");
+    let mut apply = rename;
+    apply["dry_run"] = json!(false);
+    let done = json_text(&client.call("rename_symbol", apply).await);
+    assert_eq!(done["applied"], true, "{done}");
+    let css = std::fs::read_to_string(root.join("web/css/site.css")).unwrap();
+    assert!(
+        css.contains("\n.box {\n") && css.contains("\n.box:hover {\n"),
+        "{css}"
+    );
+    let page = std::fs::read_to_string(root.join("web/index.html")).unwrap();
+    assert!(page.contains("class=\"box\""), "{page}");
+    let refused = client
+        .call(
+            "rename_symbol",
+            json!({"path": "web/css/site.css", "line": 19, "character": 2, "new_name": "1box"}),
+        )
+        .await;
+    assert!(is_error(&refused), "{refused}");
+    assert!(
+        refused
+            .to_string()
+            .contains("is not a valid CSS class name"),
+        "{refused}"
+    );
+    // OBS-0069 G1: the classes of the stylesheet in `class="box"` of line 13, with file and line.
+    let items = json_text(
+        &client
+            .call(
+                "complete_code",
+                json!({"path": "web/index.html", "line": 12, "character": 27}),
+            )
+            .await,
+    );
+    let offered: Vec<(&str, &str)> = items
+        .as_array()
+        .unwrap_or_else(|| panic!("{items}"))
+        .iter()
+        .map(|i| {
+            (
+                i["label"].as_str().unwrap(),
+                i["description"].as_str().unwrap_or_default(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        offered,
+        [
+            ("banner", "web/css/site.css:5"),
+            ("button", "web/css/site.css:13"),
+            ("primary", "web/css/site.css:13"),
+            ("box", "web/css/site.css:20"),
+        ],
+        "{items}"
+    );
+    // Back to the sample for the steps below.
+    std::fs::write(
+        root.join("web/index.html"),
+        include_str!("../../../languages/tests/fixtures/web/index.html"),
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("web/css/site.css"),
+        include_str!("../../../languages/tests/fixtures/web/css/site.css"),
+    )
+    .unwrap();
     // Step 2: `href="#prices"` on line 11 leads to `id="prices"` on line 13.
     let link = json_text(
         &client

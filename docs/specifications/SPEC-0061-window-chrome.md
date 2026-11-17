@@ -1,6 +1,8 @@
 # SPEC-0061: Window chrome in the Islands layout
 
-- **Version:** 17 · **Date:** 2026-11-14 (v17: the icon gaps of OBS-0046 — the open Structure icon, a Notifications tool window, the Build button after the first build, Run and Debug grey without anything to run, the menu marker on the Project window's "+", behaviours 63–67; v16: Stop Background Processes… (`StopBackgroundProcesses`) lists the running background tasks of the window that can be stopped and stops the chosen one, behaviour 62, AK-v16; seventh package of docs/research/KEYMAP_COVERAGE.md; v15: two quick clicks on a control of the title bar press the control twice and never zoom the window, behaviour 61 — second window check of 2026-11-14; v14: the project colour of the main toolbar in the Islands themes from the theme, behaviour 28a, OBS-0047 T1; v13: the tool windows shown at quitting come back, behaviour 59; a diff tab in front names its own file in the navigation bar, behaviour 60 — window check of 2026-11-14); 2026-11-13 (v12: full screen from the keyboard, the keymap's `ToggleFullScreen`, behaviour 58); 2026-11-07 (v2: the status bar stays free; v3: the breadcrumbs end at the
+- **Version:** 19 · **Date:** 2026-11-17 (v19: the selected editor tab in the active colours only
+  while the keyboard focus is in its editor, else in the theme's inactive colours with their border,
+  behaviour 6a, AK-v19, OBS-0079 L4; v18 is taken by an open change); 2026-11-16 (v18: Emoji & Symbols opens the system's character palette, behaviour 68; eleventh package of docs/research/KEYMAP_COVERAGE.md); 2026-11-14 (v17: the icon gaps of OBS-0046 — the open Structure icon, a Notifications tool window, the Build button after the first build, Run and Debug grey without anything to run, the menu marker on the Project window's "+", behaviours 63–67; v16: Stop Background Processes… (`StopBackgroundProcesses`) lists the running background tasks of the window that can be stopped and stops the chosen one, behaviour 62, AK-v16; seventh package of docs/research/KEYMAP_COVERAGE.md; v15: two quick clicks on a control of the title bar press the control twice and never zoom the window, behaviour 61 — second window check of 2026-11-14; v14: the project colour of the main toolbar in the Islands themes from the theme, behaviour 28a, OBS-0047 T1; v13: the tool windows shown at quitting come back, behaviour 59; a diff tab in front names its own file in the navigation bar, behaviour 60 — window check of 2026-11-14); 2026-11-13 (v12: full screen from the keyboard, the keymap's `ToggleFullScreen`, behaviour 58); 2026-11-07 (v2: the status bar stays free; v3: the breadcrumbs end at the
   symbol under the caret, behaviour 5a; v4: window structure before the new comparison with OBS-0007 —
   tool window header with content tabs, options and hide, stripe buttons and order, main toolbar
   buttons, status bar widgets, compact islands, the tree nodes "External Libraries" and "Scratches and
@@ -57,7 +59,16 @@
   v14: OBS-0046 items A1, A2, A4–A6, OSS (intellij-community at `d4018fb`: New UI icons
   `toolwindows/structure`, `toolwindows/notifications` at 16 and 20 px, `general/dropdown`;
   `defaultToolWindowlayoutProvider.kt` as in v4: Notifications on the right), SPEC-0070 (the status
-  bar's notes), SPEC-0087 (run widget), SPEC-0122 (what the editor's Run starts), ADR-0008
+  bar's notes), SPEC-0087 (run widget), SPEC-0122 (what the editor's Run starts), ADR-0008; v19:
+  OBS-0079 L4 (in `Islands Light` the reference's selected tab is white with a thin grey border,
+  IDECraft's light blue with a blue border; where the keyboard focus was is not recorded), OSS
+  (`JetBrains/intellij-community` master of 2026-11-17, equal in the keys below to the bundled
+  `750ce16`: `ManyIslandsLight.theme.json` `EditorTabs.underlinedTabBackground` = `blue-150`,
+  `underlinedBorderColor` = `blue-120`, `inactiveUnderlinedTabBackground` = `gray-150`,
+  `inactiveUnderlinedTabBorderColor` = `gray-130`; as logic templates `IslandsTabPainter.kt` (a
+  selected tab takes the first pair while its tabs are active, else the second, each as fill and
+  outline) and `EditorTabbedContainer.kt` (the editor's tabs are active while the keyboard focus is
+  inside them); no code taken)
 - **Feature matrix rows:** F-087, F-085, F-086
 
 ## Purpose
@@ -91,6 +102,19 @@ window background, a main toolbar in the title bar, a tool window stripe and a s
    border in `EditorTabs.underlinedBorderColor`; other tabs use `EditorTabs.unselectedAlpha` and get
    `EditorTabs.hoverBackground` under the pointer. A line in `EditorTabs.underTabsBorderColor` separates
    tabs and text and gutter and text. [OSS, OBS]
+6a. **(v19) The selected tab follows the focus:** with pill tabs (the Islands themes and the brand
+   themes over them) the selected tab is filled with `EditorTabs.underlinedTabBackground` and
+   outlined with `EditorTabs.underlinedBorderColor` while the window is active and the keyboard
+   focus is in that tab group's editor; otherwise it is filled with
+   `EditorTabs.inactiveUnderlinedTabBackground` and outlined with
+   `EditorTabs.inactiveUnderlinedTabBorderColor`. In `Islands Light` that is `#E3EBFE` with a
+   `#A7C5FF` border with the focus and `#E9EAEE` with a `#D1D3D9` border without it; in `Islands
+   Dark` the file's `blue-40`/`blue-60` and `gray-30`/`gray-50`. Until v19 the selected tab of the
+   current group kept the active fill whatever had the focus, with the border only while the group
+   was current, and the tab of another group had the active fill without a border. Themes with
+   underlined tabs set no inactive pair and keep their one look. The other surfaces that use the
+   selected tab's colours (header pills of behaviour 23, search scopes, the profiler) are
+   unchanged. [OSS, OBS-0079 L4]
 7. The MCP counterparts of the information shown are `workspace_info`, `git_status`/`git_branches` and
    `editor_keystrokes` (caret positions). [ADR-0008]
 8. **Status bar stays free (v2):** the status bar is a strip across the full window width at its foot,
@@ -575,6 +599,10 @@ window background, a main toolbar in the title bar, a tool window stripe and a s
     carries the open `general/dropdown` marker, a small triangle in the bottom-right corner of its
     16 px icon: the Project window's "+" (New, which opens the New popup). Buttons that act at once
     have none. [OBS-0046 A6, OSS]
+68. **v18 – Emoji & Symbols:** `EmojiAndSymbols` opens the macOS character palette for the
+    focused text input. macOS itself takes its key ⌃⌘Space with its default settings, so the
+    action is reached by Find Action. On other systems the status bar says that there is no
+    such palette. [DOC, GEN]
 
 ## Acceptance criteria
 - **AK-1** Project initials, branch from `HEAD` and from a worktree's `.git` file, detached head and no
@@ -753,11 +781,20 @@ window background, a main toolbar in the title bar, a tool window stripe and a s
   configuration keeps them active.
 - **AK-v17e (behaviours 63–67)** Side-by-side check against the reference (OBS-0046 re-check):
   open.
+- **AK-v19 (behaviour 6a)** `palette::tests::selected_tab_follows_the_focus_in_islands_light`: the
+  four colours of `Islands Light`; `metrics::pill_colours` gives the active pair with the focus and
+  the inactive pair without; every pill theme reads both pairs from its file, the underline themes
+  keep one. Window test `crates/workbench/tests/islands_light_editor.rs`: the selected tab of the
+  focused editor is active, with the focus in the Project tree it is not. Side by side with the
+  reference, with the focus in the editor in both windows and then in the Project tree: open
+  (coordinator's window check of OBS-0079).
 - **AK-v14 (behaviour 28a)** `palette::tests::frame_islands_and_selection_come_from_the_open_theme`:
   `Islands Dark` has the nine project colours mixed 85 % into `#26282C` (`#394773` → `#364268`),
   each below 2 : 1 against the window, width 600 and height 300, the same colour for the same
   folder; `Islands Light` has a gradient, `IDECraft Dark`, `IDECraft Light`, `Dark` and `Light`
   none (they keep the accent tint). On screen: next comparison run.
+- **AK-v18 (behaviour 68)** `EmojiAndSymbols` is carried out (`docs/research/KEYMAP_COVERAGE.md`);
+  the palette itself is a hand test on macOS (the test window has none).
 
 ## Out of scope
 The AI stripe button (no such tool

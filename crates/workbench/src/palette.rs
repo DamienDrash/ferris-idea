@@ -49,6 +49,11 @@ pub struct Palette {
     pub tab_selected: Rgba,
     /// Border of the selected tab (`EditorTabs.underlinedBorderColor`).
     pub tab_selected_border: Rgba,
+    /// Selected tab while the keyboard focus is elsewhere (`EditorTabs.inactiveUnderlinedTabBackground`;
+    /// `SPEC-0061` v19 behaviour 6a).
+    pub tab_selected_inactive: Rgba,
+    /// Its border (`EditorTabs.inactiveUnderlinedTabBorderColor`).
+    pub tab_selected_border_inactive: Rgba,
     /// Tab under the pointer (`EditorTabs.hoverBackground`).
     pub tab_hover: Rgba,
     /// Opacity of tabs that are not selected (`EditorTabs.unselectedAlpha`).
@@ -162,8 +167,9 @@ pub fn set_compact_mode(on: bool) {
 }
 
 /// The bundled editor colour schemes the Appearance page offers apart from the theme
-/// (`SPEC-0337` behaviour 4): each scheme's name and the theme it comes with. Islands Light draws
-/// with the `Light` scheme, so it is offered once.
+/// (`SPEC-0337` behaviour 4): each scheme's name and the theme it comes with. Islands Light's own
+/// scheme (`Light` with plain method declarations, `SPEC-0060` v13 behaviour 19) is not offered
+/// apart from its theme.
 pub const EDITOR_SCHEMES: [(&str, ThemeId); 5] = [
     ("IDECraft Dark", ThemeId::IdecraftDark),
     ("IDECraft Light", ThemeId::IdecraftLight),
@@ -183,15 +189,6 @@ pub fn scheme_of(name: &str) -> Option<ThemeId> {
         .iter()
         .find(|(n, _)| *n == name.trim())
         .map(|(_, t)| *t)
-}
-
-/// The entry of [`EDITOR_SCHEMES`] that draws the editors of theme `id` (Islands Light draws with
-/// the `Light` scheme).
-fn own_scheme(id: ThemeId) -> ThemeId {
-    match id {
-        ThemeId::IslandsLight => ThemeId::Light,
-        other => other,
-    }
 }
 
 /// The editor scheme chosen apart from the theme, as the theme it comes with.
@@ -483,6 +480,14 @@ impl Palette {
                 .background
                 .unwrap_or_else(|| mix(bg, towards, if dark { 0.3 } else { 0.25 }))
         };
+        let tab_selected = r.ui(&["EditorTabs.underlinedTabBackground"], island);
+        let tab_selected_border = r.ui(
+            &[
+                "EditorTabs.underlinedBorderColor",
+                "EditorTabs.underlineColor",
+            ],
+            accent,
+        );
         Self {
             background: bg,
             dark,
@@ -505,14 +510,16 @@ impl Palette {
                 &["EditorTabs.underTabsBorderColor", "Borders.color"],
                 tint(0.15),
             ),
-            tab_selected: r.ui(&["EditorTabs.underlinedTabBackground"], island),
-            tab_selected_border: r.ui(
-                &[
-                    "EditorTabs.underlinedBorderColor",
-                    "EditorTabs.underlineColor",
-                ],
-                accent,
-            ),
+            tab_selected,
+            tab_selected_border,
+            // Only the pill tabs of the Islands themes use these; themes without them keep the
+            // focused colours, without a note (SPEC-0061 v19 behaviour 6a).
+            tab_selected_inactive: theme
+                .color("EditorTabs.inactiveUnderlinedTabBackground")
+                .unwrap_or(tab_selected),
+            tab_selected_border_inactive: theme
+                .color("EditorTabs.inactiveUnderlinedTabBorderColor")
+                .unwrap_or(tab_selected_border),
             tab_hover: r.ui(&["EditorTabs.hoverBackground"], tint(0.08)),
             tab_unselected_alpha: theme.number("EditorTabs.unselectedAlpha").unwrap_or(1.0),
             tree_selection: r.ui(&["Tree.selectionBackground"], wash),
@@ -632,7 +639,7 @@ impl Palette {
         static MIXED: [[[OnceLock<Palette>; 2]; N]; N] =
             [const { [const { [const { OnceLock::new() }; 2] }; N] }; N];
         match scheme {
-            Some(s) if own_scheme(s) != own_scheme(id) => {
+            Some(s) if s != id => {
                 MIXED[index(id)][index(s)][usize::from(compact)].get_or_init(|| {
                     Palette::from_parts(UiTheme::for_theme(id), ColorScheme::for_theme(s), compact)
                 })
@@ -736,13 +743,6 @@ mod tests {
             assert_eq!(ColorScheme::for_theme(theme).name, name);
             assert_eq!(scheme_of(name), Some(theme));
         }
-        for theme in ThemeId::ALL {
-            assert_eq!(
-                ColorScheme::for_theme(own_scheme(theme)).name,
-                ColorScheme::for_theme(theme).name,
-                "{theme:?}"
-            );
-        }
         assert_eq!(scheme_of(""), None);
         assert_eq!(scheme_of("Solarized"), None);
         let own = Palette::for_theme(ThemeId::IdecraftDark);
@@ -754,10 +754,18 @@ mod tests {
             Palette::for_parts(ThemeId::IdecraftDark, Some(ThemeId::IdecraftDark), false),
             own
         ));
-        assert!(std::ptr::eq(
-            Palette::for_parts(ThemeId::IslandsLight, Some(ThemeId::Light), false),
-            Palette::for_theme(ThemeId::IslandsLight)
-        ));
+        // Islands Light's own scheme differs from `Light` in method declarations only
+        // (SPEC-0060 v13 behaviour 19), so `Light` over it is a scheme of its own.
+        let islands = Palette::for_theme(ThemeId::IslandsLight);
+        let over = Palette::for_parts(ThemeId::IslandsLight, Some(ThemeId::Light), false);
+        assert!(!std::ptr::eq(over, islands));
+        assert_eq!(over.text, islands.text);
+        assert_ne!(
+            over.key_style("METHOD_DECLARATION_ATTRIBUTES").foreground,
+            islands
+                .key_style("METHOD_DECLARATION_ATTRIBUTES")
+                .foreground
+        );
         let mixed = Palette::for_parts(ThemeId::IdecraftDark, Some(ThemeId::Light), false);
         let light = Palette::for_theme(ThemeId::Light);
         assert_eq!(mixed.text, light.text, "the editors draw with the scheme");
@@ -1205,6 +1213,46 @@ mod tests {
             classic.island_radius, 0.0,
             "the classic theme has no islands"
         );
+    }
+
+    /// SPEC-0061 v19 AK-v19 (behaviour 6a, OBS-0079 L4): the selected pill tab takes the theme's
+    /// active colours while the keyboard focus is in its editor and its inactive ones otherwise:
+    /// in `Islands Light` `blue-150` with a `blue-120` border, then `gray-150` with a `gray-130`
+    /// border; every pill theme reads both pairs from its file, the underline themes keep one.
+    #[test]
+    fn selected_tab_follows_the_focus_in_islands_light() {
+        let light = Palette::bundled(ThemeId::IslandsLight);
+        assert_eq!(light.tab_selected.rgb, 0xe3ebfe);
+        assert_eq!(light.tab_selected_border.rgb, 0xa7c5ff);
+        assert_eq!(light.tab_selected_inactive.rgb, 0xe9eaee);
+        assert_eq!(light.tab_selected_border_inactive.rgb, 0xd1d3d9);
+        assert_eq!(
+            crate::metrics::pill_colours(&light, true),
+            (light.tab_selected, light.tab_selected_border)
+        );
+        assert_eq!(
+            crate::metrics::pill_colours(&light, false),
+            (
+                light.tab_selected_inactive,
+                light.tab_selected_border_inactive
+            )
+        );
+        for id in ThemeId::ALL {
+            let p = Palette::bundled(id);
+            let theme = UiTheme::for_theme(id);
+            let inactive = theme.color("EditorTabs.inactiveUnderlinedTabBackground");
+            let border = theme.color("EditorTabs.inactiveUnderlinedTabBorderColor");
+            if p.metrics.tab_style == idecraft_ui::metrics::TabStyle::Pill {
+                assert_eq!(Some(p.tab_selected_inactive), inactive, "{id:?}");
+                assert_eq!(Some(p.tab_selected_border_inactive), border, "{id:?}");
+            } else {
+                assert_eq!(p.tab_selected_inactive, p.tab_selected, "{id:?}");
+                assert_eq!(
+                    p.tab_selected_border_inactive, p.tab_selected_border,
+                    "{id:?}"
+                );
+            }
+        }
     }
 
     /// SPEC-0060 AK-17 (v11), OBS-0047 T1 and T6: with `Islands Dark` the frame (window, main

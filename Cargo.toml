@@ -4,7 +4,7 @@ members = ["crates/*"]
 exclude = ["fuzz", "vendor/gpui"]
 
 [workspace.package]
-version = "0.20.0"
+version = "1.0.0"
 edition = "2024"
 rust-version = "1.89"
 license = "LicenseRef-PolyForm-Shield-1.0.0"

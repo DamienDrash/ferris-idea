@@ -870,7 +870,7 @@ impl Render for ProfilerView {
                                 cx.notify();
                             }))
                     }))
-                    .child(div().text_xs().text_color(c(p.ui_dim)).child(help)),
+                    .child(div().text_xs().text_color(c(p.ui_dim)).child(keys(help))),
             )
             .child(
                 div()
@@ -934,6 +934,12 @@ fn notes_label(notes: &[String]) -> Option<String> {
         .filter(|n| !n.is_empty())
         .collect();
     (!notes.is_empty()).then(|| notes.join(" · "))
+}
+
+/// A shortcut of this dialog written for the platform: ⌘ is Ctrl and ⌥ is Alt outside macOS
+/// (`SPEC-0028` v8 behaviour 13).
+fn keys(text: &str) -> String {
+    idecraft_ui::keymap::local_keys(text, cfg!(target_os = "macos"))
 }
 
 #[cfg(test)]

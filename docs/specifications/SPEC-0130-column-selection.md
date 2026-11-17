@@ -1,6 +1,8 @@
 # SPEC-0130: Column selection with the mouse
 
-- **Version:** 2 · **Date:** 2026-11-13 (v2: the two clicks are the keymap's mouse shortcuts of `EditorCreateRectangularSelectionOnMouseDrag` and `EditorAddOrRemoveCaret`, and a click on a caret removes it, behaviour 5; docs/research/KEYMAP_COVERAGE.md); 2026-11-02 (v1)
+- **Version:** 3 · **Date:** 2026-11-16 (v3: the middle button drags a column selection, and ⌥⇧ with
+  the middle button selects the rectangle from the caret to the click, behaviour 6; from the check of
+  feature row F-012 without a screen); 2026-11-13 (v2: the two clicks are the keymap's mouse shortcuts of `EditorCreateRectangularSelectionOnMouseDrag` and `EditorAddOrRemoveCaret`, and a click on a caret removes it, behaviour 5; docs/research/KEYMAP_COVERAGE.md); 2026-11-02 (v1)
 - **Sources:** GEN (editors select a rectangle of text with ⌥-drag on macOS and Alt-drag
   elsewhere; every line of it gets its own selection, and typing changes all of them; F-012),
   SPEC-0057/SPEC-0058 (multiple carets, block selection in the editor core), ADR-0008; v2: OSS
@@ -36,6 +38,15 @@ Edit the same columns of many lines at once, e.g. aligned values or a prefix in 
    chosen there they do nothing and answer that they are not available, since they need the place
    of a click. No MCP tool: `preview_column_edit` (behaviour 4) and the caret tools of SPEC-0057
    cover both. [OSS: ids and mouse shortcuts of the bundled keymaps; GEN]
+6. **The middle button (v3):** the keymap's second mouse shortcut of
+   `EditorCreateRectangularSelectionOnMouseDrag`, the middle button without modifiers, starts a
+   column selection as ⌥ with the primary button does: the press puts the corner, dragging with
+   the middle button held stretches the rectangle (behaviours 1 and 2), releasing it ends it. The
+   mouse shortcut of `EditorCreateRectangularSelection` (⌥⇧ with the middle button) selects the
+   rectangle from the primary caret's line and column to the clicked place, and dragging on
+   stretches it from the caret. As in behaviour 5 the editor asks the keymap in use, so changed
+   mouse shortcuts are followed; input fields take neither. [OSS: ids and mouse shortcuts of the
+   bundled keymaps; GEN]
 
 ## Acceptance criteria
 - **AK-1** Block selections over lines of different lengths, in both directions (`selection::tests`
@@ -52,13 +63,19 @@ Edit the same columns of many lines at once, e.g. aligned values or a prefix in 
   `keymap::tests::mouse_shortcuts_name_their_actions`); a click on a caret removes it, on the only
   caret or on other text it does not (unit test `selection::tests::a_click_on_a_caret_removes_it`).
   In the window: by hand.
+- **AK-6 (v3, behaviour 6)** Unit test `keymaps::tests::middle_click_actions` (the middle button
+  means the column selection, ⌥⇧ with it the rectangle from the caret). In a window of the test
+  harness (`crates/workbench/tests/it/multi_caret_gestures.rs`:
+  `column_selection_with_the_middle_button`): a middle-button drag over three lines gives one part
+  per line with a caret at the end of the short line, typing changes all of them; with the caret
+  at line 0 column 6, ⌥⇧ and a middle click at line 2 column 9 give the same rectangle; a plain
+  primary click afterwards leaves one caret.
 
 ## Out of scope
 Column selection mode (⇧⌘8) for the keyboard, virtual space past the line ends (spaces are not
-inserted), tab characters counted as more than one column, middle-button drag (the keymap's second
-mouse shortcut of `EditorCreateRectangularSelectionOnMouseDrag`), adding a rectangle to the
-selections there are (`EditorAddRectangularSelectionOnMouseDrag`), a column selection up to a
-middle click (`EditorCreateRectangularSelection`).
+inserted), tab characters counted as more than one column, adding a rectangle to the
+selections there are (`EditorAddRectangularSelectionOnMouseDrag`). Until v2 also the middle
+button (behaviour 6).
 
 ## Known deviations from the reference
 Not compared side by side.

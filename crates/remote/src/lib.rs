@@ -46,7 +46,7 @@ pub use backend::{
     BACKEND_DIR, Backend, Installed, RunStep, backend_path, ensure_backend, fingerprint,
     host_platform, local_platform, run_script, run_steps, same_platform,
 };
-pub use config::{HostInfo, config_hosts, describe};
+pub use config::{HostInfo, config_hosts, config_hosts_in, describe, host_list, ssh_config_file};
 pub use files::{
     EntryKind, MAX_FILE, NewEntry, RemoteEntry, RemoteFile, check_path, cksum, protects_home,
 };

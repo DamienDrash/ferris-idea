@@ -2,8 +2,11 @@
 //! syntax trees (`SPEC-0042` v17 behaviours 28–33): a class or id of an HTML file leads to the
 //! rules that define it, a jump link to the element with that id, a class or id selector of a
 //! stylesheet lists its uses in HTML files, and the elements of an HTML file are listed nested.
-//! The HTML language server knows nothing of the stylesheets a page links and lists elements
-//! without their nesting.
+//! Since v22 (behaviours 38–40) a class or id is also renamed here, in every stylesheet and HTML
+//! file of the project with its `.` or `#` kept, and the class names and ids of the stylesheets
+//! are offered in `class` and `id` values. The HTML language server knows nothing of the
+//! stylesheets a page links and lists elements without their nesting; the CSS server renamed a
+//! class selector with its mark and in one file only (OBS-0069 G2).
 //!
 //! Only the project's own files are read ([`idecraft_core::OwnSources`]), each through a handle
 //! that follows no symbolic link, within the bounds [`MAX_STYLESHEETS`], [`MAX_HTML_FILES`] and
@@ -21,7 +24,8 @@ use idecraft_core::{OwnSources, open_regular};
 use tree_sitter::{Node, Parser, Tree};
 
 use crate::LanguageId;
-use crate::insight::{Location, Range, Symbol};
+use crate::insight::{CompletionItem, Location, Range, Symbol};
+use crate::rename::{Edit, FileEdits, RenamePlan};
 
 /// Most stylesheet files read for one question, linked ones first (behaviour 32).
 pub const MAX_STYLESHEETS: usize = 200;
@@ -72,8 +76,34 @@ enum NameKind {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Named {
     kind: NameKind,
+    /// The name as compared (behaviour 28): without an escaping backslash.
     name: String,
+    /// The whole place: for a selector from its `.` or `#` to the end of the name.
     range: Range,
+    /// The name as written, without the mark: the target of a declaration (v22 behaviour 28)
+    /// and what a rename replaces (behaviour 38).
+    written: Range,
+    /// The bytes of [`Named::written`] in the file.
+    bytes: ByteRange<usize>,
+}
+
+impl Named {
+    /// Whether the place holds 0-based `at` (line, character), its ends included.
+    fn holds(&self, at: (u64, u64)) -> bool {
+        (self.range.start_line, self.range.start_character) <= at
+            && at <= (self.range.end_line, self.range.end_character)
+    }
+
+    /// The same name in a block that starts at byte `start`, `line` and `character` of its file.
+    fn moved(self, start: usize, line: u64, character: u64) -> Named {
+        Named {
+            kind: self.kind,
+            name: self.name,
+            range: shifted(&self.range, line, character),
+            written: shifted(&self.written, line, character),
+            bytes: self.bytes.start + start..self.bytes.end + start,
+        }
+    }
 }
 
 fn parse(language: LanguageId, text: &str) -> Option<Tree> {
@@ -384,7 +414,9 @@ fn html_facts(text: &str, tree: &Tree) -> HtmlFacts {
                             facts.names.push(Named {
                                 kind: NameKind::Class,
                                 name: word.to_owned(),
-                                range: lines.range(bytes),
+                                range: lines.range(bytes.clone()),
+                                written: lines.range(bytes.clone()),
+                                bytes,
                             });
                         }
                     }
@@ -394,7 +426,9 @@ fn html_facts(text: &str, tree: &Tree) -> HtmlFacts {
                             facts.names.push(Named {
                                 kind: NameKind::Id,
                                 name: word.to_owned(),
-                                range: lines.range(bytes),
+                                range: lines.range(bytes.clone()),
+                                written: lines.range(bytes.clone()),
+                                bytes,
                             });
                         }
                     }
@@ -486,11 +520,33 @@ fn selectors(language: LanguageId, text: &str) -> Vec<Named> {
                 kind,
                 name: unescaped(written),
                 range: lines.range(start..name.end_byte()),
+                written: lines.range(name.byte_range()),
+                bytes: name.byte_range(),
             });
         }
         stack.extend(children(node).into_iter().rev());
     }
+    // A compound selector holds its first class innermost (`.button.primary`).
+    out.sort_by_key(|n| n.bytes.start);
     out
+}
+
+/// The class and id selectors of the `<style>` block at `bytes` of the HTML `text` in
+/// `language`, with their places in the file.
+fn block_selectors(
+    text: &str,
+    lines: &Lines,
+    bytes: ByteRange<usize>,
+    language: LanguageId,
+) -> Vec<Named> {
+    let Some(block) = text.get(bytes.clone()) else {
+        return Vec::new();
+    };
+    let (line, character) = lines.position(bytes.start);
+    selectors(language, block)
+        .into_iter()
+        .map(|n| n.moved(bytes.start, line, character))
+        .collect()
 }
 
 /// Modification time and size of a file when it was read.
@@ -644,14 +700,15 @@ fn names_of(own: &OwnSources, relative: &Path) -> Option<Arc<Vec<Named>>> {
     Some(names)
 }
 
-/// The places of `names` that name `wanted` exactly, in the file `path`.
+/// The places of `names` that name `wanted` exactly, in the file `path`: each the name without
+/// its mark (v22 behaviour 28, OBS-0069 G3).
 fn places(path: &Path, names: &[Named], kind: NameKind, wanted: &str) -> Vec<Location> {
     names
         .iter()
         .filter(|n| n.kind == kind && n.name == wanted)
         .map(|n| Location {
             path: path.to_path_buf(),
-            range: n.range.clone(),
+            range: n.written.clone(),
         })
         .collect()
 }
@@ -675,20 +732,27 @@ fn shifted(range: &Range, line: u64, character: u64) -> Range {
     }
 }
 
-/// The rules that define the class or id `wanted` for the HTML file `file` with content `text`
-/// (behaviour 28): first in the stylesheets it links, in the order of the links, then in its
-/// `<style>` blocks, then in the project's other CSS, SCSS and Less files by path.
-fn rules(
+/// Where names of [`each_stylesheet`] come from.
+enum Sheet<'a> {
+    /// A stylesheet of the project, relative to the project folder.
+    File(&'a Path),
+    /// The `<style>` blocks of the HTML file itself.
+    Blocks,
+}
+
+/// Visits the selectors of the stylesheets that count for the HTML file `file` with content
+/// `text` (behaviour 28): first the stylesheets it links, in the order of the links, then its
+/// `<style>` blocks, then the project's other CSS, SCSS and Less files by path; at most
+/// [`MAX_STYLESHEETS`] files are read (behaviour 32).
+fn each_stylesheet(
     root: &Path,
     file: &Path,
     text: &str,
     facts: &HtmlFacts,
-    kind: NameKind,
-    wanted: &str,
-) -> Vec<Location> {
+    mut visit: impl FnMut(Sheet, &[Named]),
+) {
     let own = OwnSources::new(root);
     let html = relative_to(root, file);
-    let mut out = Vec::new();
     let mut read: Vec<PathBuf> = Vec::new();
     if let Some(html) = &html {
         for href in &facts.links {
@@ -702,26 +766,18 @@ fn rules(
                 break;
             }
             if let Some(names) = names_of(&own, &target) {
-                out.extend(places(&root.join(&target), &names, kind, wanted));
+                visit(Sheet::File(&target), &names);
             }
             read.push(target);
         }
     }
     let lines = Lines::new(text);
-    for (bytes, language) in &facts.styles {
-        let Some(block) = text.get(bytes.clone()) else {
-            continue;
-        };
-        let (line, character) = lines.position(bytes.start);
-        for n in selectors(*language, block) {
-            if n.kind == kind && n.name == wanted {
-                out.push(Location {
-                    path: file.to_path_buf(),
-                    range: shifted(&n.range, line, character),
-                });
-            }
-        }
-    }
+    let blocks: Vec<Named> = facts
+        .styles
+        .iter()
+        .flat_map(|(bytes, language)| block_selectors(text, &lines, bytes.clone(), *language))
+        .collect();
+    visit(Sheet::Blocks, &blocks);
     for other in own.files() {
         if read.len() >= MAX_STYLESHEETS {
             break;
@@ -730,10 +786,30 @@ fn rules(
             continue;
         }
         if let Some(names) = names_of(&own, &other) {
-            out.extend(places(&root.join(&other), &names, kind, wanted));
+            visit(Sheet::File(&other), &names);
         }
         read.push(other);
     }
+}
+
+/// The rules that define the class or id `wanted` for the HTML file `file` with content `text`
+/// (behaviour 28), in the order of [`each_stylesheet`].
+fn rules(
+    root: &Path,
+    file: &Path,
+    text: &str,
+    facts: &HtmlFacts,
+    kind: NameKind,
+    wanted: &str,
+) -> Vec<Location> {
+    let mut out = Vec::new();
+    each_stylesheet(root, file, text, facts, |sheet, names| {
+        let path = match sheet {
+            Sheet::File(relative) => root.join(relative),
+            Sheet::Blocks => file.to_path_buf(),
+        };
+        out.extend(places(&path, names, kind, wanted));
+    });
     out
 }
 
@@ -762,6 +838,34 @@ fn fragment_targets(
         .unwrap_or_default()
 }
 
+/// The attribute whose value holds byte `at` of the HTML document `tree`: its name node and the
+/// bytes of its value. Directly after a value without quotes the caret stands on what follows, so
+/// the place before it is looked at as well.
+fn attribute_at(tree: &Tree, at: usize) -> Option<(Node<'_>, ByteRange<usize>)> {
+    let around = |at: usize| {
+        let mut node = tree.root_node().descendant_for_byte_range(at, at)?;
+        while node.kind() != "attribute" {
+            node = node.parent()?;
+        }
+        attribute(node).filter(|(_, value)| value.start <= at && at <= value.end)
+    };
+    around(at).or_else(|| {
+        let before = at.checked_sub(1)?;
+        around(before).filter(|(_, value)| value.end == at)
+    })
+}
+
+/// The value of a `class` or `id` attribute that holds byte `at` of the HTML document: what it
+/// names and its bytes.
+fn name_value_at(tree: &Tree, text: &str, at: usize) -> Option<(NameKind, ByteRange<usize>)> {
+    let (name, value) = attribute_at(tree, at)?;
+    match text.get(name.byte_range())?.to_ascii_lowercase().as_str() {
+        "class" => Some((NameKind::Class, value)),
+        "id" => Some((NameKind::Id, value)),
+        _ => None,
+    }
+}
+
 /// What Go to Declaration finds at 0-based `line` and `character` (in chars) of the HTML file
 /// `file` with content `text` below the project folder `root`, when the place is one IDECraft
 /// answers itself (behaviours 28 and 29): a word of a `class` attribute or the value of an `id`
@@ -778,19 +882,7 @@ pub fn declarations(
     let tree = parse(LanguageId::Html, text)?;
     let lines = Lines::new(text);
     let at = lines.offset(line, character)?;
-    // The attribute around the caret; directly after a value without quotes the caret stands on
-    // what follows, so the place before it is looked at as well.
-    let around = |at: usize| {
-        let mut node = tree.root_node().descendant_for_byte_range(at, at)?;
-        while node.kind() != "attribute" {
-            node = node.parent()?;
-        }
-        attribute(node).filter(|(_, value)| value.start <= at && at <= value.end)
-    };
-    let (name, value) = around(at).or_else(|| {
-        let before = at.checked_sub(1)?;
-        around(before).filter(|(_, value)| value.end == at)
-    })?;
+    let (name, value) = attribute_at(&tree, at)?;
     let name = text.get(name.byte_range())?.to_ascii_lowercase();
     let facts = html_facts(text, &tree);
     match name.as_str() {
@@ -842,11 +934,9 @@ pub fn selector_uses(
     character: u64,
 ) -> Option<Vec<Location>> {
     let language = stylesheet_language(file)?;
-    let at = (line, character);
-    let wanted = selectors(language, text).into_iter().find(|n| {
-        (n.range.start_line, n.range.start_character) <= at
-            && at <= (n.range.end_line, n.range.end_character)
-    })?;
+    let wanted = selectors(language, text)
+        .into_iter()
+        .find(|n| n.holds((line, character)))?;
     let own = OwnSources::new(root);
     let mut out = Vec::new();
     let mut read = 0;
@@ -922,6 +1012,330 @@ pub fn pages_linking(root: &Path, stylesheet: &Path) -> Vec<PathBuf> {
         }
     }
     out
+}
+
+/// The class or id name at 0-based `line` and `character` (in chars) of `file` with content
+/// `text` that IDECraft renames itself (`SPEC-0042` v22 behaviour 38): a class or id selector of
+/// a stylesheet — the caret on the mark, in the name or directly after it — or of a `<style>`
+/// block of an HTML file, a word of a `class` value or an `id` value of an HTML file.
+fn named_at(file: &Path, text: &str, line: u64, character: u64) -> Option<(NameKind, String)> {
+    if let Some(language) = stylesheet_language(file) {
+        return selectors(language, text)
+            .into_iter()
+            .find(|n| n.holds((line, character)))
+            .map(|n| (n.kind, n.name));
+    }
+    if !is_html(file) {
+        return None;
+    }
+    let tree = parse(LanguageId::Html, text)?;
+    let lines = Lines::new(text);
+    let at = lines.offset(line, character)?;
+    if let Some((kind, value)) = name_value_at(&tree, text, at) {
+        return words(text, value)
+            .into_iter()
+            .find(|(bytes, _)| bytes.start <= at && at <= bytes.end)
+            .map(|(_, word)| (kind, word.to_owned()));
+    }
+    html_facts(text, &tree)
+        .styles
+        .iter()
+        .flat_map(|(bytes, language)| block_selectors(text, &lines, bytes.clone(), *language))
+        .find(|n| n.holds((line, character)))
+        .map(|n| (n.kind, n.name))
+}
+
+/// The class or id name a rename at 0-based `line` and `character` of `file` with content `text`
+/// starts with, whole and without its mark (`SPEC-0042` v22 behaviour 38: the rename popup);
+/// `None` where IDECraft does not rename itself.
+pub fn name_at(file: &Path, text: &str, line: u64, character: u64) -> Option<String> {
+    named_at(file, text, line, character).map(|(_, name)| name)
+}
+
+/// A non-ASCII character CSS Syntax Level 3 allows in an identifier, without white space and the
+/// direction mark those ranges hold (`SPEC-0042` v22 behaviour 38b).
+fn non_ascii_identifier(c: char) -> bool {
+    matches!(
+        c as u32,
+        0xB7 | 0xC0..=0xD6
+            | 0xD8..=0xF6
+            | 0xF8..=0x37D
+            | 0x37F..=0x1FFF
+            | 0x200C
+            | 0x200D
+            | 0x203F
+            | 0x2040
+            | 0x2070..=0x218F
+            | 0x2C00..=0x2FEF
+            | 0x3001..=0xD7FF
+            | 0xF900..=0xFDCF
+            | 0xFDF0..=0xFFFD
+            | 0x10000..
+    ) && !c.is_whitespace()
+        && c != '\u{061C}'
+}
+
+/// Whether `name` is a CSS identifier written without escapes (`SPEC-0042` v22 behaviour 38b): an
+/// optional `-`, then a letter, `_`, a non-ASCII identifier character or a second `-`, then
+/// letters, digits, `_`, `-` and non-ASCII identifier characters.
+pub fn is_css_identifier(name: &str) -> bool {
+    let starts = |c: char| c.is_ascii_alphabetic() || c == '_' || non_ascii_identifier(c);
+    let mut chars = name.chars();
+    let first_ok = match chars.next() {
+        Some('-') => chars.next().is_some_and(|c| c == '-' || starts(c)),
+        Some(c) => starts(c),
+        None => false,
+    };
+    first_ok && chars.all(|c| starts(c) || c.is_ascii_digit() || c == '-')
+}
+
+/// The new name of a class or id as typed into the rename: a `.` before a class's name and a `#`
+/// before an id's is the mark and is left off; what remains must be a CSS identifier
+/// (`SPEC-0042` v22 behaviour 38b), else the message why it is refused.
+fn new_name(kind: NameKind, typed: &str) -> Result<String, String> {
+    let (mark, what) = match kind {
+        NameKind::Class => ('.', "class name"),
+        NameKind::Id => ('#', "id"),
+    };
+    let name = typed.strip_prefix(mark).unwrap_or(typed);
+    if is_css_identifier(name) {
+        Ok(name.to_owned())
+    } else {
+        // Debug form: control and direction characters are shown escaped, never as they are.
+        Err(format!(
+            "{name:?} is not a valid CSS {what}: it must start with a letter, \"_\" or \"-\" (not \
+             \"-\" and a digit) and hold only letters, digits, \"_\" and \"-\". Nothing was renamed."
+        ))
+    }
+}
+
+/// The text of the project's own file `relative` for a rename (`SPEC-0042` v22 behaviour 38c):
+/// the text its editor shows when the planning runs with the window's texts (`SPEC-0220` v4
+/// behaviour 13), else the saved file within the bounds of behaviour 32.
+fn text_for(own: &OwnSources, relative: &Path) -> Option<String> {
+    if let Some(shown) = crate::shown::text_of(&own.root().join(relative)) {
+        return Some(shown);
+    }
+    let (file, _) = open_own(own, relative)?;
+    read_bounded(file)
+}
+
+/// The edits that rename the class or id `old` to `new` in `file` with content `text`
+/// (`SPEC-0042` v22 behaviour 38a): its selectors in a stylesheet; the words of `class` values or
+/// the `id` values and the selectors of the `<style>` blocks in an HTML file. Each edit replaces
+/// the name alone, never its mark.
+fn renamed_in(file: &Path, text: &str, kind: NameKind, old: &str, new: &str) -> Vec<Edit> {
+    let named = if let Some(language) = stylesheet_language(file) {
+        selectors(language, text)
+    } else if let Some(tree) = is_html(file)
+        .then(|| parse(LanguageId::Html, text))
+        .flatten()
+    {
+        let lines = Lines::new(text);
+        let facts = html_facts(text, &tree);
+        let mut all = facts.names;
+        for (bytes, language) in &facts.styles {
+            all.extend(block_selectors(text, &lines, bytes.clone(), *language));
+        }
+        all
+    } else {
+        return Vec::new();
+    };
+    let mut edits: Vec<Edit> = named
+        .into_iter()
+        .filter(|n| n.kind == kind && n.name == old)
+        .filter_map(|n| {
+            Some(Edit {
+                old_text: text.get(n.bytes.clone())?.to_owned(),
+                new_text: new.to_owned(),
+                range: n.written,
+            })
+        })
+        .collect();
+    edits.sort_by_key(|e| (e.range.start_line, e.range.start_character));
+    edits
+}
+
+/// Plans renaming the class or id at 0-based `line` and `character` (in chars) of `file` with
+/// content `text` below the project folder `root` to `new_name` (`SPEC-0042` v22 behaviour 38):
+/// every selector of that name in the project's own stylesheets and `<style>` blocks and every
+/// use in its HTML files, the marks kept. `None` where IDECraft does not rename itself (the
+/// language server is asked); `Some(Err)` with the reason when the rename is refused: a new name
+/// that is no CSS identifier, a project beyond the bounds, a file that is not the project's own.
+pub fn rename_plan(
+    root: &Path,
+    file: &Path,
+    text: &str,
+    line: u64,
+    character: u64,
+    new_name: &str,
+) -> Option<Result<RenamePlan, String>> {
+    let (kind, old) = named_at(file, text, line, character)?;
+    Some(plan_rename(root, file, text, kind, &old, new_name))
+}
+
+fn plan_rename(
+    root: &Path,
+    file: &Path,
+    text: &str,
+    kind: NameKind,
+    old: &str,
+    typed: &str,
+) -> Result<RenamePlan, String> {
+    let new = new_name(kind, typed)?;
+    let own = OwnSources::new(root);
+    let this = relative_to(own.root(), file)
+        .filter(|relative| own.not_own(relative).is_none())
+        .ok_or_else(|| {
+            format!(
+                "{} is not among the project's own sources; nothing was renamed.",
+                file.display()
+            )
+        })?;
+    let mut plan = RenamePlan {
+        old_name: old.to_owned(),
+        new_name: new.clone(),
+        files: Vec::new(),
+    };
+    if new == old {
+        return Ok(plan);
+    }
+    let mut todo: Vec<PathBuf> = own
+        .files()
+        .into_iter()
+        .filter(|p| is_stylesheet(p) || is_html(p))
+        .collect();
+    let sheets = todo.iter().filter(|p| is_stylesheet(p)).count();
+    let pages = todo.len() - sheets;
+    // A rename never leaves places out without saying so (behaviour 38d).
+    for (count, bound, what) in [
+        (sheets, MAX_STYLESHEETS, "stylesheets"),
+        (pages, MAX_HTML_FILES, "HTML files"),
+    ] {
+        if count > bound {
+            return Err(format!(
+                "The project holds {count} {what}, more than the {bound} IDECraft reads for one \
+                 rename; nothing was renamed."
+            ));
+        }
+    }
+    if !todo.contains(&this) {
+        todo.push(this.clone());
+    }
+    for relative in todo {
+        let content = if relative == this {
+            Some(text.to_owned())
+        } else {
+            text_for(&own, &relative)
+        };
+        // Without the name or an escape in it, the file has no place to change.
+        let Some(content) = content.filter(|t| t.contains(old) || t.contains('\\')) else {
+            continue;
+        };
+        let edits = renamed_in(&relative, &content, kind, old, &new);
+        if !edits.is_empty() {
+            plan.files.push(FileEdits {
+                path: own.root().join(&relative),
+                edits,
+            });
+        }
+    }
+    plan.files.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(plan)
+}
+
+/// The bytes typed of the word of a `class` or `id` value at byte `at` of the HTML document: from
+/// the start of the word up to `at`, empty between words and in an empty value (`SPEC-0042` v22
+/// behaviour 39).
+fn typed_in_value(tree: &Tree, text: &str, at: usize) -> Option<(NameKind, ByteRange<usize>)> {
+    let (kind, value) = name_value_at(tree, text, at)?;
+    let start = words(text, value)
+        .into_iter()
+        .find(|(bytes, _)| bytes.start <= at && at <= bytes.end)
+        .map_or(at, |(bytes, _)| bytes.start);
+    Some((kind, start..at))
+}
+
+/// The character where the typed word of a `class` or `id` value starts, on the caret's line,
+/// when the caret at 0-based `line` and `character` of the HTML `text` stands in such a value
+/// (`SPEC-0042` v22 behaviour 39, `SPEC-0072` v15 behaviour 52); `None` everywhere else.
+pub fn value_word(text: &str, line: u64, character: u64) -> Option<u64> {
+    let tree = parse(LanguageId::Html, text)?;
+    let lines = Lines::new(text);
+    let at = lines.offset(line, character)?;
+    let (_, typed) = typed_in_value(&tree, text, at)?;
+    let (start_line, start) = lines.position(typed.start);
+    (start_line == line).then_some(start)
+}
+
+/// The suggestions in a `class` or `id` value of the HTML file `file` with content `text` at
+/// 0-based `line` and `character` (`SPEC-0042` v22 behaviour 39): the class names, for an `id`
+/// the ids, of the stylesheets in the order of behaviour 28, each once, with the file and 1-based
+/// line where it is first defined, at most `limit`. `None` outside such a value: the language
+/// server is asked.
+pub fn completions(
+    root: &Path,
+    file: &Path,
+    text: &str,
+    line: u64,
+    character: u64,
+    limit: usize,
+) -> Option<Vec<CompletionItem>> {
+    if !is_html(file) {
+        return None;
+    }
+    let tree = parse(LanguageId::Html, text)?;
+    let lines = Lines::new(text);
+    let at = lines.offset(line, character)?;
+    let (kind, typed) = typed_in_value(&tree, text, at)?;
+    let facts = html_facts(text, &tree);
+    let shown = |p: &Path| p.to_string_lossy().replace('\\', "/");
+    let own_name = relative_to(root, file)
+        .map(|p| shown(&p))
+        .or_else(|| file.file_name().map(|n| n.to_string_lossy().into_owned()))
+        .unwrap_or_default();
+    let mut seen = std::collections::HashSet::new();
+    let mut offered: Vec<(String, String)> = Vec::new();
+    each_stylesheet(root, file, text, &facts, |sheet, names| {
+        let place = match sheet {
+            Sheet::File(relative) => shown(relative),
+            Sheet::Blocks => own_name.clone(),
+        };
+        for n in names.iter().filter(|n| n.kind == kind) {
+            if offered.len() < limit && seen.insert(n.name.clone()) {
+                offered.push((
+                    n.name.clone(),
+                    format!("{place}:{}", n.written.start_line + 1),
+                ));
+            }
+        }
+    });
+    let (start_line, start_character) = lines.position(typed.start);
+    let replaced = Range {
+        start_line,
+        start_character,
+        end_line: line,
+        end_character: character,
+    };
+    let kind = match kind {
+        NameKind::Class => "class",
+        NameKind::Id => "field",
+    };
+    Some(
+        offered
+            .into_iter()
+            .enumerate()
+            .map(|(i, (name, place))| CompletionItem {
+                label: name.clone(),
+                insert: name,
+                kind: Some(kind.to_owned()),
+                description: Some(place),
+                sort_text: Some(format!("{i:06}")),
+                edit_range: Some(replaced.clone()),
+                ..Default::default()
+            })
+            .collect(),
+    )
 }
 
 #[cfg(test)]
@@ -1068,7 +1482,8 @@ mod tests {
     }
 
     /// SPEC-0042/AK-29 (behaviour 28, OBS-0039 W1): a class of `index.html` leads to its rules in
-    /// the linked `css/site.css`, an id to its `#` rule.
+    /// the linked `css/site.css`, an id to its `#` rule. SPEC-0042/AK-43 (v22, OBS-0069 G3):
+    /// each target is the name after the mark.
     #[test]
     fn class_and_id_lead_to_their_rules() {
         let root = project("rules");
@@ -1076,12 +1491,12 @@ mod tests {
         let (line, character) = at(INDEX, "class=\"card\"", 8);
         assert_eq!((line, character), (12, 28));
         let card = declarations(&root, &file, INDEX, line, character).unwrap();
-        // `.card` on line 20 (0-based 19) and `.card:hover`.
+        // `card` of `.card` on line 20 (0-based 19) and of `.card:hover`, after the dot.
         assert_eq!(
             found(&root, &card),
             [
-                ("css/site.css".into(), 19, 0),
-                ("css/site.css".into(), 22, 0)
+                ("css/site.css".into(), 19, 1),
+                ("css/site.css".into(), 22, 1)
             ]
         );
         assert_eq!(card[0].range.end_character, 5);
@@ -1106,12 +1521,12 @@ mod tests {
         let (l, c) = at(INDEX, "button primary", 9);
         assert_eq!(
             found(&root, &declarations(&root, &file, INDEX, l, c).unwrap()),
-            [("css/site.css".into(), 12, 7)]
+            [("css/site.css".into(), 12, 8)]
         );
         let (l, c) = at(INDEX, "id=\"masthead\"", 5);
         assert_eq!(
             found(&root, &declarations(&root, &file, INDEX, l, c).unwrap()),
-            [("css/site.css".into(), 8, 0)]
+            [("css/site.css".into(), 8, 1)]
         );
         // Not on a class, id or fragment: the language server's question.
         let (l, c) = at(INDEX, "<title>", 2);
@@ -1166,11 +1581,11 @@ mod tests {
         assert_eq!(
             found(&root, &got),
             [
-                ("css/site.css".into(), 19, 0),
-                ("css/site.css".into(), 22, 0),
-                ("page.html".into(), 8, 2),
-                ("a-other.scss".into(), 1, 2),
-                ("b-other.less".into(), 2, 0),
+                ("css/site.css".into(), 19, 1),
+                ("css/site.css".into(), 22, 1),
+                ("page.html".into(), 8, 3),
+                ("a-other.scss".into(), 1, 3),
+                ("b-other.less".into(), 2, 1),
             ]
         );
         let _ = std::fs::remove_file(outside);
@@ -1189,7 +1604,7 @@ mod tests {
         std::fs::write(root.join("css/site.css"), "\n\n.card { color: red; }\n").unwrap();
         assert_eq!(
             found(&root, &declarations(&root, &file, INDEX, l, c).unwrap()),
-            [("css/site.css".into(), 2, 0)]
+            [("css/site.css".into(), 2, 1)]
         );
         // Too large.
         let big = format!(".card {{}}\n{}", " ".repeat(MAX_FILE_BYTES as usize));
@@ -1328,5 +1743,378 @@ mod tests {
         let scss = selectors(LanguageId::Scss, ".a { &.b { } #c & { } }\n");
         let names: Vec<&str> = scss.iter().map(|n| n.name.as_str()).collect();
         assert_eq!(names, ["a", "b", "c"]);
+    }
+
+    /// The edits of a plan as (file, line, character, old text, new text), the files relative to
+    /// the project folder.
+    fn edits_of(root: &Path, plan: &RenamePlan) -> Vec<(String, u64, u64, String, String)> {
+        plan.files
+            .iter()
+            .flat_map(|f| {
+                let file = f
+                    .path
+                    .strip_prefix(root)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                f.edits.iter().map(move |e| {
+                    (
+                        file.clone(),
+                        e.range.start_line,
+                        e.range.start_character,
+                        e.old_text.clone(),
+                        e.new_text.clone(),
+                    )
+                })
+            })
+            .collect()
+    }
+
+    /// The text of the project's file `relative` after the plan's edits.
+    fn after(root: &Path, plan: &RenamePlan, relative: &str) -> String {
+        let path = root.join(relative);
+        let text = std::fs::read_to_string(&path).unwrap();
+        match plan.files.iter().find(|f| f.path == path) {
+            Some(f) => crate::rename::apply_edits(&text, &f.edits).unwrap(),
+            None => text,
+        }
+    }
+
+    const MORE_SCSS: &str = ".wrap {\n  .card { top: 0; }\n}\n.card-wide {}\n.Card {}\n#card {}\n";
+    const PAGE: &str = "<style>\n  .card { }\n</style>\n<div class=\"a card b\" id=\"card\"></div>\n\
+                        <p class=\"card-wide Card\"></p>\n";
+
+    /// SPEC-0042/AK-39 (v22, behaviour 38a; OBS-0069 G2): renaming `.card` keeps the dot and
+    /// changes the selectors of every stylesheet and `<style>` block and the `class` words of every
+    /// page, from whichever place it starts; nothing else.
+    #[test]
+    fn renaming_a_class_keeps_its_mark() {
+        let root = project("rename");
+        std::fs::write(root.join("css/more.scss"), MORE_SCSS).unwrap();
+        std::fs::write(root.join("page.html"), PAGE).unwrap();
+        std::fs::create_dir_all(root.join("node_modules/pkg")).unwrap();
+        std::fs::write(root.join("node_modules/pkg/x.html"), "<p class=\"card\">").unwrap();
+        let site = root.join("css/site.css");
+        let page = root.join("page.html");
+        let expected = |new: &str| {
+            [
+                ("css/more.scss", 1, 3),
+                ("css/site.css", 19, 1),
+                ("css/site.css", 22, 1),
+                ("index.html", 12, 27),
+                ("page.html", 1, 3),
+                ("page.html", 3, 14),
+            ]
+            .map(|(f, l, c)| (f.to_owned(), l, c, "card".to_owned(), new.to_owned()))
+            .to_vec()
+        };
+        // From the stylesheet: on the dot, in the name, directly after it.
+        let (l, c) = at(SITE, ".card {", 0);
+        for into in [0, 2, 5] {
+            let plan = rename_plan(&root, &site, SITE, l, c + into, "box")
+                .unwrap()
+                .unwrap();
+            assert_eq!(plan.old_name, "card");
+            assert_eq!(plan.new_name, "box");
+            assert_eq!(edits_of(&root, &plan), expected("box"), "{into}");
+        }
+        // From a page: a word of a class list, the `<style>` block, the linked page.
+        let (l, c) = at(PAGE, "a card b", 3);
+        let from_page = rename_plan(&root, &page, PAGE, l, c, "box")
+            .unwrap()
+            .unwrap();
+        assert_eq!(edits_of(&root, &from_page), expected("box"));
+        let (l, c) = at(PAGE, ".card", 0);
+        let from_block = rename_plan(&root, &page, PAGE, l, c, ".box")
+            .unwrap()
+            .unwrap();
+        assert_eq!(edits_of(&root, &from_block), expected("box"));
+        let (l, c) = at(INDEX, "class=\"card\"", 9);
+        let from_index = rename_plan(&root, &root.join("index.html"), INDEX, l, c, "box")
+            .unwrap()
+            .unwrap();
+        assert_eq!(edits_of(&root, &from_index), expected("box"));
+        // The texts afterwards.
+        let css = after(&root, &from_page, "css/site.css");
+        assert!(
+            css.contains("\n.box {\n") && css.contains("\n.box:hover {\n"),
+            "{css}"
+        );
+        assert!(!css.contains("card"), "{css}");
+        let html = after(&root, &from_page, "page.html");
+        assert!(html.contains("  .box { }"), "{html}");
+        assert!(html.contains("class=\"a box b\" id=\"card\""), "{html}");
+        assert!(html.contains("class=\"card-wide Card\""), "{html}");
+        let scss = after(&root, &from_page, "css/more.scss");
+        assert_eq!(scss, MORE_SCSS.replacen(".card {", ".box {", 1));
+        assert!(after(&root, &from_page, "index.html").contains("class=\"box\""));
+        // An id selector and its `id` values; `href="#prices"` keeps its fragment.
+        let (l, c) = at(SITE, "#prices", 3);
+        let id = rename_plan(&root, &site, SITE, l, c, "#offers")
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            edits_of(&root, &id),
+            [("css/site.css", 16, 1), ("index.html", 12, 12)].map(|(f, l, c)| (
+                f.to_owned(),
+                l,
+                c,
+                "prices".into(),
+                "offers".into()
+            ))
+        );
+        let (l, c) = at(PAGE, "id=\"card\"", 5);
+        let card_id = rename_plan(&root, &page, PAGE, l, c, "box")
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            edits_of(&root, &card_id),
+            [("css/more.scss", 5, 1), ("page.html", 3, 26)].map(|(f, l, c)| (
+                f.to_owned(),
+                l,
+                c,
+                "card".into(),
+                "box".into()
+            ))
+        );
+        // The popup's name: whole, without the mark.
+        let more = root.join("css/more.scss");
+        let (l, c) = at(MORE_SCSS, ".card-wide", 6);
+        assert_eq!(
+            name_at(&more, MORE_SCSS, l, c).as_deref(),
+            Some("card-wide")
+        );
+        let (l, c) = at(SITE, ".card {", 0);
+        assert_eq!(name_at(&site, SITE, l, c).as_deref(), Some("card"));
+        // The same name renames nothing.
+        let same = rename_plan(&root, &site, SITE, l, c, "card")
+            .unwrap()
+            .unwrap();
+        assert!(same.files.is_empty());
+        // Not a class or id: the language server's question.
+        let (l, c) = at(SITE, "margin", 2);
+        assert_eq!(rename_plan(&root, &site, SITE, l, c, "box"), None);
+        assert_eq!(rename_plan(&root, &site, SITE, 0, 1, "box"), None);
+        let (l, c) = at(INDEX, "css/site.css", 3);
+        assert_eq!(
+            rename_plan(&root, &root.join("index.html"), INDEX, l, c, "box"),
+            None
+        );
+        assert_eq!(name_at(&site, SITE, 0, 1), None);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// SPEC-0042/AK-40 (v22, behaviour 38b): a new name must be a CSS identifier; a leading mark
+    /// of the right kind is left off, everything else is refused with the reason.
+    #[test]
+    fn new_names_must_be_css_identifiers() {
+        for good in [
+            "box",
+            "-box",
+            "--box",
+            "_b1",
+            "card-2",
+            "café",
+            "日本",
+            "a\u{200D}b",
+        ] {
+            assert_eq!(
+                new_name(NameKind::Class, good).as_deref(),
+                Ok(good),
+                "{good}"
+            );
+            assert!(is_css_identifier(good), "{good}");
+        }
+        assert_eq!(new_name(NameKind::Class, ".box").as_deref(), Ok("box"));
+        assert_eq!(new_name(NameKind::Id, "#main").as_deref(), Ok("main"));
+        let refused = [
+            "",
+            "1box",
+            "-1box",
+            "-",
+            "a b",
+            "a.b",
+            "a:b",
+            "a\\:b",
+            "\"a\"",
+            "<a>",
+            "a&b",
+            "#main",
+            "\t",
+            "a\u{85}",
+            "a\u{202E}b",
+            "a\u{61C}b",
+            "a\u{1680}b",
+            "a\u{200F}b",
+            ".",
+        ];
+        for bad in refused {
+            let error = new_name(NameKind::Class, bad).unwrap_err();
+            assert!(error.contains("is not a valid CSS class name"), "{error}");
+            assert!(error.ends_with("Nothing was renamed."), "{error}");
+            assert!(
+                !error.chars().any(|c| c.is_control() || c == '\u{202E}'),
+                "{error:?}"
+            );
+        }
+        let error = new_name(NameKind::Id, ".box").unwrap_err();
+        assert!(error.contains("is not a valid CSS id"), "{error}");
+        // A refused name leaves every file as it was.
+        let root = project("names");
+        let site = root.join("css/site.css");
+        let (l, c) = at(SITE, ".card {", 2);
+        let refusal = rename_plan(&root, &site, SITE, l, c, "1box").unwrap();
+        assert!(
+            refusal
+                .unwrap_err()
+                .starts_with("\"1box\" is not a valid CSS class name")
+        );
+        assert_eq!(std::fs::read_to_string(&site).unwrap(), SITE);
+        assert_eq!(
+            std::fs::read_to_string(root.join("index.html")).unwrap(),
+            INDEX
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// SPEC-0042/AK-41 (v22, behaviour 38c and d): more HTML files than the bound refuse the
+    /// rename; a file larger than 1 MiB is left out; the shown text of an open page counts; a
+    /// page outside the own sources refuses.
+    #[tokio::test]
+    async fn rename_bounds_and_shown_texts() {
+        let root = project("rename-bounds");
+        let site = root.join("css/site.css");
+        let (l, c) = at(SITE, ".card {", 2);
+        let big = format!(".card {{}}\n{}", " ".repeat(MAX_FILE_BYTES as usize));
+        std::fs::write(root.join("css/big.css"), big).unwrap();
+        let saved = "<p class=\"card\">x</p>\n";
+        std::fs::write(root.join("page.html"), saved).unwrap();
+        let shown = "<p class=\"card\">x</p>\n<p class=\"card\">y</p>\n";
+        let plan = crate::shown::scope(vec![(root.join("page.html"), shown.into())], async {
+            rename_plan(&root, &site, SITE, l, c, "box")
+        })
+        .await
+        .unwrap()
+        .unwrap();
+        let files: Vec<(String, u64)> = edits_of(&root, &plan)
+            .into_iter()
+            .map(|(f, l, ..)| (f, l))
+            .collect();
+        assert_eq!(
+            files,
+            [
+                ("css/site.css".into(), 19),
+                ("css/site.css".into(), 22),
+                ("index.html".into(), 12),
+                ("page.html".into(), 0),
+                ("page.html".into(), 1),
+            ]
+        );
+        // Outside the scope the saved page counts.
+        let plan = rename_plan(&root, &site, SITE, l, c, "box")
+            .unwrap()
+            .unwrap();
+        assert_eq!(edits_of(&root, &plan).len(), 4);
+        // A page that is not the project's own.
+        std::fs::create_dir_all(root.join("node_modules/pkg")).unwrap();
+        let foreign = root.join("node_modules/pkg/x.html");
+        let text = "<p class=\"card\">";
+        std::fs::write(&foreign, text).unwrap();
+        let refusal = rename_plan(&root, &foreign, text, 0, 11, "box").unwrap();
+        assert!(
+            refusal
+                .unwrap_err()
+                .contains("is not among the project's own sources"),
+        );
+        // One HTML file more than the bound.
+        std::fs::create_dir_all(root.join("many")).unwrap();
+        for i in 0..MAX_HTML_FILES {
+            std::fs::write(root.join(format!("many/p{i}.html")), "<p></p>\n").unwrap();
+        }
+        let refusal = rename_plan(&root, &site, SITE, l, c, "box").unwrap();
+        let error = refusal.unwrap_err();
+        assert!(
+            error.contains("502 HTML files, more than the 500"),
+            "{error}"
+        );
+        assert!(error.ends_with("nothing was renamed."), "{error}");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// SPEC-0042/AK-42 (v22, behaviour 39; OBS-0069 G1): a `class` value offers the stylesheets'
+    /// classes, an `id` value their ids, each once with the file and line of its first place.
+    #[test]
+    fn class_names_and_ids_are_offered() {
+        let root = project("offered");
+        std::fs::write(root.join("z.css"), ".zeta {}\n.card {}\n#zid {}\n").unwrap();
+        let page = "<link rel=\"stylesheet\" href=\"css/site.css\">\n\
+                    <style>.local {}</style>\n<div class=\"\" id=\"\"></div>\n\
+                    <p class=\"a car-\"></p>\n<p class=\"a  b\"></p>\n";
+        let file = root.join("page.html");
+        std::fs::write(&file, page).unwrap();
+        let offer = |needle: &str, into: u64| {
+            let (l, c) = at(page, needle, into);
+            completions(&root, &file, page, l, c, 100).map(|items| {
+                items
+                    .into_iter()
+                    .map(|i| {
+                        assert_eq!(i.insert, i.label);
+                        let r = i.edit_range.unwrap();
+                        assert_eq!((r.end_line, r.end_character), (l, c));
+                        (
+                            i.label,
+                            i.kind.unwrap(),
+                            i.description.unwrap(),
+                            (r.start_line, r.start_character),
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            })
+        };
+        let classes = |start: (u64, u64)| {
+            [
+                ("banner", "css/site.css:5"),
+                ("button", "css/site.css:13"),
+                ("primary", "css/site.css:13"),
+                ("card", "css/site.css:20"),
+                ("local", "page.html:2"),
+                ("zeta", "z.css:1"),
+            ]
+            .map(|(n, p)| (n.to_owned(), "class".to_owned(), p.to_owned(), start))
+            .to_vec()
+        };
+        // An empty value: the caret between the quotes.
+        assert_eq!(offer("class=\"\"", 7), Some(classes((2, 12))));
+        assert_eq!(
+            offer("id=\"\"", 4),
+            Some(
+                [
+                    ("masthead", "css/site.css:9"),
+                    ("prices", "css/site.css:17"),
+                    ("zid", "z.css:3")
+                ]
+                .map(|(n, p)| (n.to_owned(), "field".to_owned(), p.to_owned(), (2, 18)))
+                .to_vec()
+            )
+        );
+        // A typed word with `-`: replaced from its start.
+        assert_eq!(offer("car-\"", 4), Some(classes((3, 12))));
+        let (l, c) = at(page, "car-\"", 4);
+        assert_eq!(value_word(page, l, c), Some(12));
+        // Between two words: nothing typed.
+        assert_eq!(offer("a  b", 2), Some(classes((4, 12))));
+        assert_eq!(value_word(page, 4, 12), Some(12));
+        // Not in a class or id value.
+        assert_eq!(offer("<div", 2), None);
+        assert_eq!(offer("css/site.css", 2), None);
+        assert_eq!(value_word(page, 0, 3), None);
+        assert_eq!(
+            completions(&root, &root.join("css/site.css"), SITE, 4, 2, 100),
+            None
+        );
+        // The limit.
+        let (l, c) = at(page, "class=\"\"", 7);
+        assert_eq!(completions(&root, &file, page, l, c, 2).unwrap().len(), 2);
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

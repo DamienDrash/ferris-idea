@@ -1,6 +1,7 @@
 # SPEC-0011: SQLite session — open and run scripts
 
-- **Version:** 2 · **Date:** 2026-11-13 (v2: the file is read when it is opened, errors say what to do,
+- **Version:** 3 · **Date:** 2026-11-17 (v3: SQLite's own words in completion, behaviour 9, AK-10 —
+  OBS-0083 L3); 2026-11-13 (v2: the file is read when it is opened, errors say what to do,
   read-only at the level of SQLite, a WAL database where nothing can be written; v1 2026-10-31)
 - **Sources:** STD (SQLite C interface: open flags, column count, `changes()`, storage classes, extended
   result codes, `sqlite3_error_offset`), GEN, ADR-0011, SPEC-0009 (same session contract)
@@ -38,6 +39,11 @@ PostgreSQL and MySQL sessions.
    because the database file alone would be out of date. In a folder that can be written, reading a
    WAL database lets SQLite create its `-wal` and `-shm` files as every SQLite client does. [STD: SQLite
    WAL documentation, read-only databases; URI parameter `immutable`]
+9. **v3 – Words of SQLite in completion (OBS-0083 L3):** next to the common keywords SQL
+   completion (SPEC-0014) offers `returning` (SQLite 3.35 and later), `pragma`, `glob`,
+   `autoincrement`, `without`, `rowid`, `conflict`, `ifnull` and `strict` on SQLite connections;
+   before, SQLite had no words of its own, so `INSERT … RET` offered nothing. Inspections
+   (SPEC-0015) take them as words, not as unknown columns. [STD: SQLite language reference]
 
 ## Acceptance criteria
 Tests build a temporary database from the reference seed files (`tests/reference-projects/sql-basic`).
@@ -58,6 +64,8 @@ Tests build a temporary database from the reference seed files (`tests/reference
 - **AK-9 (v2)** On a read-only connection `CREATE TABLE`, `INSERT`, `PRAGMA user_version = 7` and
   `VACUUM` fail with `SQLITE_READONLY` and the folder is unchanged
   (`reading_the_schema_changes_nothing_on_disk`); the connect errors of SPEC-0108 AK-19.
+- **AK-10 (v3)** `completion::tests::sqlite_keywords`: `returning`, `pragma` and `glob` offered
+  on SQLite, `pragma` not on MySQL, `top` not on SQLite.
 
 ## Out of scope
 Creating databases, attaching further files (a startup script may `ATTACH`), WAL configuration,

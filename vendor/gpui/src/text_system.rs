@@ -1,3 +1,4 @@
+// Modified by IDECraft: layout_line joins runs of the same font only (see ../IDECRAFT.md).
 mod font_fallbacks;
 mod font_features;
 mod line;
@@ -539,39 +540,15 @@ impl WindowTextSystem {
         runs: &[TextRun],
         force_width: Option<Pixels>,
     ) -> Arc<LineLayout> {
-        let mut last_run = None::<&TextRun>;
-        let mut last_font: Option<FontId> = None;
         let mut font_runs = self.font_runs_pool.lock().pop().unwrap_or_default();
         font_runs.clear();
-
-        for run in runs.iter() {
-            let decoration_changed = if let Some(last_run) = last_run
-                && last_run.color == run.color
-                && last_run.underline == run.underline
-                && last_run.strikethrough == run.strikethrough
-            // we do not consider differing background color relevant, as it does not affect glyphs
-            // && last_run.background_color == run.background_color
-            {
-                false
-            } else {
-                last_run = Some(run);
-                true
-            };
-
-            if let Some(font_run) = font_runs.last_mut()
-                && Some(font_run.font_id) == last_font
-                && !decoration_changed
-            {
-                font_run.len += run.len;
-            } else {
-                let font_id = self.resolve_font(&run.font);
-                last_font = Some(font_id);
-                font_runs.push(FontRun {
-                    len: run.len,
-                    font_id,
-                });
-            }
-        }
+        // IDECraft change: neighbouring runs share a font run only when they resolve to the same
+        // font (see font_runs_of).
+        font_runs.extend(
+            font_runs_of(runs, |font| self.resolve_font(font))
+                .into_iter()
+                .map(|(len, font_id)| FontRun { len, font_id }),
+        );
 
         let layout = self.line_layout_cache.layout_line(
             &SharedString::new(text),
@@ -584,6 +561,34 @@ impl WindowTextSystem {
 
         layout
     }
+}
+
+/// IDECraft change: the font runs of `runs` as `(length, font)`, with the font of each run from
+/// `resolve`. A run joins the one before it only when it resolves to the same font and has the
+/// same colour, underline and strikethrough, as in `shape_text` (a change of decoration still
+/// starts a font run of its own, so no ligature spans it). gpui 0.2.2's `layout_line` joined a
+/// run with the one before it whenever the decorations were equal, without looking at its font,
+/// so an italic or bold run after a run of the same colour was shaped in the font before it.
+pub fn font_runs_of(
+    runs: &[TextRun],
+    mut resolve: impl FnMut(&Font) -> FontId,
+) -> Vec<(usize, FontId)> {
+    let mut out: Vec<(usize, FontId)> = Vec::with_capacity(runs.len());
+    let mut last_run: Option<&TextRun> = None;
+    for run in runs {
+        let font_id = resolve(&run.font);
+        let same_decoration = last_run.is_some_and(|last| {
+            last.color == run.color
+                && last.underline == run.underline
+                && last.strikethrough == run.strikethrough
+        });
+        last_run = Some(run);
+        match out.last_mut() {
+            Some((len, last)) if *last == font_id && same_decoration => *len += run.len,
+            _ => out.push((run.len, font_id)),
+        }
+    }
+    out
 }
 
 #[derive(Hash, Eq, PartialEq)]

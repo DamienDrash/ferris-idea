@@ -837,6 +837,9 @@ fn tap_level(lines: &[&str], pos: &mut usize, level: usize, name: &str) -> TestS
     if let Some(sub) = pending_subtest {
         suite.suites.push(sub);
     }
+    for case in &mut suite.tests {
+        tap_diagnostics(case);
+    }
     if let Some(planned) = plan
         && !bailed
         && numbered < planned
@@ -868,6 +871,93 @@ fn tap_level(lines: &[&str], pos: &mut usize, level: usize, name: &str) -> TestS
     suite
 }
 
+/// The fields of a test's TAP YAML block (`SPEC-0045` v7 behaviour 14): `duration_ms` (Node's test
+/// runner) as the duration, and `error` or `message` (Node, TAP-YAML convention) as the message,
+/// where the test line gave none: a one-line value, or the first line of a block value. The
+/// block stays in the details as it was, with Node's `location` and `stack`.
+fn tap_diagnostics(case: &mut TestCase) {
+    let Some(details) = case.details.as_deref() else {
+        return;
+    };
+    let mut duration = None;
+    let mut message = None;
+    let mut lines = details.lines();
+    while let Some(line) = lines.next() {
+        let Some((key, value)) = line.split_once(':') else {
+            continue;
+        };
+        let value = value.trim();
+        // A block scalar (`error: |-`, Node's test runner): its first line is the message.
+        if (value.starts_with('|') || value.starts_with('>'))
+            && matches!(key, "error" | "message")
+            && message.is_none()
+        {
+            message = lines
+                .by_ref()
+                .find(|l| !l.trim().is_empty())
+                .map(|l| l.trim().to_owned());
+            continue;
+        }
+        if value.is_empty() || value.starts_with('|') || value.starts_with('>') {
+            continue;
+        }
+        let value = unquote(value);
+        match key {
+            "duration_ms" if duration.is_none() => {
+                duration = value
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|ms| ms.is_finite() && *ms >= 0.)
+                    .map(|ms| ms / 1000.);
+            }
+            "error" | "message" if message.is_none() && !value.is_empty() => {
+                message = Some(value.to_owned());
+            }
+            _ => {}
+        }
+    }
+    if case.duration.is_none() {
+        case.duration = duration;
+    }
+    if case.message.is_none() && matches!(case.status, TestStatus::Failed | TestStatus::Error) {
+        case.message = message;
+    }
+}
+
+/// A YAML scalar without its enclosing single or double quotes.
+fn unquote(value: &str) -> &str {
+    for q in ['\'', '"'] {
+        if let Some(inner) = value.strip_prefix(q).and_then(|v| v.strip_suffix(q))
+            && value.len() >= 2
+        {
+            return inner;
+        }
+    }
+    value
+}
+
+/// Where and why a libtest test panicked (`SPEC-0045` v7 behaviour 14), from its captured output:
+/// the panic message's first line and `panicked at file:line:column`. Rust 1.73 and later print
+/// `thread 'name' panicked at src/x.rs:3:5:` and the message on the next line; older releases
+/// `thread 'name' panicked at 'message', src/x.rs:3:5`.
+fn libtest_panic(output: &str) -> Option<(String, String)> {
+    let mut lines = output.lines();
+    while let Some(line) = lines.next() {
+        let Some((_, at)) = line.split_once("panicked at ") else {
+            continue;
+        };
+        if let Some(place) = at.strip_suffix(':') {
+            let message = lines.find(|l| !l.trim().is_empty())?.trim().to_owned();
+            return Some((message, format!("panicked at {place}")));
+        }
+        if let Some((message, place)) = at.rsplit_once("', ") {
+            let message = message.strip_prefix('\'').unwrap_or(message);
+            return Some((message.to_owned(), format!("panicked at {}", place.trim())));
+        }
+    }
+    None
+}
+
 /// Whether `suite` or one nested in it has a failed or erroneous test.
 fn has_failure(suite: &TestSuite) -> bool {
     suite
@@ -894,6 +984,13 @@ fn libtest(text: &str) -> Vec<TestSuite> {
                     None => case.name.clone(),
                 };
                 if let Some(out) = sections.remove(&key) {
+                    if case.status == TestStatus::Failed
+                        && case.message.is_none()
+                        && let Some((message, place)) = libtest_panic(&out)
+                    {
+                        case.message = Some(message);
+                        case.details = Some(place);
+                    }
                     case.output = Some(out);
                 }
             }

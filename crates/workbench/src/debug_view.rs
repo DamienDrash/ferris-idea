@@ -493,6 +493,13 @@ impl DebugView {
         ))
     }
 
+    /// The type of the selected row of the Variables list, as the debugger reports it
+    /// (`SPEC-0091` v20 behaviour 45).
+    pub fn selected_variable_type(&self) -> Option<String> {
+        let rows = self.shown_rows();
+        rows.get(self.var_selected?)?.var.kind.clone()
+    }
+
     /// Whether the selected row is an object that can be marked, and whether it is marked.
     pub fn selected_mark(&self) -> (bool, bool) {
         match self

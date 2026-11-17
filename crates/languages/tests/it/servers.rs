@@ -262,6 +262,22 @@ struct Light {
     complete: Option<(&'static str, &'static str, u64, u64, &'static str)>,
 }
 
+/// Runs the request `$ask` again (at most twice more) while it ends in a timeout: a server that
+/// starts cold under a heavily loaded machine may miss one deadline (marksman on the Mac merge
+/// queue, 2026-11-17); a server that keeps timing out still fails the test.
+macro_rules! after_timeouts {
+    ($ask:expr) => {{
+        let mut answer = $ask;
+        for _ in 0..2 {
+            if !matches!(answer, Err(idecraft_languages::lsp::LspError::Timeout(..))) {
+                break;
+            }
+            answer = $ask;
+        }
+        answer
+    }};
+}
+
 async fn check_light(case: &Light) {
     if !installed(case.server) {
         if case.optional {
@@ -284,12 +300,12 @@ async fn check_light(case: &Light) {
 
     // A cold server under load may answer before it has read the file (kotlin-language-server);
     // a server that keeps answering nothing still fails the test.
-    let mut symbols = symbols_in(&root, &file, text, WAIT).await.unwrap();
+    let mut symbols = after_timeouts!(symbols_in(&root, &file, text, WAIT).await).unwrap();
     for _ in 0..2 {
         if !symbols.is_empty() {
             break;
         }
-        symbols = symbols_in(&root, &file, text, WAIT).await.unwrap();
+        symbols = after_timeouts!(symbols_in(&root, &file, text, WAIT).await).unwrap();
     }
     let names: Vec<&str> = symbols.iter().map(|s| s.name.as_str()).collect();
     for want in case.symbols {
@@ -318,16 +334,18 @@ async fn check_light(case: &Light) {
         // load); attempts back off, and a server that keeps answering nothing still fails.
         let mut def = Vec::new();
         for attempt in 0..5 {
-            def = locations_in(
-                &root,
-                &file,
-                text,
-                line,
-                column,
-                LocationKind::Definition,
-                WAIT,
+            def = after_timeouts!(
+                locations_in(
+                    &root,
+                    &file,
+                    text,
+                    line,
+                    column,
+                    LocationKind::Definition,
+                    WAIT,
+                )
+                .await
             )
-            .await
             .unwrap();
             if !def.is_empty() {
                 break;

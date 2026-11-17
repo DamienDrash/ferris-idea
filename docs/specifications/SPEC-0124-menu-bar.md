@@ -1,6 +1,8 @@
 # SPEC-0124: Menu bar
 
-- **Version:** 17 · **Date:** 2026-11-15 (v17: the menu item of the tenth keymap package, behaviour 19, AK-18); 2026-11-14 (v16: the menu items of the ninth keymap package, behaviour 18, AK-17; ninth package of docs/research/KEYMAP_COVERAGE.md; v15: the menu items of the eighth keymap package, behaviour 17, AK-16; eighth package of docs/research/KEYMAP_COVERAGE.md; v14: the menu items of the seventh keymap package, behaviour 16, AK-15; v13: the menu items of the sixth keymap package, behaviour 15, AK-14; v1: 2026-11-02, v2: 2026-11-03; v4: the actions added from the keymap coverage, behaviour 7; v5: the navigation actions from the keymap coverage, behaviour 8; v6 is the second keymap package (PR #679), written on another branch and not in this text until that branch is merged; v7: the Bookmarks submenu of Edit, behaviour 10; v8: File, Edit, Navigate, Refactor and Window follow the open platform's main-menu groups, behaviour 11; v9 is written on another branch (PR 690); v10: closing project windows in File, behaviour 13; v11: "Not offered" no longer names what has been built since — closing projects (v10, SPEC-0094 v3), the endpoint search (SPEC-0067 v9), named layouts (SPEC-0333) and the HTTP client's menu entry (SPEC-0096 v4); v12: the File Properties submenu of File, behaviour 14, SPEC-0336)
+- **Version:** 19 · **Date:** 2026-11-15 (v19: shortcuts shown after the active keyboard layout,
+  behaviour 3a, AK-20, OBS-0055 M6; v18: the View, Navigate and Edit items of OBS-0055 with the
+  shortcuts the reference shows, behaviour 20, AK-19); 2026-11-15 (v17: the menu item of the tenth keymap package, behaviour 19, AK-18); 2026-11-14 (v16: the menu items of the ninth keymap package, behaviour 18, AK-17; ninth package of docs/research/KEYMAP_COVERAGE.md; v15: the menu items of the eighth keymap package, behaviour 17, AK-16; eighth package of docs/research/KEYMAP_COVERAGE.md; v14: the menu items of the seventh keymap package, behaviour 16, AK-15; v13: the menu items of the sixth keymap package, behaviour 15, AK-14; v1: 2026-11-02, v2: 2026-11-03; v4: the actions added from the keymap coverage, behaviour 7; v5: the navigation actions from the keymap coverage, behaviour 8; v6 is the second keymap package (PR #679), written on another branch and not in this text until that branch is merged; v7: the Bookmarks submenu of Edit, behaviour 10; v8: File, Edit, Navigate, Refactor and Window follow the open platform's main-menu groups, behaviour 11; v9 is written on another branch (PR 690); v10: closing project windows in File, behaviour 13; v11: "Not offered" no longer names what has been built since — closing projects (v10, SPEC-0094 v3), the endpoint search (SPEC-0067 v9), named layouts (SPEC-0333) and the HTTP client's menu entry (SPEC-0096 v4); v12: the File Properties submenu of File, behaviour 14, SPEC-0336)
 - **Sources:** GEN (the reference has an application menu bar with File, Edit, View, Navigate,
   Code, Refactor, Build, Run, Git/VCS, Tools, Window, Help; items show their shortcuts; F-087),
   OSS (action ids and their shortcuts from the ported keymaps; menu item captions of the platform
@@ -55,6 +57,16 @@ reference.
    use, including the user's changes; changing a shortcut in Settings updates the menu at once.
    A shortcut runs its action once: the window handles the key first and the menu only acts when
    no view took it. [OSS, STD]
+3a. **v19 – After the keyboard layout:** on macOS a shortcut whose key the active layout moves
+   to another key shows that key, as macOS localizes shortcuts of its own applications: on a German
+   layout Back and Forward show ⌘Ö and ⌘Ä instead of ⌘[ and ⌘].
+   The table of moved keys is the one the platform reports for the layout
+   (Apple's localization, which is not the key in the same position); letters, digits and named
+   keys stay. The labels are set again when the layout changes. The keymap binds characters, not
+   key codes: a key pressed with ⌘, ⌃ or ⌥ is first looked up as the layout types it and, where
+   the keymap knows no action for that, as the US key the layout's key stands in for (SPEC-0071 v4
+   behaviour 6), so ⌘Ö on a German layout runs Back. Until v18 the menu showed the US keys
+   (OBS-0055 M6). [OBS, STD]
 4. **Export Data… (v2):** Tools › Database › Export Data… opens the export dialog of SPEC-0021 v2
    for the result shown in the Services window (the selected rows when several are selected); with
    no result shown, the status bar says to run a query first. Like every menu item it is also found
@@ -151,6 +163,43 @@ reference.
     Next and Previous Template Variable and Iterate Recent Files are keys of a template and of the
     Switcher and get no item. [OSS: title from `ActionsBundle.properties`; the place is IDECraft's]
 
+20. **Items of OBS-0055 (v18):** the menus gain items the reference shows with a shortcut
+    (OBS-0055 M3–M5) for actions IDECraft carries out, in the open groups' order, under the open
+    texts unless noted [OSS: `PlatformActions.xml` ViewMenu and GoToMenu, `LangActions.xml`
+    QuickActions, CodeEditorViewGroup and GoToCodeGroup, `ActionsBundle.properties`]:
+    - **View:** Quick Definition (`QuickImplementations`) now stands before Quick Documentation,
+      as in the open QuickActions group; Context Info (`EditorContextInfo`, ⌃⇧Q) after Type Info,
+      before Error Description; then, each group after a separator, Jump to Source (`EditSource`,
+      ⌘↓); Recent Files, Recently Changed Files and Recent Locations (`RecentLocations`, ⇧⌘E);
+      Compare With… (`CompareTwoFiles`, ⌘D; the reference's title, the open text is "Compare
+      Files") and Compare with Clipboard (`CompareClipboardWithSelection`); Quick Switch Scheme…
+      and Compact Mode; Increase Font Size in All Editors and Decrease Font Size in All Editors
+      (`EditorIncreaseFontSizeGlobal`, `EditorDecreaseFontSizeGlobal`, ⌃⇧. and ⌃⇧, in the macOS
+      keymap). The split and tab actions follow after a separator [ours: the open View menu does
+      not hold them]. Jump to Source opens the Project tree's selected file in the editor and gives
+      it the focus while the tree has the focus, as ⌘↓ does there, and else gives the active
+      editor the focus [ours]; Compare With… compares the two files selected in the tree
+      (SPEC-0084); Compare with Clipboard compares the selection or file with the clipboard.
+    - **Navigate:** Previous Occurrence and Next Occurrence (`PreviousOccurence`,
+      `NextOccurence`, ⌥⌘↑ and ⌥⌘↓) after the Navigate in File submenu, as the open GoToMenu has
+      them; OBS-0055 names them as bookmark occurrences, the open texts are used. File Path
+      (`ShowFilePath`, ⌥⌘F12) after a separator below Header/Source, before File Structure.
+    - **Edit:** Duplicate Line or Selection is titled Duplicate Line, as the reference shows it
+      [OBS], and shows no shortcut: ⌘D (Ctrl+D) shows at View › Compare With…, as in the
+      reference. The keymap keeps ⌘D on both actions; in the editor ⌘D still duplicates, in the
+      Project tree it compares (`keymap_actions`, SPEC-0059). A menu item leaves a chord to the
+      item named in `menu_bar::CHORD_SHOWN_ELSEWHERE`; behaviour 3 holds otherwise.
+    - **Not added:** Recent Changes (⌥⇧C in the reference): IDECraft has no action for the
+      list of recent local-history changes. Reset Font Size in All Editors: left out by SPEC-0129
+      v4 (no value to go back to). Show Siblings, Quick Type Definition and the Bidi submenu:
+      IDECraft has no such actions. Emoji & Symbols (⌃⌘Space, OBS-0055 M5) is the system's
+      panel, not an IDECraft action.
+    - **Visible consequences of named deviations:** Navigate › Test shows no shortcut in the
+      macOS keymap because ⇧⌘T is Reopen Closed Tab (SPEC-0059, behaviour 8; OBS-0055 M1).
+      Navigate › Endpoint… shows no shortcut: the reference's ⇧⌘# (German keyboard) is not in
+      the bundled keymap files (OBS-0055 M2). Shortcuts after the German layout (OBS-0055 M6):
+      behaviour 3a (v19).
+
 ## Acceptance criteria
 - **AK-1** Keystroke conversion; every menu action has a handler; v2: data export is in the menu,
   and every menu action is found by Search Everywhere with either platform's keymap
@@ -208,6 +257,20 @@ reference.
 - **AK-18 (v17, behaviour 19)** The item stands after Class Name Completion and the three keys have
   no item (`menus::tests::tenth_package_items_are_in_their_menus`); its effect is declared as a
   write, the keys' as none (`security::tests::tenth_package_actions_declare_their_effects`).
+
+- **AK-19 (v18, behaviour 20)** The items stand in View, Navigate and Edit in the order named,
+  with the separators (`menus::tests::view_navigate_and_edit_items_of_obs_0055`, and
+  `items_of_the_open_platform_groups_stand_in_their_order` for Edit and Navigate); the macOS
+  keymap gives the shortcuts named, ⌘D shows at Compare With… and not at Duplicate Line while the
+  keymap still binds it to Duplicate (`menu_bar::tests::obs_0055_items_show_their_macos_shortcuts`);
+  every item is carried out and found (`menu_bar::tests::every_menu_action_is_carried_out_somewhere`,
+  `every_menu_action_is_found_by_search_everywhere`).
+
+- **AK-20 (v19, behaviour 3a)** With the German layout's table, Back and Forward show ⌘Ö and ⌘Ä,
+  Compare With… ⌘D and Jump to Source ⌘↓; ⇧⌘[ shows ⇧⌘Ö; a US layout keeps ⌘[; and the event
+  of ⌘Ö (⌘Ä) on that layout resolves to Back (Forward) in the macOS keymap
+  (`menu_bar::tests::menu_shortcuts_follow_the_keyboard_layout`). The real menu bar on a German
+  layout is checked in a window (not part of the tests).
 
 ## Not offered (v11, v12)
 Functions that have a main-menu item in the open platform's groups or, by OBS-0041, in the reference, and that IDECraft does not have. They get no menu item until an action exists; none is shown disabled.

@@ -94,13 +94,14 @@ pub fn update_info_rows(info: &UpdateInfo) -> (String, Vec<String>) {
 }
 
 /// The reset choice of Update Project, naming what it gives up (`SPEC-0144` v4 behaviour 9,
-/// IMP-0322).
-pub fn reset_choice_label(ahead: usize) -> String {
-    match ahead {
+/// IMP-0322), its shortcut written for the platform (`SPEC-0028` v8 behaviour 13).
+pub fn reset_choice_label(ahead: usize, macos: bool) -> String {
+    let text = match ahead {
         0 => "Reset the current branch to its upstream (no local commits to lose) (⌥E)".into(),
         1 => "Reset the current branch to its upstream, giving up 1 local commit (⌥E)".into(),
         n => format!("Reset the current branch to its upstream, giving up {n} local commits (⌥E)"),
-    }
+    };
+    idecraft_ui::keymap::local_keys(&text, macos)
 }
 
 /// Status text after a reset to the upstream (`SPEC-0144` v4 behaviour 9).
@@ -544,9 +545,11 @@ mod tests {
                 .ends_with("local changes kept in the stash, they conflict in a.txt")
         );
         assert!(reset_report(&pull(op(false, &[]), Vec::new())).starts_with("Reset failed"));
-        assert!(reset_choice_label(2).contains("giving up 2 local commits"));
-        assert!(reset_choice_label(1).contains("giving up 1 local commit ("));
-        assert!(reset_choice_label(0).contains("no local commits"));
+        assert!(reset_choice_label(2, true).contains("giving up 2 local commits (⌥E)"));
+        assert!(reset_choice_label(1, true).contains("giving up 1 local commit ("));
+        assert!(reset_choice_label(0, true).contains("no local commits"));
+        // SPEC-0028 v8 AK-15: Alt outside macOS.
+        assert!(reset_choice_label(2, false).ends_with("giving up 2 local commits (Alt+E)"));
     }
 
     #[test]

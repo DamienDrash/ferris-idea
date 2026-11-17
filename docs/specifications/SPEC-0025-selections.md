@@ -1,6 +1,8 @@
 # SPEC-0025: Selections and multiple carets
 
-- **Version:** 4 · **Date:** 2026-11-15 (v4: occurrences of a word are whole words, behaviour 4b,
+- **Version:** 5 · **Date:** 2026-11-16 (v5: Clone Caret Above/Below by the doubled modifier,
+  behaviour 9; a suggestion accepted at several carets goes in at every caret, behaviour 10; from
+  the check of feature row F-012 without a screen; v4: occurrences of a word are whole words, behaviour 4b,
   OBS-0058 M1; text pasted at one caret in plain text is indented to its column, behaviour 6a,
   OBS-0058 R1; v3: where the carets of added occurrences stand, behaviour 4a, OBS-0053 C1; v2:
   Unselect Occurrence, behaviour 8)
@@ -20,7 +22,13 @@
   pasted text at one caret as text and then, in a file whose language has no formatter, indents the
   block with `DefaultTypingActionsExtension.indentPlainTextBlock`; `EditorCopyPasteHelperImpl`,
   `ClipboardTextPerCaretSplitter` and `TextBlockTransferable` give a single caret outside column
-  mode the whole text; `docs/legal/PROVENANCE.md`)
+  mode the whole text; `docs/legal/PROVENANCE.md`); v5: OSS (`JetBrains/intellij-community` at
+  `d4018fb`, read as a logic template, no code taken:
+  `platform/platform-impl/src/com/intellij/openapi/keymap/impl/ModifierKeyDoubleClickHandler.kt`
+  — the clone actions are bound to the multi-caret modifier pressed twice, ⌥ on macOS and Ctrl
+  elsewhere, held on the second press, with ↑ or ↓; a press, release and press each within
+  300 ms; another key or modifier ends it), GEN (editors with several carets insert a chosen
+  completion at each caret), SPEC-0072 (the completion list)
 - **Feature matrix rows:** F-012
 
 ## Purpose
@@ -86,6 +94,27 @@ Edit in several places at once, predictably, with one undo step per action.
    menu bar and in Find Action (⇧⌘A); agents reach it through the MCP tool `editor_keystrokes` with
    the keystroke of the keymap (`control shift G` in the macOS keymap). [OSS, DOC, GEN, ADR-0008]
 
+9. **v5 – Clone Caret Above/Below by the doubled modifier:** `EditorCloneCaretAbove` and
+   `EditorCloneCaretBelow` have no key of their own in the keymaps; in the editor they are reached
+   by pressing the multi-caret modifier — ⌥ on macOS, Ctrl elsewhere — twice and keeping it held
+   on the second press: each ↑ then clones the carets one line up and each ↓ one line down
+   (behaviour 3), as often as the arrow is pressed while the modifier stays held. Press, release
+   and second press each come within 300 ms of the step before; a slower step, another modifier
+   or any other key ends the gesture, and so does releasing the modifier. Without the gesture
+   ⌥↑ and ⌥↓ keep their keymap actions (Extend and Shrink Selection on macOS). Input fields have
+   no gesture. Find Action (⇧⌘A) still runs both actions; agents use `EditorCloneCaretAbove` and
+   `EditorCloneCaretBelow` through the editor action tools. Until v4 the actions were reachable
+   only through Find Action. [OSS, GEN, ADR-0008]
+10. **v5 – Completion at several carets:** a suggestion accepted from the completion list
+   (SPEC-0072, Enter or Tab) while the editor has several carets goes in at every caret, as one
+   undo step: at the primary caret as with one caret; at every other caret it replaces that
+   caret's selection or, at an empty caret, as many characters before it as the prefix typed at
+   the primary caret (and with Tab the rest of the identifier after it). Afterwards every caret
+   stands after its inserted text and the primary caret stays primary. With several carets the
+   text of a template goes in without its tab stops, and the edits the suggestion brings
+   elsewhere (an import) are made once. Until v4 the suggestion went in at the primary caret only
+   and the other carets were dropped. [GEN]
+
 ## Acceptance criteria
 - **AK-1** Normalisation: sorting, merging of overlapping selections and of equal empty carets, primary
   caret kept.
@@ -126,6 +155,19 @@ Edit in several places at once, predictably, with one undo step per action.
   and ⌃G in `x xz x` give two carets; ⇧⌘8, ⇧→, ⇧↓ ⇧↓, ⌘C, ⇧⌘8, ⌘→, ⌘V give the indented block and
   ⌘Z takes it back.
 
+- **AK-13 (v5, behaviour 9)** Unit tests `caret_gesture::tests` in `idecraft-workbench`: ⌥ down,
+  up, down within 300 ms arms the gesture and keeps it while held; a slow step, another modifier,
+  another key and the release disarm it; a single press does not arm it.
+- **AK-14 (v5, behaviour 10)** Unit test `completion_model::tests::a_suggestion_goes_in_at_every_caret`:
+  the ranges a suggestion replaces at empty carets and at a selection, and the offsets after the
+  inserted texts.
+- **AK-15 (v5)** In a window of the test harness with the macOS keymap
+  (`crates/workbench/tests/it/multi_caret_gestures.rs`): ⌥ pressed twice and held, ↓ ↓ gives three
+  carets that type together and one ⌘Z takes the typing back; after releasing ⌥, ⌥↑ is Extend
+  Selection again (`clone_caret_with_the_doubled_option_key`); with three carets after `ar` a
+  suggestion `area` accepted with Enter gives `area` at all three carets, one ⌘Z takes it back
+  (`a_suggestion_goes_in_at_every_caret`).
+
 ## Out of scope
 Rendering, mouse handling, soft wrap, rectangular paste of whole lines, smart indentation, file watching
 (own spec).
@@ -139,3 +181,5 @@ occurrence commands; IDECraft ends it with any other command, Find included (beh
 Behaviour 6a follows the reference's way for languages without a formatter; in source files
 IDECraft keeps its own re-indentation (SPEC-0057 v3 behaviour 19), and Markdown, which the
 reference formats, keeps its pasted text as it is.
+(v5) Behaviours 9 and 10 were not compared side by side; the timing of behaviour 9 follows the open
+sources, and how the reference places a template's tab stops at several carets was not observed.

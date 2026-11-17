@@ -1,6 +1,9 @@
 # SPEC-0042: Language server registry
 
-- **Version:** 24 · **Date:** 2026-11-17 (v24: files IDECraft writes on disk outside an editor are told to the servers at once, behaviour 42, AK-46; headless check of F-011, OBS-0075, where the second of two renames over MCP left the other file with the old name); 2026-11-16 (v23: typescript-language-server's diagnostics come in steps and the last list is the answer, behaviour 41, AK-45; headless check of F-033, OBS-0072, where one in four `code_actions` calls missed "Add import" because only the syntax check's list had come; v22 is taken by an open change); 2026-11-14 (v21: definitions, references, type definitions and
+- **Version:** 25 · **Date:** 2026-11-17 (v25: a PHP file opened in a running intelephense after its indexing gets its diagnostics at once, behaviour 43, AK-47; ruby-lsp's diagnostics are asked for, behaviour 44, AK-48; headless check of F-038, OBS-0081, where both took 30 s and Ruby's syntax errors were never shown; v24: files IDECraft writes on disk outside an editor are told to the servers at once, behaviour 42, AK-46; headless check of F-011, OBS-0075, where the second of two renames over MCP left the other file with the old name); 2026-11-16 (v23: typescript-language-server's diagnostics come in steps and the last list is the answer, behaviour 41, AK-45; headless check of F-033, OBS-0072, where one in four `code_actions` calls missed "Add import" because only the syntax check's list had come; v22 is taken by an open change; v22: next to the reference, OBS-0069 G1 to G3: renaming a class or
+  id from a stylesheet or an HTML file keeps the `.` or `#` and changes every use in one step, a new name that is
+  no CSS identifier is refused, a `class` or `id` value offers the names of the stylesheets with file and line,
+  and Go to Declaration lands on the name, behaviours 28, 38–40, AK-39 to AK-44); 2026-11-14 (v21: definitions, references, type definitions and
   implementations get the wait they are asked with, behaviour 37, AK-38; v20: a question to kotlin-language-server waits for its
   diagnostics of the file, behaviour 35; intelephense's second list of an opened file is the answer,
   behaviour 36; v19: intelephense is ready also by its own notification and when it read
@@ -85,7 +88,26 @@
   selects a class, `#name` an id, names are case-sensitive; URLs: scheme, host, query, fragment and percent
   encoding), OSS (the tree-sitter grammars for HTML, CSS, SCSS and Less the workspace already uses for colouring),
   SPEC-0148 (the project's own sources), SPEC-0156 (opening a file without following a link), GEN (a tool that
-  reads files named by file content bounds how many and how large they are and never leaves the project)
+  reads files named by file content bounds how many and how large they are and never leaves the project);
+  v25: OBS-0081 (headless check of F-038 on 2026-11-17 with small Go, Rust, C, C++, PHP, Ruby, HTML and CSS
+  projects: `file_diagnostics` took 30 s on every PHP file and answered right; on every Ruby file it took 30 s and
+  answered with an empty list, also for a file with a syntax error), OSS (measured over the protocol with a client
+  of our own: intelephense 1.18.5 starts indexing on `initialized` and reports it as a progress; a file opened
+  after that progress ended gets one `publishDiagnostics`, checked against the index, and no second; ruby-lsp
+  0.26.11 announces `diagnosticProvider`, publishes no diagnostics at all and answers `textDocument/diagnostic`
+  with the syntax errors of Prism and, where configured, RuboCop's findings, also when the client did not
+  announce pulled diagnostics), STD (LSP `textDocument/diagnostic`, full report with `items`);
+  v22: OBS-0069 (side by side 2026-11-16 on `index.html` linking `style.css` with the rules `.card`, `#hello`
+  and `.side`: completion in an empty `class` value lists `card` and `side`, each with file and line, G1; Go to
+  Declaration on `card` puts the caret on the name in the rule, where IDECraft put it before the dot, G3; Rename
+  on `.card` to `box` gives `.box` in the stylesheet and `class="box"` in the HTML file, where IDECraft wrote
+  `box {` without the dot and left the HTML file as it was, although Find Usages lists it, G2), STD (CSS Syntax
+  Module Level 3: an identifier is an optional `-` followed by a second `-` or an identifier-start character,
+  then identifier characters — letters, digits, `_`, `-` and the non-ASCII ranges the module lists; a
+  backslash escapes; HTML: the `class` attribute is a set of tokens separated by ASCII white space, an `id` is
+  one token), SPEC-0193 (a refactoring over several files is one undo group), SPEC-0220 v4 behaviour 13 (open
+  files count with the text their editor shows), GEN (renaming a name must not change what kind of selector it
+  stands in; a new name that would not read back as the same name is refused before anything is written)
 - **Feature matrix rows:** F-038
 
 ## Purpose
@@ -363,8 +385,9 @@ one — instead of failing with "command not found" in the middle of a feature.
     answer from IDECraft's own syntax trees when the caret stands in, directly before or directly
     after a word of a `class` attribute's value, or the value of an `id` attribute: the targets are
     all class selectors `.name` of that word, for an id all id selectors `#name`. Each target
-    reaches from the `.` or `#` to the end of the name. They are looked for, and listed, in this
-    order:
+    is the name after the `.` or `#`, so the caret lands on the name (v22, OBS-0069 G3; until v21
+    the target reached from the mark and the caret landed before it). They are looked for, and
+    listed, in this order:
     a. the stylesheets the file links: every `<link>` whose `rel` holds the word `stylesheet`
        (in any case), in the order of the links, when its `href` names a CSS, SCSS or Less file
        among the project's own sources. The address counts from the folder of the HTML file, one
@@ -470,6 +493,78 @@ one — instead of failing with "command not found" in the middle of a feature.
     A server that builds its search index on the first such question (jdtls) may answer later than
     the wait under load; the pooled server keeps building it, so a question asked again is
     answered. [GEN]
+38. **Renaming a class or an id (v22, OBS-0069 G2):** Rename (SPEC-0074, ⇧F6), the MCP tool
+    `rename_symbol` and the host's `lsp.rename` answer from IDECraft's own syntax trees, and ask no
+    language server, when the caret stands
+    - in a CSS, SCSS or Less file on a class selector `.name` or an id selector `#name`: on the mark,
+      in the name or directly after it;
+    - in an HTML file on a word of a `class` value or on an `id` value (the places of behaviour 28),
+      or on a class or id selector of one of the file's `<style>` blocks.
+    The name is compared as in behaviour 28: exactly, case-sensitively, an escaping backslash left
+    out. The rename popup starts with the whole name without its mark, also when the name holds a
+    `-` (`card-wide`), and also with the caret on the mark.
+    a. **What changes:** every class selector of that name (for an id: every id selector) in the
+       project's own CSS, SCSS and Less files and in the `<style>` blocks of the project's own HTML
+       files, and every word of a `class` attribute (for an id: every `id` value) that equals the name
+       in the project's own HTML files. Only the name is replaced, never the mark: `.card` becomes
+       `.box`, `.card:hover` `.box:hover`, `#hello` `#main`; of `class="a card b"` only the middle
+       word changes, the other words and the white space stay. These are the places Find Usages
+       lists for the selector (behaviour 30 and the rules of the stylesheet itself) and the rules
+       Go to Declaration offers for the word (behaviour 28), whichever side the rename starts from;
+       a class and an id of the same name are different names. Other spellings (`Card`,
+       `card-wide`), attribute selectors (`[class~=card]`), selectors built by nesting (`&-wide`) and
+       names that scripts or templates put together stay as they are.
+    b. **The new name:** a `.` typed before a class's new name, or a `#` before an id's, is taken as
+       the mark and left off. What remains must be a CSS identifier written without escapes: an
+       optional `-`; then a letter, `_`, a non-ASCII identifier character or a second `-`; then any
+       number of letters, digits, `_`, `-` and non-ASCII identifier characters. Non-ASCII identifier
+       characters are those of CSS Syntax Level 3: U+00B7, U+00C0–U+00D6, U+00D8–U+00F6,
+       U+00F8–U+037D, U+037F–U+1FFF, U+200C, U+200D, U+203F, U+2040, U+2070–U+218F, U+2C00–U+2FEF,
+       U+3001–U+D7FF, U+F900–U+FDCF, U+FDF0–U+FFFD and from U+10000 on, except white space (U+1680)
+       and the direction mark U+061C, which those ranges hold as well. Every other name is refused
+       before anything is written — empty, with white space, starting with a digit (`1box`, `-1box`),
+       a lone `-`, with a backslash, a quote, `.`, `#`, `:`, `<`, `>`, `&`, a control character or a
+       character that changes the writing direction: the status bar (the MCP tool: its error) says
+       that the name is no valid class name (id) and what one is made of. A name of this form stands
+       in a selector and in an attribute value as it is, so nothing is ever escaped. A new name equal
+       to the old one renames nothing. For a class or id the rename popup leaves this check to the
+       rename, in place of its own of SPEC-0074 behaviour 2 (letters, digits and `_`), which would
+       swallow a name with `-` and refuse others without a word: Enter passes every name that is
+       not empty.
+    c. **One step:** all files change together as one refactoring (SPEC-0193): open files through
+       their editors, the others on disk; one ⌘Z takes back all of them, and the status bar names the
+       files as for every rename (`Renamed card to box in 2 file(s).`). An open file counts with the
+       text its editor shows, saved or not (SPEC-0220 v4 behaviour 13), the others with their saved
+       content; a file that changed after the plan refuses the whole rename (SPEC-0040 behaviour 4).
+       As for other renames there is no preview, unless comments, strings or text files are searched
+       too (SPEC-0148): that search looks for the old name without its mark, so
+       `querySelector('.card')` in a script is offered for review.
+    d. **Bounds:** files are read as in behaviour 32: the project's own sources only, no symbolic
+       link followed, a file larger than 1 MiB left out as it is for Find Usages. When the project
+       holds more than 200 stylesheets or more than 500 HTML files, the rename is refused with a
+       message that names the bound, and nothing is written: a rename never leaves out places
+       without saying so. A rename started in a file that is not among the project's own sources is
+       refused.
+    e. At every other place (a property, a tag selector, a value, an attribute name) the language
+       server is asked as before. [OBS-0069, STD, GEN]
+39. **Class names and ids offered in HTML (v22, OBS-0069 G1):** in an HTML file, Code Completion
+    (SPEC-0072 behaviour 1), the list that opens while typing (SPEC-0072 v15 behaviour 52) and the MCP
+    tool `complete_code` answer from IDECraft's own syntax trees, and ask no language server, when
+    the caret stands in the value of a `class` attribute — also an empty one (`class=""`), and
+    between two words — or of an `id` attribute. The suggestions are the class names (for `id`: the
+    ids) of the stylesheets of behaviour 28 in its order — the linked ones in the order of the links,
+    the file's `<style>` blocks, the project's other stylesheets by path —, within a file in the
+    order of the rules, each name once. Every suggestion shows on the right where the name is first
+    defined: the file relative to the project folder and the 1-based line (`style.css:1`); for a
+    `<style>` block of the file itself the file's own name. A class has the kind `class`, an id the
+    kind `field` (the icons of the Structure view). The typed part is the word from its start (after
+    the quote or the white space before it) up to the caret, `-` included; the chosen name replaces
+    it and the rest of the value stays. Names are offered as the HTML file has to write them: without
+    an escaping backslash (`.a\:b` gives `a:b`). The reading and its bounds are those of behaviour
+    32; at most the list's limit of suggestions is given. Where no stylesheet defines a name there
+    are no suggestions. [OBS-0069, STD, GEN]
+40. **No server needed (v22):** behaviours 38 and 39 answer without a language server, also when
+    none is installed; behaviour 33 holds for them as for 28, 29 and 31. [GEN]
 41. **Diagnostics in steps (v23):** typescript-language-server publishes an opened file's
     diagnostics in up to three lists, one after each check of TypeScript's server (syntax, semantic,
     suggestions), each with everything found so far; lists that come within a few milliseconds are
@@ -493,6 +588,23 @@ one — instead of failing with "command not found" in the middle of a feature.
     seconds later, and without a window to nobody: a pooled pyright kept the old text of a file a
     rename had written, so a second rename right after the first changed only the file it started
     from and left `from calc import aa` behind in the other (OBS-0075). [STD, GEN]
+43. **intelephense's one list after its indexing (v25):** a file opened in a running intelephense
+    whose reported indexing (progress or `indexingStarted`/`indexingEnded`, behaviour 25) has ended
+    is checked against the finished index at once and gets one list, no second. That list is the
+    answer; the wait of behaviour 36 for a second list applies only to a file opened before or
+    while the server indexed, or in a server that began no indexing (behaviour 25, stored index).
+    This concerns the pool, whose running server waits for the end of its indexing before it opens
+    the first file: there every PHP file, in the window and over MCP, waited 30 s for its problems
+    before v25 (OBS-0081). A file closed and opened again is judged anew. A server started for one
+    question gets the file before its indexing, publishes twice, and is unchanged. [OSS, OBS-0081]
+44. **ruby-lsp is asked for its diagnostics (v25):** ruby-lsp publishes no diagnostics; it hands out
+    a file's list when asked with `textDocument/diagnostic`. It is therefore a server whose
+    diagnostics are pulled, as vue-language-server and TypeScript 7's server (`pulls_diagnostics`,
+    SPEC-0141 v4 behaviour 9): a question for diagnostics asks once the server has indexed
+    (behaviour 6) and takes the `items` of the full report. Before v25 the window and
+    `file_diagnostics` waited 30 s for a publication that never came and showed no problem, also
+    for a syntax error (OBS-0081). solargraph publishes its diagnostics and is unchanged. [OSS,
+    STD, OBS-0081]
 ## Acceptance criteria
 - **AK-1** With a crafted `PATH`: the first available candidate wins over later ones; a missing program is
   skipped; a non-executable file is skipped; a rustup proxy whose `rustup which` fails is reported as such,
@@ -568,7 +680,7 @@ one — instead of failing with "command not found" in the middle of a feature.
 
 - **AK-21 (v13)** With TypeScript 7.0.2 installed: `file_diagnostics` on `const n: number = "x";` gives an
   error at line 1 (`tests/functional/f036_javascript.rs::typescript_errors_come_from_the_language_server`);
-  `servers::tests::only_vue_and_typescript_7_pull_diagnostics`.
+  `servers::tests::only_vue_typescript_7_and_ruby_lsp_pull_diagnostics`.
 
 - **AK-22 (v14)** With pyright or basedpyright installed, in a project with a class, a method and a
   function in `app/prices.py` used from `main.py` and `test_prices.py`, each asked of a freshly
@@ -676,6 +788,46 @@ one — instead of failing with "command not found" in the middle of a feature.
   stress on all cores, the question asked again after a timeout until the pooled server answers;
   three stress runs green (report `kotlin-live-test-under-load.md`; before v21 one in three failed
   with `Timeout("textDocument/implementation", 60)` although 120 s were asked).
+- **AK-39 (v22, behaviour 38a; OBS-0069 G2)** `html_css::tests::renaming_a_class_keeps_its_mark`: in a
+  project with two stylesheets, a page with a `<style>` block and a second page, renaming `.card` to
+  `box` — with the caret on the dot, in the name and directly after it, from `card` of
+  `class="a card b"` and from the `<style>` block — gives one plan with old name `card`: `.card` and
+  `.card:hover` become `.box` and `.box:hover` in both stylesheets and the block, the middle word of
+  `class="a card b"` and `class="card"` of the second page become `box`, and `Card`, `card-wide`,
+  `id="card"`, `#card` and a page in `node_modules` stay; each edit replaces the name alone. An id
+  the same: `#prices` to `#offers` changes the rule and `id="prices"`, and the jump link
+  `href="#prices"` keeps its fragment. The popup's name is `card-wide` on `.card-wide` and `card` on
+  its dot.
+  A property, a tag selector and the address of a link give no answer of IDECraft's own.
+- **AK-40 (v22, behaviour 38b)** `html_css::tests::new_names_must_be_css_identifiers`: `box`, `-box`,
+  `--box`, `_b1`, `card-2`, `café`, `日本` are accepted, `.box` for a class and `#main` for an id lose
+  their mark; the empty name, `1box`, `-1box`, `-`, `a b`, `a.b`, `a:b`, `a\:b`, `"a"`, `<a>`, `a&b`,
+  `#main` for a class, `.box` for an id, a tab, U+0085 and U+202E are refused with the message, and a
+  rename with such a name leaves every file unchanged.
+- **AK-41 (v22, behaviour 38d)** `html_css::tests::rename_bounds_and_shown_texts`: with 501 HTML files
+  the rename is refused with a message naming the bound; a file larger than 1 MiB is left out; a
+  rename inside a scope of shown texts (SPEC-0220) plans on the shown text of an open page, not on
+  its saved content; a page outside the own sources refuses.
+- **AK-42 (v22, behaviour 39; OBS-0069 G1)** `html_css::tests::class_names_and_ids_are_offered`: in
+  `class=""` the classes of the linked stylesheet come first in rule order, then those of the
+  `<style>` block, then the other stylesheets', each once and with `file:line`; between two words and
+  after a typed `car-` the same list with the typed part from the word's start; in `id=""` the ids;
+  outside a `class` or `id` value nothing of IDECraft's own.
+- **AK-43 (v22, behaviour 28; OBS-0069 G3)** `html_css::tests::class_and_id_lead_to_their_rules`: the
+  rule `.card` is the target from character 1 to 5 of its line, the id rule `#masthead` from 1;
+  `crates/languages/tests/it/html_css.rs::html_answers_without_a_server` and MCP
+  (`crates/mcp/tests/it/protocol.rs::html_navigation_and_structure`) likewise.
+- **AK-44 (v22, behaviours 38–40 in the window)** `crates/workbench/tests/it/f038_window.rs`:
+  `obs_0069_rename_keeps_the_mark_and_changes_the_page` — ⇧F6 on `.card` of `style.css`, `box`,
+  Enter: the editor shows `.box {`, `index.html` on disk `class="box"`, the status bar
+  `Renamed card to box in 2 file(s).`, one ⌘Z brings back both; from `card` of `class="card"` of
+  the open page and for `#hello` the same; the name `1box` is refused and nothing changes;
+  `obs_0069_class_names_are_offered_in_html` — Code Completion in `class=""` lists `card` with
+  `style.css:1` and `side` with `style.css:10`, typing `s` there opens the list by itself, Enter
+  writes `class="side"`; ⌘B on `card` puts the caret on the name (line 1, column 2). With
+  `crates/languages/tests/it/html_css.rs::rename_and_completion_without_a_server` (`plan_rename_in`
+  and `complete_in` with no time for a server) and MCP `rename_symbol` and `complete_code` in
+  `crates/mcp/tests/it/protocol.rs::html_navigation_and_structure`.
 - **AK-45 (v23, behaviour 41)** `insight::tests::the_last_step_of_a_server_that_publishes_in_steps_is_the_answer`:
   three lists end with the third, two lists with the second after the quiet time, a pause longer
   than the quiet time ends with the list so far, a server without the property keeps its first
@@ -687,6 +839,17 @@ one — instead of failing with "command not found" in the middle of a feature.
   second plan has only the file it started from. Headless (OBS-0075): two `rename_symbol` calls
   and `undo_refactoring`/`redo_refactoring` in one `idecraft mcp` session change both files each
   time.
+- **AK-47 (v25, behaviour 43)** With intelephense in the pool (`crates/languages/tests/php_pool.rs`:
+  `a_file_opened_after_the_indexing_is_answered_at_once`): after a first file has started the server
+  and waited for its indexing, the diagnostics of a second file with an undefined class name the
+  class within 10 s (1.9 s for the whole test; before v25 30 s). Headless (OBS-0081): `file_diagnostics`
+  on two PHP files takes 2 s each.
+- **AK-48 (v25, behaviour 44)** With ruby-lsp (`crates/languages/tests/it/ruby.rs`:
+  `ruby_lsp_reports_problems_when_asked`): a file with an unclosed parameter list has an error, a file
+  without problems an empty list, both within 45 s together (before v25 no error and 30 s each);
+  `servers::tests::only_vue_typescript_7_and_ruby_lsp_pull_diagnostics`. Headless (OBS-0081): seven
+  problems for the broken file in 5 s.
+
 ## Out of scope
 Installing servers automatically, per-project server settings, servers over TCP, version checks;
 showing the sources of library classes (`java/classFileContents`); Java files outside the project
@@ -694,9 +857,13 @@ folder; marking source roots by hand (v8: they are inferred only); updating the 
 server when folders are added (v9: the next start renews the data); removing the data folders of
 projects that are no longer opened; v11: watchers registered by servers (glob patterns and kinds
 of `client/registerCapability`), native file events, folders as such (only files are told), and
-holding back the change event of IDECraft's own saves. v17: completion of class names and ids in HTML, renaming a
-class or id across HTML and stylesheets, Find Usages started on a class or id in the HTML file, problems for a
-class no stylesheet defines, and the same navigation in Vue, Svelte, JSX and template files.
+holding back the change event of IDECraft's own saves. v17: Find Usages started on a class or id in the HTML
+file, problems for a class no stylesheet defines, and the same navigation in Vue, Svelte, JSX and template
+files (v22: completion of class names and ids in HTML and renaming a class or id across HTML and stylesheets
+are behaviours 38 and 39). v22: a preview of a class rename before it is written, a warning when the new
+name is already a class of the project (the two rules then apply to the same elements), the fragment of a
+jump link (`href="#prices"`) when its id is renamed (the text search of SPEC-0148 can offer it), renaming
+in Vue, Svelte, JSX and template files, and completion of class names in a stylesheet or a script.
 
 ## Known deviations from the reference
 The reference bundles its own analysis for many languages; IDECraft uses external servers and reports
@@ -725,7 +892,7 @@ to the reference.
 
 v17: the limits of the HTML server named for v16 are closed for the declaration of a class or id,
 for jump links and for the nesting of the structure (behaviours 28 to 31); completion of class
-names, usages started in the HTML file and problems for HTML stay as v16 says. What stays
+names (closed in v22, behaviour 39), usages started in the HTML file and problems for HTML stay as v16 says. What stays
 different from the reference:
 - A class that a script, a template or a framework puts together (`classList.add(…)`, `{{ … }}`,
   a class bound in Vue, Svelte or JSX) is not resolved; only words written in a `class` attribute
@@ -742,3 +909,25 @@ different from the reference:
   changes of them.
 - Go to Declaration on an `id` value and Find Usages on a selector (behaviour 30) were not
   compared next to the reference.
+
+v22 (OBS-0069): what stays different from the reference or was not compared:
+- The reference renames from a dialog with a scope and a preview button; IDECraft renames from its
+  popup at once, one undo step, and shows a preview only when comments, strings or text files are
+  searched (behaviour 38c). OBS-0069 noted that the missing preview hid the G2 defect; the spec keeps
+  the popup and relies on the status bar's file count and on the single undo.
+- The reference was seen to rename the use in one HTML file; renaming the same class in a second
+  stylesheet, in a `<style>` block, from the HTML side and for an id was not observed there. IDECraft
+  renames every place of behaviour 38a.
+- Whether the reference refuses a new name that is no CSS identifier was not observed; IDECraft
+  refuses it (behaviour 38b).
+- Completion of a tag, a CSS property and a value was not compared; they stay the servers' answers.
+  Which suggestion the reference shows for a name defined in several stylesheets, and whether it
+  leaves out names already written in the same `class` value, was not observed; IDECraft names the
+  first place and offers every name.
+
+v25: found in the same headless run (OBS-0081) and left as they are, limits of the servers: ruby-lsp
+lists a method's definition twice in its hover, once under a path with a doubled `/`, and repeats
+its comment (the window shows it once, SPEC-0071 v6; the MCP tool `hover_symbol` gives the server's
+text); without RuboCop or Syntax Tree in the project ruby-lsp neither formats nor reports style
+problems; Prism's syntax errors are reported. Not compared next to the reference, whose Ruby, PHP,
+Go, Rust and C/C++ support needs plugins.

@@ -349,10 +349,20 @@ pub fn with_comments(
 }
 
 /// The status line for a refactoring SQL files do not offer, as one whole sentence and a list
-/// (`SPEC-0152` v4 behaviour 6a).
-pub fn not_offered(refactoring: &str) -> String {
+/// (`SPEC-0152` v4 behaviour 6a), with `keys` giving the key of an action in the keymap in use
+/// (`SPEC-0028` v9 behaviour 14).
+pub fn not_offered(refactoring: &str, keys: impl Fn(&str) -> String) -> String {
+    let p = |action: &str| crate::keymaps::in_parens(&keys(action));
+    let intentions = keys("ShowIntentionActions");
+    let intentions = if intentions.is_empty() {
+        "the context actions".to_string()
+    } else {
+        format!("the actions of {intentions}")
+    };
     format!(
-        "{refactoring} is not offered in SQL files. Offered: Rename (⇧F6), Inline (⌥⌘N) and the actions of ⌥↩."
+        "{refactoring} is not offered in SQL files. Offered: Rename{}, Inline{} and {intentions}.",
+        p("RenameElement"),
+        p("Inline")
     )
 }
 
@@ -517,13 +527,26 @@ mod tests {
     /// SPEC-0152 v3 AK-7 (OBS-0068 L4): no language server is named for a SQL file.
     #[test]
     fn sql_files_name_their_own_refactorings() {
-        let line = not_offered("Extract Method");
+        let line = not_offered("Extract Method", |_| String::new());
+        assert!(
+            line.starts_with("Extract Method is not offered in SQL files. Offered: "),
+            "{line}"
+        );
+        assert!(!line.contains("language server"), "{line}");
+        // SPEC-0028 v9 AK-16: the keys of the keymap in use, for macOS and for Linux.
         // SPEC-0152 v4 AK-8 (OBS-0068 N1): a whole sentence, not cut off.
+        let mac = idecraft_ui::keymap::Keymap::bundled_macos();
+        let line = not_offered("Extract Method", |a| mac.shortcut_label(a, true));
         assert_eq!(
             line,
             "Extract Method is not offered in SQL files. Offered: Rename (⇧F6), Inline (⌥⌘N) and the actions of ⌥↩."
         );
-        assert!(!line.contains("language server"), "{line}");
+        let linux = idecraft_ui::keymap::Keymap::bundled_default();
+        let line = not_offered("Extract Method", |a| linux.shortcut_label(a, false));
+        assert_eq!(
+            line,
+            "Extract Method is not offered in SQL files. Offered: Rename (Shift+F6), Inline (Ctrl+Alt+N) and the actions of Alt+Enter."
+        );
     }
     use idecraft_database::{DbError, inspect};
 

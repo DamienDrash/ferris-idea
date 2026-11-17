@@ -117,7 +117,19 @@ pub(crate) fn dialect_keywords(dialect: Dialect) -> &'static [&'static str] {
             "summarize",
             "describe",
         ],
-        Dialect::MySql | Dialect::Sqlite => &[],
+        // SQLite since 3.35 (`SPEC-0011` v3 behaviour 9, OBS-0083 L3).
+        Dialect::Sqlite => &[
+            "returning",
+            "pragma",
+            "glob",
+            "autoincrement",
+            "without",
+            "rowid",
+            "conflict",
+            "ifnull",
+            "strict",
+        ],
+        Dialect::MySql => &[],
     }
 }
 
@@ -1039,6 +1051,32 @@ mod tests {
         assert!(du.iter().any(|c| c.label == "sysdate"), "{du:?}");
         let ora = at_in("select * from |", Dialect::Oracle, &schema);
         assert_eq!(ora[0].insert_text, "\"Order Items\"");
+    }
+
+    /// SPEC-0011 v3 AK-10 (OBS-0083 L3): SQLite's own words are offered, other dialects' not.
+    #[test]
+    fn sqlite_keywords() {
+        let schema = vec![table("note", "table", &[("body", "text")])];
+        let ret = at_in("insert into note values (1) ret|", Dialect::Sqlite, &schema);
+        assert!(ret.iter().any(|c| c.label == "returning"), "{ret:?}");
+        let pra = at_in("pra|", Dialect::Sqlite, &schema);
+        assert!(pra.iter().any(|c| c.label == "pragma"), "{pra:?}");
+        let glob = at_in(
+            "select * from note where body gl|",
+            Dialect::Sqlite,
+            &schema,
+        );
+        assert!(glob.iter().any(|c| c.label == "glob"), "{glob:?}");
+        assert!(
+            !at_in("pra|", Dialect::MySql, &schema)
+                .iter()
+                .any(|c| c.label == "pragma")
+        );
+        assert!(
+            !at_in("select to|", Dialect::Sqlite, &schema)
+                .iter()
+                .any(|c| c.label == "top")
+        );
     }
 
     fn others() -> Vec<SchemaEntry> {

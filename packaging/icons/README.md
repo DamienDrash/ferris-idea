@@ -36,8 +36,12 @@ scripts/bundle-macos.sh --debug    # bundle the debug binary (quick check, also 
   minimum macOS read from the binary, high-resolution support, privacy usage descriptions for
   project folders, removable and network volumes, the local network, and for programs started in
   the terminal: controlling other apps, microphone, camera).
-- **Signature:** ad hoc only (`codesign --sign -`), so it runs on the Mac that built it. No
-  Developer ID, notarization, DMG or upload; distributing it needs the publishing approval GO-4.
+- **Signature:** without `IDECRAFT_SIGN_IDENTITY` ad hoc (`codesign --sign -`), so it runs on the
+  Mac that built it. With `IDECRAFT_SIGN_IDENTITY` set to a signing identity in the keychain, every
+  nested Mach-O file and then the app are signed inside-out with the hardened runtime, the
+  entitlements in [`../macos/IDECraft.entitlements`](../macos/IDECraft.entitlements) and a secure
+  timestamp; there is no default identity. The download (Developer ID, notarized, stapled DMG) is
+  built by `scripts/release-macos.sh`, which uploads nothing.
 - **Checks:** the script fails unless `plutil -lint` and `codesign --verify --strict` pass, the icon
   equals this folder's file, and the bundled binary's `--version` matches the plist.
 - **Starting:** from Finder, the Dock or Spotlight the app opens the most recent project that still

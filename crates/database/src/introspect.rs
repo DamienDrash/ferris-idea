@@ -423,6 +423,7 @@ async fn read_schema(session: &Session, schema: Option<&str>) -> Result<Vec<Tabl
     let details = match dialect {
         Dialect::PostgreSql => Some(POSTGRES_COLUMN_DETAILS),
         Dialect::MySql | Dialect::MariaDb => Some(MYSQL_COLUMN_DETAILS),
+        Dialect::Oracle => Some(ORACLE_COLUMN_DETAILS),
         _ => None,
     };
     if let Some(sql) = details.filter(|_| custom.columns.is_none())
@@ -517,6 +518,21 @@ const MYSQL_COLUMN_DETAILS: &str = "select TABLE_NAME, COLUMN_NAME, \
     where TABLE_SCHEMA = database() and TABLE_TYPE <> 'VIEW' and TABLE_COMMENT <> '' \
     order by 1, 2";
 
+/// The same on Oracle from the user's own views (`SPEC-0142` v4 behaviour 5): an identity column's
+/// clause (its default is the system sequence behind it, so it is no default of its own) and the
+/// comments of columns and tables.
+const ORACLE_COLUMN_DETAILS: &str = "SELECT c.table_name, c.column_name, \
+    CASE WHEN c.identity_column = 'YES' THEN 'GENERATED ' || i.generation_type || \
+      CASE WHEN c.default_on_null = 'YES' THEN ' ON NULL' END || ' AS IDENTITY' END, \
+    NULL, NULL, m.comments \
+    FROM user_tab_columns c \
+    LEFT JOIN user_tab_identity_cols i ON i.table_name = c.table_name AND i.column_name = c.column_name \
+    LEFT JOIN user_col_comments m ON m.table_name = c.table_name AND m.column_name = c.column_name \
+    WHERE c.identity_column = 'YES' OR m.comments IS NOT NULL \
+    UNION ALL SELECT table_name, NULL, NULL, NULL, NULL, comments FROM user_tab_comments \
+    WHERE table_type = 'TABLE' AND comments IS NOT NULL \
+    ORDER BY 1, 2";
+
 /// Attaches rows of [`POSTGRES_COLUMN_DETAILS`] or [`MYSQL_COLUMN_DETAILS`] to their tables and
 /// columns; rows of an unknown table or column are ignored. A generated column's expression is
 /// no default: PostgreSQL keeps both in one place, so the default is dropped there.
@@ -534,6 +550,10 @@ fn attach_column_details(tables: &mut [Table], rows: &Rows) {
             continue;
         };
         column.identity = some(row, 2);
+        if column.identity.is_some() {
+            // Oracle reports the sequence behind an identity column as its default.
+            column.default = None;
+        }
         if let Some(kind) = some(row, 3) {
             column.generated = Some(kind);
             column.expression = some(row, 4).map(|e| e.trim().to_owned());
@@ -1059,12 +1079,18 @@ pub fn sequence_query(dialect: Dialect, schema: Option<&str>) -> Option<String> 
             "select sequence_name from duckdb_sequences() where schema_name = {} order by 1",
             schema.map_or_else(|| "current_schema()".into(), lit)
         ),
+        // The sequences Oracle makes for identity columns belong to their columns (`SPEC-0142`
+        // v4 behaviour 5).
         Dialect::Oracle => match schema {
             Some(s) => format!(
-                "select sequence_name from all_sequences where sequence_owner = {} order by 1",
+                "select sequence_name from all_sequences where sequence_owner = {0} \
+                and sequence_name not in (select sequence_name from all_tab_identity_cols \
+                where owner = {0}) order by 1",
                 lit(s)
             ),
-            None => "select sequence_name from user_sequences order by 1".into(),
+            None => "select sequence_name from user_sequences where sequence_name not in \
+                (select sequence_name from user_tab_identity_cols) order by 1"
+                .into(),
         },
         Dialect::SqlServer => format!(
             "select name from sys.sequences where schema_id = {} order by 1",

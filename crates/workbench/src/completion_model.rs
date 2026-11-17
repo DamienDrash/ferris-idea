@@ -8,6 +8,14 @@ fn is_ident(c: char) -> bool {
     c.is_alphanumeric() || c == '_'
 }
 
+/// Whether `typed` is still a name the open list narrows by (behaviours 2–3): letters, digits and
+/// `_`; for class names and ids in an HTML value also `-` (`css_names`, v15 behaviour 52).
+pub fn is_typed_name(typed: &str, css_names: bool) -> bool {
+    typed
+        .chars()
+        .all(|c| is_ident(c) || (css_names && c == '-'))
+}
+
 /// Column (chars) where the identifier ending at `column` starts in `line` (behaviour 2).
 pub fn word_start(line: &str, column: usize) -> usize {
     let chars: Vec<char> = line.chars().collect();
@@ -649,6 +657,36 @@ pub fn identifier_rest(after: &str) -> usize {
     after.chars().take_while(|c| is_ident(*c)).count()
 }
 
+/// The range a suggestion replaces at a caret other than the primary one (`SPEC-0025` v5
+/// behaviour 10): its selection, or at an empty caret `typed` chars before it (not past
+/// `line_start`) and `rest` after it.
+pub fn caret_range(
+    anchor: usize,
+    head: usize,
+    typed: usize,
+    rest: usize,
+    line_start: usize,
+) -> std::ops::Range<usize> {
+    if anchor != head {
+        return anchor.min(head)..anchor.max(head);
+    }
+    head.saturating_sub(typed).max(line_start.min(head))..head + rest
+}
+
+/// Where each of `edits` (sorted, not overlapping) ends once all of them are applied.
+pub fn ends_after(edits: &[(std::ops::Range<usize>, String)]) -> Vec<usize> {
+    let mut shift = 0isize;
+    edits
+        .iter()
+        .map(|(r, t)| {
+            let n = t.chars().count();
+            let end = (r.start as isize + shift) as usize + n;
+            shift += n as isize - r.len() as isize;
+            end
+        })
+        .collect()
+}
+
 /// `text` cut to `max` characters, the last one an ellipsis when it was longer.
 fn cut(text: &str, max: usize) -> String {
     if text.chars().count() <= max {
@@ -856,6 +894,31 @@ pub fn list_key(
 
 #[cfg(test)]
 mod tests {
+    /// SPEC-0025 AK-14 (v5): the ranges a suggestion replaces at the other carets and where the
+    /// carets stand after the texts went in.
+    #[test]
+    fn a_suggestion_goes_in_at_every_caret() {
+        use super::{caret_range, ends_after};
+        // `ar|` typed at an empty caret: the two chars before it.
+        assert_eq!(caret_range(12, 12, 2, 0, 10), 10..12);
+        // With Tab also the rest of the identifier after it.
+        assert_eq!(caret_range(12, 12, 2, 3, 10), 10..15);
+        // Never back into the line before.
+        assert_eq!(caret_range(11, 11, 2, 0, 10), 10..11);
+        // A selection is replaced as it is, in either direction.
+        assert_eq!(caret_range(20, 16, 2, 3, 10), 16..20);
+        // `ar` at 0..2, 5..7 and 10..12 become `area`.
+        let edits = vec![
+            (0..2, "area".to_owned()),
+            (5..7, "area".to_owned()),
+            (10..12, "area".to_owned()),
+        ];
+        assert_eq!(ends_after(&edits), vec![4, 11, 18]);
+        // An import before them moves them all.
+        let edits = vec![(0..0, "use a;\n".to_owned()), (9..10, "xy".to_owned())];
+        assert_eq!(ends_after(&edits), vec![7, 18]);
+    }
+
     use super::*;
 
     /// SPEC-0072 AK-33 (v14): only the server's templates stay, in their order.
@@ -1104,6 +1167,19 @@ mod tests {
             insert: label.into(),
             ..Default::default()
         }
+    }
+
+    /// SPEC-0072/AK-36 (v15, behaviour 52): in an HTML class value the typed name takes `-`
+    /// along; white space and quotes end it; elsewhere `-` ends it as before.
+    #[test]
+    fn css_names_keep_their_hyphen() {
+        assert!(is_typed_name("card-w", true));
+        assert!(is_typed_name("--x_1", true));
+        assert!(is_typed_name("", true));
+        assert!(!is_typed_name("card w", true));
+        assert!(!is_typed_name("card\"", true));
+        assert!(!is_typed_name("card-w", false));
+        assert!(is_typed_name("card_w2", false));
     }
 
     #[test]

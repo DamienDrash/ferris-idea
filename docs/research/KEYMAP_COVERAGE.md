@@ -33,25 +33,25 @@ The reference's macOS keymap binds **419** actions.
 
 | Result | Actions | Share of all | Share of the present ones |
 |---|---:|---:|---:|
-| same | 366 | 87.4 % | 99.7 % |
+| same | 374 | 89.3 % | 99.7 % |
 | different shortcut | 0 | 0.0 % | 0.0 % |
 | action exists without shortcut | 1 | 0.2 % | 0.3 % |
-| action missing | 52 | 12.4 % | — |
-| **action present** | **367** | **87.6 %** | 100.0 % |
+| action missing | 44 | 10.5 % | — |
+| **action present** | **375** | **89.5 %** | 100.0 % |
 
 Chords on which IDECraft's keymap binds an action the reference keymap does not bind there: 5
 (table below). Shortcuts of IDECraft on chords the reference keymap leaves free: 13.
 
 | Area | Bound in the reference | same | different shortcut | exists without shortcut | missing | present |
 |---|---:|---:|---:|---:|---:|---:|
-| editor | 154 | 138 | 0 | 0 | 16 | 89.6 % |
-| navigation | 105 | 101 | 0 | 1 | 3 | 97.1 % |
+| editor | 154 | 143 | 0 | 0 | 11 | 92.9 % |
+| navigation | 105 | 102 | 0 | 1 | 2 | 98.1 % |
 | refactoring | 13 | 12 | 0 | 0 | 1 | 92.3 % |
 | VCS | 32 | 27 | 0 | 0 | 5 | 84.4 % |
-| run/debug | 35 | 32 | 0 | 0 | 3 | 91.4 % |
+| run/debug | 35 | 33 | 0 | 0 | 2 | 94.3 % |
 | tool windows | 29 | 25 | 0 | 0 | 4 | 86.2 % |
 | database | 4 | 3 | 0 | 0 | 1 | 75.0 % |
-| other | 47 | 28 | 0 | 0 | 19 | 59.6 % |
+| other | 47 | 29 | 0 | 0 | 18 | 61.7 % |
 
 The area is assigned by the pattern of the action id (`RULES` in the script).
 
@@ -138,7 +138,7 @@ the deviations above say so.
 | `control SPACE` | select the previous input source | `ChangesView.SetDefault`, `CodeCompletion` | `ChangesView.SetDefault`, `CodeCompletion` |
 | `control alt SPACE` | select the next input source | `ClassNameCompletion` | `ClassNameCompletion` |
 | `control meta F` | full screen | `ToggleFullScreen` | `ToggleFullScreen` |
-| `control meta SPACE` | emoji and symbols | `EmojiAndSymbols` | — |
+| `control meta SPACE` | emoji and symbols | `EmojiAndSymbols` | `EmojiAndSymbols` |
 | `meta BACK_QUOTE` | next window of the application | `NextWindow` | `NextWindow` |
 | `meta M` | minimise the window | `MinimizeCurrentWindow` | `MinimizeCurrentWindow` |
 | `meta Q` | quit the application | `Exit` | `Exit` |
@@ -151,34 +151,28 @@ Bound in the reference's macOS keymap, no action in IDECraft. The owner is the e
 specification that would take the action, assigned by the id's pattern; nothing is implied about
 whether or when it is built.
 
-### editor (16)
+### editor (11)
 
 | Action | Reference shortcuts | Would be owned by |
 |---|---|---|
-| `BraceOrQuoteOut` | `TAB` | SPEC-0056 (editor actions), SPEC-0122 (Java and Kotlin editor) |
 | `CodeFloatingToolbar.GotoNextMenu` | `TAB` | SPEC-0076 (context actions) |
 | `CodeFloatingToolbar.GotoPrevMenu` | `shift TAB` | SPEC-0076 (context actions) |
 | `CollapseExpandableComponent` | `shift ENTER`<br>`meta SUBTRACT`<br>`meta MINUS` | SPEC-0083 (folding in the editor); tree keys: SPEC-0275 |
 | `DumpLookupElementWeights` | `alt shift meta W` | SPEC-0072 (code completion) |
 | `EditorAddRectangularSelectionOnMouseDrag` | `mouse: meta alt shift button1` | SPEC-0057 (editor commands), SPEC-0058 (editor view) |
 | `EditorCreateRectangularSelection` | `mouse: alt shift button2` | SPEC-0057 (editor commands), SPEC-0058 (editor view) |
-| `EditorFocusGutter` | `alt shift 6, F` | SPEC-0057 (editor commands), SPEC-0058 (editor view) |
 | `EditorPasteFromX11` | `mouse: button2` | SPEC-0057 (editor commands), SPEC-0058 (editor view) |
 | `ExpandExpandableComponent` | `shift ENTER`<br>`meta ADD`<br>`meta EQUALS` | SPEC-0083 (folding in the editor); tree keys: SPEC-0275 |
-| `ExpandLiveTemplateByTab` | `TAB` | no specification yet (live templates) |
-| `ExternalJavaDoc` | `shift F1` | SPEC-0077 (quick documentation) |
-| `QuickActionPopup` | `alt meta ENTER` | SPEC-0076 (context actions) |
 | `SelectVirtualTemplateElement` | `alt shift O` | no specification yet (live templates) |
 | `SurroundWithLiveTemplate` | `alt meta J` | no specification yet (live templates) |
 | `ToggleRenderedDocPresentation` | `control alt Q` | SPEC-0077 (quick documentation) |
 
-### navigation (3)
+### navigation (2)
 
 | Action | Reference shortcuts | Would be owned by |
 |---|---|---|
 | `EditSourceInNewWindow` | `shift F4` | SPEC-0071 (Go to Declaration and navigation) |
 | `SearchEverywhere.CompleteCommand` | `TAB` | SPEC-0067 (Search Everywhere popup) |
-| `ShowSettingsAndFindUsages` | `alt shift meta F7` | SPEC-0293 (Find tool window), SPEC-0073 (Find Usages) |
 
 ### refactoring (1)
 
@@ -196,13 +190,12 @@ whether or when it is built.
 | `ShelvedChanges.Rename` | `F2`<br>`shift F6` | SPEC-0106 (stash; shelves have no specification yet) |
 | `Vcs.MoveChangedLinesToChangelist` | `shift meta M` | SPEC-0063 (Commit tool window) |
 
-### run/debug (3)
+### run/debug (2)
 
 | Action | Reference shortcuts | Would be owned by |
 |---|---|---|
 | `RunAnything` | `gesture: dblClick ctrl control` | SPEC-0087 (Run tool window) |
 | `SwitchCoverage` | `alt meta F6` | SPEC-0088 (test results) |
-| `XDebugger.JumpToTypeSource` | `shift F4` | SPEC-0091 (Debug tool window) |
 
 ### tool windows (4)
 
@@ -219,7 +212,7 @@ whether or when it is built.
 |---|---|---|
 | `Console.Execute` | `ENTER` | SPEC-0093 (SQL console) |
 
-### other (19)
+### other (18)
 
 | Action | Reference shortcuts | Would be owned by |
 |---|---|---|
@@ -227,7 +220,6 @@ whether or when it is built.
 | `ContextHelp` | `shift meta F1` | no owning specification yet |
 | `DuplicatesForm.SendToLeft` | `meta 1` | no owning specification yet |
 | `DuplicatesForm.SendToRight` | `meta 2` | no owning specification yet |
-| `EmojiAndSymbols` | `control meta SPACE` | SPEC-0124 (menu bar), SPEC-0061 (window chrome) |
 | `FileChooser.GoToParent` | `meta UP` | no specification yet (IDECraft uses the system's file dialog) |
 | `FileChooser.GoToRoot` | `meta SLASH` | no specification yet (IDECraft uses the system's file dialog) |
 | `FileChooser.GotoDesktop` | `meta D` | no specification yet (IDECraft uses the system's file dialog) |
@@ -269,7 +261,7 @@ whether or when it is built.
 | `ActivateVersionControlToolWindow` | tool windows | `meta 9` | same id | `meta 9` | same |
 | `AutoIndentLines` | editor | `control alt I` | same id | `control alt I` | same |
 | `Back` | navigation | `meta OPEN_BRACKET`<br>`alt meta LEFT`<br>`mouse: button4` | same id | `meta OPEN_BRACKET`<br>`alt meta LEFT`<br>`mouse: button4` | same |
-| `BraceOrQuoteOut` | editor | `TAB` | — | — | action missing |
+| `BraceOrQuoteOut` | editor | `TAB` | same id | `TAB` | same |
 | `CallHierarchy` | navigation | `control alt H` | same id | `control alt H` | same |
 | `ChangeSignature` | refactoring | `meta F6` | same id | `meta F6` | same |
 | `ChangeTypeSignature` | refactoring | `shift meta F6` | — | — | action missing |
@@ -355,7 +347,7 @@ whether or when it is built.
 | `EditorDuplicate` | editor | `meta D` | same id | `meta D` | same |
 | `EditorEnter` | editor | `ENTER` | same id | `ENTER` | same |
 | `EditorEscape` | editor | `ESCAPE` | same id | `ESCAPE` | same |
-| `EditorFocusGutter` | editor | `alt shift 6, F` | — | — | action missing |
+| `EditorFocusGutter` | editor | `alt shift 6, F` | same id | `alt shift 6, F` | same |
 | `EditorIncreaseFontSizeGlobal` | editor | `control shift PERIOD` | same id | `control shift PERIOD` | same |
 | `EditorIndentSelection` | editor | `TAB` | same id | `TAB` | same |
 | `EditorJoinLines` | editor | `control shift J` | same id | `control shift J` | same |
@@ -400,7 +392,7 @@ whether or when it is built.
 | `EditorUnindentSelection` | editor | `shift TAB` | same id | `shift TAB` | same |
 | `EditorUp` | editor | `UP`<br>`control P` | same id | `UP`<br>`control P` | same |
 | `EditorUpWithSelection` | editor | `shift UP` | same id | `shift UP` | same |
-| `EmojiAndSymbols` | other | `control meta SPACE` | — | — | action missing |
+| `EmojiAndSymbols` | other | `control meta SPACE` | same id | `control meta SPACE` | same |
 | `EvaluateExpression` | run/debug | `alt F8` | same id | `alt F8` | same |
 | `Exit` | other | `meta Q` | Quit of the application menu, fixed key (`menu_bar.rs`) | `meta Q` | same |
 | `ExpandAll` | editor | `meta ADD`<br>`meta EQUALS` | same id | `meta ADD`<br>`meta EQUALS` | same |
@@ -411,7 +403,7 @@ whether or when it is built.
 | `ExpandAllToLevel4` | editor | `alt meta MULTIPLY, 4`<br>`alt meta MULTIPLY, NUMPAD4` | same id | `alt meta MULTIPLY, 4`<br>`alt meta MULTIPLY, NUMPAD4` | same |
 | `ExpandAllToLevel5` | editor | `alt meta MULTIPLY, 5`<br>`alt meta MULTIPLY, NUMPAD5` | same id | `alt meta MULTIPLY, 5`<br>`alt meta MULTIPLY, NUMPAD5` | same |
 | `ExpandExpandableComponent` | editor | `shift ENTER`<br>`meta ADD`<br>`meta EQUALS` | — | — | action missing |
-| `ExpandLiveTemplateByTab` | editor | `TAB` | — | — | action missing |
+| `ExpandLiveTemplateByTab` | editor | `TAB` | same id | `TAB` | same |
 | `ExpandRegion` | editor | `meta ADD`<br>`meta EQUALS` | same id | `meta ADD`<br>`meta EQUALS` | same |
 | `ExpandRegionRecursively` | editor | `alt meta ADD`<br>`alt meta EQUALS` | same id | `alt meta ADD`<br>`alt meta EQUALS` | same |
 | `ExpandToLevel1` | editor | `meta MULTIPLY, 1`<br>`meta MULTIPLY, NUMPAD1` | same id | `meta MULTIPLY, 1`<br>`meta MULTIPLY, NUMPAD1` | same |
@@ -422,7 +414,7 @@ whether or when it is built.
 | `ExpandTreeNode` | editor | `ADD` | same id | `ADD` | same |
 | `ExportToTextFile` | other | `control O` | same id | `control O` | same |
 | `ExpressionTypeInfo` | editor | `control shift P` | same id | `control shift P` | same |
-| `ExternalJavaDoc` | editor | `shift F1` | — | — | action missing |
+| `ExternalJavaDoc` | editor | `shift F1` | same id | `shift F1` | same |
 | `ExtractMethod` | refactoring | `alt meta M` | same id | `alt meta M` | same |
 | `FileChooser.GoToParent` | other | `meta UP` | — | — | action missing |
 | `FileChooser.GoToRoot` | other | `meta SLASH` | — | — | action missing |
@@ -537,7 +529,7 @@ whether or when it is built.
 | `PreviousTab` | navigation | `shift meta OPEN_BRACKET`<br>`control LEFT` | same id | `shift meta OPEN_BRACKET`<br>`control LEFT` | same |
 | `PreviousTemplateVariable` | editor | `shift TAB` | same id | `shift TAB` | same |
 | `PreviousWindow` | other | `shift meta BACK_QUOTE` | same id | `shift meta BACK_QUOTE` | same |
-| `QuickActionPopup` | editor | `alt meta ENTER` | — | — | action missing |
+| `QuickActionPopup` | editor | `alt meta ENTER` | same id | `alt meta ENTER` | same |
 | `QuickChangeScheme` | other | `control BACK_QUOTE` | same id | `control BACK_QUOTE` | same |
 | `QuickEvaluateExpression` | run/debug | `alt meta F8`<br>`mouse: alt button1` | same id | `alt meta F8`<br>`mouse: alt button1` | same |
 | `QuickImplementations` | navigation | `alt SPACE`<br>`meta Y` | same id | `alt SPACE`<br>`meta Y` | same |
@@ -595,7 +587,7 @@ whether or when it is built.
 | `ShowReformatFileDialog` | editor | `alt shift meta L` | same id | `alt shift meta L` | same |
 | `ShowSearchHistory` | navigation | `alt DOWN` | same id | `alt DOWN` | same |
 | `ShowSettings` | other | `meta COMMA` | same id | `meta COMMA` | same |
-| `ShowSettingsAndFindUsages` | navigation | `alt shift meta F7` | — | — | action missing |
+| `ShowSettingsAndFindUsages` | navigation | `alt shift meta F7` | same id | `alt shift meta F7` | same |
 | `ShowTypeBookmarks` | navigation | `alt meta F3` | same id | `alt meta F3` | same |
 | `ShowUsages` | navigation | `alt meta F7` | same id | `alt meta F7` | same |
 | `SmartStepInto` | run/debug | `shift F7` | same id | `shift F7` | same |
@@ -660,7 +652,7 @@ whether or when it is built.
 | `ViewBreakpoints` | run/debug | `shift meta F8` | same id | `shift meta F8` | same |
 | `ViewSource` | navigation | `meta ENTER` | same id | `meta ENTER` | same |
 | `XDebugger.AttachToProcess` | run/debug | `alt shift F5` | same id | `alt shift F5` | same |
-| `XDebugger.JumpToTypeSource` | run/debug | `shift F4` | — | — | action missing |
+| `XDebugger.JumpToTypeSource` | run/debug | `shift F4` | same id | `shift F4` | same |
 | `XDebugger.NewWatch` | run/debug | `INSERT` | same id | `INSERT` | same |
 | `XDebugger.SetValue` | run/debug | `F2` | same id | `F2` | same |
 | `ZoomCurrentWindow` | other | `control meta EQUALS` | same id | `control meta EQUALS` | same |

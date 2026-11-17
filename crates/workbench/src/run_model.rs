@@ -162,7 +162,8 @@ impl Console {
 pub fn page_run_status(c: &idecraft_core::RunConfig, debug_key: &str) -> Option<String> {
     let url = c.url.as_ref().filter(|_| c.command.is_empty())?;
     Some(format!(
-        "Opened {url} in the default browser · Debug ({debug_key}) debugs it in Chrome with its own profile"
+        "Opened {url} in the default browser · Debug{} debugs it in Chrome with its own profile",
+        crate::keymaps::in_parens(debug_key)
     ))
 }
 

@@ -1,6 +1,7 @@
 # SPEC-0028: Keymaps
 
-- **Version:** 7 · **Date:** 2026-11-16 (v7: a key named in a button, a hint or a status line is
+- **Version:** 9 · **Date:** 2026-11-16 (v9: hints that name the key of a keymap action take it from the keymap in use, behaviour 14); 2026-11-16 (v8: the dialogs that handle their own keys write them
+  for the platform and take Ctrl where macOS takes ⌘, behaviour 13); 2026-11-16 (v7: a key named in a button, a hint or a status line is
   written in the system's notation, behaviour 12 — PR #866 Linux window self-test); 2026-11-14 (v6.3: the Run tool window is a part of the window with an action of its own, Send EOF on ⌘D and Ctrl+D, SPEC-0087 v10 behaviour 18; the chords of the four list actions are the focused list's own keys, SPEC-0275 v19 behaviours 47 and 48 — both in behaviour 11. v6.2: the Find tool window's ⌃-letter chords of behaviour 11 also hold ⌃R, ⌃W, ⌃I, ⌃D and ⌃O, SPEC-0293 v9 behaviours 22–26. v6.1: ⌃K in a text input cuts to the end of the
   line, now that `EditorCutLineEnd` is carried out, SPEC-0057 v6 behaviour 24. v6: a chord pressed in a text input, behaviour 11 — an
   action the keymap binds for the input itself goes before the input's editing action on the same
@@ -188,6 +189,32 @@ memory, and answer "which keys run this action" and "what does this key do".
     Linux the breakpoint popup's button said "More (⇧⌘F8)" for Ctrl+Shift+F8. v7 applies this to
     the breakpoint popup and dialog (SPEC-0127 v14 behaviour 30); the other places with built-in
     symbols follow one by one and are listed in the report of the branch. [GEN]
+13. **Dialogs with keys of their own (v8):** the run configurations dialog (Add, Remove, Copy,
+    Move Up and Move Down, its hints), Push (tags, force), Update Project (merge, rebase, reset),
+    the stash popup, the rename options and Recent Locations of the Go To popup, the remote file
+    list, interactive rebase and the profiler's process picker write their keys as behaviour 12
+    says for a key a dialog handles itself. Each of them takes the key it names: ⌥ as Alt, and
+    where macOS takes ⌘, Ctrl elsewhere. Before v8 the remote file list took ⌘N, ⇧⌘N and ⌘⌫ only
+    with the macOS Command key and Recent Locations took ⇧⌘E only so; outside macOS they now take
+    Ctrl+N, Ctrl+Shift+N, Ctrl+Backspace and Ctrl+Shift+E. "Show edited only" of Recent Files
+    names the first shortcut of its keymap action (`SwitcherRecentEditedChangedToggleCheckBox`),
+    which it already followed. Texts that name a key of a keymap action outside these dialogs
+    (status hints of the main window, the usages, SQL editor and tooltip texts) follow in a later
+    version. [GEN]
+14. **Hints naming a keymap action's key (v9):** a status message, hint or link that names the
+    key of an action of the keymap writes the action's first shortcut in the keymap in use, for
+    the system the window runs on (behaviour 12), and leaves the key out — with its parentheses —
+    when the action has none: the hint after a single usage and "No usages searched yet" (Find
+    Usages), the message for a refactoring SQL files do not offer (Rename, Inline, the context
+    actions), the Debug key after opening a web page, Undo after an AI agent's edits, the context
+    actions after an inspection is switched off, the problem popup's fix and "More actions…"
+    links (the first quick fix, the context actions), and the key back to the previous inline
+    suggestion. Keys the window handles itself are written as behaviour 12 says for such keys:
+    ⌥I of the Git log in the interactive rebase messages, Apply in the side panel of a cell, the
+    keys of the Plugins page, and Enter and ⌘↩ of the debugger's code fragment field. ⌘Q is a
+    fixed key of the macOS application menu; elsewhere the bundled keymaps give quitting no key,
+    so the hint of "Confirm before quitting" names only the menu there. The Plan tab's hint
+    (⌥R, ⌘C) follows with the Plan tab's own change (SPEC-0110 v13). [GEN]
 
 ## Acceptance criteria
 - **AK-1** Keystroke parsing incl. `ctrl`/`control`, lower-case key names, `pressed`, invalid input.
@@ -248,6 +275,16 @@ memory, and answer "which keys run this action" and "what does this key do".
   in the toolkit's source and not run.)
 - **AK-14 (v7, behaviour 12)** Unit test `keymap::tests::local_keys_follow_the_platform`: the
   conversion of every symbol and of combined keys, text around them kept, unchanged on macOS.
+- **AK-15 (v8, behaviour 13)** Unit tests with `macos = false`:
+  `remote_view::tests::shortcuts_follow_the_platform` (Ctrl+N, Ctrl+Shift+N, Ctrl+Backspace and
+  ⌥↑ reach their commands, ⌃N is not ⌘N on macOS, the hint in Linux notation),
+  `goto_view::platform_tests::the_locations_toggle_follows_the_platform` and
+  `vcs_ops_model::tests::reset_reports_name_what_was_given_up` (the reset choice ends in `(Alt+E)`).
+- **AK-16 (v9, behaviour 14)** Unit tests with the bundled macOS and Linux keymaps:
+  `usages_model::tests::one_usage_is_a_hint` (`Find Usages (Alt+F7)`, no parentheses without a
+  key) and `sql_editor_model::tests::sql_files_name_their_own_refactorings` (`Offered: Rename
+  (Shift+F6), Inline (Ctrl+Alt+N) and the actions of Alt+Enter.` and the macOS symbols, the
+  sentence of SPEC-0152 v4 behaviour 6a).
 
 ## Out of scope
 The other upstream keymaps (Emacs, Sublime Text, GNOME/KDE, XWin, macOS system shortcuts) — later, same

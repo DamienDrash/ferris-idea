@@ -71,6 +71,8 @@ pub struct IdeServer {
         Arc<std::sync::Mutex<std::collections::HashMap<String, idecraft_remote::RemoteProject>>>,
     /// Where the chosen theme is saved (SPEC-0060 v5); the user's settings folder by default.
     theme_file: Option<std::path::PathBuf>,
+    /// The user's list of recent projects (SPEC-0094); the user's settings folder by default.
+    recent_projects_file: Option<std::path::PathBuf>,
     /// The IDECraft log folder (SPEC-0270); the user's by default.
     log_dir: Option<std::path::PathBuf>,
     ide_settings_file: Option<std::path::PathBuf>,
@@ -2160,8 +2162,8 @@ pub struct SaveConnectionArgs {
     pub id: Option<String>,
     /// Display name, unique in the workspace.
     pub name: String,
-    /// `postgresql`, `mysql`, `mariadb`, `sqlserver`, `oracle`, `sqlite`, or the id of a database
-    /// system from `list_connectors` (e.g. `tidb`), which selects its family.
+    /// `postgresql`, `mysql`, `mariadb`, `sqlserver`, `oracle`, `sqlite`, `duckdb`, or the id of a
+    /// database system from `list_connectors` (e.g. `tidb`), which selects its family.
     pub dialect: String,
     /// Database system from `list_connectors` on top of the dialect (optional).
     #[serde(default)]
@@ -2178,7 +2180,7 @@ pub struct SaveConnectionArgs {
     /// User name.
     #[serde(default)]
     pub user: Option<String>,
-    /// Database file, workspace-relative or absolute (SQLite only).
+    /// Database file, workspace-relative or absolute (SQLite and DuckDB; it must exist).
     #[serde(default)]
     pub path: Option<String>,
     /// `disable`, `prefer`, `require`, `verify-ca` or `verify-full` (default for a new connection:
@@ -5403,6 +5405,7 @@ impl IdeServer {
             backends: Arc::default(),
             remote_projects: Arc::default(),
             theme_file: idecraft_core::theme_file(),
+            recent_projects_file: idecraft_core::recent_projects_file(),
             log_dir: idecraft_core::logs::log_dir(),
             ide_settings_file: idecraft_core::ide_settings_file(),
             connectors_dir: idecraft_database::connector::connectors_dir(),
@@ -5894,6 +5897,13 @@ impl IdeServer {
     /// Server that reads logs from `dir` instead of the user's log folder (tests).
     pub fn with_log_dir(mut self, dir: std::path::PathBuf) -> Self {
         self.log_dir = Some(dir);
+        self
+    }
+
+    /// Server that reads the recent projects from `file` instead of the user's settings folder
+    /// (tests).
+    pub fn with_recent_projects_file(mut self, file: std::path::PathBuf) -> Self {
+        self.recent_projects_file = Some(file);
         self
     }
 
@@ -10986,12 +10996,23 @@ impl IdeServer {
     }
 
     #[tool(
-        description = "Project folders this user opened recently in IDECraft, most recent first, as listed in the window's project popup (folders that no longer exist are left out)."
+        description = "Project folders this user opened recently in IDECraft, most recent first, as listed in the window's project popup (folders that no longer exist are left out). They lie outside this workspace, so the tool needs the user-granted `recent-projects` right (SPEC-0094 v9); without it the call is refused with \"not granted\" and the right's name. Every read is written to the local agent log, with the number of folders, never their paths."
     )]
     async fn recent_projects(&self) -> Result<CallToolResult, McpError> {
-        let projects = idecraft_core::recent_projects_file()
-            .map(|f| idecraft_core::load_recent_projects(&f))
+        // The folders of other projects lie outside the workspace (SPEC-0094 v9 behaviour 23).
+        self.require(idecraft_core::Grant::RecentProjects).await?;
+        let projects = self
+            .recent_projects_file
+            .as_deref()
+            .map(idecraft_core::load_recent_projects)
             .unwrap_or_default();
+        self.log(
+            self.workspace.root(),
+            serde_json::json!({
+                "time": unix_time(), "tool": "recent_projects", "count": projects.len(),
+                "right": idecraft_core::Grant::RecentProjects.name(),
+            }),
+        )?;
         json_result(projects)
     }
 
@@ -12440,17 +12461,9 @@ impl IdeServer {
     )]
     async fn remote_hosts(&self) -> Result<CallToolResult, McpError> {
         let extra = self.ssh_extra.clone();
-        let hosts = tokio::task::spawn_blocking(move || {
-            let home = std::env::var_os("HOME")
-                .map(PathBuf::from)
-                .unwrap_or_default();
-            idecraft_remote::config_hosts(&home)
-                .iter()
-                .map(|a| idecraft_remote::describe(a, &extra))
-                .collect::<Vec<_>>()
-        })
-        .await
-        .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+        let hosts = tokio::task::spawn_blocking(move || idecraft_remote::host_list(&extra))
+            .await
+            .map_err(|e| McpError::internal_error(e.to_string(), None))?;
         json_result(serde_json::json!({ "hosts": hosts }))
     }
 
@@ -17480,7 +17493,7 @@ impl IdeServer {
     }
 
     #[tool(
-        description = "What agents may do in this workspace beyond reading: the rights (`run`, `http`, `debug`, `remote`, `ssh`, `trust`, `write` for workspace files, `vcs-write` for commits, branches, merges, stashes, rebases, pulls and pushes, `quit`, `terminal-read` for the window's terminal tabs, `ports`, `ui` for operating the window through the UI driver, `secret-read`, `settings` for the user's own IDE settings, keymap and theme) granted by the user in their own settings folder (never in the workspace), the grant file consulted and any problem reading it. Over the window's HTTP transport a missing right is asked in the window (Deny, Allow Once, Always for This Workspace). `connections` lists the database permissions the user granted in the same file, per connection and target (SPEC-0012); a project file never grants any."
+        description = "What agents may do in this workspace beyond reading: the rights (`run`, `http`, `debug`, `remote`, `ssh`, `trust`, `write` for workspace files, `vcs-write` for commits, branches, merges, stashes, rebases, pulls and pushes, `quit`, `terminal-read` for the window's terminal tabs, `ports`, `ui` for operating the window through the UI driver, `secret-read`, `settings` for the user's own IDE settings, keymap and theme, `recent-projects` for the folders of the other recent projects) granted by the user in their own settings folder (never in the workspace), the grant file consulted and any problem reading it. Over the window's HTTP transport a missing right is asked in the window (Deny, Allow Once, Always for This Workspace). `connections` lists the database permissions the user granted in the same file, per connection and target (SPEC-0012); a project file never grants any."
     )]
     async fn agent_permissions(&self) -> Result<CallToolResult, McpError> {
         let mut out = serde_json::to_value(self.permissions.as_ref())
@@ -18146,7 +18159,7 @@ impl IdeServer {
     }
 
     #[tool(
-        description = "Rename the symbol at a position of a workspace file in all its usages, through the file's language server. With search_comments_and_strings and/or search_text_occurrences (SPEC-0148) the old name is also renamed as a whole word in comments and string literals and in text files (Markdown, XML, YAML, JSON, TOML, plain text); these are listed separately as numbered `occurrences`, and `exclude` leaves some of them unchanged. Only the project's own sources are searched and changed: usages the language server reports in a virtual environment (`.venv`, `site-packages`), installed dependencies (`node_modules`), build output, folders the project excludes or files ignored by .gitignore are left out of `plan` and listed as numbered `outside_project` with the reason; `include_outside` changes the given ones too. dry_run defaults to true and returns the edits per file (range, old and new text); dry_run=false writes the files, refusing if any changed since. A Java class, interface, enum or record renamed in the file of its name takes the file along (`renamed_files`, from and to; undone with undo_refactoring)."
+        description = "Rename the symbol at a position of a workspace file in all its usages, through the file's language server. With search_comments_and_strings and/or search_text_occurrences (SPEC-0148) the old name is also renamed as a whole word in comments and string literals and in text files (Markdown, XML, YAML, JSON, TOML, plain text); these are listed separately as numbered `occurrences`, and `exclude` leaves some of them unchanged. Only the project's own sources are searched and changed: usages the language server reports in a virtual environment (`.venv`, `site-packages`), installed dependencies (`node_modules`), build output, folders the project excludes or files ignored by .gitignore are left out of `plan` and listed as numbered `outside_project` with the reason; `include_outside` changes the given ones too. dry_run defaults to true and returns the edits per file (range, old and new text); dry_run=false writes the files, refusing if any changed since. A Java class, interface, enum or record renamed in the file of its name takes the file along (`renamed_files`, from and to; undone with undo_refactoring). A CSS class or id (on a selector of a CSS, SCSS or Less file, or on a word of a `class` or `id` value or a `<style>` selector of an HTML file) is renamed by IDECraft itself, without a language server: every selector of that name in the project's stylesheets and `<style>` blocks and every `class` word or `id` value in its HTML files, the `.` or `#` kept; a new name that is not a CSS identifier is refused (SPEC-0042 v22)."
     )]
     async fn rename_symbol(
         &self,
@@ -18807,7 +18820,7 @@ impl IdeServer {
     }
 
     #[tool(
-        description = "Completion proposals at a position of a workspace file, from its language server: label, kind, detail and the text to insert. Lines and characters are 0-based. With `details: true` the returned items are resolved for their declaration (`detail`), parameters (`label_detail`) and type (`description`). Python files (pyright, basedpyright) are resolved without it, for up to 500 ms, and members get `origin`, the class that declares them (SPEC-0072 v10); `details: false` turns both off. Configuration keys (SPEC-0115 v7, SPEC-0134 v6) come from the bean model without a language server: inside a `${…}` placeholder of a Java string and in the `name` of `@ConfigProperty`/`@Property` the keys the project's application*.properties/.yml define, with the value the application gets (masked as `•••` for keys that look like secrets) or the profiles that define them; in an application*.properties or .yml/.yaml file at a key, the keys the code reads that the file does not define (those defined nowhere first), then the keys the other configuration files define (`kind` `property`; in YAML the rest of the key below the maps the line stands in)."
+        description = "Completion proposals at a position of a workspace file, from its language server: label, kind, detail and the text to insert. Lines and characters are 0-based. With `details: true` the returned items are resolved for their declaration (`detail`), parameters (`label_detail`) and type (`description`). Python files (pyright, basedpyright) are resolved without it, for up to 500 ms, and members get `origin`, the class that declares them (SPEC-0072 v10); `details: false` turns both off. In a `class` or `id` value of an HTML file the proposals are the class names or ids of the linked and the project's stylesheets, each with `description` `file:line` of its first rule, without a language server (SPEC-0042 v22). Configuration keys (SPEC-0115 v7, SPEC-0134 v6) come from the bean model without a language server: inside a `${…}` placeholder of a Java string and in the `name` of `@ConfigProperty`/`@Property` the keys the project's application*.properties/.yml define, with the value the application gets (masked as `•••` for keys that look like secrets) or the profiles that define them; in an application*.properties or .yml/.yaml file at a key, the keys the code reads that the file does not define (those defined nowhere first), then the keys the other configuration files define (`kind` `property`; in YAML the rest of the key below the maps the line stands in)."
     )]
     async fn complete_code(
         &self,

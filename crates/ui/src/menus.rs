@@ -167,7 +167,8 @@ pub const MENUS: &[(&str, &[Entry])] = &[
             S,
             A("Toggle Case", "EditorToggleCase"),
             A("Join Lines", "EditorJoinLines"),
-            A("Duplicate Line or Selection", "EditorDuplicate"),
+            // The reference's title; ⌘D shows at View › Compare With… (SPEC-0124 v18).
+            A("Duplicate Line", "EditorDuplicate"),
             A("Sort Lines", "EditorSortLines"),
             A("Reverse Lines", "EditorReverseLines"),
             A("Transpose", "EditorTranspose"),
@@ -209,16 +210,39 @@ pub const MENUS: &[(&str, &[Entry])] = &[
             Sub("Tool Windows", TOOL_WINDOWS),
             Sub("Appearance", &[A("Tool Window Bars", "ViewToolButtons")]),
             S,
-            A("Quick Documentation", "QuickJavaDoc"),
+            // The open View menu's order (SPEC-0124 v18 behaviour 20; `LangActions.xml` groups
+            // QuickActions and CodeEditorViewGroup, `PlatformActions.xml` ViewMenu).
             // SPEC-0081 v4 behaviour 6.
             A("Quick Definition", "QuickImplementations"),
+            A("Quick Documentation", "QuickJavaDoc"),
             A("Parameter Info", "ParameterInfo"),
             // SPEC-0124 v14 behaviour 16, SPEC-0077 v7 behaviour 6.
             A("Type Info", "ExpressionTypeInfo"),
+            A("Context Info", "EditorContextInfo"),
             A("Error Description", "ShowErrorDescription"),
+            S,
+            A("Jump to Source", "EditSource"),
+            S,
             A("Recent Files", "RecentFiles"),
             // SPEC-0069 v3 behaviour 9.
             A("Recently Changed Files", "RecentChangedFiles"),
+            A("Recent Locations", "RecentLocations"),
+            S,
+            A("Compare With…", "CompareTwoFiles"),
+            A("Compare with Clipboard", "CompareClipboardWithSelection"),
+            S,
+            A("Quick Switch Scheme…", "QuickChangeScheme"),
+            A("Compact Mode", "ToggleCompactMode"),
+            S,
+            A(
+                "Increase Font Size in All Editors",
+                "EditorIncreaseFontSizeGlobal",
+            ),
+            A(
+                "Decrease Font Size in All Editors",
+                "EditorDecreaseFontSizeGlobal",
+            ),
+            // IDECraft's own: the split actions, which the open View menu does not hold.
             S,
             A("Split Right", "SplitVertically"),
             A("Split Down", "SplitHorizontally"),
@@ -231,9 +255,6 @@ pub const MENUS: &[(&str, &[Entry])] = &[
             A("Goto Previous Splitter", "PrevSplitter"),
             A("Next Tab", "NextTab"),
             A("Previous Tab", "PreviousTab"),
-            S,
-            A("Quick Switch Scheme…", "QuickChangeScheme"),
-            A("Compact Mode", "ToggleCompactMode"),
         ],
     ),
     (
@@ -269,6 +290,9 @@ pub const MENUS: &[(&str, &[Entry])] = &[
                     A("Previous Method", "MethodUp"),
                 ],
             ),
+            // SPEC-0124 v18 behaviour 20 (`PlatformActions.xml` GoToMenu).
+            A("Previous Occurrence", "PreviousOccurence"),
+            A("Next Occurrence", "NextOccurence"),
             S,
             // SPEC-0059 v9.3 behaviour 24.
             A("Select in Project Tree", "SelectIn"),
@@ -284,6 +308,8 @@ pub const MENUS: &[(&str, &[Entry])] = &[
             // SPEC-0124 v16 behaviour 18, SPEC-0071 v12 behaviour 19.
             A("Header/Source", "SwitchHeaderSource"),
             S,
+            // SPEC-0124 v18 behaviour 20 (`LangActions.xml` GoToCodeGroup).
+            A("File Path", "ShowFilePath"),
             A("File Structure", "FileStructurePopup"),
             A("Type Hierarchy", "TypeHierarchy"),
             A("Method Hierarchy", "MethodHierarchy"),
@@ -805,14 +831,88 @@ mod tests {
         let view = labels(menu("View"));
         let at = view.iter().position(|l| *l == "Recent Files").unwrap();
         assert_eq!(view[at + 1], "Recently Changed Files");
-        let at = view
-            .iter()
-            .position(|l| *l == "Quick Documentation")
-            .unwrap();
-        assert_eq!(view[at + 1], "Quick Definition");
+        // SPEC-0124 v18: Quick Definition before Quick Documentation, as the open group has them.
+        let at = view.iter().position(|l| *l == "Quick Definition").unwrap();
+        assert_eq!(view[at + 1], "Quick Documentation");
         let navigate = labels(menu("Navigate"));
         let at = navigate.iter().position(|l| *l == "Super Method").unwrap();
         assert_eq!(navigate[at + 1..at + 3], ["Related Symbol…", "Test"]);
+    }
+
+    /// SPEC-0124 AK-19 (v18): View holds the items of OBS-0055 M3 in the open View menu's order,
+    /// with separators where the open groups have them; Navigate holds File Path and Previous and
+    /// Next Occurrence; Edit says Duplicate Line.
+    #[test]
+    fn view_navigate_and_edit_items_of_obs_0055() {
+        let items: Vec<&str> = menu("View")
+            .iter()
+            .map(|e| match e {
+                A(l, _) | Sub(l, _) => *l,
+                S => "-",
+            })
+            .collect();
+        let from = items.iter().position(|l| *l == "Quick Definition").unwrap();
+        let to = items
+            .iter()
+            .position(|l| *l == "Decrease Font Size in All Editors")
+            .unwrap();
+        assert_eq!(
+            items[from..=to],
+            [
+                "Quick Definition",
+                "Quick Documentation",
+                "Parameter Info",
+                "Type Info",
+                "Context Info",
+                "Error Description",
+                "-",
+                "Jump to Source",
+                "-",
+                "Recent Files",
+                "Recently Changed Files",
+                "Recent Locations",
+                "-",
+                "Compare With…",
+                "Compare with Clipboard",
+                "-",
+                "Quick Switch Scheme…",
+                "Compact Mode",
+                "-",
+                "Increase Font Size in All Editors",
+                "Decrease Font Size in All Editors",
+            ]
+        );
+        for (id, label, place) in [
+            ("EditorContextInfo", "Context Info", "View"),
+            ("EditSource", "Jump to Source", "View"),
+            ("RecentLocations", "Recent Locations", "View"),
+            ("CompareTwoFiles", "Compare With…", "View"),
+            (
+                "CompareClipboardWithSelection",
+                "Compare with Clipboard",
+                "View",
+            ),
+            (
+                "EditorIncreaseFontSizeGlobal",
+                "Increase Font Size in All Editors",
+                "View",
+            ),
+            (
+                "EditorDecreaseFontSizeGlobal",
+                "Decrease Font Size in All Editors",
+                "View",
+            ),
+            ("ShowFilePath", "File Path", "Navigate"),
+            ("PreviousOccurence", "Previous Occurrence", "Navigate"),
+            ("NextOccurence", "Next Occurrence", "Navigate"),
+            ("EditorDuplicate", "Duplicate Line", "Edit"),
+        ] {
+            assert_eq!(menu_title(id), Some((label, place)), "{id}");
+        }
+        // No item for an action IDECraft does not have (behaviour 11).
+        for id in ["RecentChanges", "EditorResetFontSizeGlobal"] {
+            assert_eq!(menu_title(id), None, "{id}");
+        }
     }
 
     /// SPEC-0334 AK-10: View › Tool Windows lists TODO after Find.
@@ -977,7 +1077,7 @@ mod tests {
             "Select All",
             "Add Carets to Ends of Selected Lines",
             "Add Selection for Next Occurrence",
-            "Duplicate Line or Selection",
+            "Duplicate Line",
             "Sort Lines",
             "Reverse Lines",
             "Transpose",
@@ -1068,7 +1168,7 @@ mod tests {
                     "Shrink Selection",
                     "Toggle Case",
                     "Join Lines",
-                    "Duplicate Line or Selection",
+                    "Duplicate Line",
                     "Indent Selection",
                     "Unindent Line or Selection",
                     "Bookmarks",
@@ -1090,12 +1190,15 @@ mod tests {
                     "Last Edit Location",
                     "Next Edit Location",
                     "Navigate in File",
+                    "Previous Occurrence",
+                    "Next Occurrence",
                     "Select in Project Tree",
                     "Jump to Navigation Bar",
                     "Declaration or Usages",
                     "Implementation(s)",
                     "Type Declaration",
                     "Super Method",
+                    "File Path",
                     "File Structure",
                     "Type Hierarchy",
                     "Method Hierarchy",

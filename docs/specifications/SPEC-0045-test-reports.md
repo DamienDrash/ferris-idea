@@ -1,6 +1,6 @@
 # SPEC-0045: Test results — reading test reports into a result tree
 
-- **Version:** 6 · **Date:** 2026-11-17 (v6: Jest/Vitest suites keep their test file, Debug at the ▶ of a Jest test, behaviours 8 and 12, AK-15–AK-16, beta screen run of workflow (a), hand tests 19 and 208); 2026-11-13 (v5: ▶ at the tests of pytest, Go and Rust files and a run from the context of only the test at the caret, behaviour 13, AK-14, OBS-0034 part 15 R1); 2026-11-09 (v4: ▶ at the tests of Vitest and Jest files; v2: the test line after a subtest only names it; from hand test 15;
+- **Version:** 7 · **Date:** 2026-11-17 (v7: a failed test's message, place and duration from the TAP YAML block and the libtest panic, behaviour 14, AK-17 — headless pre-check of F-078); 2026-11-17 (v6: Jest/Vitest suites keep their test file, Debug at the ▶ of a Jest test, behaviours 8 and 12, AK-15–AK-16, beta screen run of workflow (a), hand tests 19 and 208); 2026-11-13 (v5: ▶ at the tests of pytest, Go and Rust files and a run from the context of only the test at the caret, behaviour 13, AK-14, OBS-0034 part 15 R1); 2026-11-09 (v4: ▶ at the tests of Vitest and Jest files; v2: the test line after a subtest only names it; from hand test 15;
   v3: Jest/Vitest JSON and `go test -json`, test configurations for Vitest, Jest, pytest and Go)
 - **Sources:** GEN (IDEs show test results as a tree of suites and tests with status, duration, failure
   message and output, and can import results from files; F-078), STD (JUnit XML as written by Ant, Maven
@@ -93,6 +93,24 @@ Turn the output of any common test tool into one result tree the IDE and agents 
     now runs its tests from the context (`cargo test <module path>`, a file below `tests/` as its
     target), report `libtest`. MCP `run_markers` takes these files too. Before v5 the context run
     of a pytest file always ran the whole file (OBS-0034 item 62). [OBS, STD]
+14. **Why a test failed, and where (v7, headless pre-check of F-078 on 2026-11-16):** the tree
+    shows a failed test's message next to it and its place in the details; two formats carried
+    them only inside text the tree did not read.
+    - **TAP:** the YAML block under a test line (TAP 13/14) gives `duration_ms` as the test's
+      duration (Node's test runner writes it for every test) and `error` or `message` as the
+      message of a failed or erroneous test where the test line gave none: a one-line value
+      without its quotes, or the first non-empty line of a block value (`error: |-`, as Node
+      writes an assertion's message). The block itself stays in the details as before, with
+      Node's `location` (file:line:column of the test) and `stack`.
+    - **libtest:** a failed test whose captured output holds a panic gets the panic message's
+      first line as its message (``assertion `left == right` failed: wrong sum``) and `panicked at
+      src/main.rs:10:18` as its details, the place the window and agents can open; the whole
+      output stays. Rust 1.73 and later print the place first (`panicked at file:line:col:`, the
+      message on the next line), older releases `panicked at 'message', file:line:col`; both are
+      read.
+    - Before v6 both showed no message: a Node test only `not ok` with the YAML text as details,
+      a Rust test only its output. libtest on stable Rust prints no time per test, so a Rust
+      test still has no duration (only the nightly `--report-time` does). [GEN, STD]
 
 ## Acceptance criteria
 - **AK-1** JUnit: nested suites, all statuses, times, messages, output, counts; malformed XML error.
@@ -137,10 +155,21 @@ Turn the output of any common test tool into one result tree the IDE and agents 
 - **AK-16 (v6, behaviour 8)** The suites of a real Jest report keep their files, nested suites none
   (`crates/core/tests/it/testreport.rs::jest_report`); the history keeps no path
   (`test_history::tests::the_last_ten_runs_are_kept_without_output`).
+- **AK-17 (v7, behaviour 14)** `crates/core/tests/it/testreport.rs`:
+  `tap_yaml_gives_duration_and_message` (real `node --test --test-reporter=tap` output of Node 22:
+  durations in seconds, the block message's first line, a quoted one-line message, `location` and
+  `stack` kept in the details, no message on a passed test) and
+  `libtest_panic_gives_message_and_place` (the panic of Rust 1.73+ and the older form: message,
+  `panicked at` place, output kept). Through MCP `run_configuration` on a Node and a Cargo project
+  on 2026-11-16 the tree had no message before and has it after.
 ## Out of scope
-Running tests (run configurations, F-077), live streaming results while tests run, rerunning failed
-tests, history of runs, other formats (NUnit, xUnit.net, TRX) — later. Debugging a single Vitest
-test from the gutter — later.
+Running tests (run configurations, F-077, SPEC-0087), live streaming results while tests run, other
+formats (NUnit, xUnit.net, TRX) — later. Rerunning failed tests and the history of runs are
+specified in SPEC-0088 (v3); a single test or `describe` block from the gutter in behaviours 12 and
+13 here. Single tests and rerunning failed ones of Node's built-in test runner (`node:test`, run with
+`--test-name-pattern`), a duration per Rust test (stable libtest prints none) and markers for
+`unittest.TestCase` subclasses whose name does not start with `Test` (pytest collects them) are
+open; they wait for the comparison with the reference (OBS-0078, gaps L3–L5). Debugging a single Vitest test from the gutter — later.
 
 ## Known deviations from the reference
 Not compared yet; the reference's import of test results was not observed. Improvement (IMP-0036): a

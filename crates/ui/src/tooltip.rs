@@ -116,7 +116,12 @@ pub const DEBUG_TOOLBAR: &[Control] = &[
     c("debug-console-end", "Scroll to the End"),
     c("debug-console-clear", "Clear All"),
     c("debug-fragment", "Code Fragment Mode")
-        .detail("Several statements; Enter starts a new line, ⌘↩ evaluates"),
+        // The field's own key, written for the platform (`SPEC-0028` v9 behaviour 14).
+        .detail(if cfg!(target_os = "macos") {
+            "Several statements; Enter starts a new line, ⌘↩ evaluates"
+        } else {
+            "Several statements; Enter starts a new line, Ctrl+Enter evaluates"
+        }),
 ];
 
 /// The Run tool window (`SPEC-0087`, `SPEC-0088`).

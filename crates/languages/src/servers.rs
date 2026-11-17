@@ -220,8 +220,11 @@ const PHP: &[Candidate] = &[
 ];
 const RUBY: &[Candidate] = &[
     // Answers hover and definition empty until its indexing progress ends (`SPEC-0042` v6).
+    // Hands out a file's diagnostics only when asked (`textDocument/diagnostic`) and publishes
+    // none (`SPEC-0042` v25 behaviour 44).
     Candidate {
         reports_status: true,
+        pulls_diagnostics: true,
         ..c("ruby-lsp", &[], "gem install ruby-lsp")
     },
     c("solargraph", &["stdio"], "gem install solargraph"),
@@ -1329,14 +1332,18 @@ mod tests {
     use super::*;
     use std::os::unix::fs::PermissionsExt;
 
-    /// SPEC-0141 v4 behaviour 9: only the Vue server's diagnostics are pulled.
+    /// SPEC-0141 v4 behaviour 9: the Vue server's diagnostics are pulled; so are TypeScript 7's
+    /// (SPEC-0042 v13) and ruby-lsp's (SPEC-0042 v25 behaviour 44).
     #[test]
-    fn only_vue_and_typescript_7_pull_diagnostics() {
+    fn only_vue_typescript_7_and_ruby_lsp_pull_diagnostics() {
         for language in LanguageId::ALL {
             for candidate in candidates(language) {
                 assert_eq!(
                     candidate.pulls_diagnostics,
-                    matches!(candidate.program, "vue-language-server" | "tsc"),
+                    matches!(
+                        candidate.program,
+                        "vue-language-server" | "tsc" | "ruby-lsp"
+                    ),
                     "{}",
                     candidate.program
                 );

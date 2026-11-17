@@ -59,9 +59,10 @@ pub fn tab_bar() -> Div {
 /// An editor tab: themes with negative top and bottom `EditorTabs.tabInsets` (Islands) draw the
 /// selected tab as a pill inside the bar with `EditorTabs.underlineArc` corners, the others draw an
 /// underline of `EditorTabs.underlineHeight`; side padding from the insets, else Jewel's.
-/// `framed` draws the pill's border (the focused pane). Holds the content gap before the close
-/// button (`SPEC-0154` behaviour 2).
-pub fn tab(id: impl Into<ElementId>, selected: bool, framed: bool) -> Stateful<Div> {
+/// `active` (the keyboard focus is in the tab's editor) draws the selected pill in the theme's
+/// active colours, else in its inactive ones, each with its border (`SPEC-0061` v19 behaviour 6a).
+/// Holds the content gap before the close button (`SPEC-0154` behaviour 2).
+pub fn tab(id: impl Into<ElementId>, selected: bool, active: bool) -> Stateful<Div> {
     let p = Palette::current();
     let m = &p.metrics;
     let pill = m.tab_style == TabStyle::Pill;
@@ -80,8 +81,8 @@ pub fn tab(id: impl Into<ElementId>, selected: bool, framed: bool) -> Stateful<D
                 .border_color(gpui::transparent_black())
         })
         .when(selected && pill, |d| {
-            d.bg(c(p.tab_selected))
-                .when(framed, |d| d.border_color(c(p.tab_selected_border)))
+            let (fill, border) = pill_colours(p, active);
+            d.bg(c(fill)).border_color(c(border))
         })
         .when(selected && !pill, |d| {
             d.border_b(px(m.tab_underline_height))
@@ -91,6 +92,19 @@ pub fn tab(id: impl Into<ElementId>, selected: bool, framed: bool) -> Stateful<D
             d.opacity(p.tab_unselected_alpha)
                 .hover(|s| s.opacity(1.0).bg(c(p.tab_hover)))
         })
+}
+
+/// Fill and border of a selected pill tab: the active colours while the keyboard focus is in its
+/// editor, the inactive ones otherwise (`SPEC-0061` v19 behaviour 6a).
+pub fn pill_colours(
+    p: &Palette,
+    active: bool,
+) -> (idecraft_ui::theme::Rgba, idecraft_ui::theme::Rgba) {
+    if active {
+        (p.tab_selected, p.tab_selected_border)
+    } else {
+        (p.tab_selected_inactive, p.tab_selected_border_inactive)
+    }
 }
 
 /// A tab's icon and label with Jewel's content gap.

@@ -64,7 +64,8 @@ Never mix states in one sentence ("supports Java" when only file detection works
 
 ## 5. Project maturity
 
-Current stage: **beta** (since v0.20.0, 2026-11-17; alpha since v0.2.0, 2026-10-31). The stage is a constant in
+Current stage: **stable**, the 1.0 stage (since v1.0.0, 2026-11-17; beta since v0.20.0, alpha since
+v0.2.0, 2026-10-31). The stage is a constant in
 `crates/core/src/release.rs`, shown by `idecraft --version` and the About dialog, and written as
 the `Stage:` line of every version in `CHANGELOG.md`.
 
@@ -73,12 +74,15 @@ the `Stage:` line of every version in `CHANGELOG.md`.
 | **pre-alpha** | code exists; no desktop window that edits files | v0.1.0 (2026-10-30) |
 | **alpha** | the desktop UI opens, edits and saves files for the priority languages (Python, SQL, JavaScript, TypeScript, Java; SPEC-0004), backed by the window self-test and a hand test | v0.2.0 (2026-10-31): editor view and workbench window (#65, #66), saving with local history (#78), highlighting for all priority languages (#27), window self-test 32/32, hand-test rounds 1 and 2 passed |
 | **beta** | daily use for one priority workflow is possible, shown by: (1) every hand test of that workflow in the current round of the hand-test log passed in an agent run (computer use or Remote Robot, marked as agent run; the product owner delegated beta testing to the agent on 2026-11-06), with no failed hand test or open defect in `docs/testing/` left for it; (2) the window self-test (`scripts/ci-window.sh`) green on the commit that is tagged; (3) the workflow's feature-matrix rows at parity stage 3 or higher in `docs/research/PARITY.md`; (4) the agent records the switch with this evidence in the status file and the `Stage:` line of the version | v0.20.0 (2026-11-17), for both priority workflows: all hand tests of (a) and (b) in round 5 passed in agent runs, window self-test 1,065/0 on `v0.19.0`, rows of both workflows at stage 3 or higher (CHANGELOG v0.20.0) |
-| **1.0** | beta criteria for every priority workflow, a published release (GO-4) | not reached |
+| **1.0** (`stable`) | beta criteria for every priority workflow, a published release: a GitHub release of the public repository with a signed and notarized macOS download (owner, 2026-11-17) | v1.0.0 (2026-11-17): beta criteria of both workflows (v0.20.0), window self-test on the commit of the version cut, GitHub release `v1.0.0` of the public repository with the signed, notarized and stapled DMG (CHANGELOG v1.0.0) |
 
 Priority workflows: (a) a project in a priority language: open, edit, navigate, run or debug, and
 commit with Git; (b) SQL work against PostgreSQL or MySQL: connect, browse the schema, run
 queries and edit data. "Production-ready" is not used before a 1.0
 release. A stage changes only in a version whose changelog section names the evidence.
+
+From 1.0 on, the interfaces in [STABILITY.md](../STABILITY.md) are kept stable as that page
+describes.
 
 ## 6. Technical writing rules
 

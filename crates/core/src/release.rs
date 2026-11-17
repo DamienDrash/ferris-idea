@@ -8,8 +8,9 @@
 /// IDECraft's version (SemVer), from the workspace `Cargo.toml`.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// The project's maturity stage (CONTENT_STYLE_GUIDE §5): `pre-alpha`, `alpha` or `beta`.
-pub const STAGE: &str = "beta";
+/// The project's maturity stage (CONTENT_STYLE_GUIDE §5): `pre-alpha`, `alpha`, `beta` or
+/// `stable` (the 1.0 stage).
+pub const STAGE: &str = "stable";
 
 /// Version and stage as one label, e.g. `0.8.0 (alpha)`.
 pub fn version_label() -> String {
@@ -49,7 +50,7 @@ mod tests {
         let (version, stage) = newest_release();
         assert_eq!(version, VERSION, "Cargo.toml and CHANGELOG.md disagree");
         assert_eq!(stage, STAGE, "STAGE and CHANGELOG.md disagree");
-        assert!(["pre-alpha", "alpha", "beta"].contains(&STAGE));
+        assert!(["pre-alpha", "alpha", "beta", "stable"].contains(&STAGE));
     }
 
     #[test]

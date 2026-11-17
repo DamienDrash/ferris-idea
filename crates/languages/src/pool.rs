@@ -33,6 +33,10 @@ pub(crate) struct Server {
     /// (`SPEC-0042` v23 behaviour 41).
     publishes_in_steps: bool,
     publication_counts: StdMutex<HashMap<String, u32>>,
+    /// Documents opened after the server's reported indexing had ended: it checks them against the
+    /// finished index at once and publishes their diagnostics once, so the first list is the
+    /// answer (`SPEC-0042` v25 behaviour 43).
+    opened_indexed: StdMutex<std::collections::HashSet<String>>,
     loading_text: Option<&'static str>,
     resend_on_open: bool,
     /// The server lists the project's files before its first diagnostics (`SPEC-0042` v14
@@ -127,6 +131,9 @@ impl Server {
                         .await?;
                 }
                 docs.insert(uri.to_owned(), (version, text.to_owned(), before));
+                if self.publishes_twice && self.indexed() {
+                    lock(&self.opened_indexed).insert(uri.to_owned());
+                }
                 true
             }
         };
@@ -252,6 +259,7 @@ impl Server {
         }
         if self.publishes_twice
             && first.is_some()
+            && !lock(&self.opened_indexed).contains(uri)
             && lock(&self.publication_counts)
                 .get(uri)
                 .copied()
@@ -289,6 +297,7 @@ impl Server {
         if self.docs.lock().await.remove(uri).is_some() {
             // Opened again, it publishes twice again.
             lock(&self.publication_counts).remove(uri);
+            lock(&self.opened_indexed).remove(uri);
             let _ = self
                 .client
                 .notify(
@@ -361,6 +370,15 @@ impl Server {
             _ => return,
         }
         self.changed.notify_waiters();
+    }
+
+    /// Whether the server has run an indexing it reported and that indexing has ended
+    /// (`SPEC-0042` v25 behaviour 43).
+    fn indexed(&self) -> bool {
+        self.indexing_begun.load(Ordering::SeqCst)
+            && !self.indexing_now.load(Ordering::SeqCst)
+            && !lock(&self.indexing).running()
+            && self.ready.load(Ordering::SeqCst)
     }
 
     /// Whether the server is still loading the project (`SPEC-0095` v10 behaviour 12): one that
@@ -595,6 +613,7 @@ impl Pool {
                 publishes_twice: server.candidate.publishes_twice,
                 publishes_in_steps: server.candidate.publishes_in_steps,
                 publication_counts: StdMutex::default(),
+                opened_indexed: StdMutex::default(),
                 loading_text: server.candidate.loading_text,
                 resend_on_open: server.candidate.resend_on_open,
                 lists_files_first: server.candidate.lists_files_first,

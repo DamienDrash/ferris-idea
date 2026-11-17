@@ -1,13 +1,19 @@
 #!/bin/sh
-# Builds a local IDECraft.app from the idecraft binary and checks it (SPEC-0282). Ad-hoc signed
-# only: no Developer ID, no notarization, no upload. Distributing the bundle needs GO-4.
+# Builds IDECraft.app from the idecraft binary and checks it (SPEC-0282). Without
+# IDECRAFT_SIGN_IDENTITY the bundle is signed ad hoc and runs only on this Mac. With it, every
+# nested Mach-O file and then the app are signed inside-out with that identity, the hardened runtime
+# (packaging/macos/IDECraft.entitlements) and a secure timestamp. There is no default identity.
+# Notarizing and packaging the download: scripts/release-macos.sh. Nothing is uploaded.
 #
 #   bundle-macos.sh               release build (cargo build --release -p idecraft), then bundle
 #   bundle-macos.sh --debug       bundle the debug binary instead (quick check in ci-local.sh)
 #   bundle-macos.sh --no-build    bundle the binary that is already built
 #   bundle-macos.sh --out DIR     put IDECraft.app into DIR (default: <target>/bundle/macos)
 #
+#   IDECRAFT_SIGN_IDENTITY=<name or SHA-1 of a signing identity in the keychain>
+#
 # Opens no window: the checks are plutil -lint, codesign --verify and `idecraft --version`.
+# The identity is never printed: codesign's messages are shown with it replaced.
 set -eu
 cd "$(dirname "$0")/.."
 
@@ -145,10 +151,47 @@ cat > "$app/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-# Ad-hoc signature (behaviour 4): accepted on this Mac, nothing to distribute.
-codesign --force --sign - --timestamp=none "$app" 2>/dev/null || fail "codesign failed"
+identity="${IDECRAFT_SIGN_IDENTITY:-}"
+entitlements=packaging/macos/IDECraft.entitlements
+# codesign's messages without the identity, a team ID in parentheses or a certificate hash.
+redact() {
+  awk -v id="$identity" '{ if (id != "") while ((i = index($0, id)) > 0) $0 = substr($0, 1, i - 1) "<IDECRAFT_SIGN_IDENTITY>" substr($0, i + length(id)); print }' |
+    sed -E 's/\([A-Z0-9]{10}\)/(<team>)/g; s/[0-9A-Fa-f]{40}/<hash>/g' >&2
+}
+sign() { # sign <path> [codesign options …]
+  path="$1"; shift
+  if ! codesign --force --options runtime --timestamp --sign "$identity" "$@" "$path" 2>"$app.sign.log"; then
+    redact <"$app.sign.log"; rm -f "$app.sign.log"; fail "codesign failed for ${path#"$app"/}"
+  fi
+  rm -f "$app.sign.log"
+}
 
-# Checks (behaviour 5).
+if [ -z "$identity" ]; then
+  # Ad-hoc signature (behaviour 4): accepted on this Mac, nothing to distribute.
+  codesign --force --sign - --timestamp=none "$app" 2>/dev/null || fail "codesign failed"
+  signed="ad-hoc signed (IDECRAFT_SIGN_IDENTITY not set: runs on this Mac only, not for distribution)"
+else
+  # Signed with an identity (behaviour 4a): inside-out, deepest nested Mach-O file first, the
+  # main executable last through the bundle itself. Today the binary is the only Mach-O file.
+  [ -f "$entitlements" ] || fail "no entitlements file at $entitlements"
+  plutil -lint -s "$entitlements" || fail "$entitlements is not valid"
+  find "$app/Contents" -type f ! -path "$app/Contents/MacOS/idecraft" | while IFS= read -r f; do
+    case "$(file -b "$f")" in *Mach-O*) printf '%s\t%s\n' "$(printf '%s' "$f" | tr -cd / | wc -c | tr -d ' ')" "$f" ;; esac
+  done | sort -rn | cut -f2- | while IFS= read -r f; do sign "$f"; done
+  sign "$app" --entitlements "$entitlements"
+  details=$(codesign --display --verbose=2 "$app" 2>&1) || fail "cannot read the signature"
+  printf '%s\n' "$details" | grep -q '^CodeDirectory.*flags=.*(runtime)' || fail "the app is signed without the hardened runtime"
+  printf '%s\n' "$details" | grep -q '^Timestamp=' || fail "the signature has no secure timestamp"
+  codesign --verify --deep --strict "$app" || fail "the signature does not verify (--deep --strict)"
+  for key in automation.apple-events device.audio-input device.camera; do
+    codesign --display --entitlements - --xml "$app" 2>/dev/null | grep -q "com.apple.security.$key" ||
+      fail "entitlement com.apple.security.$key is missing in the signature"
+  done
+  kind=$(printf '%s\n' "$details" | sed -n 's/^Authority=\([^:]*\):.*/\1/p' | head -n 1)
+  signed="signed with the identity from IDECRAFT_SIGN_IDENTITY (${kind:-unknown kind}), hardened runtime, timestamp"
+fi
+
+# Checks (behaviour 5). With an identity, `--version` is also the hardened-runtime launch check.
 plutil -lint -s "$app/Contents/Info.plist" || fail "Info.plist is not valid"
 codesign --verify --strict "$app" || fail "the signature does not verify"
 cmp -s "$app/Contents/Resources/IDECraft.icns" packaging/icons/macos/IDECraft.icns || fail "icon differs from packaging/icons/macos/IDECraft.icns"
@@ -158,4 +201,4 @@ plutil -extract CFBundleDocumentTypes.2.LSItemContentTypes.0 raw "$app/Contents/
 plist_version=$(plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist")
 said=$("$app/Contents/MacOS/idecraft" --version)
 [ "${said%% (*}" = "idecraft $plist_version" ] || fail "the bundle's binary says '$said', the plist '$plist_version'"
-printf 'built %s: version %s, macOS %s or later, ad-hoc signed, checks passed\n' "$app" "$version" "$min_os"
+printf 'built %s: version %s, macOS %s or later, %s; checks passed\n' "$app" "$version" "$min_os" "$signed"

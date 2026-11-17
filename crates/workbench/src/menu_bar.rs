@@ -99,12 +99,28 @@ pub fn unavailable(id: &str, keymap: &idecraft_ui::keymap::Keymap) -> String {
     }
 }
 
+/// Menu items that leave a chord to another item that has it too (`SPEC-0124` v18 behaviour 20):
+/// ⌘D (Ctrl+D) shows at View › Compare With…, as in the reference, not at Edit › Duplicate Line;
+/// in the editor the key still duplicates (`keymap_actions`).
+pub const CHORD_SHOWN_ELSEWHERE: &[(&str, &str)] = &[("EditorDuplicate", "CompareTwoFiles")];
+
 /// The first single-keystroke shortcut of `id` in the keymap in use, in toolkit notation.
 pub fn menu_shortcut(id: &str) -> Option<String> {
+    menu_shortcut_in(&crate::keymaps::current(), id)
+}
+
+/// [`menu_shortcut`] in `keymap`.
+pub fn menu_shortcut_in(keymap: &idecraft_ui::keymap::Keymap, id: &str) -> Option<String> {
+    let owner = CHORD_SHOWN_ELSEWHERE
+        .iter()
+        .find(|(item, _)| *item == id)
+        .map(|(_, owner)| keymap.shortcuts(owner).to_vec())
+        .unwrap_or_default();
     // Without the chords the action yields to another one (SPEC-0071 v10 behaviour 16).
-    crate::keymaps::current()
+    keymap
         .shown_shortcuts(id)
         .into_iter()
+        .filter(|s| !owner.contains(s))
         .find_map(|s| match s {
             Shortcut::Keyboard {
                 first,
@@ -258,18 +274,61 @@ fn app_menu() -> Menu {
     }
 }
 
-/// Installs the menu bar and its shortcut labels; call again after the keymap changed.
+/// The menu label of the shortcut `keys` (toolkit notation) on the active keyboard layout: the
+/// key a US keyboard has there is replaced by the key the layout puts in its place, as macOS does
+/// for the shortcuts it localizes (⌘[ shows as ⌘Ö on German layouts; `SPEC-0124` v19
+/// behaviour 3a). `equivalents` maps US keys to the layout's keys as the platform reports them;
+/// `None` on a US layout. Pressing the shown key reaches the same action through the workbench
+/// (SPEC-0071 v4 behaviour 6).
+pub fn localized_keys<S: std::hash::BuildHasher>(
+    keys: &str,
+    equivalents: Option<&std::collections::HashMap<char, char, S>>,
+) -> String {
+    let Some(equivalents) = equivalents else {
+        return keys.to_owned();
+    };
+    // The key is the part after the last `-` that is no key of its own (`cmd--` is ⌘-).
+    let (prefix, key) = match keys.strip_suffix("--") {
+        Some(rest) => (format!("{rest}-"), "-"),
+        None => match keys.rsplit_once('-') {
+            Some((mods, key)) => (format!("{mods}-"), key),
+            None => (String::new(), keys),
+        },
+    };
+    let mut chars = key.chars();
+    match (chars.next(), chars.next()) {
+        (Some(c), None) => match equivalents.get(&c) {
+            Some(layout) => format!("{prefix}{layout}"),
+            None => keys.to_owned(),
+        },
+        _ => keys.to_owned(),
+    }
+}
+
+/// Whether the menu bar follows changes of the keyboard layout already.
+struct FollowsLayout;
+
+impl gpui::Global for FollowsLayout {}
+
+/// Installs the menu bar and its shortcut labels; call again after the keymap changed. The labels
+/// follow the active keyboard layout and are set again when it changes (behaviour 3a).
 pub fn install(cx: &mut App) {
     cx.clear_key_bindings();
     let mut bindings = Vec::new();
+    let mapper = cx.keyboard_mapper().clone();
     for id in std::iter::once("ShowSettings").chain(menu_actions()) {
         if let Some(keys) = menu_shortcut(id) {
+            let keys = localized_keys(&keys, mapper.get_key_equivalents());
             bindings.push(KeyBinding::new(
                 &keys,
                 IdeAction { id: id.to_owned() },
                 Some(MENU_ONLY),
             ));
         }
+    }
+    if !cx.has_global::<FollowsLayout>() {
+        cx.set_global(FollowsLayout);
+        cx.on_keyboard_layout_change(install).detach();
     }
     if cfg!(target_os = "macos") {
         bindings.push(KeyBinding::new("cmd-q", QuitIde, Some(MENU_ONLY)));
@@ -489,6 +548,7 @@ mod tests {
             include_str!("workbench_keymap_eighth.rs"),
             include_str!("workbench_keymap_ninth.rs"),
             include_str!("workbench_keymap_tenth.rs"),
+            include_str!("workbench_keymap_eleventh.rs"),
             include_str!("workbench_tabs.rs"),
             include_str!("tabs.rs"),
             include_str!("editor_view.rs"),
@@ -576,6 +636,82 @@ mod tests {
             "SelectAllOccurrences",
         ] {
             assert!(idecraft_editor::COMMANDS.contains(&id), "{id}");
+        }
+    }
+
+    /// SPEC-0124 AK-19 (v18): the items of OBS-0055 show the macOS keymap's shortcuts; ⌘D shows
+    /// at View › Compare With… and not at Edit › Duplicate Line, while the keymap still binds it
+    /// to Duplicate too (the editor duplicates on ⌘D).
+    // The labels are what macOS shows (⌘ is `cmd`); elsewhere the toolkit writes the same key as
+    // `super`, and the menu bar is the macOS one.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn obs_0055_items_show_their_macos_shortcuts() {
+        use idecraft_ui::keymap::Keymap;
+        let mac = Keymap::bundled_macos();
+        for (id, shown) in [
+            ("EditorContextInfo", Some("ctrl-shift-q")),
+            ("EditSource", Some("cmd-down")),
+            ("RecentLocations", Some("shift-cmd-e")),
+            ("CompareTwoFiles", Some("cmd-d")),
+            ("CompareClipboardWithSelection", None),
+            ("ShowFilePath", Some("alt-cmd-f12")),
+            ("PreviousOccurence", Some("alt-cmd-up")),
+            ("NextOccurence", Some("alt-cmd-down")),
+            ("EditorDuplicate", None),
+        ] {
+            assert_eq!(menu_shortcut_in(&mac, id).as_deref(), shown, "{id}");
+        }
+        assert!(menu_shortcut_in(&mac, "EditorIncreaseFontSizeGlobal").is_some());
+        assert!(menu_shortcut_in(&mac, "EditorDecreaseFontSizeGlobal").is_some());
+        let k = |t: &str| Keystroke::parse(t).unwrap();
+        assert!(
+            mac.actions_for(&k("meta D"), None)
+                .contains(&"EditorDuplicate")
+        );
+    }
+
+    /// SPEC-0124 AK-20 (v19, OBS-0055 M6): on a German layout the menu labels ⌘[ and ⌘] as ⌘Ö and
+    /// ⌘Ä, as macOS localizes them; letters and named keys keep theirs. The keymap binds
+    /// characters, not key codes: pressing ⌘Ö on that layout reaches Back through the layout's
+    /// stand-in for `[`.
+    // The labels are what macOS shows (⌘ is `cmd`); elsewhere the toolkit writes the same key as
+    // `super`, and the menu bar is the macOS one.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn menu_shortcuts_follow_the_keyboard_layout() {
+        use idecraft_ui::keymap::{EventStrokes, Keymap};
+        // Apple's localization of the German layout for the keys it moves (part of gpui's table).
+        let german: std::collections::HashMap<char, char> =
+            [('[', 'ö'), (']', 'ä'), ('/', 'ß'), (';', 'ü')]
+                .into_iter()
+                .collect();
+        let mac = Keymap::bundled_macos();
+        let shown =
+            |id: &str| localized_keys(&menu_shortcut_in(&mac, id).expect(id), Some(&german));
+        assert_eq!(menu_shortcut_in(&mac, "Back").as_deref(), Some("cmd-["));
+        assert_eq!(shown("Back"), "cmd-ö");
+        assert_eq!(shown("Forward"), "cmd-ä");
+        assert_eq!(shown("CompareTwoFiles"), "cmd-d");
+        assert_eq!(shown("EditSource"), "cmd-down");
+        assert_eq!(localized_keys("shift-cmd-[", Some(&german)), "shift-cmd-ö");
+        assert_eq!(localized_keys("cmd--", Some(&german)), "cmd--");
+        let none: Option<&std::collections::HashMap<char, char>> = None;
+        assert_eq!(
+            localized_keys("cmd-[", none),
+            "cmd-[",
+            "a US layout keeps it"
+        );
+        // The localized label is a binding the toolkit takes.
+        assert!(gpui::Keystroke::parse(&shown("Back")).is_ok());
+        // ⌘Ö and ⌘Ä pressed on the German layout reach Back and Forward.
+        for (key, id) in [("ö", "Back"), ("ä", "Forward")] {
+            let strokes = EventStrokes::of(key, false, false, false, true, Some(&german));
+            let stroke = strokes.resolve(&mac).expect("a shortcut");
+            assert!(
+                mac.actions_for(&stroke, None).contains(&id),
+                "{key}: {stroke:?}"
+            );
         }
     }
 

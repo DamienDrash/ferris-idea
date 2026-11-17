@@ -81,8 +81,15 @@ pub fn chooser_title(what: &str, symbol: Option<&str>, n: usize) -> String {
 }
 
 /// What ⌥⌘F7 does with a single usage (`SPEC-0073` v5 behaviour 7): whether the caret jumps to
-/// it, and the hint shown.
-pub fn one_usage(symbol: &str, usage: &Place, length: usize, caret: &Place) -> (bool, String) {
+/// it, and the hint shown, which names `find_usages`, the key of Find Usages in the keymap in use
+/// (`SPEC-0028` v9 behaviour 14).
+pub fn one_usage(
+    symbol: &str,
+    usage: &Place,
+    length: usize,
+    caret: &Place,
+    find_usages: &str,
+) -> (bool, String) {
     let at_caret = usage.path == caret.path
         && usage.line == caret.line
         && (usage.column..=usage.column + length.max(symbol.chars().count()))
@@ -91,7 +98,8 @@ pub fn one_usage(symbol: &str, usage: &Place, length: usize, caret: &Place) -> (
         (
             false,
             format!(
-                "{symbol} has no other usage in project files; Find Usages (⌥F7) shows it in the Find tool window"
+                "{symbol} has no other usage in project files; Find Usages{} shows it in the Find tool window",
+                crate::keymaps::in_parens(find_usages)
             ),
         )
     } else {
@@ -329,10 +337,21 @@ mod tests {
     #[test]
     fn one_usage_is_a_hint() {
         let usage = place("/w/bad.c", 1, 25);
-        let (jump, hint) = one_usage("helper", &usage, 6, &place("/w/bad.c", 1, 27));
+        let (jump, hint) = one_usage("helper", &usage, 6, &place("/w/bad.c", 1, 27), "⌥F7");
         assert!(!jump);
         assert!(hint.starts_with("helper has no other usage"), "{hint}");
-        let (jump, hint) = one_usage("helper", &usage, 6, &place("/w/bad.c", 0, 5));
+        assert!(hint.contains("Find Usages (⌥F7) shows"), "{hint}");
+        // SPEC-0028 v9 AK-16: the key of the keymap in use, written for Linux.
+        let linux =
+            idecraft_ui::keymap::Keymap::bundled_default().shortcut_label("FindUsages", false);
+        let (_, hint) = one_usage("helper", &usage, 6, &place("/w/bad.c", 1, 27), &linux);
+        assert!(hint.contains("Find Usages (Alt+F7) shows"), "{hint}");
+        let (_, hint) = one_usage("helper", &usage, 6, &place("/w/bad.c", 1, 27), "");
+        assert!(
+            hint.contains("Find Usages shows"),
+            "no key, no parentheses: {hint}"
+        );
+        let (jump, hint) = one_usage("helper", &usage, 6, &place("/w/bad.c", 0, 5), "⌥F7");
         assert!(jump);
         assert_eq!(hint, "Only usage of helper in project files");
     }

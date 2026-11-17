@@ -379,27 +379,21 @@ pub fn text_plan(rows: &Rows) -> Vec<PlanNode> {
 /// The plan of `statement` through `EXPLAIN PLAN` and the user's `PLAN_TABLE` (`SPEC-0142`).
 async fn explain_oracle(session: &Session, statement: &str) -> Result<Plan, ExplainError> {
     const ID: &str = "IDECRAFT";
-    let run = |sql: String| async move {
-        let r = session.run_script(&sql, OnError::Stop).await;
-        match r.outcomes.into_iter().next().map(|o| o.outcome) {
-            Some(Outcome::Error(e)) => Err(ExplainError::Db(e)),
-            Some(Outcome::ResultSet { rows, .. }) => Ok(rows),
-            _ => Ok(Vec::new()),
-        }
+    let crate::Driver::Oracle(oracle) = &session.driver else {
+        unreachable!("Oracle plans need an Oracle session")
     };
-    run(format!(
-        "DELETE FROM plan_table WHERE statement_id = '{ID}'"
-    ))
-    .await?;
-    run(format!(
-        "EXPLAIN PLAN SET STATEMENT_ID = '{ID}' FOR {statement}"
-    ))
-    .await?;
-    let rows = run(format!(
-        "SELECT id, parent_id, operation, options, object_name, cost, cardinality, \
-         access_predicates, filter_predicates FROM plan_table WHERE statement_id = '{ID}' ORDER BY id"
-    ))
-    .await?;
+    let rows = oracle
+        .plan_rows(
+            statement,
+            ID,
+            &format!(
+                "SELECT id, parent_id, operation, options, object_name, cost, cardinality, \
+                 access_predicates, filter_predicates FROM plan_table WHERE statement_id = '{ID}' \
+                 ORDER BY id"
+            ),
+        )
+        .await
+        .map_err(ExplainError::Db)?;
     let raw = rows
         .iter()
         .map(|r| {

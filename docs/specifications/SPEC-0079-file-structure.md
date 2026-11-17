@@ -1,6 +1,6 @@
 # SPEC-0079: File Structure popup
 
-- **Version:** 7 · **Date:** 2026-11-13 (v7: HTML files nested as the document, elements named with id and classes, in document order, OBS-0039 W3; v2: below the caret, full-width selection; hand test; v3: no package row, OBS-0016; v4: order by kind and name, nested types closed, filters for inherited members, anonymous classes and lambdas, filter field, matches highlighted, OBS-0016 defects F034-4 and F034-5; v5: Python functions with their parameter list, no parameters and local variables, OBS-0034 L11; v6: the same for JavaScript and TypeScript, with the types the source states, OBS-0028 T1)
+- **Version:** 8 · **Date:** 2026-11-17 (v8: no parameters and variables below a PHP function or method, behaviour 15, AK-10; headless check of F-038, OBS-0081); 2026-11-13 (v7: HTML files nested as the document, elements named with id and classes, in document order, OBS-0039 W3; v2: below the caret, full-width selection; hand test; v3: no package row, OBS-0016; v4: order by kind and name, nested types closed, filters for inherited members, anonymous classes and lambdas, filter field, matches highlighted, OBS-0016 defects F034-4 and F034-5; v5: Python functions with their parameter list, no parameters and local variables, OBS-0034 L11; v6: the same for JavaScript and TypeScript, with the types the source states, OBS-0028 T1)
 - **Sources:** GEN (a popup with the symbols of the current file as a tree, filtered by typing; F-034),
   OSS (action id `FileStructurePopup` with ⌘F12 / Ctrl+F12 in the ported keymaps; symbol icons from
   `platform/icons/src/expui/nodes/`), STD (LSP `textDocument/documentSymbol`), SPEC-0024 (symbols
@@ -17,8 +17,12 @@
   methods with their parameters and types, fields with their type, an arrow function bound to a
   constant as a function, and no local variables), STD (ECMAScript and TypeScript syntax of
   parameter lists and type annotations), own measurement 2026-11-12 with
-  typescript-language-server (behaviour 13, "Inferred types")
-- **Feature matrix rows:** F-034, F-035
+  typescript-language-server (behaviour 13, "Inferred types"); v8: OBS-0081 (headless on 2026-11-17:
+  intelephense 1.18.5 lists a PHP function's parameter `$name` as a variable below the function, and
+  `document_symbols` with `structure: true` showed it), GEN (a file's structure names its declarations;
+  parameters and local variables are no declarations of the file, as behaviours 12 and 13 hold for Python
+  and TypeScript)
+- **Feature matrix rows:** F-034, F-035, F-038
 
 ## Purpose
 See what a file contains and jump to one of its declarations without scrolling.
@@ -141,6 +145,12 @@ See what a file contains and jump to one of its declarations without scrolling.
     `document_symbols` with `structure: true`. No element starts collapsed (behaviour 8 speaks
     of types). The filter field matches the whole name, so typing `.card` or `#prices` finds
     the elements of that class or id. [OBS-0039, SPEC-0042]
+15. **PHP (v8):** intelephense reports the parameters and the variables of a function or a method as
+    its children. They are left out as in behaviour 12: below a function, method or constructor
+    stay only nested functions and types (class, interface, enum); properties and constants of a
+    class stay, and so do variables of the file itself. This holds wherever IDECraft shows the
+    file's symbols, `document_symbols` included. Not compared next to the reference, whose PHP
+    support needs a plugin. [OBS-0081, GEN]
 
 ## Acceptance criteria
 - **AK-1** Symbols of unsaved text with their nesting (integration test with clangd).
@@ -182,6 +192,10 @@ See what a file contains and jump to one of its declarations without scrolling.
   depths, names and details (`html_css::tests::structure_is_nested_and_named`); the order of the
   popup leaves elements where the document has them
   (`structure::tests::elements_keep_document_order`).
+- **AK-10 (v8, behaviour 15)** A PHP function's parameter and a method's variable are left out,
+  properties, constants, methods and a variable of the file stay
+  (`insight::tests::php_structure_without_parameters`); headless (OBS-0081) `document_symbols` of
+  `greeter.php` with intelephense lists `greet` without children.
 
 ## Out of scope
 Inferred types in the structure of a JavaScript or TypeScript file, and the structure of the

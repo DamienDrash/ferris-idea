@@ -221,6 +221,7 @@ impl SshLine {
 
     /// The process to start.
     pub fn command(&self) -> Command {
+        crate::testing::check_ssh_args(&self.args);
         let mut cmd = Command::new(&self.program);
         cmd.args(&self.args);
         if let Some(log) = &self.hop_log {
@@ -250,6 +251,9 @@ impl SshLine {
 /// `-G`): no input,
 /// its messages discarded.
 pub(crate) fn output(program: &str, args: &[String]) -> std::io::Result<Output> {
+    if args.iter().any(|a| a == "-G") {
+        crate::testing::check_ssh_args(args);
+    }
     Command::new(program)
         .args(args)
         .stdin(Stdio::null())

@@ -1,0 +1,10 @@
+<!-- Islands Light editor scheme (own file, SPEC-0060 v13 behaviour 19, OBS-0079 L1): the open scheme
+     `Light` with function and method declarations drawn like plain text, as the reference draws
+     them in its Islands Light theme. Every other key is `Light`'s. -->
+<scheme name="Islands Light" version="142" parent_scheme="Light">
+  <attributes>
+    <option name="DEFAULT_FUNCTION_DECLARATION">
+      <value />
+    </option>
+  </attributes>
+</scheme>

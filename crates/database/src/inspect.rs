@@ -272,6 +272,12 @@ pub fn inspect(script: &str, dialect: Dialect, schema: &[Table]) -> Vec<Problem>
         let (refs, opaque) = references(&tokens, &words, text);
         let mut all_known = true;
         for (name, range, _) in &refs {
+            // Oracle's and MySQL's one-row table is no table of the schema (`SPEC-0015` v5
+            // behaviour 13, OBS-0083 L4); its columns are not checked.
+            if dialect_table(dialect, name) {
+                all_known = false;
+                continue;
+            }
             let known = schema.iter().any(|t| t.name.eq_ignore_ascii_case(name))
                 || ctes.iter().any(|c| c == name)
                 || created.iter().any(|c| c.eq_ignore_ascii_case(name));
@@ -910,6 +916,13 @@ fn hides(table: &Table, column: &str) -> bool {
         .any(|h| h.eq_ignore_ascii_case(column))
 }
 
+/// A table every database of `dialect` has without it being in the catalog: `DUAL` on Oracle,
+/// MySQL and MariaDB.
+fn dialect_table(dialect: Dialect, name: &str) -> bool {
+    matches!(dialect, Dialect::Oracle | Dialect::MySql | Dialect::MariaDb)
+        && name.eq_ignore_ascii_case("dual")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -953,6 +966,26 @@ mod tests {
 
     fn pg(sql: &str) -> Vec<Problem> {
         inspect(sql, Dialect::PostgreSql, &schema())
+    }
+
+    /// SPEC-0015 v5 AK-12 (OBS-0083 L4): `DUAL` is no unknown table on Oracle, MySQL and MariaDB,
+    /// and its columns are not checked; on PostgreSQL it still is one.
+    #[test]
+    fn dual_is_known_where_the_dialect_has_it() {
+        for d in [Dialect::Oracle, Dialect::MySql, Dialect::MariaDb] {
+            assert!(
+                inspect("select sysdate, dummy from dual", d, &schema()).is_empty(),
+                "{d:?}"
+            );
+            assert!(
+                inspect("SELECT 1 FROM DUAL", d, &schema()).is_empty(),
+                "{d:?}"
+            );
+        }
+        assert_eq!(pg("select 1 from dual")[0].message, "unknown table `dual`");
+        let ora = inspect("select * from stok, dual", Dialect::Oracle, &schema());
+        assert_eq!(ora.len(), 1);
+        assert_eq!(ora[0].message, "unknown table `stok`");
     }
 
     #[test]

@@ -204,6 +204,27 @@ impl WorkbenchView {
         }
     }
 
+    /// `ShowSettingsAndFindUsages` (⌥⇧⌘F7): asks for the scope first — the project's files or
+    /// the caret's file — and then searches as Find Usages or Find Usages in File does
+    /// (`SPEC-0293` v10 behaviour 28). Without a name at the caret nothing opens.
+    pub(super) fn find_usages_with_scope(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(q) = self.usage_query(cx) else {
+            return;
+        };
+        let title = format!("Find Usages of {}", q.symbol);
+        let scopes = super::keymap_eleventh_impl::USAGE_SCOPES
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect();
+        self.show_jvm_popup(title, scopes, window, cx, |this, i, window, cx| {
+            if i == 0 {
+                this.find_usages_window(window, cx);
+            } else {
+                this.find_usages_in_file(window, cx);
+            }
+        });
+    }
+
     /// Searches again for the window's symbol at its place (Rerun).
     fn rerun_find_usages(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(view) = self.find_usages.clone() else {
@@ -505,8 +526,13 @@ impl WorkbenchView {
                 if let [only] = places.as_slice()
                     && search.source == UsageSource::LanguageServer
                 {
-                    let (jump, hint) =
-                        usages_model::one_usage(&symbol, &place_of(only), length_of(only), &caret);
+                    let (jump, hint) = usages_model::one_usage(
+                        &symbol,
+                        &place_of(only),
+                        length_of(only),
+                        &caret,
+                        &crate::keymaps::label("FindUsages"),
+                    );
                     if jump {
                         this.remember_place(cx);
                         this.show_place(&place_of(only), window, cx);

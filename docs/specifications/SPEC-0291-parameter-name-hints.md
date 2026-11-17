@@ -1,6 +1,8 @@
 # SPEC-0291: Parameter name hints
 
-- **Version:** 8 · **Date:** 2026-11-13 (v8: Go, gopls is asked for parameter names, behaviour 3e; v2: no hints before the arguments of collection factory and
+- **Version:** 9 · **Date:** 2026-11-17 (v9: a hint stands on a rounded pill of the scheme's
+  hint background in every theme whose scheme gives one, behaviour 4b, AK-9, OBS-0079 L3);
+  2026-11-13 (v8: Go, gopls is asked for parameter names, behaviour 3e; v2: no hints before the arguments of collection factory and
   varargs methods whose parameter names say nothing, behaviour 3a; v3: JavaScript and TypeScript:
   server settings, type hints, single arguments; OBS-0028 item 1; v4: the only argument of a
   constructor keeps its hint, OBS-0027 L18; v5: Kotlin, OBS-0035 L7; v6: no space between an opening
@@ -27,7 +29,10 @@
   `parameterNames`, off unless set, read from the section `gopls` of `workspace/configuration`),
   OSS (measured over the protocol with gopls 0.24.0: no hints without the setting; with it
   `scaled(all[0], 2.5)` gets `s:` and `factor:` of kind `Parameter`, and a variadic parameter is
-  labelled `a...:`)
+  labelled `a...:`); v9: OBS-0079 L3 (in `Islands Light` the reference shows `sku:`, `name:`,
+  `qty:` on a grey pill, IDECraft as grey text without a background), OSS (the open scheme `Default`,
+  parent of `Light`, gives `INLINE_PARAMETER_HINT` the background `EDEDED`,
+  `Islands Dark` and `Dark` `393B40`; the theme palette's `inlay-bg` is used by no editor key)
 - **Feature matrix rows:** F-013, F-038
 
 ## Purpose
@@ -90,6 +95,15 @@ See which parameter a literal argument fills without opening the method's declar
    as a space. It takes room on the line: the text after it moves right, and carets, selections,
    underlines and clicks keep pointing at the right characters. The hint is not part of the text:
    copying, saving and the caret never see it. [GEN, OSS]
+4b. **(v9) The pill:** the label stands on a pill in the background of `INLINE_PARAMETER_HINT`,
+   one pixel wider than the label on each side, 2 px inside its line above and below, with 4 px
+   corners, drawn under the text and over the caret row and selections. Every bundled scheme gives
+   the key a background (`EDEDED` in `Light`, `Islands Light` and `IDECraft Light`, `393B40` in
+   `Islands Dark`, `Dark` and `IDECraft Dark`), so every theme draws the pill; a scheme without one
+   draws none. The space the server asks for stays outside the pill. Until v9 the background of
+   behaviour 4 was set on the text run but never drawn: the editor paints its own backgrounds and
+   the toolkit draws none for a run, so the hints showed as grey text in every theme (OBS-0079 L3).
+   [OBS, OSS]
 4a. **(v6) No space after the bracket:** the space a server asks for before a parameter name is left out
    when the hint stands at the start of its line, after white space or right after an opening bracket
    (`(`, `[`, `{`), so the call reads `Cat(name: "Tom")` and `total(a: 1, b: 2)` as with jdtls, which asks
@@ -162,6 +176,11 @@ See which parameter a literal argument fills without opening the method's declar
 - **AK-5** The MCP tool lists the hints of a C file when clangd is installed: `add(1, 2)` gives `a:`
   and `b:` before the literals (protocol test, skipped without clangd).
 
+- **AK-9 (v9, behaviour 4b)** `editor_view::tests::a_hint_pill_wraps_its_label_inside_the_line`
+  (size and corner of the pill); window test `crates/workbench/tests/islands_light_editor.rs`: the
+  four hints of `Inventory.java`'s `main` line are drawn on four pills of the scheme's hint
+  background in `Islands Light`. Side by side with the reference: open (coordinator's window check
+  of OBS-0079).
 - **AK-6 (v8)** `servers::tests::readiness_and_settings_of_clangd_intelephense_css_and_gopls` (the
   setting); with gopls (`crates/languages/tests/it/servers.rs::gopls_parameter_hints`):
   `scaled(1.5, 2.5)` gets `value:` and `factor:` before its arguments. Skipped without gopls.

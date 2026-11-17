@@ -1,6 +1,10 @@
 # SPEC-0060: Themes and editor colour schemes
 
-- **Version:** 12 · **Date:** 2026-11-17 (v12: `themes` follows Sync with OS — names it with the
+- **Version:** 13 · **Date:** 2026-11-17 (v13: `Islands Light` next to the reference, OBS-0079 L1
+  and L2: an own editor scheme `Islands Light` over `Light` draws function and method
+  declarations like plain text, static calls stay italic and are pinned by a window test; the
+  parameter name hints' pill in SPEC-0291 v9 and the selected tab's focus colours in SPEC-0061 v19;
+  behaviour 19, AK-19; v12: `themes` follows Sync with OS — names it with the
   preferred themes, switches it, a theme chosen while it is on becomes the preferred theme of its
   kind; behaviour 18, AK-18 — headless check of F-085, OBS-0077); 2026-11-14 (v2: editor font; v3: icons and hover; v4: Islands Dark default;
   v5: switching themes at run time; v6: IDECraft brand themes as default, app icon at run time;
@@ -22,7 +26,15 @@
   equal in the release tag `idea/262.9437.185`; as logic templates `IslandsUICustomization.kt` and
   `IslandsGradientPainter.kt` (which keys paint the frame and the gaps between islands),
   `RenderingUtil.java` and `JBUI.java` (`CurrentTheme.Tree.Selection`: when a selection counts as
-  focused); no code taken)
+  focused); no code taken); v13: OBS-0079 (L1: the reference draws method declarations in
+  `Islands Light` black like plain text, IDECraft teal; L2: static calls italic in the reference),
+  OSS (`JetBrains/intellij-community` release tag `idea/262.11879.100`, the reference's build:
+  `ManyIslandsLight.theme.json` names the editor scheme `Light`, and `expUI_lightScheme.xml` gives
+  `DEFAULT_FUNCTION_DECLARATION` `00627A`, `STATIC_METHOD_ATTRIBUTES` italic without a colour; both
+  equal to the bundled `750ce16`; `JavaHighlightingColors.java`: `METHOD_DECLARATION_ATTRIBUTES`
+  falls back to `DEFAULT_FUNCTION_DECLARATION`; no code taken), GEN (jdtls 1.64's semantic tokens
+  for the test file `Inventory.java`, recorded over the protocol: `totalValue` and `List.of` at
+  their calls are `method` with `static`, the declarations `method` with `declaration`)
 - **Feature matrix rows:** F-085, F-013
 
 ## Purpose
@@ -229,6 +241,32 @@ from the reference's own open theme files instead of hand-picked values.
     agent's choice changed nothing on screen until Sync with OS was switched off; an agent could
     not switch Sync with OS at all. [GEN, ADR-0008]
 
+19. **`Islands Light` next to the reference (v13, OBS-0079 L1, L2):**
+    - **Method declarations (L1):** the theme draws its editors with an own scheme `Islands Light`
+      (`crates/ui/themes/IslandsLightScheme.xml`, IDECraft's file) whose parent is the open `Light`.
+      It sets one key: `DEFAULT_FUNCTION_DECLARATION` without colour or font style, so the name of
+      a method where it is declared (`totalCents`, `totalValue`, `main`) has the text colour
+      `#080808`, upright, as in the reference. The Java and Kotlin key of the server's tokens
+      (`METHOD_DECLARATION_ATTRIBUTES`) and the syntax roles of declarations (Java's
+      `function.method`, Kotlin's `function`, Python's `PY.FUNC_DEFINITION`) fall back to it, so a
+      name keeps its colour when the tokens arrive (SPEC-0290 v3). Every other key, colour and
+      attribute is `Light`'s; calls were already drawn in the text colour there. The open files give
+      `00627A` (teal) through `DEFAULT_FUNCTION_DECLARATION`, which IDECraft drew until v13; the
+      reference draws the declarations black although its build names the same scheme file, for a
+      reason the open sources do not show. Declarations in languages other than Java were not
+      compared; they follow the same key.
+    - **Static calls (L2):** a call of a static method (`totalValue(…)` and `List.of(…)` in `main`)
+      is italic in the text colour: jdtls marks it `method` with `static`, which maps to
+      `STATIC_METHOD_ATTRIBUTES` (SPEC-0290 behaviour 3), and `Light` makes that key italic
+      without a colour. The rule was in place before v13; it is now pinned in a window that draws
+      `Inventory.java` with the server's tokens and hints, so a gap between key and painted font
+      shows. `Islands Dark` makes the same key italic through `Darcula` (unchanged; OBS-0047 and
+      OBS-0049 compared no static calls). Static fields stay italic in both.
+    - **Other themes:** `Light`, `IDECraft Light` (over `Light`) and the dark themes keep their
+      declaration colours. The Appearance page still offers the five schemes of SPEC-0337
+      behaviour 4; `Light` chosen over `Islands Light` is now a scheme apart from the theme's own
+      (teal declarations), no longer the same one. [OBS, OSS, GEN]
+
 **Contrast, all bundled themes (v10; WCAG 2.2, AA = 4.5 : 1 for text, 3 : 1 for marks; checked
 2026-11-13 by `palette::tests::contrast_table`, 70 pairs per theme):** UI text and muted text on
 islands, the window and popups; links and the four status texts on islands and popups; error and
@@ -348,6 +386,17 @@ error text on the dark window background (3.97, used on islands only).
   both are in the settings file; a preferred name that is no theme reads as the default of its
   kind; switched off, `shown` is `Light` again and the preferred dark theme is kept. In a window:
   not checked (the theme popup already follows behaviour 3 of SPEC-0131).
+
+- **AK-19 (v13, behaviour 19)** `theme::tests::islands_light_declares_methods_in_the_text_colour`:
+  the chain `Islands Light` → `Light` → `Default`; a method declaration (server key and syntax
+  roles) in the text colour, upright;
+  a static call and a static field italic, an instance call upright, in `Islands Light` and
+  `Islands Dark`; `Light` keeps `00627A` and `Islands Dark` `56A8F5` for declarations; every other
+  checked key equals `Light`'s and the file gives no note. `palette::tests::editor_scheme_over_the_theme`:
+  `Light` over `Islands Light` is a scheme of its own. Window test
+  `crates/workbench/tests/islands_light_editor.rs`: with jdtls's tokens of `Inventory.java` the line
+  of `main`'s call paints exactly `out`, `totalValue` and `of` in italics and the declaration line
+  none. Side by side with the reference: open (coordinator's window check of OBS-0079).
 
 ## Out of scope
 Brand typography (Inter) in the application, a brand splash or about screen, a window icon on

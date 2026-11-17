@@ -56,6 +56,10 @@ pub enum Grant {
     /// Change the user's own IDECraft settings, which hold for every project: IDE settings,
     /// keymap, theme, plugin grants (`SPEC-0053` v8 behaviour 12).
     Settings,
+    /// Read the folders of the other projects the user opened recently, which lie outside the
+    /// workspace (`SPEC-0094` v9 behaviour 23).
+    #[serde(rename = "recent-projects")]
+    RecentProjects,
 }
 
 impl Grant {
@@ -76,6 +80,7 @@ impl Grant {
             Grant::Ui => "ui",
             Grant::SecretRead => "secret-read",
             Grant::Settings => "settings",
+            Grant::RecentProjects => "recent-projects",
         }
     }
 
@@ -103,6 +108,9 @@ impl Grant {
             }
             Grant::Settings => {
                 "change your own IDECraft settings, which hold for every project: IDE settings, keymap, theme, plugin grants"
+            }
+            Grant::RecentProjects => {
+                "read the folders of the other projects you opened recently in IDECraft"
             }
         }
     }

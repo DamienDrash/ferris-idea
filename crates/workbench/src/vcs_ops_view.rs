@@ -509,7 +509,7 @@ impl Render for PushView {
                         .child(
                             div()
                                 .id("push-tags")
-                                .child(format!("{} Push tags (⌥T)", check(self.tags)))
+                                .child(format!("{} {}", check(self.tags), keys("Push tags (⌥T)")))
                                 .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
                                     this.toggle_tags(cx)
                                 })),
@@ -518,8 +518,9 @@ impl Render for PushView {
                             div()
                                 .id("push-force")
                                 .child(format!(
-                                    "{} Force push, only if unchanged since fetch (⌥F)",
-                                    check(self.force_with_lease)
+                                    "{} {}",
+                                    check(self.force_with_lease),
+                                    keys("Force push, only if unchanged since fetch (⌥F)")
                                 ))
                                 .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
                                     this.toggle_force(cx)
@@ -719,7 +720,7 @@ impl Render for UpdateView {
                     .rounded(px(4.))
                     .when(on, |d| d.bg(c(p.tree_selection)))
                     .child(if on { "◉" } else { "○" })
-                    .child(label)
+                    .child(keys(label))
                     .on_click(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
                         this.select(m, cx)
                     }))
@@ -743,7 +744,10 @@ impl Render for UpdateView {
                             .flex_1()
                             .min_w_0()
                             .whitespace_normal()
-                            .child(crate::vcs_ops_model::reset_choice_label(self.ahead)),
+                            .child(crate::vcs_ops_model::reset_choice_label(
+                                self.ahead,
+                                cfg!(target_os = "macos"),
+                            )),
                     )
                     .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
                         this.select_reset(cx)
@@ -756,4 +760,10 @@ impl Render for UpdateView {
                     .child("Local changes are stashed and restored around a rebase or reset. Enter updates, Escape cancels."),
             )
     }
+}
+
+/// A shortcut of this dialog written for the platform: ⌘ is Ctrl and ⌥ is Alt outside macOS
+/// (`SPEC-0028` v8 behaviour 13).
+fn keys(text: &str) -> String {
+    idecraft_ui::keymap::local_keys(text, cfg!(target_os = "macos"))
 }

@@ -39,7 +39,15 @@ fn workspace(tag: &str) -> PathBuf {
     root.canonicalize().unwrap()
 }
 
+/// How many times as long a call on the test host may take as in the product (`SPEC-0121`
+/// behaviour 2): several builds in parallel slow the test `sshd` far beyond a normal machine.
+const HOST_STRETCH: u32 = 4;
+
 fn window(root: &Path, cx: &mut TestAppContext) -> (Bench, &'static mut VisualTestContext) {
+    // Nothing of the user's SSH setup: the host list and every `ssh` use a config of the test's
+    // own, and a read of `~/.ssh/config` fails the test (`isolate_ssh`).
+    idecraft_remote::testing::isolate_ssh();
+    idecraft_remote::testing::stretch_limits(HOST_STRETCH);
     let settings = root.join(".test-settings");
     std::fs::create_dir_all(&settings).unwrap();
     cx.update(|cx| {
@@ -53,6 +61,8 @@ fn window(root: &Path, cx: &mut TestAppContext) -> (Bench, &'static mut VisualTe
     let cx = VisualTestContext::from_window(window.into(), cx).into_mut();
     cx.simulate_resize(gpui::size(px(1372.), px(860.)));
     cx.run_until_parked();
+    let empty = idecraft_remote::testing::empty_ssh_config(&settings);
+    bench.update(cx, |b, _| b.set_remote_ssh(empty));
     (bench, cx)
 }
 
@@ -1115,18 +1125,45 @@ fn remote_texts(bench: &Bench, cx: &mut VisualTestContext) -> Vec<String> {
 }
 
 /// How long a step on the test host may take before it counts as hanging. Every call of the
-/// window has its own limit (10 s to connect, 30 s a command, SPEC-0121 behaviour 2) and shows
-/// an error when it is exceeded, so a slow machine only waits longer for the same result.
+/// window has its own limit (10 s to connect, 30 s a command, SPEC-0121 behaviour 2, here
+/// [`HOST_STRETCH`] times as long) and shows an error when it is exceeded, so a slow machine only
+/// waits longer for the same result and a real hang still ends in that error.
 const HOST_HANG: Duration = Duration::from_secs(300);
 
 /// A local `sshd` as the test host, ready: it has completed a whole SSH session through
-/// IDECraft's own `ssh`, so the steps that follow do not race the server's start under load.
+/// IDECraft's own `ssh`, so the steps that follow do not race the server's start under load. Its
+/// sessions have a home folder of the test's own (`dir/home`), so the window never lists the
+/// user's home folder.
 fn ready_host(dir: &Path) -> Option<idecraft_remote::testing::TestHost> {
-    let host = idecraft_remote::testing::TestHost::start(dir)?;
+    let home = dir.join("home");
+    std::fs::create_dir_all(&home).unwrap();
+    let home = home.canonicalize().unwrap();
+    let host = idecraft_remote::testing::TestHost::start_with_env(
+        &dir.join("ssh"),
+        &[("HOME", &home.display().to_string())],
+    )?;
     if let Err(e) = host.wait_ready(HOST_HANG) {
         panic!("the test host started but never let a session in: {e}");
     }
     Some(host)
+}
+
+/// The rows of the Remote Host window for a failure message: all of them inside a folder of the
+/// test (the temporary folder), otherwise only their count and the rows naming the test's own
+/// host, so that a message never lists hosts or files of the user.
+fn rows_for_message(place: Option<&str>, texts: &[String]) -> String {
+    let tmp = std::env::temp_dir();
+    let inside = |p: &Path| {
+        p.starts_with(&tmp)
+            || tmp.canonicalize().is_ok_and(|t| p.starts_with(t))
+            || p.starts_with("/tmp")
+            || p.starts_with("/private/tmp")
+    };
+    if place.is_some_and(|p| inside(Path::new(p))) {
+        return format!("{texts:?}");
+    }
+    let own: Vec<&String> = texts.iter().filter(|t| t.contains("idecraft-")).collect();
+    format!("{} rows, the test host's: {own:?}", texts.len())
 }
 
 /// The Remote Host window's state, for a failure message.
@@ -1135,13 +1172,14 @@ fn remote_state(bench: &Bench, cx: &mut VisualTestContext) -> String {
         b.remote_view()
             .map(|v| {
                 let v = v.read(cx);
+                let place = v.place().map(|(_, p)| p.clone());
                 format!(
-                    "place {:?} field {:?} busy {} error {:?} rows {:?} status {:?}",
-                    v.place(),
+                    "place {:?} field {:?} busy {} error {:?} rows {} status {:?}",
+                    place,
                     v.field_text(cx),
                     v.busy(),
                     v.error(),
-                    v.texts(),
+                    rows_for_message(place.as_deref(), &v.texts()),
                     b.status_message(cx)
                 )
             })
@@ -1189,14 +1227,25 @@ fn go_remote(bench: &Bench, cx: &mut VisualTestContext, name: &str) {
     cx.update(|window, cx| window.focus(&view.read(cx).focus()));
     cx.run_until_parked();
     for _ in 0..100 {
-        let (texts, selected) = view.read_with(cx, |v, _| (v.texts(), v.selected_text()));
+        let (texts, selected, place) = view.read_with(cx, |v, _| {
+            (
+                v.texts(),
+                v.selected_text(),
+                v.place().map(|(_, p)| p.clone()),
+            )
+        });
         if selected.as_deref().is_some_and(|s| s.contains(name)) {
             return;
         }
         let want = texts
             .iter()
             .position(|t| t.contains(name))
-            .unwrap_or_else(|| panic!("no row {name:?}: {texts:#?}"));
+            .unwrap_or_else(|| {
+                panic!(
+                    "no row {name:?}: {}",
+                    rows_for_message(place.as_deref(), &texts)
+                )
+            });
         let at = selected
             .and_then(|s| texts.iter().position(|t| *t == s))
             .unwrap_or(0);
@@ -1213,6 +1262,8 @@ fn go_remote(bench: &Bench, cx: &mut VisualTestContext, name: &str) {
 /// first connection once took longer than a fixed 60 s.
 #[gpui::test]
 fn hand_test_183_files_on_the_host_with_keys(cx: &mut TestAppContext) {
+    // One test at a time works on a test host (see the helper).
+    let _turn = idecraft_remote::testing::one_host_at_a_time();
     let base = std::env::temp_dir().join(format!("idecraft-f083-ssh-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
     std::fs::create_dir_all(&base).unwrap();
@@ -1226,6 +1277,8 @@ fn hand_test_183_files_on_the_host_with_keys(cx: &mut TestAppContext) {
     let root = workspace("remote");
     let (bench, cx) = window(&root, cx);
     bench.update_in(cx, |b, window, cx| {
+        // The host list and the connection read the test host's own config only.
+        b.set_remote_ssh(host.target.extra.clone());
         b.toggle_remote(window, cx);
         b.remote_connect(host.target.clone(), cx);
     });
@@ -1346,5 +1399,37 @@ fn hand_test_183_files_on_the_host_with_keys(cx: &mut TestAppContext) {
     });
     drop(host);
     let _ = std::fs::remove_dir_all(&base);
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// The guard of the tests above: the Remote Host window of a test window lists its hosts from a
+/// config in the test's temporary folder, never from the user's `~/.ssh/config`, and with the
+/// guard on a host list without a config of the test's own fails before anything is read.
+#[gpui::test]
+fn remote_host_list_never_reads_the_users_ssh_config(cx: &mut TestAppContext) {
+    let root = workspace("ssh-guard");
+    let (bench, cx) = window(&root, cx);
+    bench.update_in(cx, |b, window, cx| b.toggle_remote(window, cx));
+    cx.run_until_parked();
+    let config = bench.read_with(cx, |b, _| b.remote_ssh_config());
+    assert!(
+        config.starts_with(&root) && idecraft_remote::testing::is_test_config(&config),
+        "the host list reads the test's own config"
+    );
+    let texts = remote_texts(&bench, cx);
+    assert!(
+        texts.is_empty(),
+        "an empty config lists no host: {} rows",
+        texts.len()
+    );
+    assert!(idecraft_remote::testing::ssh_isolated());
+    let home = std::env::var_os("HOME").map(PathBuf::from).unwrap();
+    if !idecraft_remote::testing::is_test_config(&home.join(".ssh/config")) {
+        let read = std::panic::catch_unwind(|| idecraft_remote::host_list(&[]));
+        assert!(
+            read.is_err(),
+            "a host list from the user's ~/.ssh/config fails in a test"
+        );
+    }
     let _ = std::fs::remove_dir_all(&root);
 }

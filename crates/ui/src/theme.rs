@@ -33,6 +33,8 @@ pub const ISLANDS_DARK_THEME_JSON: &str = include_str!("../themes/ManyIslandsDar
 pub const ISLANDS_DARK_SCHEME_XML: &str = include_str!("../themes/IslandSchemeDark.xml");
 /// Islands Light theme (parent `ExperimentalLightWithLightHeader`, editor scheme `Light`).
 pub const ISLANDS_LIGHT_THEME_JSON: &str = include_str!("../themes/ManyIslandsLight.theme.json");
+/// IDECraft's editor scheme of `Islands Light` over the open `Light` (`SPEC-0060` v13 behaviour 19).
+pub const ISLANDS_LIGHT_SCHEME_XML: &str = include_str!("../themes/IslandsLightScheme.xml");
 /// New UI `Light with Light Header` (parent `ExperimentalLight`), the parent of Islands Light.
 pub const LIGHT_HEADER_THEME_JSON: &str =
     include_str!("../themes/expUI_light_with_light_header.theme.json");
@@ -60,7 +62,8 @@ pub enum ThemeId {
     Light,
     /// `Islands Dark` with scheme `Islands Dark`, the reference's default.
     IslandsDark,
-    /// `Islands Light` with scheme `Light`, the reference's default light theme.
+    /// `Islands Light` with scheme `Islands Light` over `Light`, the reference's default light
+    /// theme (`SPEC-0060` v13 behaviour 19).
     IslandsLight,
 }
 
@@ -463,7 +466,11 @@ impl ColorScheme {
     pub fn for_theme(id: ThemeId) -> Self {
         match id {
             ThemeId::Dark => Self::bundled(true),
-            ThemeId::Light | ThemeId::IslandsLight => Self::bundled(false),
+            ThemeId::Light => Self::bundled(false),
+            // Method declarations like plain text, as the reference draws them (v13, OBS-0079 L1).
+            ThemeId::IslandsLight => {
+                Self::bundled_over(ISLANDS_LIGHT_SCHEME_XML, &[LIGHT_SCHEME_XML])
+            }
             ThemeId::IslandsDark => Self::bundled_over(ISLANDS_DARK_SCHEME_XML, &[]),
             ThemeId::IdecraftDark => {
                 Self::bundled_over(IDECRAFT_DARK_SCHEME_XML, &[ISLANDS_DARK_SCHEME_XML])
@@ -1237,7 +1244,7 @@ mod tests {
             UiTheme::bundled(false).number("Tree.rowHeight")
         );
         let s = ColorScheme::for_theme(ThemeId::IslandsLight);
-        assert_eq!(s.chain()[0], "Light");
+        assert_eq!(s.chain(), ["Islands Light", "Light", "Default"]);
     }
 
     #[test]
@@ -1615,6 +1622,77 @@ mod tests {
                 "{id:?}"
             );
         }
+    }
+
+    /// SPEC-0060 v13 AK-19 (OBS-0079 L1, L2): `Islands Light` draws Java method declarations
+    /// like plain text and static members in italics; `Light` and `Islands Dark` keep their
+    /// declaration colours; a static call is italic in both Islands schemes.
+    #[test]
+    fn islands_light_declares_methods_in_the_text_colour() {
+        let islands = ColorScheme::for_theme(ThemeId::IslandsLight);
+        let text = islands.attributes("TEXT").foreground;
+        assert_eq!(text, Some(0x080808));
+        let declaration = islands.attributes("METHOD_DECLARATION_ATTRIBUTES");
+        assert_eq!(declaration.foreground.or(text), text);
+        assert!(!declaration.italic && !declaration.bold);
+        // The keys of a static method's declaration, its call and an instance call.
+        let key = |modifiers: &[&str]| semantic_key("method", modifiers, true).unwrap();
+        assert_eq!(
+            key(&["static", "declaration", "public"]),
+            "METHOD_DECLARATION_ATTRIBUTES"
+        );
+        assert_eq!(
+            key(&["static", "public", "generic"]),
+            "STATIC_METHOD_ATTRIBUTES"
+        );
+        assert_eq!(key(&["public"]), "METHOD_CALL_ATTRIBUTES");
+        for id in [ThemeId::IslandsLight, ThemeId::IslandsDark] {
+            let s = ColorScheme::for_theme(id);
+            let call = s.attributes("STATIC_METHOD_ATTRIBUTES");
+            assert!(call.italic, "{id:?}");
+            assert!(!s.attributes("METHOD_CALL_ATTRIBUTES").italic, "{id:?}");
+            assert!(s.attributes("STATIC_FIELD_ATTRIBUTES").italic, "{id:?}");
+        }
+        // Light-coloured static calls keep the text colour in Islands Light, as instance calls.
+        assert_eq!(
+            islands.attributes("STATIC_METHOD_ATTRIBUTES").foreground,
+            None
+        );
+        // Unchanged: `Light` and `Islands Dark` colour declarations as their files say.
+        let light = ColorScheme::for_theme(ThemeId::Light);
+        assert_eq!(
+            light.attributes("METHOD_DECLARATION_ATTRIBUTES").foreground,
+            Some(0x00627a)
+        );
+        assert_eq!(
+            ColorScheme::for_theme(ThemeId::IslandsDark)
+                .attributes("METHOD_DECLARATION_ATTRIBUTES")
+                .foreground,
+            Some(0x56a8f5)
+        );
+        // Everything else of `Islands Light` is `Light`'s.
+        for key in [
+            "DEFAULT_KEYWORD",
+            "DEFAULT_STRING",
+            "DEFAULT_INSTANCE_FIELD",
+            "DEFAULT_STATIC_FIELD",
+            "DEFAULT_STATIC_METHOD",
+            "INLINE_PARAMETER_HINT",
+            "METHOD_CALL_ATTRIBUTES",
+            "STATIC_METHOD_ATTRIBUTES",
+        ] {
+            assert_eq!(islands.attributes(key), light.attributes(key), "{key}");
+        }
+        // The syntax roles of a declaration agree with the server's key, so nothing changes
+        // colour when the tokens arrive: Java's `function.method`, Kotlin's `function`.
+        for role in ["function", "function.method"] {
+            assert_eq!(islands.capture_style(role).foreground, text, "{role}");
+        }
+        assert_eq!(
+            islands.color("CARET_ROW_COLOR"),
+            light.color("CARET_ROW_COLOR")
+        );
+        assert!(islands.notes().is_empty());
     }
 
     /// WCAG AA (4.5 : 1) for text in the brand themes (`SPEC-0060` v6 behaviour 11).

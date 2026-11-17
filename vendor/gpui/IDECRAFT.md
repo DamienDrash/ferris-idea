@@ -68,8 +68,16 @@ What differs from the published crate, and nothing else:
    with the same defaults, and block, flexbox and grid layout got fixes. `Cargo.toml.orig` stays as
    published. gpui sizes a grid only for an element styled `display: grid` (`Styled::grid`);
    no IDECraft crate calls it.
-5. **Notices of change (Apache-2.0 §4(b)):** every changed file (`Cargo.toml`, `src/window.rs`,
-   `src/window/prompts.rs`, `src/platform.rs`, `src/platform/mac/window.rs`,
+5. **`src/text_system.rs`: font runs of a line** (marked "IDECraft change"; SPEC-0290 behaviour 4,
+   OBS-0084 L2). gpui 0.2.2's `WindowTextSystem::layout_line` joined a text run with the run before
+   it whenever both had the same colour, underline and strikethrough, without comparing their
+   fonts, so an italic or bold run that followed a run of the same colour was shaped in the font
+   before it (a static method call in the text colour after `println(` lost its italics, while a
+   static field in its own colour kept them). The new public function `font_runs_of` joins a run
+   with the one before it only when both resolve to the same font and have the same decorations,
+   the rule `shape_text` already followed; `layout_line` builds its font runs with it.
+6. **Notices of change (Apache-2.0 §4(b)):** every changed file (`Cargo.toml`, `src/window.rs`,
+   `src/text_system.rs`, `src/window/prompts.rs`, `src/platform.rs`, `src/platform/mac/window.rs`,
    `src/platform/windows/window.rs`, `src/platform/test/platform.rs`, `src/app/test_context.rs`)
    starts with a comment "Modified by IDECraft" that names the change and points here.
 

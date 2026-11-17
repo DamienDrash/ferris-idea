@@ -1,6 +1,6 @@
 # SPEC-0058: Editor view
 
-- **Version:** 4 · **Date:** 2026-11-15 (v4 after OBS-0065 S1: Save All saved only the editor in
+- **Version:** 5 · **Date:** 2026-11-16 (v5: the gutter icons answer to keys, `EditorFocusGutter`, behaviour 13, AK-8; twelfth package of docs/research/KEYMAP_COVERAGE.md); 2026-11-15 (v4 after OBS-0065 S1: Save All saved only the editor in
   front; it now saves every editor of the window with unsaved changes, behaviour 12, AK-7; v3: saving when the window loses the focus is a setting, SPEC-0337 behaviour 2; v2: saving with local history, changes on disk)
 - **Sources:** GEN (how IDE editors draw and handle a document: gutter with line numbers, caret row,
   selections, carets, mouse selection, input methods; F-010), SPEC-0057 (editor commands), SPEC-0028
@@ -73,6 +73,18 @@ the editor commands of SPEC-0057.
        (SPEC-0317 v3 behaviour 10), each with its own conflict check and second save. [GEN]
     e. `SaveDocument` still saves only its own editor. An editor outside a project window
        (`idecraft edit`, behaviour 9) saves its own file on `SaveAll`. [GEN]
+13. **Focus Gutter (v5):** `EditorFocusGutter` (⌥⇧6 then F in the bundled keymaps) gives the keys
+    to the gutter icons drawn in the visible part of the editor — run markers, breakpoints,
+    folding arrows, bookmarks and the marks of declarations and beans (SPEC-0294 behaviour 4) —
+    starting at the first icon of the caret's line, else of the nearest line below, else of the
+    last line above. The icon that has the keys gets a ring in the accent colour and keeps its
+    tooltip (SPEC-0294). ↑ and ↓ go to the previous and next line with icons, ← and → along the
+    icons of a line, left to right; they stop at the ends. Enter and Space do what a click on the
+    icon does: run what a ▶ marks, remove the breakpoint, fold or unfold, go to the other side of
+    a declaration's or a bean's mark; a bookmark has only its tooltip. Escape gives the keys back
+    to the text; any other key does too and then acts as it would. Without a drawn icon the
+    status bar says "No gutter icons in the visible part of the editor". A one-line field has no
+    gutter. [GEN]
 
 ## Acceptance criteria
 - **AK-1** Tab expansion with mapping between columns and display bytes, gutter width, capture colours
@@ -91,6 +103,11 @@ the editor commands of SPEC-0057.
   EditorConfig on-save edits apply to the file behind the one in front; a file changed on disk
   stays modified with its editor's note while the others are saved, and the next Save All writes
   it; a read-only file in front does not stop the others; `SaveDocument` writes only its own file.
+- **AK-8** (v5, behaviour 13) Unit test
+  `editor_view::gutter_focus::tests::the_gutter_icons_are_walked_by_line_and_place` (icons by
+  line and place, start line, moves stop at the ends); window test
+  `crates/workbench/tests/it/twelfth_package_keymap.rs`: `the_gutter_icons_answer_to_keys`
+  (macOS; written, not yet built).
 
 ## Out of scope
 Soft wraps, folding in the view, inlay hints, error stripes and gutter icons, minimap, tabs and the
@@ -100,3 +117,6 @@ tool windows around the editor (rest of M3.7), caret blinking, font settings, li
 Not yet compared side by side. (v3) Saving when the window loses the focus is a setting, off by
 default (the reference saves automatically by default; reason in SPEC-0337); a conflict is shown in the status bar instead of a dialog. Interim colours and font (Menlo / DejaVu Sans Mono) until M3.8; the caret
 does not blink.
+- **Focus Gutter (v5):** only the icons drawn on screen take the keys; ↓ at the last visible
+  line with icons does not scroll to icons further down. A breakpoint's Enter removes it as a
+  click does; its properties stay with the breakpoint dialog (SPEC-0127).

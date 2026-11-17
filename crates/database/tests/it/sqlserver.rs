@@ -190,3 +190,50 @@ async fn multi_line_error_has_a_position() {
     let offset = run.outcomes[0].error_offset.expect("position");
     assert!(script[offset..].starts_with("nosuch_column"), "{run:?}");
 }
+
+/// SPEC-0116 v8 behaviour 5 (OBS-0083 L5): procedures, functions and triggers of the default
+/// schema are listed with their definitions.
+#[tokio::test]
+async fn routines_and_triggers() {
+    let Some(s) = session(false).await else {
+        return;
+    };
+    let drop = "DROP TRIGGER IF EXISTS ide_obj_trg;\nGO\nDROP TABLE IF EXISTS ide_obj;\nGO\n\
+                DROP PROCEDURE IF EXISTS ide_obj_p;\nGO\nDROP FUNCTION IF EXISTS ide_obj_f";
+    let _ = s.run_script(drop, OnError::Continue).await;
+    let created = s
+        .run_script(
+            "CREATE TABLE ide_obj (id int PRIMARY KEY);\nGO\n\
+             CREATE PROCEDURE ide_obj_p AS SELECT 1 AS one;\nGO\n\
+             CREATE FUNCTION ide_obj_f (@x int) RETURNS int AS BEGIN RETURN @x + 1; END;\nGO\n\
+             CREATE TRIGGER ide_obj_trg ON ide_obj AFTER INSERT, UPDATE AS SET NOCOUNT ON;\nGO",
+            OnError::Stop,
+        )
+        .await;
+    assert!(
+        created
+            .outcomes
+            .iter()
+            .all(|o| !matches!(o.outcome, Outcome::Error(_))),
+        "{created:?}"
+    );
+    let objects = idecraft_database::schema_objects(&s, None).await.unwrap();
+    let find = |name: &str| objects.iter().find(|o| o.name == name).cloned();
+    assert_eq!(find("ide_obj_p").unwrap().kind, "procedure");
+    assert_eq!(find("ide_obj_f").unwrap().kind, "function");
+    let trigger = find("ide_obj_trg").unwrap();
+    assert_eq!(
+        (trigger.kind.as_str(), trigger.table.as_deref()),
+        ("trigger", Some("ide_obj"))
+    );
+    assert_eq!(trigger.detail.as_deref(), Some("AFTER INSERT OR UPDATE"));
+    let definition = idecraft_database::object_definition(&s, None, &find("ide_obj_f").unwrap())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        definition.starts_with("CREATE FUNCTION ide_obj_f"),
+        "{definition}"
+    );
+    let _ = s.run_script(drop, OnError::Continue).await;
+}

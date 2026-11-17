@@ -1,6 +1,6 @@
 # SPEC-0067: Search Everywhere popup
 
-- **Version:** 12 · **Date:** 2026-11-14 (v12: the focus goes back to the element that had it — a list or tree of the tool window, not only the window —, and a tool window counts as focused wherever in it the focus is, behaviour 21, AK-13; second window check of 2026-11-14; v11: `SearchEverywhere.NavigateToNextGroup` and `SearchEverywhere.NavigateToPrevGroup` go from group to group of the results, behaviour 22, AK-12; sixth package of docs/research/KEYMAP_COVERAGE.md; v10: the focus goes back to the tool window that had it when the popup closes or runs an action, behaviour 21); 2026-11-13 (v9: an Endpoints tab that searches the rows of the Endpoints tool window by path, HTTP method and handler, opened by `GotoUrlAction`, behaviour 20; v8: `TextSearchAction` opens the Text tab and ⇧Enter is the keymap action `OpenInRightSplit`, behaviour 19; v7: Tab, ⇧Tab and Enter of the popup are the keymap actions `SearchEverywhere.NextTab`, `SearchEverywhere.PrevTab` and `SearchEverywhere.SelectItem`, behaviour 18); 2026-11-12 (v6: the files are the project's own sources and the popup says what it left out, behaviour 13, SPEC-0031 v5); 2026-11-06 (v2: readable rows, raised popup; v3: action titles; v4: only
+- **Version:** 13 · **Date:** 2026-11-17 (v13: the rows item of v5 had the number of Close, 5; it is behaviour 23 now, no change of behaviour); 2026-11-14 (v12: the focus goes back to the element that had it — a list or tree of the tool window, not only the window —, and a tool window counts as focused wherever in it the focus is, behaviour 21, AK-13; second window check of 2026-11-14; v11: `SearchEverywhere.NavigateToNextGroup` and `SearchEverywhere.NavigateToPrevGroup` go from group to group of the results, behaviour 22, AK-12; sixth package of docs/research/KEYMAP_COVERAGE.md; v10: the focus goes back to the tool window that had it when the popup closes or runs an action, behaviour 21); 2026-11-13 (v9: an Endpoints tab that searches the rows of the Endpoints tool window by path, HTTP method and handler, opened by `GotoUrlAction`, behaviour 20; v8: `TextSearchAction` opens the Text tab and ⇧Enter is the keymap action `OpenInRightSplit`, behaviour 19; v7: Tab, ⇧Tab and Enter of the popup are the keymap actions `SearchEverywhere.NextTab`, `SearchEverywhere.PrevTab` and `SearchEverywhere.SelectItem`, behaviour 18); 2026-11-12 (v6: the files are the project's own sources and the popup says what it left out, behaviour 13, SPEC-0031 v5); 2026-11-06 (v2: readable rows, raised popup; v3: action titles; v4: only
   Shift tapped alone counts, OBS-0021 item 12; v5: side-by-side comparison OBS-0023 — Classes and Text
   tabs, recent files, marks, footer, right split, preview, non-project items, filter, calculator,
   settings pages, Find window)
@@ -61,7 +61,7 @@ Everywhere.
    headings; the All tab keeps them (see deviations). [GEN, OSS; OBS-0023 L1]
 2a. **Empty query:** the recently opened files without the one in the editor (All, Classes, Files);
    without results the popup shows only its head and field. [GEN; OBS-0023 L3, L17]
-5. **Rows:** symbols show their parameters and, for Java packages and Python modules, `of <container>`,
+23. **Rows (v5; numbered 5 until v13):** symbols show their parameters and, for Java packages and Python modules, `of <container>`,
    with `file:line` on the right; text rows the line with the match marked and `file line`; actions and
    settings pages their group and shortcut. The selected row marks the typed characters with the find
    result background. [GEN; OBS-0023 L6, L12]
@@ -147,7 +147,7 @@ Everywhere.
    - **Rows:** the methods as the tool window shows them (`POST|PUT`, nothing for a mapping
      without a method), the path, the handler, the word "client" for a row of a client
      interface, and on the right `file:line`. The selected row marks the matched characters of
-     path and handler (behaviour 5). The footer shows the file's path. [GEN]
+     path and handler (behaviour 23). The footer shows the file's path. [GEN]
    - **Choose:** Enter or a double click opens the file with the caret on the row's line — the
      declaration the tool window opens (SPEC-0103 behaviour 2); `OpenInRightSplit` opens it in
      the right split (behaviour 19); the preview (behaviour 12) shows the lines around it.

@@ -53,6 +53,31 @@ elif releases and changelog.index('\n## Unreleased\n') > changelog.index(f'## ID
     errors.append('CHANGELOG.md: "## Unreleased" must come before the versions')
 if not cargo or not releases or releases[0] != cargo.group(1):
     errors.append(f'CHANGELOG.md: newest version {releases[0] if releases else None} differs from Cargo.toml {cargo.group(1) if cargo else None}')
+# A spec's behaviours are numbered items `N. **…**` at the start of a line in its Behaviour
+# section; each number is used once, so "behaviour N" names one item (#891/#878: SPEC-0072 had
+# behaviour 52 twice). Lettered additions (`2a.`) and items inside fenced blocks do not count.
+for f in sorted((root / 'docs' / 'specifications').glob('SPEC-*.md')):
+    section, seen = None, {}
+    in_fence = False
+    for n, line in enumerate(f.read_text(encoding='utf-8').splitlines(), 1):
+        if line.startswith('```'):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        if line.startswith('## '):
+            section = line[3:].strip().lower()
+            continue
+        if not section or not section.startswith('behavio'):
+            continue
+        m = re.match(r'(\d+)\. \*\*', line)
+        if not m:
+            continue
+        number = int(m.group(1))
+        if number in seen:
+            errors.append(f'{f}:{n}: behaviour {number} is numbered twice (first at line {seen[number]})')
+        else:
+            seen[number] = n
 for e in errors:
     print(e)
 print(f'checked {len(files)} files, {len(errors)} problem(s)')

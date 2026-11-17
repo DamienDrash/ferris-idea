@@ -15419,6 +15419,11 @@ fn remote_project_steps() -> Vec<Step> {
                     &dir.display().to_string(),
                 );
             }
+            // The host list of the self-test's window: an empty config of its own, never the
+            // user's `~/.ssh/config`.
+            if let Some(parent) = dir.parent() {
+                b.set_remote_ssh(idecraft_remote::testing::empty_ssh_config(parent));
+            }
             if let Ok(mut h) = HOST.lock() {
                 *h = Some((idecraft_remote::inprocess::HostSwitch::default(), dir));
             }
@@ -15653,6 +15658,9 @@ fn remote_steps() -> Vec<Step> {
                 let _ = std::fs::create_dir_all(project.join("src"));
                 let _ = std::fs::write(project.join("notes.txt"), "remote notes\n");
                 b.set_remote_ssh(h.target.extra.clone());
+            } else {
+                // No test host: the host list still never reads the user's `~/.ssh/config`.
+                b.set_remote_ssh(idecraft_remote::testing::empty_ssh_config(&dir));
             }
             if let Ok(mut slot) = HOST.lock() {
                 *slot = host;

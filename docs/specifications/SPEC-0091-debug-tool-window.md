@@ -1,6 +1,6 @@
 # SPEC-0091: Debugging in the window
 
-- **Version:** 22 · **Date:** 2026-11-16 (v22 (v20 and v21 are taken by #891 and #902): a value with line breaks after a line of code is put on one line too, behaviour 13, AK-27; hand test 20 of the beta of workflow (a)); 2026-11-14 (v19: Quick Evaluate Expression, behaviour 44, AK-24; eighth package of docs/research/KEYMAP_COVERAGE.md; v18: Go files and Go tests through Delve, SPEC-0039 v7; v17: a breakpoint the session cannot bind is hollow, SPEC-0127 v5, OBS-0035 L14; v16: JVM values in one form with the size of collections, no `this` row in a frame without a receiver, OBS-0035 L11 and L12; v15: values at the end of a line are placed one after the other; v14: a value with line breaks stays on one row; v2: Python scripts through debugpy; v3: evaluate expression,
+- **Version:** 22 · **Date:** 2026-11-16 (v22 (v20 and v21 are taken by #891 and #902): a value with line breaks after a line of code is put on one line too, behaviour 13, AK-27; hand test 20 of the beta of workflow (a); v20: Jump to Type Source from the Variables list, behaviour 45, AK-28 (AK-25 is taken by v13, AK-26 by #902, AK-27 by v22); eleventh package of docs/research/KEYMAP_COVERAGE.md); 2026-11-14 (v19: Quick Evaluate Expression, behaviour 44, AK-24; eighth package of docs/research/KEYMAP_COVERAGE.md; v18: Go files and Go tests through Delve, SPEC-0039 v7; v17: a breakpoint the session cannot bind is hollow, SPEC-0127 v5, OBS-0035 L14; v16: JVM values in one form with the size of collections, no `this` row in a frame without a receiver, OBS-0035 L11 and L12; v15: values at the end of a line are placed one after the other; v14: a value with line breaks stays on one row; v2: Python scripts through debugpy; v3: evaluate expression,
   breakpoints kept across restarts; v4: Node.js scripts through js-debug; v5: watches, threads, values
   in the editor; v6: the field's hint is a placeholder; v7: debugger items in the editor menu, the
   adapter's echo of the command line, closure scopes; v8: values in the editor also for the fields of the
@@ -419,6 +419,12 @@ the editor.
     program is not paused"; without a session the action is not available. The mouse shortcut
     (⌥-click) of the keymap is not carried out. MCP: `debug_evaluate`. [OSS: id and keys of the
     bundled keymaps; GEN]
+45. **Jump to Type Source (v20):** with a row of the Variables list selected and the Debug
+    window focused, `XDebugger.JumpToTypeSource` (⇧F4 in the bundled macOS keymap) opens Go to
+    Class with the simple name of the row's type as the debugger reports it, without package,
+    type arguments or array brackets (`java.util.ArrayList<String>` → `ArrayList`); Enter opens
+    the class. A primitive type says in the status bar that it has no declaration. Without a
+    selected row the key goes to the next action of the chord. [GEN]
 
 ## Acceptance criteria
 - **AK-1** Breakpoint lines follow inserted, removed and joined lines; the variables tree fetches
@@ -537,6 +543,7 @@ the editor.
   in a window of the test harness a Node.js program paused with a function among its variables
   shows its values after the lines (`workflow_a_beta_handtests.rs::hand_test_20_debug_node`, with
   js-debug). In the window on the screen: hand test 20.
+- **AK-28 (v20, behaviour 45)** Unit test `workbench_keymap_eleventh::tests::the_type_to_look_for`.
 
 ## Out of scope
 Conditional breakpoints and logpoints in the UI (the session supports them, SPEC-0039), a breakpoints
@@ -578,3 +585,6 @@ A code fragment the reference refused (OBS-0025 item 5) is evaluated (IMP-0355).
 **(v13)** The result of hot swap stays in the console instead of a passing notification, and reloading is refused with the files and error counts while a changed source has errors (IMP-0361); the console's input line also evaluates in Java, where the reference has none (IMP-0362).
 
 **(v16)** Collections show their size after type and id in IDECraft's own form (`ArrayList@566 size = 1`); the reference showed type, id and size too (OBS-0035 item 18). IDECraft shows no preview of the elements in the row, and for Kotlin no size of collection classes outside `java.util` and `kotlin.collections`, because it reads fields instead of calling the program's methods.
+- **Jump to Type Source (v20):** the reference opens the type's declaration at once; IDECraft
+  lists the classes of that name in Go to Class, where the person picks one when several have
+  it.

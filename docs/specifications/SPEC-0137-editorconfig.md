@@ -1,6 +1,6 @@
 # SPEC-0137: EditorConfig
 
-- **Version:** 2 · **Date:** 2026-11-16
+- **Version:** 3 · **Date:** 2026-11-16 (v3: the hand test's steps in a window test, AK-7; v2: `max_line_length` draws the right margin and a changed `.editorconfig` reaches open editors, AK-5, AK-6, #852; v1: 2026-11-02)
 - **Sources:** GEN (the reference's open EditorConfig plugin applies `.editorconfig` files to the
   editor: indentation, tab width, line breaks, trailing whitespace and final line break on save;
   F-081), STD (EditorConfig specification, editorconfig.org, read for the rules, not quoted: files
@@ -67,6 +67,14 @@ function is rebuilt from the public specification; no plugin code was read or po
   the new indentation, the status bar names it, the right margin moves; a created and a deleted
   `.editorconfig` count too; Synchronize reads it at once (window test of the harness,
   `crates/workbench/tests/it/editorconfig_live.rs`; unit tests of the change stamp).
+
+- **AK-7 (v3)** Hand test 63 in a window of the test harness with real keys
+  (`crates/workbench/tests/it/editorconfig_handtest_63.rs`: `hand_test_63_editorconfig_in_the_window`):
+  `[*.py]` with four spaces, `[Makefile]` with a tab of width 8, `[*.bat]` with CRLF and, for every
+  file, trimmed line ends and a final line break; Tab and typing in each file and ⌘S give the files
+  byte for byte (the caret line keeping its spaces); a changed `.editorconfig`, saved, switches the
+  open Python editor to two spaces at once. AK-4, next to the reference, follows the cases of
+  `docs/research/PLAN-F081.md`.
 
 ## Out of scope
 `charset` other than UTF-8 (IDECraft reads and writes UTF-8; the property is reported, not

@@ -1,6 +1,6 @@
 # SPEC-0076: Context actions from the editor (Alt+Enter)
 
-- **Version:** 8 · **Date:** 2026-11-13 (v2: problems on the caret's line count; hand test; v3: preview
+- **Version:** 9 · **Date:** 2026-11-16 (v9: Quick Actions open the context actions, behaviour 13, AK-10; eleventh package of docs/research/KEYMAP_COVERAGE.md); 2026-11-13 (v2: problems on the caret's line count; hand test; v3: preview
   of the selected action, one undo step for the whole action; v4: a title listed once, OBS-0027; v5: the
   list closes the problem's popup, OBS-0027 L12; v6: jdtls's refined diagnostics as context, unused code
   as a weak warning with its removal fix, OBS-0027 JQ1 and JQ2; v7: IDECraft's own Wrap using
@@ -90,6 +90,8 @@ editor.
     value without side effects), ⌥↩ and `code_actions` list the inspection's fix "Remove variable
     '<name>'" as a quick fix, applied by IDECraft. In the window the inspection's row and this action
     share the title and are listed once (behaviour v4). [OBS-0027 JQ1b; GEN]
+13. **Quick actions (v9):** `QuickActionPopup` (⌥⌘↩ in the bundled macOS keymap) opens the
+    context actions at the caret, as `ShowIntentionActions` does (behaviour 1). [GEN]
 
 ## Acceptance criteria
 - **AK-1** Actions and their edits on unsaved text: a quick fix offered only for the editor's text, and
@@ -124,6 +126,8 @@ editor.
   a list whose problems all sit at character 0 with no width is the build's; the refined list, an
   empty list and a mixed list are not. With jdtls, the live tests of AK-7 and AK-8 pass also on a
   machine under load (three runs of the live tests with a build running beside them).
+- **AK-10 (v9, behaviour 13)** `QuickActionPopup` is carried out (`docs/research/KEYMAP_COVERAGE.md`
+  lists it as mapped); the popup is the one of AK-1.
 
 ## Out of scope
 The bulb in the gutter, the inline action submenu (→), "Fix all in file", suppressing inspections,
@@ -146,3 +150,5 @@ it is clear why a refactoring is not available; not compared side by side yet.
   by jdtls (the reference reports them).
 - The reference names the removal "Remove local variable 'unused'"; jdtls offers "Remove 'unused' and all
   assignments" and "Remove 'unused', keep assignments with side effects".
+- **Quick actions (v9):** the reference's popup of quick actions groups actions of its
+  floating code toolbar; IDECraft has no such toolbar and shows the context actions.

@@ -1,6 +1,6 @@
 # SPEC-0293: Find tool window for Find Usages
 
-- **Version:** 11 · **Date:** 2026-11-17 (v11: without a language server for the file the window and MCP list the text occurrences with the reason, and in JavaScript and TypeScript a text occurrence inside a string or a comment is no usage, behaviours 10a and 11, AK-9 and AK-17; found on a CI runner without Node language servers, where `find_usages` failed instead of answering from the text as AK-9 asks); 2026-11-14 (v9: the filters by read access, write access and import statements, the nested folders, the module groups, Exclude and Include, and the export to a text file, under the ids of the bundled keymaps, behaviours 22–26, AK-14 and AK-15; sixth package of docs/research/KEYMAP_COVERAGE.md; v8: a place without a name is not searched and a search never stays in its searching state, behaviours 20 and 21, AK-13; window check of 2026-11-14: Find Usages in File at the first column of an annotated line opened the window searching for a symbol without a name); 2026-11-13 (v7: `FindUsagesInFile` shows only the usages in the file of the caret, behaviour 19, AK-12; v6: the grouping toggles under the ids of the bundled keymaps, behaviour 18, AK-11; docs/research/KEYMAP_COVERAGE.md; v5: a class or id selector of a stylesheet also lists its uses in HTML files, from IDECraft's own index and marked so, behaviour 17, AK-10; v4: in JavaScript and TypeScript the kinds come from the syntax tree and the members that implement or override the searched one are no usages, OBS-0028 T5, behaviours 14a and 16, AK-9); 2026-11-05 (v2: only the name is marked, OBS-0016; v3: grouped by usage kind, module, package, class and method, OBS-0016 defect F034-3)
+- **Version:** 11 · **Date:** 2026-11-17 (v11: without a language server for the file the window and MCP list the text occurrences with the reason, and in JavaScript and TypeScript a text occurrence inside a string or a comment is no usage, behaviours 10a and 11, AK-9 and AK-17; found on a CI runner without Node language servers, where `find_usages` failed instead of answering from the text as AK-9 asks); 2026-11-16 (v10: Find Usages with a choice of scope, behaviour 28, AK-16; eleventh package of docs/research/KEYMAP_COVERAGE.md); 2026-11-14 (v9: the filters by read access, write access and import statements, the nested folders, the module groups, Exclude and Include, and the export to a text file, under the ids of the bundled keymaps, behaviours 22–26, AK-14 and AK-15; sixth package of docs/research/KEYMAP_COVERAGE.md; v8: a place without a name is not searched and a search never stays in its searching state, behaviours 20 and 21, AK-13; window check of 2026-11-14: Find Usages in File at the first column of an annotated line opened the window searching for a symbol without a name); 2026-11-13 (v7: `FindUsagesInFile` shows only the usages in the file of the caret, behaviour 19, AK-12; v6: the grouping toggles under the ids of the bundled keymaps, behaviour 18, AK-11; docs/research/KEYMAP_COVERAGE.md; v5: a class or id selector of a stylesheet also lists its uses in HTML files, from IDECraft's own index and marked so, behaviour 17, AK-10; v4: in JavaScript and TypeScript the kinds come from the syntax tree and the members that implement or override the searched one are no usages, OBS-0028 T5, behaviours 14a and 16, AK-9); 2026-11-05 (v2: only the name is marked, OBS-0016; v3: grouped by usage kind, module, package, class and method, OBS-0016 defect F034-3)
 - **Sources:** OBS-0012 (side-by-side 2026-11-05 with `Inventory.java` of `java-basic`, record `Item`:
   ⌥F7 in the reference opens a tool window at the bottom, not a popup; its tab is named after the
   search, "<symbol> in Project Files"; a tree starts with the searched symbol, then a group of usages in
@@ -246,6 +246,11 @@ each use in view, without the list closing when you jump.
     what each changes: the filters, groupings, Exclude and Include change the view only, Export
     to Text File writes a file. `find_usages` is unchanged: it returns every usage with its
     kind, so an agent filters itself. [ADR-0008]
+28. **Find Usages with its settings (v10):** `ShowSettingsAndFindUsages` (⌥⇧⌘F7 in the bundled
+    macOS keymap) on a name asks for the scope in a list titled "Find Usages of <name>":
+    "Project Files" searches as `FindUsages` does (behaviour 1), "This File" as
+    `FindUsagesInFile` (v7 behaviour 19). Without a name at the caret nothing opens and the
+    status bar says so (v8 behaviour 20). [GEN]
 
 ## Acceptance criteria
 - **AK-1** Tree model: grouping by file, counts, labels, sorting, de-duplication, flat mode, expand and
@@ -329,6 +334,8 @@ each use in view, without the list closing when you jump.
   in a window of the test harness the file is written and named in the status bar, and without
   a result nothing is written (`sixth_package_keymap.rs::usages_are_exported_to_a_text_file`).
   The save dialog itself is not exercised by a test.
+- **AK-16 (v10, behaviour 28)** Window test `eleventh_package_keymap.rs`:
+  `find_usages_asks_for_the_scope` (title and the two scopes, macOS).
 - **AK-17 (v11, behaviour 10a)** Without a usable language server the search of `area` of the
   interface of AK-9 answers with the call in `describe` only, kind `call`, source `text` and a
   note that names the missing server, its install hint and that text occurrences are shown
@@ -365,3 +372,6 @@ call hierarchy below the preview.
   reference. Known differences: read and write access come from the usage kinds of behaviour 14,
   not from a language analysis; module groups come from dotted folder names; excluded usages
   are not skipped by a refactoring, because no refactoring of IDECraft runs from this window.
+- **Find Usages settings (v10):** the reference's dialog also offers the kinds of usages and
+  further scopes; IDECraft asks only for the two scopes it can search (the filters of v9 work
+  on the result).

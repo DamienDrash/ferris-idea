@@ -1,6 +1,6 @@
 # SPEC-0072: Code completion in the editor
 
-- **Version:** 14 · **Date:** 2026-11-15 (v14: Insert Live Template, behaviour 50, and Next and Previous Template Variable, behaviour 51, AK-33 and AK-34; tenth package of docs/research/KEYMAP_COVERAGE.md); 2026-11-14 (v13: Class name completion, behaviour 48, and inserting a suggestion with a dot, behaviour 49, AK-31 and AK-32; eighth package of docs/research/KEYMAP_COVERAGE.md; v12: the documentation panel prefers the right side of the list and
+- **Version:** 17 · **Date:** 2026-11-17 (v17: the server's list is ranked before it is cut to the number asked for, behaviour 54, AK-38; headless check of F-038, OBS-0081; v15 and v16 are taken by open changes); 2026-11-16 (v16 (v15 is taken by #878): Tab expands a Python live template named as typed, behaviour 53, AK-37 (behaviour 52 and AK-36 are taken by #878, AK-35 by #887); eleventh package of docs/research/KEYMAP_COVERAGE.md); 2026-11-16 (v15: in the `class` and `id` values of an HTML file the list opens while typing and the typed name includes `-`, behaviour 52, AK-36; OBS-0069 G1, with SPEC-0042 v22 behaviour 39); 2026-11-15 (v14: Insert Live Template, behaviour 50, and Next and Previous Template Variable, behaviour 51, AK-33 and AK-34; tenth package of docs/research/KEYMAP_COVERAGE.md); 2026-11-14 (v13: Class name completion, behaviour 48, and inserting a suggestion with a dot, behaviour 49, AK-31 and AK-32; eighth package of docs/research/KEYMAP_COVERAGE.md; v12: the documentation panel prefers the right side of the list and
   stays inside the editor area on the left, behaviour 16, AK-35; second window check of 2026-11-14; v11: Enter and Tab of the list are the keymap actions
   `EditorChooseLookupItem` and `EditorChooseLookupItemReplace`, behaviour 47; v10 2026-11-12; v2: ⌥Esc on macOS, IMP-0032; v3: the list opens by itself while typing;
   v4: every row is one line, long details are cut off with an ellipsis; v5: icons, highlighted prefix,
@@ -26,8 +26,15 @@
   `textDocument/definition`; The Python Language Reference: attribute lookup follows the method
   resolution order, the C3 linearisation of the base classes, and every class without bases
   derives from `object`; `dataclasses`: the methods the decorator may add), GEN (tried with
-  pyright 1.1.414: what its completion items carry, see behaviour 44)
-- **Feature matrix rows:** F-031
+  pyright 1.1.414: what its completion items carry, see behaviour 44); v17: OBS-0081 (headless on 2026-11-17:
+  `complete_code` after `r.` in a Rust file listed `into()` and `try_into()` before the type's own `area()`, which
+  rust-analyzer had preselected with a better sort text; in a PHP file the project's function `greet` was not among
+  the first 100 of intelephense's items for `gr`), STD (LSP: a client sorts completion items by `sortText`, the
+  label where it is missing; the order of the list as sent means nothing), OSS (rust-analyzer and intelephense
+  send their lists in an order of their own, not by sort text); v15: OBS-0069 G1 (the
+  reference lists the stylesheets' classes in an empty `class` value; IDECraft listed nothing, by
+  hand or while typing), STD (CSS identifiers hold `-`; HTML attribute values are quoted text)
+- **Feature matrix rows:** F-031, F-038
 
 ## Purpose
 Complete identifiers from the language server without leaving the keyboard, on the text as it is in the
@@ -367,6 +374,26 @@ editor.
     place; at the first place, and once Escape or leaving the text ended the template, ⇧Tab is the
     editor's again (unindent), as in the reference where the action is then not available. [OSS:
     ids and keys of the bundled keymaps; GEN]
+52. **v15 – Class names and ids in HTML:** in the value of a `class` or an `id` attribute of an
+    HTML file the suggestions are IDECraft's own (SPEC-0042 v22 behaviour 39). There the list
+    opens while typing as in behaviour 8 although the value is a string, the typed name (behaviour
+    2) reaches back to the start of the word in the value and includes `-` (`card-w`), and the list
+    narrows over `-` as over letters (behaviour 3); it closes when white space or the closing quote
+    is typed. The chosen name replaces the whole typed name. Elsewhere behaviours 2, 3 and 8 stay
+    as they are. [OBS-0069 G1; STD: CSS class names hold `-`]
+53. **v16 – Expand Live Template by Tab:** in a Python file, Tab with one caret and no
+    selection, list or template expands IDECraft's Python live template (behaviour 39) whose
+    name is exactly the word before the caret, at the start of a statement, as if it were chosen
+    in the list; a template whose name only starts with the word is not taken, and Tab then does
+    what it did. Only where the keymap in use binds Tab to `ExpandLiveTemplateByTab`. [OSS, GEN]
+54. **v17 – The best suggestions within the limit:** a server's list is put in the server's ranking
+    — preselected first, then by sort text ignoring case first, then by the exact sort text, items
+    without sort text last, the server's order where nothing decides (the order of behaviour 12)
+    — before it is cut to the number of suggestions asked for: the window's limit and the `limit`
+    of the MCP tool `complete_code`. `complete_code` returns its items in this order. Before v17
+    the first items in the order sent were kept and returned as they came, so with rust-analyzer
+    the type's own members came after methods of every type, and with intelephense a project
+    function could be cut off behind a hundred built-in ones (OBS-0081). [STD, OBS-0081]
 
 ## Acceptance criteria
 - **AK-1** Completion and definition on unsaved text that differs from the file on disk (integration
@@ -489,6 +516,20 @@ editor.
 - **AK-34 (v14, behaviour 51)** Tab and ⇧Tab walk an inserted template's places both ways, ⇧Tab
   selects what was typed into a place and goes back from the end; after Escape Tab is the
   editor's (`tenth_package_keymap.rs::tab_and_shift_tab_walk_a_templates_places`).
+- **AK-36 (v15, behaviour 52)** `completion_model::tests::css_names_keep_their_hyphen`: the typed
+  name of an HTML class value takes `-` along and white space ends it; in a window
+  (`crates/workbench/tests/it/f038_window.rs::obs_0069_class_names_are_offered_in_html`): typing `s`
+  in `class=""` opens the list by itself with `side`, typing `-` keeps a list of `side-bar`, Enter
+  writes the whole name.
+- **AK-37 (v16, behaviour 53)** Unit test
+  `workbench_keymap_eleventh::tests::tab_expands_only_a_template_named_as_typed`; window test
+  `eleventh_package_keymap.rs`: `tab_steps_out_of_pairs_and_expands_a_template` (macOS).
+- **AK-38 (v17, behaviour 54)** An unsorted list is ranked before the limit: preselected items
+  first, sort text ignoring case, items without sort text last; of 150 built-in items and one
+  better-ranked project function with a limit of 100 the function is kept and first
+  (`insight::tests::completion_is_ranked_before_the_limit`). Headless (OBS-0081): `complete_code`
+  after `r.` in a Rust file lists `w`, `h`, `area()` before `into()`; in a PHP file `greet` is among
+  the first 40 items for `gr`.
 
 ## Out of scope
 Parameter info (SPEC-0080), a live template library of IDECraft's own with its settings page,
@@ -532,3 +573,6 @@ hierarchies it cannot read completely, generated methods of decorated classes, w
 reference shows `object`). The reference shows a method's parameters as `(self)`; IDECraft shows
 pyright's bound signature `()`. IDECraft keeps the type in the right column and adds the origin
 after it (IMP-0315). The origin arrives a moment after the list instead of with it.
+- **Expand Live Template by Tab (v16):** only IDECraft's own Python templates expand on Tab.
+  The templates of other languages come from their language servers (behaviour 50), and Tab
+  does not wait for a server's answer; there ⌘J lists them.

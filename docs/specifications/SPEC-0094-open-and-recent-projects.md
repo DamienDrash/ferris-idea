@@ -1,6 +1,8 @@
 # SPEC-0094: Open project and recent projects
 
-- **Version:** 8 · **Date:** 2026-11-17 (v8: each recent project once, by its canonical path,
+- **Version:** 9 · **Date:** 2026-11-17 (v9: `recent_projects` needs the agent right
+  `recent-projects`, behaviour 23, AK-20 — security review: an agent of one project read the
+  folders of all the user's other projects); 2026-11-17 (v8: each recent project once, by its canonical path,
   behaviour 22, AK-19 — headless check of F-001, OBS-0077); 2026-11-15 (v7: a path to a file opens the file's project and the file in an editor, never a project with the file as its root, behaviours 18 to 21, AK-16 to AK-18 — window check of 2026-11-15, `idecraft ui <folder>/queries/file.sql` showed the file as the project folder and opened nothing; 2026-11-14 (v6: `NextWindow` and `PreviousWindow` step through every window of the application, behaviour 17, AK-15; sixth package of docs/research/KEYMAP_COVERAGE.md; v5: the popup's actions New Project…, Clone Repository… and its Open Projects section, behaviours 1 and 12 to 15, AK-10 to AK-14; the window that opens the popup or closes projects is read directly, behaviour 16 — crash of the window check of 2026-11-14 — comparison next to the reference of 2026-11-14, F-001; v4: the window's close button closes as Close Project,
   behaviour 11, AK-9; v3: closing project windows — the current one, all, all others —
   behaviours 6 to 10, AK-5 to AK-8; v2: next and previous project window, the keymap's `NextProjectWindow` and `PreviousProjectWindow`, behaviour 5, AK-4); 2026-11-01 (v1)
@@ -29,7 +31,8 @@ Switch between projects and open a new one without the command line.
    IDECraft settings folder (SPEC-0053: `$IDECRAFT_CONFIG_DIR`, else `$XDG_CONFIG_HOME/idecraft`, else
    `~/.config/idecraft`), one folder per line, at most 25. Folders that no longer exist are left out when
    the list is read. [GEN]
-4. Agents read the list through `recent_projects`. [ADR-0008]
+4. Agents read the list through `recent_projects` (v9: only with the `recent-projects` right,
+   behaviour 23). [ADR-0008]
 5. **Next and previous project window (v2):** `NextProjectWindow` (⌥⌘` in the macOS keymap, Ctrl+Alt+] in
    the default one) brings the project window opened after the current one to the front,
    `PreviousProjectWindow` (⌥⇧⌘`, Ctrl+Alt+[) the one opened before it; after the last comes the first, and
@@ -191,6 +194,18 @@ Switch between projects and open a new one without the command line.
     `…/proj`, `…/proj/` and `…/proj/../proj` (a list edited by hand, kept from an older version
     or written by another tool through a link such as `/tmp` for `/private/tmp` on macOS) showed the same
     project three times, against SPEC-0001 behaviour 1 and AK-1. [GEN]
+23. **The list is the user's, not the workspace's (v9):** the folders of the other recent
+    projects lie outside the workspace an agent is connected to and tell where the user's other
+    work is. `recent_projects` therefore checks the agent right `recent-projects` (SPEC-0053) before
+    it reads the list; the right is not granted unless the user grants it for the workspace
+    (in the grant file or by answering "Always for This Workspace" when the window asks a client
+    over HTTP). Without it the call is refused with the stable "not granted" text that names the
+    right `recent-projects`, its meaning and the grant entry to add, and returns no folder. With it
+    the tool returns the list as before and writes one line to the workspace's agent log with the
+    tool, the right and the number of folders, never their paths. The project popup, the next and
+    previous project window and every other use of the list inside IDECraft's own windows are
+    unaffected: the right governs agents only. Until v9 the tool needed no right, so every agent
+    connected to any project could read the folders of all others. [GEN, SPEC-0053]
 ## Acceptance criteria
 - **AK-1** Most recent first, no duplicates, missing folders left out, at most 25
   (`crates/core/tests/it/recent.rs`); the tool is listed (`crates/mcp/tests/it/protocol.rs`).
@@ -278,6 +293,13 @@ Switch between projects and open a new one without the command line.
   `..` and by its canonical path, and another folder, reads as the two canonical folders in order;
   remembering a link to the second puts that folder's canonical path first and the file holds
   each folder once. By hand: not needed (the popup reads the same list).
+- **AK-20 (v9, behaviour 23)** MCP protocol test
+  `protocol::recent_projects_needs_its_right_and_logs_the_read`: without the right (also with the
+  `write`, `vcs-write` and `settings` rights) the call is refused, the message starts with
+  "not granted:", names `recent-projects` and no folder, and nothing is logged; with the right it
+  lists the existing folder of the list (a missing one left out) and the agent log holds a line
+  with `recent_projects`, the right and `count` 1, without the folder's path. The effects table
+  names the check (`tests/it/effects.rs`). By hand: not needed (the popup does not use the tool).
 
 ## Out of scope
 A welcome screen without a project (v3: after the last window the folder chooser stands in for it), removing entries from the list, opening a project in the current

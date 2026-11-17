@@ -184,6 +184,68 @@ impl OracleSession {
         run
     }
 
+    /// The `PLAN_TABLE` rows of `statement` under `id` (`SPEC-0142` v4 behaviour 6): its old rows
+    /// are deleted, `EXPLAIN PLAN` writes the new ones, `select` reads them and they are deleted
+    /// again. The statement itself never runs. This also works on a read-only profile, whose
+    /// refusal would stop the plan's own `DELETE` and `EXPLAIN PLAN`: Oracle's `PLAN_TABLE` is a
+    /// temporary table private to the session. A schema with a `PLAN_TABLE` of its own would be
+    /// written to, so a read-only profile refuses the plan then.
+    pub async fn plan_rows(
+        &self,
+        statement: &str,
+        id: &str,
+        select: &str,
+    ) -> Result<Vec<Vec<Option<String>>>, DbError> {
+        let inner = Arc::clone(&self.inner);
+        let read_only = self.read_only;
+        let delete = format!("DELETE FROM plan_table WHERE statement_id = '{id}'");
+        let explain = format!("EXPLAIN PLAN SET STATEMENT_ID = '{id}' FOR {statement}");
+        let select = select.to_owned();
+        tokio::task::spawn_blocking(move || {
+            let mut inner = match inner.lock() {
+                Ok(i) => i,
+                Err(p) => p.into_inner(),
+            };
+            if read_only {
+                let (_, own) = rows(
+                    &inner.conn,
+                    "select count(*) from user_tables where table_name = 'PLAN_TABLE'",
+                )?;
+                if own
+                    .first()
+                    .and_then(|r| r.first())
+                    .cloned()
+                    .flatten()
+                    .as_deref()
+                    != Some("0")
+                {
+                    return Err(DbError {
+                        message: "the connection is read-only and the schema has a PLAN_TABLE of \
+                                  its own, which Explain Plan would write to"
+                            .into(),
+                        ..DbError::default()
+                    });
+                }
+            }
+            let step = |inner: &mut Inner, sql: &str| match execute(inner, sql) {
+                Outcome::Error(e) => Err(e),
+                _ => Ok(()),
+            };
+            step(&mut inner, &delete)?;
+            step(&mut inner, &explain)?;
+            let read = rows(&inner.conn, &select).map(|(_, rows)| rows);
+            let cleared = step(&mut inner, &delete);
+            let read = read?;
+            cleared?;
+            Ok(read)
+        })
+        .await
+        .map_err(|e| DbError {
+            message: e.to_string(),
+            ..DbError::default()
+        })?
+    }
+
     /// The rows of one query.
     pub async fn query(&self, sql: &str) -> Result<ResultSet, DbError> {
         let inner = Arc::clone(&self.inner);

@@ -1,8 +1,9 @@
 # SPEC-0155: Copyright, Properties and grammar checks
 
-- **Version:** 3 · **Date:** 2026-11-16 (v2: both places of a duplicate key are marked, each naming
+- **Version:** 4 · **Date:** 2026-11-16 (v2: both places of a duplicate key are marked, each naming
   the other, and ⌥↩ offers "Remove property"; typos with the built-in word list of SPEC-0159 v2 —
-  OBS-0066 P1, G1; v3: "Ignore '<text>'" and "Disable rule" for grammar findings — OBS-0066 G2)
+  OBS-0066 P1, G1; v3: "Ignore '<text>'" and "Disable rule" for grammar findings — OBS-0066 G2; v4:
+  the hand test's steps in a window test, AK-8; v1: 2026-11-03)
 - **Sources:** GEN (the reference bundles open plugins for copyright notices — a profile with a
   notice template, "Update Copyright" writing it as a comment at the top of a file —, for
   `.properties` files — duplicate keys, trailing spaces — and Grazie, which checks grammar and
@@ -111,6 +112,13 @@ behaviour; no plugin code was read or ported.
   harness: ⌥↩ on `an user`, "Ignore" chosen, the mark goes and the file holds the text; "Disable
   rule" on a repeated word turns the rule off in the profile
   (`f081_properties_grammar::grammar_finding_ignore_and_disable_rule`).
+
+- **AK-8 (v4)** Hand test 81, IDECraft's side, in a window of the test harness
+  (`crates/workbench/tests/it/open_plugin_handtests.rs`: `hand_test_81_copyright_properties_and_grammar`):
+  Code › Update Copyright in a Java and a Python file writes the notice at the top and a second run
+  changes nothing; a properties file's duplicate key and trailing spaces are marked and ⌥↩ removes
+  the spaces; a repeated word and a wrong article in a README are marked and ⌥↩ corrects each. AK-4,
+  next to the reference, follows `docs/research/PLAN-F081.md`.
 
 ## Out of scope
 Copyright scopes, per-language formatting options, updating on save or commit; resource bundles

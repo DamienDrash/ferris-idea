@@ -3375,7 +3375,10 @@ impl Render for SettingsView {
                     )
                     .child(
                         div().text_color(c(p.ui_dim)).text_xs().child(
-                            "Enter enables or disables · Space grants or withdraws its permissions · ⇧Delete revokes network grants · Delete twice removes · ⌘O installs",
+                            idecraft_ui::keymap::local_keys(
+                                "Enter enables or disables · Space grants or withdraws its permissions · ⇧Delete revokes network grants · Delete twice removes · ⌘O installs",
+                                cfg!(target_os = "macos"),
+                            ),
                         ),
                     )
                     .when_some(self.plugin_review.clone(), |d, (_, review)| {

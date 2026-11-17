@@ -1,6 +1,7 @@
 # SPEC-0135: Oracle dialect without a connection
 
-- **Version:** 1 · **Date:** 2026-11-02
+- **Version:** 2 · **Date:** 2026-11-17 (v2: a column's default and identity clause before `NOT NULL`,
+  behaviour 5, AK-5 — OBS-0083 L2); 2026-11-02 (v1)
 - **Sources:** GEN (database IDEs support Oracle next to the other systems: scripts with PL/SQL
   blocks, completion, quoting, DDL for schema changes; F-060), STD (Oracle SQL and PL/SQL lexical
   rules: `"identifier"`, `'…'` with `''`, alternative quoting `q'[…]'`/`nq'…'` with paired
@@ -33,6 +34,9 @@ protocol is known; the choice is the project owner's (PO-STATUS open question).
    (type, `DEFAULT …`/`DEFAULT NULL`, `NULL`/`NOT NULL`), because restating an unchanged `NOT NULL`
    is an error; constraints and indexes as in PostgreSQL. Renames use `RENAME COLUMN … TO` and
    `RENAME TO`. [STD]
+   **v2 (OBS-0083 L2):** in a column definition the default and the identity clause come before
+   `NOT NULL` (`"STATE" VARCHAR2(10) DEFAULT 'new' NOT NULL`); Oracle refuses `NOT NULL DEFAULT …`
+   with ORA-03076, so generated DDL for a `NOT NULL` column with a default did not run. [STD]
 6. **Completion:** the common keywords plus `dual`, `rownum`, `sysdate`, `systimestamp`, `nvl`,
    `decode`, `fetch first … rows only`, `connect by prior`, `start with`, `merge`, `varchar2`,
    `number`, `clob`, PL/SQL `begin`/`declare`/`exception`, `returning`, `minus`. [STD]
@@ -48,6 +52,8 @@ protocol is known; the choice is the project owner's (PO-STATUS open question).
   MCP splits an Oracle script (`crates/mcp/tests/it/protocol.rs`: `language_and_sql_tools`).
 - **AK-4** Window self-test: Oracle in the connection dialog, Test Connection names the missing
   driver.
+- **AK-5 (v2)** `ddl::tests::oracle_ddl_puts_default_and_identity_before_not_null`: identity and
+  default before `NOT NULL`, never `NOT NULL DEFAULT`, comments as `COMMENT ON`; live in SPEC-0142 AK-7.
 
 ## Out of scope
 A session, catalog and plans (they need the driver), PL/SQL language intelligence, packages and

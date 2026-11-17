@@ -48,6 +48,9 @@ struct Host {
     home: PathBuf,
     /// A folder on the host's `PATH`, empty at first.
     bin: PathBuf,
+    /// This test's turn among the tests of this program that start a backend on a test host
+    /// (dropped last, after the server and the folders).
+    _turn: idecraft_remote::testing::HostTurn,
 }
 
 impl Drop for Host {
@@ -59,6 +62,7 @@ impl Drop for Host {
 /// A ready test host whose sessions have `HOME` and a `PATH` folder of the test's own; `None`
 /// without `sshd` or `ssh-keygen`.
 fn host(tag: &str) -> Option<Host> {
+    let turn = idecraft_remote::testing::one_host_at_a_time();
     let base = std::env::temp_dir().join(format!("idecraft-f083-app-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
     std::fs::create_dir_all(base.join("home/bin")).unwrap();
@@ -79,6 +83,7 @@ fn host(tag: &str) -> Option<Host> {
         base,
         home,
         bin,
+        _turn: turn,
     })
 }
 
@@ -94,7 +99,15 @@ fn workspace(base: &Path) -> PathBuf {
     root
 }
 
+/// How many times as long a call on a host may take as in the product (`SPEC-0121` behaviour 2):
+/// several builds in parallel slow the test `sshd` far beyond a normal machine.
+const STRETCH: u32 = 4;
+
 fn window(root: &Path, cx: &mut TestAppContext) -> (Bench, &'static mut VisualTestContext) {
+    // Nothing of the user's SSH setup: the host list reads an empty config of the test's own,
+    // every `ssh` carries a `-F` of its own, and a read of `~/.ssh/config` fails the test.
+    idecraft_remote::testing::isolate_ssh();
+    idecraft_remote::testing::stretch_limits(STRETCH);
     idecraft_workbench::hit_targets::enable();
     idecraft_workbench::semantics::set_consumer(
         idecraft_workbench::semantics::Consumer::SelfTest,
@@ -115,8 +128,10 @@ fn window(root: &Path, cx: &mut TestAppContext) -> (Bench, &'static mut VisualTe
     cx.simulate_resize(gpui::size(px(1372.), px(860.)));
     cx.run_until_parked();
     // The backend is this build's `idecraft`, not the test binary the window runs in.
+    let empty = idecraft_remote::testing::empty_ssh_config(&settings);
     bench.update(cx, |b, _| {
-        b.set_remote_backend_binary(PathBuf::from(env!("CARGO_BIN_EXE_idecraft")))
+        b.set_remote_backend_binary(PathBuf::from(env!("CARGO_BIN_EXE_idecraft")));
+        b.set_remote_ssh(empty);
     });
     (bench, cx)
 }
@@ -154,20 +169,39 @@ fn place(bench: &Bench, cx: &mut VisualTestContext) -> Option<PathBuf> {
     })
 }
 
+/// The rows of the Remote Host window for a failure message: all of them inside a folder of the
+/// test (the temporary folder), otherwise only their count and the rows naming the test's own
+/// host, so that a message never lists hosts or files of the user.
+fn rows_for_message(place: Option<&str>, texts: &[String]) -> String {
+    let tmp = std::env::temp_dir();
+    let inside = |p: &Path| {
+        p.starts_with(&tmp)
+            || tmp.canonicalize().is_ok_and(|t| p.starts_with(t))
+            || p.starts_with("/tmp")
+            || p.starts_with("/private/tmp")
+    };
+    if place.is_some_and(|p| inside(Path::new(p))) {
+        return format!("{texts:#?}");
+    }
+    let own: Vec<&String> = texts.iter().filter(|t| t.contains("idecraft-")).collect();
+    format!("{} rows, the test host's: {own:?}", texts.len())
+}
+
 /// The Remote Host window and the status bar, for a failure message.
 fn state(bench: &Bench, cx: &mut VisualTestContext) -> String {
     bench.read_with(cx, |b, cx| {
         let view = b.remote_view().map(|v| {
             let v = v.read(cx);
+            let place = v.place().map(|(_, p)| p.clone());
             format!(
-                "place {:?} field {:?} busy {} error {:?} backend {:?} selected {:?} rows {:#?}",
-                v.place(),
+                "place {:?} field {:?} busy {} error {:?} backend {:?} selected {:?} rows {}",
+                place,
                 v.field_text(cx),
                 v.busy(),
                 v.error(),
                 v.backend(),
                 v.selected_text(),
-                v.texts()
+                rows_for_message(place.as_deref(), &v.texts())
             )
         });
         format!(
@@ -248,7 +282,13 @@ fn select(bench: &Bench, cx: &mut VisualTestContext, part: &str) {
         let want = rows
             .iter()
             .position(|t| t.contains(part))
-            .unwrap_or_else(|| panic!("no row with {part:?}: {rows:#?}"));
+            .unwrap_or_else(|| {
+                let at = place(bench, cx).map(|p| p.display().to_string());
+                panic!(
+                    "no row with {part:?}: {}",
+                    rows_for_message(at.as_deref(), &rows)
+                )
+            });
         let at = selected
             .and_then(|s| rows.iter().position(|t| *t == s))
             .unwrap_or(0);

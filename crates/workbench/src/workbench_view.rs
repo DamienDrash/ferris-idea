@@ -106,6 +106,8 @@ pub(crate) mod java_actions;
 mod keymap_action_impl;
 #[path = "workbench_keymap_eighth.rs"]
 mod keymap_eighth_impl;
+#[path = "workbench_keymap_eleventh.rs"]
+mod keymap_eleventh_impl;
 #[path = "workbench_keymap_more.rs"]
 mod keymap_more_impl;
 #[path = "workbench_keymap_ninth.rs"]
@@ -296,6 +298,9 @@ struct Completion {
     /// The typed name when the list opened: servers filter by it, so a name that no longer
     /// extends it is asked for again (SPEC-0072 v9 behaviour 43).
     opened_with: String,
+    /// The list is of class names or ids in an HTML value: the typed name holds `-` (SPEC-0072
+    /// v15 behaviour 52).
+    css_names: bool,
     _watch: gpui::Subscription,
 }
 
@@ -514,6 +519,9 @@ pub struct WorkbenchView {
     groups: Vec<Split>,
     layout: crate::editor_layout::Layout,
     focused_group: crate::editor_layout::GroupId,
+    /// The keyboard focus is in the focused group's editor and the window is active: its
+    /// selected tab draws in the active colours (`SPEC-0061` v19 behaviour 6a).
+    tabs_have_focus: bool,
     /// Closed files for `ReopenClosedTab` (SPEC-0059 v9 behaviour 19).
     closed_tabs: crate::tabs::ClosedTabs,
     /// The open tab list or Switcher (SPEC-0059 v9 behaviours 15 and 19).
@@ -1422,6 +1430,7 @@ impl WorkbenchView {
             groups: Vec::new(),
             layout: Default::default(),
             focused_group: crate::editor_layout::MAIN,
+            tabs_have_focus: false,
             closed_tabs: Default::default(),
             tab_list: None,
             tab_scrolls: Default::default(),
@@ -2139,7 +2148,10 @@ impl WorkbenchView {
                 if self.find_usages.is_some() {
                     self.toggle_flag_window(w, window, cx);
                 } else {
-                    self.status = Some("No usages searched yet (⌥F7)".into());
+                    self.status = Some(format!(
+                        "No usages searched yet{}",
+                        crate::keymaps::in_parens(&crate::keymaps::label("FindUsages"))
+                    ));
                     cx.notify();
                 }
             }
@@ -3884,12 +3896,8 @@ impl WorkbenchView {
             .iter()
             .find(|c| c.name == name)
             .and_then(|c| {
-                let key = if cfg!(target_os = "macos") {
-                    "⌃D"
-                } else {
-                    "⇧F9"
-                };
-                crate::run_model::page_run_status(c, key)
+                let key = crate::keymaps::label("Debug");
+                crate::run_model::page_run_status(c, &key)
             })
         {
             // SPEC-0133 v2 behaviour 1 (hand test 60).
@@ -7095,9 +7103,11 @@ impl WorkbenchView {
                 }
                 if changed > 0 {
                     // SPEC-0128 v4 behaviour 7: how to take the file changes back.
-                    msg.push_str(
-                        "; ⌘Z in an open file takes its change back, Show History has the old text of the others",
-                    );
+                    let undo = crate::keymaps::label("$Undo");
+                    msg.push_str(&format!(
+                        "; {} in an open file takes its change back, Show History has the old text of the others",
+                        if undo.is_empty() { "Undo".to_owned() } else { undo }
+                    ));
                 }
                 this.status = Some(msg);
                 this.db_rename = None;
@@ -9533,9 +9543,19 @@ impl WorkbenchView {
         view
     }
 
-    /// Uses these extra `ssh` arguments for every host (tests: a private config and key).
+    /// Uses these extra `ssh` arguments for every host (tests: a private config and key). A
+    /// `-F <config>` among them is also where the host list comes from.
     pub fn set_remote_ssh(&mut self, extra: Vec<String>) {
         self.remote_extra = extra;
+    }
+
+    /// The SSH configuration the Remote Host window lists its hosts from: `~/.ssh/config`, or the
+    /// `-F` file of [`Self::set_remote_ssh`] (tests).
+    pub fn remote_ssh_config(&self) -> PathBuf {
+        let home = std::env::var_os("HOME")
+            .map(PathBuf::from)
+            .unwrap_or_default();
+        idecraft_remote::ssh_config_file(&self.remote_extra, &home)
     }
 
     /// A target from what the user typed: an alias or `[user@]host[:port]`.
@@ -9545,15 +9565,9 @@ impl WorkbenchView {
 
     fn load_remote_hosts(&mut self, cx: &mut Context<Self>) {
         let extra = self.remote_extra.clone();
-        let task = cx.background_executor().spawn(async move {
-            let home = std::env::var_os("HOME")
-                .map(PathBuf::from)
-                .unwrap_or_default();
-            idecraft_remote::config_hosts(&home)
-                .iter()
-                .map(|a| idecraft_remote::describe(a, &extra))
-                .collect::<Vec<_>>()
-        });
+        let task = cx
+            .background_executor()
+            .spawn(async move { idecraft_remote::host_list(&extra) });
         cx.spawn(async move |this, cx| {
             let hosts = task.await;
             let _ = this.update(cx, |this, cx| {
@@ -14565,6 +14579,10 @@ impl WorkbenchView {
                                 this.problem_hover(*start, cx)
                             }
                         }
+                        EditorEvent::Note(note) => {
+                            this.status = Some(note.clone());
+                            cx.notify();
+                        }
                         EditorEvent::DocHover(start) => {
                             if this.active_path().as_deref() == Some(path.as_path()) {
                                 this.doc_hover(*start, window, cx)
@@ -14669,7 +14687,15 @@ impl WorkbenchView {
                 line_text,
             )
         };
-        let word_start = completion_model::word_start(&line_text, column);
+        // In a `class` or `id` value of an HTML file the typed name reaches back to the start of
+        // the word, `-` included (SPEC-0072 v15 behaviour 52).
+        let word_start = language
+            .filter(|l| *l == idecraft_languages::LanguageId::Html)
+            .and_then(|_| {
+                idecraft_languages::html_css::value_word(&text, line as u64, column as u64)
+            })
+            .map(|start| (start as usize).min(column))
+            .unwrap_or_else(|| completion_model::word_start(&line_text, column));
         let start = caret - (column - word_start);
         let asked_revision = editor.read(cx).revision();
         let asked_editor = editor.clone();
@@ -14876,6 +14902,17 @@ impl WorkbenchView {
                 .flatten()
                 .unwrap_or_default()
         };
+        // Class names or ids in an HTML value (SPEC-0072 v15 behaviour 52).
+        let css_names = idecraft_languages::html_css::is_html(&path) && {
+            let e = editor.read(cx);
+            let s = e.status();
+            idecraft_languages::html_css::value_word(
+                &e.state.buffer.text(),
+                (s.line - 1) as u64,
+                (s.column - 1) as u64,
+            )
+            .is_some()
+        };
         let watch = cx.observe(&editor, |this, _, cx| this.refilter_completion(cx));
         self.completion = Some(Completion {
             path,
@@ -14890,6 +14927,7 @@ impl WorkbenchView {
             details_asked: Default::default(),
             origins_asked: false,
             opened_with,
+            css_names,
             _watch: watch,
         });
         self.refilter_completion(cx);
@@ -15414,7 +15452,7 @@ impl WorkbenchView {
                 (caret >= c.start)
                     .then(|| e.state.buffer.slice(c.start..caret).ok())
                     .flatten()
-                    .filter(|p| p.chars().all(|ch| ch.is_alphanumeric() || ch == '_'))
+                    .filter(|p| completion_model::is_typed_name(p, c.css_names))
             }
             _ => None,
         };
@@ -15547,6 +15585,40 @@ impl WorkbenchView {
                     1
                 });
             }
+            // At several carets the text goes in at every caret, without tab stops
+            // (SPEC-0025 v5 behaviour 10): the selection, or as many chars before an empty caret
+            // as were typed at the primary one, with Tab also the rest of the identifier.
+            let primary = e.state.carets.primary();
+            let typed = caret.saturating_sub(c.start);
+            let others: Vec<std::ops::Range<usize>> = e
+                .state
+                .carets
+                .carets()
+                .iter()
+                .filter(|k| (k.anchor, k.head) != (primary.anchor, primary.head))
+                .map(|k| {
+                    let p = buffer.offset_to_position(k.head).unwrap_or_default();
+                    let line_start = k.head - p.column;
+                    let rest = if replace && k.anchor == k.head {
+                        let line = buffer.line(p.line).unwrap_or_default();
+                        completion_model::identifier_rest(
+                            &line.chars().skip(p.column).collect::<String>(),
+                        )
+                    } else {
+                        0
+                    };
+                    completion_model::caret_range(k.anchor, k.head, typed, rest, line_start)
+                })
+                .filter(|r| r.end <= start || r.start >= end)
+                .collect();
+            if !others.is_empty() {
+                expanded.stops.clear();
+                past_parens = None;
+            }
+            let apart = |r: &std::ops::Range<usize>| {
+                (r.end <= start || r.start >= end)
+                    && others.iter().all(|o| r.end <= o.start || r.start >= o.end)
+            };
             // Edits elsewhere (an import) in the same undo step (v7 behaviour 20).
             let mut edits: Vec<(std::ops::Range<usize>, String)> = item
                 .additional_edits
@@ -15554,18 +15626,41 @@ impl WorkbenchView {
                 .filter_map(|a| {
                     let r = offset(a.range.start_line, a.range.start_character)?
                         ..offset(a.range.end_line, a.range.end_character)?;
-                    (r.end <= start || r.start >= end).then(|| (r, a.text.clone()))
+                    apart(&r).then(|| (r, a.text.clone()))
                 })
                 .collect();
+            let imports = edits.len();
             let before: isize = edits
                 .iter()
                 .filter(|(r, _)| r.end <= start)
                 .map(|(r, t)| t.chars().count() as isize - r.len() as isize)
                 .sum();
             edits.push((start..end, expanded.text.clone()));
-            edits.sort_by_key(|(r, _)| r.start);
+            for r in &others {
+                edits.push((r.clone(), expanded.text.clone()));
+            }
+            // Which edits put the suggestion in, after sorting.
+            let mut tagged: Vec<(usize, (std::ops::Range<usize>, String))> =
+                edits.into_iter().enumerate().collect();
+            tagged.sort_by_key(|(_, (r, _))| r.start);
+            let at_carets: Vec<bool> = tagged.iter().map(|(i, _)| *i >= imports).collect();
+            let edits: Vec<(std::ops::Range<usize>, String)> =
+                tagged.into_iter().map(|(_, e)| e).collect();
             asked = Some((before_text, start));
             e.replace_ranges(&edits, cx);
+            if !others.is_empty() {
+                let carets: Vec<idecraft_editor::Caret> = completion_model::ends_after(&edits)
+                    .into_iter()
+                    .zip(at_carets)
+                    .filter(|(_, mine)| *mine)
+                    .map(|(at, _)| idecraft_editor::Caret::at(at))
+                    .collect();
+                e.state.carets.moved_to(carets);
+                // The late import of behaviour 20 needs a single caret.
+                asked = None;
+                cx.notify();
+                return;
+            }
             let at = (start as isize + before).max(0) as usize;
             let after_text = at + expanded.text.chars().count();
             if let Some(skip) = past_parens {
@@ -16020,6 +16115,32 @@ impl WorkbenchView {
                 return;
             }
         }
+        // Tab out of a pair and a Python template expanded by Tab, where the keymap binds Tab to
+        // them (SPEC-0056 v6 behaviour 22, SPEC-0072 v16 behaviour 53).
+        if self.completion.is_none()
+            && self.snippet.is_none()
+            && event.keystroke.key == "tab"
+            && self
+                .active_editor()
+                .is_some_and(|e| e.read(cx).focus().is_focused(window))
+        {
+            let k = &event.keystroke;
+            let keymap = crate::keymaps::current();
+            let bound = Keystroke::from_platform(
+                &k.key,
+                k.modifiers.control,
+                k.modifiers.alt,
+                k.modifiers.shift,
+                k.modifiers.platform,
+            )
+            .map(|s| keymap.actions_for(&s, None))
+            .unwrap_or_default();
+            if self.tab_out_or_expand(&bound, cx) {
+                cx.stop_propagation();
+                cx.notify();
+                return;
+            }
+        }
         let Some(open) = self.completion.as_ref() else {
             return;
         };
@@ -16146,6 +16267,21 @@ impl WorkbenchView {
         self.completion
             .as_ref()
             .map(|c| c.shown.iter().map(|i| i.label.trim().to_owned()).collect())
+    }
+
+    /// The rows of the open list as drawn: label and the grey text at the right edge (SPEC-0072
+    /// v5 behaviour 10; `style.css:1` for a class name, SPEC-0042 v22 behaviour 39).
+    pub fn completion_rows(&self) -> Option<Vec<(String, String)>> {
+        let c = self.completion.as_ref()?;
+        Some(
+            c.shown
+                .iter()
+                .map(|i| {
+                    let row = completion_model::row(i, &c.prefix);
+                    (row.label, row.type_text)
+                })
+                .collect(),
+        )
     }
 
     fn completion_popup(&self, window_w: f32, cx: &mut Context<Self>) -> Option<impl IntoElement> {
@@ -16420,7 +16556,23 @@ impl WorkbenchView {
             .buffer
             .line(here.line)
             .unwrap_or_default();
-        let old = usages_model::word_at(line.trim_end_matches(['\n', '\r']), here.column);
+        // A class or id starts the popup whole and without its mark, also on the mark and with a
+        // `-` in it (SPEC-0042 v22 behaviour 38).
+        let css_name = (idecraft_languages::html_css::is_html(&here.path)
+            || idecraft_languages::html_css::is_stylesheet(&here.path))
+        .then(|| {
+            idecraft_languages::html_css::name_at(
+                &here.path,
+                &editor.read(cx).state.buffer.text(),
+                here.line as u64,
+                here.column as u64,
+            )
+        })
+        .flatten();
+        let checked_by_planner = css_name.is_some();
+        let old = css_name.unwrap_or_else(|| {
+            usages_model::word_at(line.trim_end_matches(['\n', '\r']), here.column)
+        });
         if old.is_empty() {
             return;
         }
@@ -16428,7 +16580,14 @@ impl WorkbenchView {
         self.introduced_name = None;
         self.extract_name_prompt = None;
         let options = self.rename_options;
-        let view = cx.new(|cx| GotoView::rename(&old, options, cx));
+        let view = cx.new(|cx| {
+            let popup = GotoView::rename(&old, options, cx);
+            if checked_by_planner {
+                popup.with_name_checked_by_planner()
+            } else {
+                popup
+            }
+        });
         self.show_goto(view, window, cx);
     }
 
@@ -16463,6 +16622,20 @@ impl WorkbenchView {
             .map(|(p, e)| (p.clone(), e.read(cx).state.buffer.text()))
             .collect();
         let options = self.rename_options;
+        // A class or id is renamed by IDECraft itself in the open pages and stylesheets as their
+        // editors show them (SPEC-0042 v22 behaviour 38c, SPEC-0220 v4 behaviour 13).
+        let css = |p: &Path| {
+            idecraft_languages::html_css::is_html(p)
+                || idecraft_languages::html_css::is_stylesheet(p)
+        };
+        let shown: Vec<(PathBuf, String)> = if css(&at.path) {
+            open.iter()
+                .filter(|(p, _)| css(p))
+                .map(|(p, t)| (p.clone(), t.clone()))
+                .collect()
+        } else {
+            Vec::new()
+        };
         self.status = Some(format!("Renaming to {new_name}…"));
         cx.notify();
         let root = self.root.clone();
@@ -16475,16 +16648,17 @@ impl WorkbenchView {
                         .enable_all()
                         .build()
                         .map_err(|e| e.to_string())?;
+                    let planning = idecraft_languages::rename::plan_rename_in(
+                        &root,
+                        &from.path,
+                        Some(&text),
+                        from.line as u64,
+                        from.column as u64,
+                        &name,
+                        std::time::Duration::from_secs(30),
+                    );
                     let plan = rt
-                        .block_on(idecraft_languages::rename::plan_rename_in(
-                            &root,
-                            &from.path,
-                            Some(&text),
-                            from.line as u64,
-                            from.column as u64,
-                            &name,
-                            std::time::Duration::from_secs(30),
-                        ))
+                        .block_on(idecraft_languages::shown::scope(shown, planning))
                         .map_err(|e| e.to_string())?;
                     let mut plan = plan;
                     if introduced.as_deref() == Some(plan.old_name.as_str()) {
@@ -17584,7 +17758,10 @@ impl WorkbenchView {
             match refactoring {
                 Refactoring::Inline => self.inline_sql(&here.path, &editor, cx),
                 Refactoring::Any => self.show_intentions(window, cx),
-                other => self.hold_status(crate::sql_editor_model::not_offered(other.name()), cx),
+                other => self.hold_status(
+                    crate::sql_editor_model::not_offered(other.name(), crate::keymaps::label),
+                    cx,
+                ),
             }
             return;
         }
@@ -18334,8 +18511,9 @@ impl WorkbenchView {
                     cx,
                 );
                 self.status = Some(format!(
-                    "Inspection '{}' no longer highlighted; its fix stays in ⌥↩",
-                    idecraft_languages::inspections::name_of(id)
+                    "Inspection '{}' no longer highlighted; its fix stays in the context actions{}",
+                    idecraft_languages::inspections::name_of(id),
+                    crate::keymaps::in_parens(&crate::keymaps::label("ShowIntentionActions"))
                 ));
                 cx.notify();
                 return;
@@ -18764,6 +18942,7 @@ impl WorkbenchView {
         let sql_file = path
             .extension()
             .is_some_and(|e| e.eq_ignore_ascii_case("sql"));
+        let html_file = idecraft_languages::html_css::is_html(&path);
         self.auto_complete_seq += 1;
         let seq = self.auto_complete_seq;
         cx.spawn_in(window, async move |this, cx| {
@@ -18777,7 +18956,19 @@ impl WorkbenchView {
                         .buffer
                         .slice(caret.saturating_sub(64)..caret)
                         .unwrap_or_default();
-                    let in_text = caret > 0 && e.in_comment_or_string(caret - 1);
+                    // A `class` or `id` value of an HTML file is a string that still opens the
+                    // list (SPEC-0072 v15 behaviour 52).
+                    let in_text = caret > 0
+                        && e.in_comment_or_string(caret - 1)
+                        && !(html_file && {
+                            let s = e.status();
+                            idecraft_languages::html_css::value_word(
+                                &e.state.buffer.text(),
+                                (s.line - 1) as u64,
+                                (s.column - 1) as u64,
+                            )
+                            .is_some()
+                        });
                     !in_text
                         && (completion_model::auto_trigger(&before)
                             || sql_file
@@ -18916,7 +19107,7 @@ impl WorkbenchView {
         let blocks = doc_block_elements(&doc.blocks, p);
         // The first fix and "More actions…" of a problem popup (SPEC-0078 v2 behaviours 5–6).
         let links = doc.problem.as_ref().map(|problem| {
-            let link = |id: &'static str, label: String, keys: &'static str| {
+            let link = |id: &'static str, label: String, keys: String| {
                 div()
                     .id(id)
                     .flex()
@@ -18934,12 +19125,24 @@ impl WorkbenchView {
                 .flex()
                 .gap_4()
                 .when_some(problem.fix.clone(), |d, title| {
-                    d.child(link("problem-fix-link", title, "⌥⇧↩").on_click(
-                        cx.listener(|this, _, window, cx| this.apply_first_fix(window, cx)),
-                    ))
+                    d.child(
+                        link(
+                            "problem-fix-link",
+                            title,
+                            crate::keymaps::label("MoveToolWindowTabToEditorAction"),
+                        )
+                        .on_click(
+                            cx.listener(|this, _, window, cx| this.apply_first_fix(window, cx)),
+                        ),
+                    )
                 })
                 .child(
-                    link("problem-more-actions", "More actions…".into(), "⌥↩").on_click(
+                    link(
+                        "problem-more-actions",
+                        "More actions…".into(),
+                        crate::keymaps::label("ShowIntentionActions"),
+                    )
+                    .on_click(
                         cx.listener(|this, _, window, cx| this.problem_more_actions(window, cx)),
                     ),
                 )
@@ -21597,7 +21800,12 @@ impl WorkbenchView {
                     Ok(text) if !text.is_empty() => {
                         alt.shown.push(text.clone());
                         alt.index = alt.shown.len() - 1;
-                        this.status = Some(format!("Suggestion {} (⌥[ goes back)", alt.index + 1));
+                        let back = crate::keymaps::label("PrevInlineCompletionSuggestionAction");
+                        this.status = Some(if back.is_empty() {
+                            format!("Suggestion {}", alt.index + 1)
+                        } else {
+                            format!("Suggestion {} ({back} goes back)", alt.index + 1)
+                        });
                         editor.update(cx, |e, cx| e.set_ghost(at, revision, text, cx));
                     }
                     Ok(_) => this.status = Some("No other suggestion".into()),
@@ -22942,8 +23150,10 @@ impl WorkbenchView {
     pub fn open_rebase(&mut self, onto: &str, window: &mut Window, cx: &mut Context<Self>) {
         if self.remote_project.is_some() {
             if onto.is_empty() {
-                self.status =
-                    Some("Interactive rebase: start from a commit in the Git log (⌥I)".into());
+                self.status = Some(idecraft_ui::keymap::local_keys(
+                    "Interactive rebase: start from a commit in the Git log (⌥I)",
+                    cfg!(target_os = "macos"),
+                ));
                 cx.notify();
             } else {
                 self.remote_open_rebase(onto.to_owned(), None, window, cx);
@@ -22957,10 +23167,10 @@ impl WorkbenchView {
                     .find(|t| t.current)
                     .and_then(|t| t.upstream)
                     .ok_or_else(|| {
-                        idecraft_vcs::GitError::Rejected(
-                            "the branch has no upstream; start from a commit in the Git log (⌥I)"
-                                .into(),
-                        )
+                        idecraft_vcs::GitError::Rejected(idecraft_ui::keymap::local_keys(
+                            "the branch has no upstream; start from a commit in the Git log (⌥I)",
+                            cfg!(target_os = "macos"),
+                        ))
                     })?
             } else {
                 onto.to_owned()
@@ -25540,6 +25750,32 @@ impl WorkbenchView {
         cx.notify();
     }
 
+    /// Jump to Source (`EditSource`, SPEC-0124 v18 behaviour 20): with the Project tree focused the
+    /// selected file opens in the editor, which takes the focus, as ⌘↓ (F4) does there; elsewhere
+    /// the active editor takes the focus. False when there is neither.
+    fn jump_to_source(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        if self.tree_focus.is_focused(window) {
+            let command = crate::tree_nav::on_key(
+                &self.tree.nav_rows(),
+                self.tree.selected_row(),
+                crate::tree_nav::TreeKey::Open,
+            );
+            if let Some(path) = self.tree.apply(command) {
+                self.open(&path, window, cx);
+                self.focus_editor(window, cx);
+                cx.notify();
+                return true;
+            }
+            return false;
+        }
+        if self.active_editor().is_none() {
+            return false;
+        }
+        self.focus_editor(window, cx);
+        cx.notify();
+        true
+    }
+
     /// Carries out a workbench action by id; returns whether it is one (behaviour 6 of SPEC-0059,
     /// also used by Search Everywhere, SPEC-0067).
     fn run_action(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) -> bool {
@@ -25592,6 +25828,8 @@ impl WorkbenchView {
             "Diff.PrevChange" => return self.compare_neighbour_file(false, window, cx),
             "Diff.ShowSettingsPopup" => return self.show_diff_settings(window, cx),
             "CompareTwoFiles" => self.compare_two_files(window, cx),
+            // View › Jump to Source (SPEC-0124 v18 behaviour 20).
+            "EditSource" => return self.jump_to_source(window, cx),
             // The Commit tool window (SPEC-0063 v9 behaviour 21).
             "Diff.ShowDiff"
             | "Vcs.ToggleAmendCommitMode"
@@ -25682,6 +25920,8 @@ impl WorkbenchView {
             _ if self.run_ninth_package_action(id, window, cx) => {}
             // The tenth package (`workbench_keymap_tenth.rs`).
             _ if self.run_tenth_package_action(id, window, cx) => {}
+            // The eleventh package (`workbench_keymap_eleventh.rs`).
+            _ if self.run_eleventh_package_action(id, window, cx) => {}
             "Find" => self.open_find(window, cx),
             "Replace" => self.open_replace(window, cx),
             "FindInPath" => self.open_find_in_files(window, cx),
@@ -26125,7 +26365,8 @@ impl WorkbenchView {
             }
             "InspectCode" => self.inspect_code(window, cx),
             "PopupHector" => return self.open_level_popup(window, cx),
-            crate::context_menu::COMPARE_CLIPBOARD => self.compare_with_clipboard(window, cx),
+            // Also View › Compare with Clipboard (SPEC-0124 v18 behaviour 20).
+            "CompareClipboardWithSelection" => self.compare_with_clipboard(window, cx),
             "Resume" => return self.debug_command(crate::debug_model::Command::Continue, cx),
             "StepOver" => return self.debug_command(crate::debug_model::Command::StepOver, cx),
             "StepInto" => return self.debug_command(crate::debug_model::Command::StepInto, cx),
@@ -28966,6 +29207,12 @@ impl Render for WorkbenchView {
         self.follow_compact_setting(cx);
         // Edit › Undo and Redo name the tree's next file operation (SPEC-0275 v16 behaviour 42).
         self.sync_undo_titles(window, cx);
+        // The selected editor tab is active only while the keyboard focus is in its editor
+        // (SPEC-0061 v19 behaviour 6a).
+        self.tabs_have_focus = window.is_window_active()
+            && self.active_editor().is_some_and(|e| {
+                gpui::Focusable::focus_handle(e.read(cx), cx).contains_focused(window, cx)
+            });
         // No tooltip over an open menu or Git popup (SPEC-0294 v2 behaviour 11): the widget's
         // tooltip stayed over the branch popup, a tab's over the tab menu.
         idecraft_ui::tooltip::set_suppressed(

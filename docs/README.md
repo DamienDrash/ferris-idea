@@ -22,3 +22,4 @@ Start here. Each topic has one home; other files link to it.
 | Roadmap | [roadmap for readers](../ROADMAP.md) | English |
 | Security reports, conduct | [SECURITY.md](../SECURITY.md), [CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md) | English |
 | Release notes | [CHANGELOG.md](../CHANGELOG.md) | English |
+| Releasing | [the signed and notarized macOS download](RELEASE_MACOS.md) | English |

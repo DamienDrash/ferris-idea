@@ -395,3 +395,112 @@ fn huge_tap_plan_gives_one_missing_entry() {
     let small = parse_report("1..3\nok 1 - a\n", Some(ReportFormat::Tap)).unwrap();
     assert_eq!(small.suites.iter().map(|s| s.tests.len()).sum::<usize>(), 3);
 }
+
+/// `node --test --test-reporter=tap` of Node 22, paths shortened.
+const NODE_TAP: &str = "TAP version 13
+# Subtest: adds
+ok 1 - adds
+  ---
+  duration_ms: 1.820988
+  type: 'test'
+  ...
+# Subtest: fails
+not ok 2 - fails
+  ---
+  duration_ms: 1.684234
+  type: 'test'
+  location: '/p/math.test.js:4:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    wrong sum
+
+    2 !== 3
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  stack: |-
+    TestContext.<anonymous> (/p/math.test.js:4:30)
+  ...
+# Subtest: quoted
+not ok 3 - quoted
+  ---
+  duration_ms: 0.5
+  error: 'one line'
+  ...
+1..3
+# tests 3
+";
+
+/// SPEC-0045 v7 AK-17: the YAML block of a TAP test gives its duration and message; the block
+/// with Node's `location` and `stack` stays in the details.
+#[test]
+fn tap_yaml_gives_duration_and_message() {
+    let r = parse_report(NODE_TAP, None).unwrap();
+    assert_eq!(r.format, ReportFormat::Tap);
+    let t = &r.suites[0].tests;
+    assert_eq!(t.len(), 3);
+    assert_eq!(t[0].status, TestStatus::Passed);
+    assert!((t[0].duration.unwrap() - 0.001820988).abs() < 1e-12);
+    assert_eq!(t[0].message, None, "a passed test gets no message");
+    assert_eq!(t[1].status, TestStatus::Failed);
+    assert_eq!(t[1].message.as_deref(), Some("wrong sum"));
+    let details = t[1].details.as_deref().unwrap();
+    assert!(
+        details.contains("location: '/p/math.test.js:4:1'"),
+        "{details}"
+    );
+    assert!(details.contains("math.test.js:4:30"), "{details}");
+    assert_eq!(t[2].message.as_deref(), Some("one line"));
+    assert_eq!(t[2].duration, Some(0.0005));
+}
+
+/// SPEC-0045 v7 AK-17: a failed libtest test gets the panic's first line as its message and
+/// `panicked at file:line:column` as its details, in the format of Rust 1.73 and later and in the
+/// older one; the captured output is kept.
+#[test]
+fn libtest_panic_gives_message_and_place() {
+    let new = "running 2 tests
+test tests::adds ... ok
+test tests::fails ... FAILED
+
+failures:
+
+---- tests::fails stdout ----
+
+thread 'tests::fails' (1016936) panicked at src/main.rs:10:18:
+assertion `left == right` failed: wrong sum
+  left: 2
+ right: 3
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    tests::fails
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+";
+    let r = parse_report(new, Some(ReportFormat::Libtest)).unwrap();
+    let t = &r.suites[0].tests;
+    assert_eq!(t[0].message, None);
+    assert_eq!(
+        t[1].message.as_deref(),
+        Some("assertion `left == right` failed: wrong sum")
+    );
+    assert_eq!(
+        t[1].details.as_deref(),
+        Some("panicked at src/main.rs:10:18")
+    );
+    assert!(t[1].output.as_deref().unwrap().contains("left: 2"));
+
+    let old = new.replace(
+        "thread 'tests::fails' (1016936) panicked at src/main.rs:10:18:\nassertion `left == right` failed: wrong sum\n",
+        "thread 'tests::fails' panicked at 'wrong sum', src/main.rs:10:18\n",
+    );
+    let r = parse_report(&old, Some(ReportFormat::Libtest)).unwrap();
+    let t = &r.suites[0].tests;
+    assert_eq!(t[1].message.as_deref(), Some("wrong sum"));
+    assert_eq!(
+        t[1].details.as_deref(),
+        Some("panicked at src/main.rs:10:18")
+    );
+}

@@ -917,7 +917,7 @@ impl Render for RunConfigDialog {
         let selected = self.model.selected;
         let locked = self.read_only.is_some();
         let template_mode = self.model.template_mode;
-        let tool = |id: &'static str, key: &'static str, title: &'static str| {
+        let tool = |id: &'static str, key: &'static str, title: &str| {
             crate::metrics::header_button(id)
                 .when(locked, |d| d.opacity(0.4))
                 .child(icon(key))
@@ -974,12 +974,12 @@ impl Render for RunConfigDialog {
                 .items_center()
                 .gap_1()
                 .child(
-                    tool("run-config-add", "general/add", "Add ⌘N").on_click(cx.listener(
+                    tool("run-config-add", "general/add", &keys("Add ⌘N")).on_click(cx.listener(
                         |this, _: &gpui::ClickEvent, window, cx| this.open_templates(window, cx),
                     )),
                 )
                 .child(
-                    tool("run-config-remove", "general/delete", "Remove ⌫")
+                    tool("run-config-remove", "general/delete", &keys("Remove ⌫"))
                         .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| this.remove(cx))),
                 )
                 .child(
@@ -991,20 +991,24 @@ impl Render for RunConfigDialog {
                         .tip_text(
                             "run-config-copy",
                             idecraft_ui::tooltip::Tip {
-                                title: "Copy ⌘D".into(),
+                                title: keys("Copy ⌘D"),
                                 shortcut: String::new(),
                                 details: Vec::new(),
                             },
                         )
                         .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| this.copy(cx))),
                 )
-                .child(tool("run-config-up", "general/up", "Move Up ⌥↑").on_click(
-                    cx.listener(|this, _: &gpui::ClickEvent, _, cx| this.move_selected(true, cx)),
-                ))
                 .child(
-                    tool("run-config-down", "general/down", "Move Down ⌥↓").on_click(cx.listener(
-                        |this, _: &gpui::ClickEvent, _, cx| this.move_selected(false, cx),
+                    tool("run-config-up", "general/up", &keys("Move Up ⌥↑")).on_click(cx.listener(
+                        |this, _: &gpui::ClickEvent, _, cx| this.move_selected(true, cx),
                     )),
+                )
+                .child(
+                    tool("run-config-down", "general/down", &keys("Move Down ⌥↓")).on_click(
+                        cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                            this.move_selected(false, cx)
+                        }),
+                    ),
                 )
                 .child(
                     text_tool("run-config-new-folder", "New Folder", 72.).on_click(cx.listener(
@@ -1933,7 +1937,7 @@ impl RunConfigDialog {
             return div()
                 .flex_1()
                 .text_color(c(p.ui_muted))
-                .child("Select a configuration, or add one with ⌘N")
+                .child(keys("Select a configuration, or add one with ⌘N"))
                 .into_any_element();
         };
         let entry = self.model.entries[i].clone();
@@ -2021,9 +2025,9 @@ impl RunConfigDialog {
             .flex_col()
             .gap_2()
             .when(entry.source == Source::Detected, |d| {
-                d.child(div().text_color(c(p.ui_muted)).child(
+                d.child(div().text_color(c(p.ui_muted)).child(keys(
                     "Detected from the build files: Copy (⌘D) makes an editable configuration.",
-                ))
+                )))
             })
             .when(temporary, |d| {
                 d.child(
@@ -2133,6 +2137,12 @@ impl RunConfigDialog {
             .children(under(&problems, Some(RunField::Url)))
             .into_any_element()
     }
+}
+
+/// A shortcut of this dialog written for the platform: ⌘ is Ctrl and ⌥ is Alt outside macOS
+/// (`SPEC-0028` v8 behaviour 13).
+fn keys(text: &str) -> String {
+    idecraft_ui::keymap::local_keys(text, cfg!(target_os = "macos"))
 }
 
 #[cfg(test)]

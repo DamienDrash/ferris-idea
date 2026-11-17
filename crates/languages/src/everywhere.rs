@@ -203,6 +203,8 @@ pub const UNBOUND_ACTIONS: &[&str] = &[
     "ConvertToMacLineSeparators",
     "AddBom",
     "RemoveBom",
+    // View › Compare with Clipboard (SPEC-0124 v18 behaviour 20): no keymap binds it.
+    "CompareClipboardWithSelection",
     // The file type actions (SPEC-0004 v5 behaviour 13): no keymap binds them.
     "OverrideFileTypeAction",
     "ReverteOverrideFileTypeAction",

@@ -244,3 +244,193 @@ fn hand_test_110_bundle_lock_in_the_terminal_and_f1_through_bundle_exec(cx: &mut
     cx.simulate_keystrokes("escape");
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// The page and stylesheet of OBS-0069: `index.html` links `style.css`; `class="card"` and
+/// `id="hello"` on line 7, an empty `class` value on line 8; `.card` on line 1, `#hello` on line
+/// 5, `.side` on line 10 and `.side-bar` on line 13 of the stylesheet.
+const OBS_0069_INDEX: &str = "<!DOCTYPE html>\n<html>\n<head>\n  <link rel=\"stylesheet\" href=\"style.css\">\n</head>\n<body>\n  <main class=\"card\" id=\"hello\">\n    <div class=\"\">x</div>\n  </main>\n</body>\n</html>\n";
+const OBS_0069_STYLE: &str = ".card {\n  padding: 1em;\n}\n\n#hello {\n  color: navy;\n}\n\n\n.side {\n  margin: 0;\n}\n.side-bar {\n}\n";
+
+fn keys(cx: &mut VisualTestContext, keystrokes: &str) {
+    cx.simulate_keystrokes(keystrokes);
+    cx.run_until_parked();
+}
+
+fn text_of(editor: &Entity<EditorView>, cx: &mut VisualTestContext) -> String {
+    editor.read_with(cx, |e, _| e.state.buffer.text())
+}
+
+fn status(bench: &Bench, cx: &mut VisualTestContext) -> String {
+    bench
+        .read_with(cx, |b, cx| b.status_message(cx))
+        .unwrap_or_default()
+}
+
+/// ⇧F6 at `line` and `column` (0-based) of `editor`, the name typed key by key, Enter.
+fn rename_at(
+    bench: &Bench,
+    cx: &mut VisualTestContext,
+    editor: &Entity<EditorView>,
+    (line, column): (usize, usize),
+    name: &str,
+) {
+    bench.update_in(cx, |b, window, cx| b.focus_editor(window, cx));
+    editor.update(cx, |e, cx| e.go_to(line, column, cx));
+    cx.run_until_parked();
+    keys(cx, "shift-f6");
+    assert!(
+        bench.read_with(cx, |b, _| b.goto_popup().is_some()),
+        "the rename popup is open"
+    );
+    let typed: Vec<String> = name.chars().map(|c| c.to_string()).collect();
+    keys(cx, &typed.join(" "));
+    keys(cx, "enter");
+}
+
+/// `SPEC-0042` v22 AK-44 (behaviour 38, OBS-0069 G2): ⇧F6 on `.card` of the stylesheet keeps the
+/// dot and renames `class="card"` of the page in the same step, one ⌘Z takes both back; the same
+/// from the page and for an id; a name that is no CSS identifier is refused and nothing changes.
+#[gpui::test]
+fn obs_0069_rename_keeps_the_mark_and_changes_the_page(cx: &mut TestAppContext) {
+    let root = workspace(
+        "obs0069-rename",
+        &[
+            ("index.html", OBS_0069_INDEX),
+            ("style.css", OBS_0069_STYLE),
+        ],
+    );
+    let (bench, cx) = window(&root, idecraft_core::IdeSettings::default(), cx);
+    let page_on_disk = || std::fs::read_to_string(root.join("index.html")).unwrap();
+    let style = open(&bench, cx, &root.join("style.css"));
+
+    // From the stylesheet, the page closed: `.box {` and `class="box"` on disk.
+    rename_at(&bench, cx, &style, (0, 2), "box");
+    until(cx, 30, "the rename is written", |cx| {
+        text_of(&style, cx).starts_with(".box {\n")
+    });
+    assert_eq!(
+        text_of(&style, cx),
+        OBS_0069_STYLE.replacen(".card", ".box", 1)
+    );
+    assert_eq!(
+        page_on_disk(),
+        OBS_0069_INDEX.replace("class=\"card\"", "class=\"box\"")
+    );
+    assert_eq!(status(&bench, cx), "Renamed card to box in 2 file(s).");
+    // One ⌘Z: both files.
+    bench.update_in(cx, |b, window, cx| b.focus_editor(window, cx));
+    keys(cx, "cmd-z");
+    assert_eq!(text_of(&style, cx), OBS_0069_STYLE);
+    assert_eq!(page_on_disk(), OBS_0069_INDEX);
+    assert_eq!(status(&bench, cx), "Undone: Rename card to box (2 files)");
+
+    // From the open page, on `card` of `class="card"`: both editors change.
+    let page = open(&bench, cx, &root.join("index.html"));
+    rename_at(&bench, cx, &page, (6, 16), "box");
+    until(cx, 30, "the rename reaches both editors", |cx| {
+        text_of(&page, cx).contains("class=\"box\"") && text_of(&style, cx).starts_with(".box {")
+    });
+    assert_eq!(status(&bench, cx), "Renamed card to box in 2 file(s).");
+    keys(cx, "cmd-z");
+    assert_eq!(text_of(&page, cx), OBS_0069_INDEX);
+    assert_eq!(text_of(&style, cx), OBS_0069_STYLE);
+
+    // An id, from the stylesheet: `#main` and `id="main"`.
+    let style = open(&bench, cx, &root.join("style.css"));
+    rename_at(&bench, cx, &style, (4, 1), "main");
+    until(cx, 30, "the id is renamed", |cx| {
+        text_of(&style, cx).contains("\n#main {\n") && text_of(&page, cx).contains("id=\"main\"")
+    });
+    keys(cx, "cmd-z");
+    assert_eq!(text_of(&style, cx), OBS_0069_STYLE);
+    assert_eq!(text_of(&page, cx), OBS_0069_INDEX);
+
+    // No CSS identifier: refused, with the reason, nothing written.
+    rename_at(&bench, cx, &style, (0, 0), "1box");
+    until(cx, 30, "the name is refused", |cx| {
+        status(&bench, cx).starts_with("Rename failed: \"1box\" is not a valid CSS class name")
+    });
+    assert_eq!(text_of(&style, cx), OBS_0069_STYLE);
+    assert_eq!(text_of(&page, cx), OBS_0069_INDEX);
+    assert_eq!(page_on_disk(), OBS_0069_INDEX);
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// `SPEC-0042` v22 AK-44 (behaviour 39, OBS-0069 G1 and G3) and `SPEC-0072` v15 AK-36: Code
+/// Completion in an empty `class` value lists the stylesheet's classes with file and line;
+/// typing opens the list by itself and narrows over `-`; Enter writes the whole name. ⌘B on
+/// `card` puts the caret on the name in the rule.
+#[gpui::test]
+fn obs_0069_class_names_are_offered_in_html(cx: &mut TestAppContext) {
+    let root = workspace(
+        "obs0069-complete",
+        &[
+            ("index.html", OBS_0069_INDEX),
+            ("style.css", OBS_0069_STYLE),
+        ],
+    );
+    let (bench, cx) = window(&root, idecraft_core::IdeSettings::default(), cx);
+    let page = open(&bench, cx, &root.join("index.html"));
+    let rows = |cx: &mut VisualTestContext| bench.read_with(cx, |b, _| b.completion_rows());
+    let items = |cx: &mut VisualTestContext| bench.read_with(cx, |b, _| b.completion_items());
+
+    // Code › Code Completion between the quotes of line 8.
+    page.update(cx, |e, cx| e.go_to(7, 16, cx));
+    bench.update_in(cx, |b, window, cx| {
+        b.menu_action("CodeCompletion", window, cx)
+    });
+    until(cx, 10, "the list opens", |cx| rows(cx).is_some());
+    let row = |l: &str, t: &str| (l.to_owned(), t.to_owned());
+    assert_eq!(
+        rows(cx).unwrap(),
+        [
+            row("card", "style.css:1"),
+            row("side", "style.css:10"),
+            row("side-bar", "style.css:13")
+        ]
+    );
+    keys(cx, "escape");
+    assert_eq!(items(cx), None);
+
+    // Typing opens it by itself; Enter writes the name.
+    cx.simulate_input("s");
+    until(cx, 10, "the list opens while typing", |cx| {
+        items(cx).is_some_and(|i| i == ["side", "side-bar"])
+    });
+    keys(cx, "enter");
+    assert!(
+        text_of(&page, cx).contains("<div class=\"side\">x</div>"),
+        "{}",
+        text_of(&page, cx)
+    );
+    // A second word: the list narrows over `-` and Enter writes the whole name.
+    cx.simulate_input(" ");
+    cx.simulate_input("side");
+    until(cx, 10, "the list opens for the second word", |cx| {
+        items(cx).is_some_and(|i| i.contains(&"side-bar".to_owned()))
+    });
+    cx.simulate_input("-");
+    cx.run_until_parked();
+    assert_eq!(items(cx), Some(vec!["side-bar".to_owned()]));
+    keys(cx, "enter");
+    assert!(
+        text_of(&page, cx).contains("<div class=\"side side-bar\">x</div>"),
+        "{}",
+        text_of(&page, cx)
+    );
+
+    // ⌘B on `card` of line 7: the caret on the name in the rule, line 1 column 2.
+    page.update(cx, |e, cx| e.go_to(6, 16, cx));
+    bench.update_in(cx, |b, window, cx| {
+        b.menu_action("GotoDeclaration", window, cx)
+    });
+    until(cx, 10, "the stylesheet opens at the rule", |cx| {
+        bench.read_with(cx, |b, _| b.active_file()) == Some(root.join("style.css"))
+    });
+    let editor = bench
+        .read_with(cx, |b, _| b.active_editor_entity())
+        .unwrap();
+    let at = editor.read_with(cx, |e, _| e.status());
+    assert_eq!((at.line, at.column), (1, 2));
+    let _ = std::fs::remove_dir_all(&root);
+}

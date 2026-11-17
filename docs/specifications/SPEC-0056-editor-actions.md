@@ -1,6 +1,6 @@
 # SPEC-0056: Editing actions
 
-- **Version:** 5 · **Date:** 2026-11-14 (v5: Complete Current Statement, behaviour 20, and Unwrap/Remove, behaviour 21, AK-15 and AK-16; eighth package of docs/research/KEYMAP_COVERAGE.md; v4: move an element of a list left or right; behaviour 19.
+- **Version:** 6 · **Date:** 2026-11-16 (v6: Tab out of a closing bracket or quote, behaviour 22, AK-17; eleventh package of docs/research/KEYMAP_COVERAGE.md); 2026-11-14 (v5: Complete Current Statement, behaviour 20, and Unwrap/Remove, behaviour 21, AK-15 and AK-16; eighth package of docs/research/KEYMAP_COVERAGE.md; v4: move an element of a list left or right; behaviour 19.
   v2: Enter inside the indentation keeps the whitespace before the
   caret on the upper line; OBS-0012. v3: side by side in OBS-0018 — caret on a duplicated declaration,
   moving statements, join removing braces, comment caret, block comments, Markdown comments, `{`
@@ -153,6 +153,13 @@ undoable as one step.
     languages, the status bar says "Nothing to unwrap here". MCP: `editor_action` with `unwrap`
     and `level` (1 = innermost, the default) answers the text after unwrapping and the
     `choices`. [GEN; DOC: the action removes the enclosing statement and keeps its body]
+22. **Tab out of a pair (v6; `BraceOrQuoteOut` Tab):** with one caret and no selection, no
+    completion list, template or parameter info, Tab moves the caret past the character after
+    it when that character is `)`, `]` or `}` whose opening bracket stands before the caret on
+    the same line, or a quote (`"`, `'`, `` ` ``) that closes a string opened before the caret on
+    that line, and something other than indentation stands before the caret. Otherwise Tab does
+    what it did (indent, accept an inline suggestion, a template's next place). Only where the
+    keymap in use binds Tab to `BraceOrQuoteOut`. [OSS, GEN]
 
 ## Acceptance criteria
 - **AK-1** Each action on single and multiple carets and selections with the expected text and caret
@@ -208,6 +215,11 @@ undoable as one step.
   tabs and spaces (`statement::tests::*`); MCP `editor_action` with `unwrap` and `level`
   (protocol test above); in a window, ⇧⌘⌦ lists the blocks, Enter unwraps the chosen one and
   Undo restores it (same window test).
+- **AK-17 (v6, behaviour 22)** Unit test
+  `workbench_keymap_eleventh::tests::tab_steps_out_of_a_pair_on_the_line` (round, square and
+  curly brackets, quotes, nested pairs, not after indentation only, not without the opening
+  character on the line); window test `eleventh_package_keymap.rs`:
+  `tab_steps_out_of_pairs_and_expands_a_template` (macOS).
 
 ## Out of scope
 Language-aware indentation from the parse tree (the formatter, SPEC-0043, covers
@@ -230,3 +242,7 @@ language (IDECraft: every comma-separated list of the syntax tree) and where the
   reference also offers "Remove" entries (the block with its body) and more constructs
   (`else` branches, `catch`, lambdas, conditional expressions); IDECraft does not yet. Not
   compared next to the reference.
+- **Tab out of a pair (v6):** the reference steps out only of a pair it closed itself while
+  the person typed. IDECraft keeps no record of auto-closed pairs and steps out of any pair
+  whose opening character is on the caret's line, so Tab before a `)` typed by hand also steps
+  over it; a Tab meant as indentation inside a pair on one line is rare.

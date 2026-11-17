@@ -4793,7 +4793,7 @@ dependencies = [
 
 [[package]]
 name = "idecraft"
-version = "0.20.0"
+version = "1.0.0"
 dependencies = [
  "gpui",
  "idecraft-ai",
@@ -4827,7 +4827,7 @@ dependencies = [
 
 [[package]]
 name = "idecraft-ai"
-version = "0.20.0"
+version = "1.0.0"
 dependencies = [
  "idecraft-core",
  "idecraft-database",
@@ -4840,7 +4840,7 @@ dependencies = [
 
 [[package]]
 name = "idecraft-bench"
-version = "0.20.0"
+version = "1.0.0"
 dependencies = [
  "idecraft-core",
  "idecraft-editor",
@@ -4853,7 +4853,7 @@ dependencies = [
 
 [[package]]
 name = "idecraft-containers"
-version = "0.20.0"
+version = "1.0.0"
 dependencies = [
  "idecraft-remote",
  "rustix 1.1.6",
@@ -4864,7 +4864,7 @@ dependencies = [
 
 [[package]]
 name = "idecraft-core"
-version = "0.20.0"
+version = "1.0.0"
 dependencies = [
  "flate2",
  "gix-index",
@@ -4883,7 +4883,7 @@ dependencies = [
 
 [[package]]
 name = "idecraft-database"
-version = "0.20.0"
+version = "1.0.0"
 dependencies = [
  "chrono",
  "duckdb",
@@ -4917,7 +4917,7 @@ dependencies = [
 
 [[package]]
 name = "idecraft-debugger"
-version = "0.20.0"
+version = "1.0.0"
 dependencies = [
  "idecraft-core",
  "nix 0.28.0",
@@ -4930,7 +4930,7 @@ dependencies = [
 
 [[package]]
 name = "idecraft-editor"
-version = "0.20.0"
+version = "1.0.0"
 dependencies = [
  "ropey",
  "thiserror 2.0.21",
@@ -4938,7 +4938,7 @@ dependencies = [
 
 [[package]]
 name = "idecraft-formats"
-version = "0.20.0"
+version = "1.0.0"
 dependencies = [
  "idecraft-core",
  "idecraft-database",
@@ -4949,7 +4949,7 @@ dependencies = [
 
 [[package]]
 name = "idecraft-hardening"
-version = "0.20.0"
+version = "1.0.0"
 dependencies = [
  "idecraft-ai",
  "idecraft-core",
@@ -4973,7 +4973,7 @@ dependencies = [
 
 [[package]]
 name = "idecraft-host"
-version = "0.20.0"
+version = "1.0.0"
 dependencies = [
  "idecraft-core",
  "idecraft-debugger",
@@ -4991,7 +4991,7 @@ dependencies = [
 
 [[package]]
 name = "idecraft-http"
-version = "0.20.0"
+version = "1.0.0"
 dependencies = [
  "flate2",
  "native-tls",
@@ -5003,7 +5003,7 @@ dependencies = [
 
 [[package]]
 name = "idecraft-languages"
-version = "0.20.0"
+version = "1.0.0"
 dependencies = [
  "flate2",
  "idecraft-core",
@@ -5049,7 +5049,7 @@ dependencies = [
 
 [[package]]
 name = "idecraft-mcp"
-version = "0.20.0"
+version = "1.0.0"
 dependencies = [
  "bytes",
  "duckdb",
@@ -5089,7 +5089,7 @@ dependencies = [
 
 [[package]]
 name = "idecraft-mobile"
-version = "0.20.0"
+version = "1.0.0"
 dependencies = [
  "idecraft-pairing",
  "idecraft-session",
@@ -5103,7 +5103,7 @@ dependencies = [
 
 [[package]]
 name = "idecraft-nosql"
-version = "0.20.0"
+version = "1.0.0"
 dependencies = [
  "base64 0.22.1",
  "futures-util",
@@ -5119,7 +5119,7 @@ dependencies = [
 
 [[package]]
 name = "idecraft-pairing"
-version = "0.20.0"
+version = "1.0.0"
 dependencies = [
  "curve25519-dalek",
  "futures-lite 2.6.1",
@@ -5144,7 +5144,7 @@ dependencies = [
 
 [[package]]
 name = "idecraft-plugins"
-version = "0.20.0"
+version = "1.0.0"
 dependencies = [
  "idecraft-core",
  "native-tls",
@@ -5160,7 +5160,7 @@ dependencies = [
 
 [[package]]
 name = "idecraft-profiler"
-version = "0.20.0"
+version = "1.0.0"
 dependencies = [
  "idecraft-core",
  "serde",
@@ -5169,11 +5169,11 @@ dependencies = [
 
 [[package]]
 name = "idecraft-refactoring"
-version = "0.20.0"
+version = "1.0.0"
 
 [[package]]
 name = "idecraft-remote"
-version = "0.20.0"
+version = "1.0.0"
 dependencies = [
  "idecraft-core",
  "idecraft-debugger",
@@ -5191,7 +5191,7 @@ dependencies = [
 
 [[package]]
 name = "idecraft-serve"
-version = "0.20.0"
+version = "1.0.0"
 dependencies = [
  "idecraft-core",
  "idecraft-editor",
@@ -5212,7 +5212,7 @@ dependencies = [
 
 [[package]]
 name = "idecraft-session"
-version = "0.20.0"
+version = "1.0.0"
 dependencies = [
  "getrandom 0.3.4",
  "idecraft-core",
@@ -5227,7 +5227,7 @@ dependencies = [
 
 [[package]]
 name = "idecraft-terminal"
-version = "0.20.0"
+version = "1.0.0"
 dependencies = [
  "nix 0.28.0",
  "portable-pty",
@@ -5240,7 +5240,7 @@ dependencies = [
 
 [[package]]
 name = "idecraft-ui"
-version = "0.20.0"
+version = "1.0.0"
 dependencies = [
  "gpui",
  "idecraft-core",
@@ -5253,7 +5253,7 @@ dependencies = [
 
 [[package]]
 name = "idecraft-uidriver"
-version = "0.20.0"
+version = "1.0.0"
 dependencies = [
  "accesskit",
  "futures",
@@ -5264,7 +5264,7 @@ dependencies = [
 
 [[package]]
 name = "idecraft-vcs"
-version = "0.20.0"
+version = "1.0.0"
 dependencies = [
  "gix",
  "idecraft-core",
@@ -5277,7 +5277,7 @@ dependencies = [
 
 [[package]]
 name = "idecraft-web"
-version = "0.20.0"
+version = "1.0.0"
 dependencies = [
  "futures-util",
  "httparse",
@@ -5298,7 +5298,7 @@ dependencies = [
 
 [[package]]
 name = "idecraft-workbench"
-version = "0.20.0"
+version = "1.0.0"
 dependencies = [
  "duckdb",
  "gpui",

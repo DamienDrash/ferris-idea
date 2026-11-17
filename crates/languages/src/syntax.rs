@@ -1010,6 +1010,9 @@ pub struct OneLineBody {
     pub end_line: usize,
     /// Text shown after the opening brace while folded: ` statement }`.
     pub placeholder: String,
+    /// Columns of the folded line: the brace line up to `{` and the placeholder (`SPEC-0083` v10
+    /// behaviour 7a); the editor folds only bodies within the right margin.
+    pub folded_width: usize,
 }
 
 /// Whether a node is of some kind (a comment, an import).
@@ -1138,6 +1141,20 @@ impl SyntaxDocument {
             let Some(body) = node.child_by_field_name("body") else {
                 continue;
             };
+            // The name and the end of the parameter list on one line (`SPEC-0083` v10 behaviour
+            // 7a, as the open platform's folding of one-line methods asks).
+            let same_line = match (
+                node.child_by_field_name("name"),
+                node.child_by_field_name("parameters"),
+            ) {
+                (Some(name), Some(params)) => {
+                    name.start_position().row == params.end_position().row
+                }
+                _ => false,
+            };
+            if !same_line {
+                continue;
+            }
             let open = body.start_position().row;
             let close = body.end_position().row;
             if close != open + 2 {
@@ -1168,10 +1185,13 @@ impl SyntaxDocument {
                 continue;
             }
             let statement = self.text[statement.start_byte()..statement.end_byte()].trim();
+            let placeholder = format!(" {statement} }}");
+            let brace_line = self.text[line_start..=body.start_byte()].chars().count();
             out.push(OneLineBody {
                 start_line: open,
                 end_line: close,
-                placeholder: format!(" {statement} }}"),
+                folded_width: brace_line + placeholder.chars().count(),
+                placeholder,
             });
         }
         out.sort_by_key(|b| b.start_line);
@@ -2925,6 +2945,31 @@ mod tests {
         );
         let rust = SyntaxDocument::new(LanguageId::Rust, false, "fn f() {\n    g();\n}\n").unwrap();
         assert!(rust.one_line_bodies().is_empty());
+    }
+
+    /// SPEC-0083 AK-31 (v10, behaviour 7a): the conditions of the open platform's default — the
+    /// name and the parameter list's end on one line, and the width of the folded line for the
+    /// right margin; the method of OBS-0056 folds within the default margin.
+    #[test]
+    fn one_line_bodies_follow_the_open_conditions() {
+        let text = "record Item(int qty, int unitPriceCents) {\n    int totalCents() {\n        return qty * unitPriceCents;\n    }\n    int wrapped(int a,\n                int b) {\n        return a + b;\n    }\n}\n";
+        let doc = SyntaxDocument::new(LanguageId::Java, false, text).unwrap();
+        let bodies = doc.one_line_bodies();
+        assert_eq!(
+            bodies.len(),
+            1,
+            "the wrapped parameter list stays open: {bodies:?}"
+        );
+        let b = &bodies[0];
+        assert_eq!((b.start_line, b.end_line), (1, 3));
+        let folded = "    int totalCents() { return qty * unitPriceCents; }";
+        assert_eq!(b.folded_width, folded.chars().count());
+        assert!(b.folded_width <= 120, "within the default right margin");
+        assert!(
+            idecraft_core::IdeSettings::default()
+                .editor
+                .fold_one_line_methods
+        );
     }
 
     /// SPEC-0027 AK-16 (v13): in the languages whose bundled query names every identifier (or

@@ -48,7 +48,15 @@ pub fn object_kinds(dialect: Dialect) -> &'static [&'static str] {
             "trigger",
         ],
         Dialect::Sqlite => &["table", "view", "trigger"],
-        Dialect::DuckDb | Dialect::Oracle | Dialect::SqlServer => &["table", "view", "sequence"],
+        Dialect::Oracle | Dialect::SqlServer => &[
+            "table",
+            "view",
+            "sequence",
+            "function",
+            "procedure",
+            "trigger",
+        ],
+        Dialect::DuckDb => &["table", "view", "sequence"],
     }
 }
 
@@ -155,7 +163,62 @@ pub fn object_queries(dialect: Dialect, schema: Option<&str>) -> Vec<(CatalogPar
                 ),
             ));
         }
-        Dialect::DuckDb | Dialect::Oracle | Dialect::SqlServer => {}
+        // SPEC-0116 v8 behaviour 5 (OBS-0083 L5): the routines and triggers of the user's
+        // default schema, without the system's own.
+        Dialect::SqlServer => {
+            let s = schema.map_or_else(
+                || "schema_id()".into(),
+                |s| format!("schema_id({})", lit(s)),
+            );
+            out.push((
+                CatalogPart::Routines,
+                format!(
+                    "select o.name, case when o.type in ('P', 'PC') then 'procedure' \
+                    else 'function' end, null from sys.objects o \
+                    where o.schema_id = {s} and o.is_ms_shipped = 0 \
+                    and o.type in ('P', 'PC', 'FN', 'IF', 'TF', 'FS', 'FT') order by 1"
+                ),
+            ));
+            out.push((
+                CatalogPart::Triggers,
+                format!(
+                    "select t.name, o.name, \
+                    case when t.is_instead_of_trigger = 1 then 'INSTEAD OF' else 'AFTER' end + ' ' + \
+                    string_agg(e.type_desc, ' OR ') within group (order by e.type) \
+                    from sys.triggers t join sys.objects o on o.object_id = t.parent_id \
+                    join sys.trigger_events e on e.object_id = t.object_id \
+                    where o.schema_id = {s} and t.is_ms_shipped = 0 \
+                    group by t.name, o.name, t.is_instead_of_trigger order by 1, 2"
+                ),
+            ));
+        }
+        // SPEC-0142 v4 behaviour 5 (OBS-0083 L5): stand-alone functions and procedures and the
+        // triggers of the user's schema, or of the schema named.
+        Dialect::Oracle => {
+            let (objects, triggers, owner) = match schema {
+                Some(s) => (
+                    "all_objects",
+                    "all_triggers",
+                    format!(" and owner = {}", lit(s)),
+                ),
+                None => ("user_objects", "user_triggers", String::new()),
+            };
+            out.push((
+                CatalogPart::Routines,
+                format!(
+                    "select object_name, lower(object_type), null from {objects} \
+                    where object_type in ('FUNCTION', 'PROCEDURE'){owner} order by 1"
+                ),
+            ));
+            out.push((
+                CatalogPart::Triggers,
+                format!(
+                    "select trigger_name, table_name, trigger_type || ' ' || triggering_event \
+                    from {triggers} where base_object_type in ('TABLE', 'VIEW'){owner} order by 1, 2"
+                ),
+            ));
+        }
+        Dialect::DuckDb => {}
     }
     out
 }
@@ -269,7 +332,7 @@ pub async fn schema_objects(
 
 /// The catalogue query that gives the definition of `object` of `schema` (the current one with
 /// `None`) in `dialect`, its text in the first row; `None` for a kind whose definition is not read
-/// there (sequences, and every kind of DuckDB, Oracle and SQL Server) (`SPEC-0013` v7
+/// there (sequences, every kind of DuckDB, and Oracle's and SQL Server's tables) (`SPEC-0013` v7
 /// behaviour 20).
 pub fn definition_query(
     dialect: Dialect,
@@ -369,6 +432,34 @@ pub fn definition_query(
             // `Create Function` / `Create Procedure` / `SQL Original Statement` is the third column.
             Some((format!("SHOW CREATE {what} {target}"), 2))
         }
+        // SPEC-0116 v8 behaviour 5: the text SQL Server keeps for the module.
+        Dialect::SqlServer
+            if matches!(object.kind.as_str(), "function" | "procedure" | "trigger") =>
+        {
+            let q = |n: &str| crate::quote_identifier(n, dialect);
+            let target = match schema {
+                Some(s) => format!("{}.{}", q(s), q(&object.name)),
+                None => q(&object.name),
+            };
+            Some((
+                format!("select object_definition(object_id({}))", lit(&target)),
+                0,
+            ))
+        }
+        // SPEC-0142 v4 behaviour 5: the DDL Oracle writes for the unit.
+        Dialect::Oracle if matches!(object.kind.as_str(), "function" | "procedure" | "trigger") => {
+            let owner = match schema {
+                Some(s) => format!(", {}", lit(s)),
+                None => String::new(),
+            };
+            Some((
+                format!(
+                    "select dbms_metadata.get_ddl({}, {name}{owner}) from dual",
+                    lit(&object.kind.to_ascii_uppercase())
+                ),
+                0,
+            ))
+        }
         Dialect::Sqlite if object.kind == "trigger" => {
             let master = match schema {
                 Some(name) => format!(
@@ -391,7 +482,8 @@ pub fn definition_query(
 pub const NO_DEFINITION_PRIVILEGE: &str =
     "the database gave no definition: the user may lack the privilege to see it";
 
-/// The definition in the rows of [`definition_query`]: the text at `column` of the first row;
+/// The definition in the rows of [`definition_query`]: the text at `column` of the first row,
+/// without white space around it;
 /// an error when the row is there but empty (no privilege), `None` without a row.
 pub fn definition_from_rows(
     rows: &[Vec<Option<String>>],
@@ -401,7 +493,8 @@ pub fn definition_from_rows(
         return Ok(None);
     };
     match cell(row, column) {
-        Some(text) => Ok(Some(text.trim_end().to_owned())),
+        // Oracle's DBMS_METADATA starts its DDL with a line break and indentation.
+        Some(text) => Ok(Some(text.trim().to_owned())),
         None => Err(NO_DEFINITION_PRIVILEGE.into()),
     }
 }
@@ -495,12 +588,16 @@ mod tests {
         assert_eq!(parts(Dialect::MySql), [Routines, Triggers]);
         assert_eq!(parts(Dialect::MariaDb), [Sequences, Routines, Triggers]);
         assert_eq!(parts(Dialect::Sqlite), [Triggers]);
-        assert_eq!(parts(Dialect::Oracle), [Sequences]);
+        assert_eq!(parts(Dialect::Oracle), [Sequences, Routines, Triggers]);
+        assert_eq!(parts(Dialect::SqlServer), [Sequences, Routines, Triggers]);
+        assert!(parts(Dialect::DuckDb).iter().all(|p| *p == Sequences));
         for d in [
             Dialect::PostgreSql,
             Dialect::MySql,
             Dialect::MariaDb,
             Dialect::Sqlite,
+            Dialect::Oracle,
+            Dialect::SqlServer,
         ] {
             for (_, sql) in object_queries(d, Some("o'x")) {
                 let lower = sql.to_ascii_lowercase();
@@ -633,9 +730,43 @@ mod tests {
             lite.contains("from sqlite_master") && lite.contains("name = 'a''b'"),
             "{lite}"
         );
-        assert!(
-            definition_query(Dialect::Oracle, None, &object("trigger", "t", None, None)).is_none()
+        // SPEC-0142 v4 and SPEC-0116 v8 behaviour 5 (OBS-0083 L5): Oracle's and SQL Server's
+        // routines and triggers have their definitions; their sequences do not.
+        assert_eq!(
+            definition_query(
+                Dialect::Oracle,
+                None,
+                &object("procedure", "P'1", None, None)
+            ),
+            Some((
+                "select dbms_metadata.get_ddl('PROCEDURE', 'P''1') from dual".into(),
+                0
+            ))
         );
+        assert_eq!(
+            definition_query(
+                Dialect::Oracle,
+                Some("HR"),
+                &object("trigger", "T", Some("X"), None)
+            )
+            .unwrap()
+            .0,
+            "select dbms_metadata.get_ddl('TRIGGER', 'T', 'HR') from dual"
+        );
+        assert_eq!(
+            definition_query(
+                Dialect::SqlServer,
+                Some("dbo"),
+                &object("function", "f]x", None, None)
+            ),
+            Some((
+                "select object_definition(object_id('[dbo].[f]]x]'))".into(),
+                0
+            ))
+        );
+        for d in [Dialect::Oracle, Dialect::SqlServer] {
+            assert!(definition_query(d, None, &object("sequence", "s", None, None)).is_none());
+        }
         for d in [
             Dialect::PostgreSql,
             Dialect::MySql,

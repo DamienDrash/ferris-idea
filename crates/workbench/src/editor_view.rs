@@ -64,6 +64,79 @@ fn editor_font() -> Font {
     f
 }
 
+/// The text run of `len` bytes in `style` over the editor font `base`: bold and italic from the
+/// style, its colour or the text colour `text` (`SPEC-0290` behaviour 4).
+fn styled_run(
+    len: usize,
+    style: &idecraft_ui::theme::TextStyle,
+    base: &Font,
+    text: u32,
+) -> TextRun {
+    TextRun {
+        len,
+        font: Font {
+            weight: if style.bold {
+                gpui::FontWeight::BOLD
+            } else {
+                base.weight
+            },
+            style: if style.italic {
+                gpui::FontStyle::Italic
+            } else {
+                base.style
+            },
+            ..base.clone()
+        },
+        color: color(style.foreground.unwrap_or(text)),
+        background_color: style.background.map(color),
+        // A line under the text in the effect colour, e.g. a reassigned variable
+        // (`SPEC-0027` v11).
+        underline: style
+            .effect
+            .filter(|_| style.underline)
+            .map(|c| gpui::UnderlineStyle {
+                thickness: px(1.0),
+                color: Some(color(c)),
+                wavy: false,
+            }),
+        strikethrough: None,
+    }
+}
+
+/// The text runs of a line of `len` bytes from its sorted, non-overlapping `coloured` byte ranges;
+/// the text between them in the plain font and the text colour `text`.
+fn line_runs(
+    coloured: &[(Range<usize>, idecraft_ui::theme::TextStyle)],
+    len: usize,
+    base: &Font,
+    text: u32,
+) -> Vec<TextRun> {
+    let plain = |len: usize| TextRun {
+        len,
+        font: base.clone(),
+        color: color(text),
+        background_color: None,
+        underline: None,
+        strikethrough: None,
+    };
+    let mut runs = Vec::new();
+    let mut at = 0usize;
+    for (r, c) in coloured {
+        if r.start < at || r.end <= r.start || r.end > len {
+            continue;
+        }
+        if r.start > at {
+            runs.push(plain(r.start - at));
+        }
+        runs.push(styled_run(r.end - r.start, c, base, text));
+        at = r.end;
+    }
+    if at < len || runs.is_empty() {
+        runs.push(plain(len - at));
+    }
+    runs
+}
+
 /// The syntax styles of the line `line` (char range of the buffer) shown as `display`, by display
 /// byte, from the highlight `spans` of the painted range (`SPEC-0027`).
 fn syntax_runs(
@@ -237,6 +310,19 @@ fn place_at_line_end(end: Pixels, gap: Pixels, width: Pixels) -> (Pixels, Pixels
     (x, x + width)
 }
 
+/// Corner radius of the pill behind a parameter name hint (`SPEC-0291` v9 behaviour 4b).
+const HINT_PILL_CORNER: f32 = 4.0;
+
+/// The pill behind a hint whose label runs from `from` to `to` on the line at `top`: 1 px wider
+/// on each side than the label and 2 px inside the line above and below, so pills of
+/// neighbouring hints and the text around them stay apart (`SPEC-0291` v9 behaviour 4b).
+fn hint_pill(from: Pixels, to: Pixels, top: Pixels, line_height: Pixels) -> Bounds<Pixels> {
+    Bounds::new(
+        point(from - px(1.0), top + px(2.0)),
+        size(to - from + px(2.0), line_height - px(4.0)),
+    )
+}
+
 /// `runs` with `extra` inserted at byte `at`, splitting the run there.
 fn insert_run(runs: &[gpui::TextRun], at: usize, extra: gpui::TextRun) -> Vec<gpui::TextRun> {
     let mut out = Vec::with_capacity(runs.len() + 2);
@@ -277,6 +363,8 @@ struct PaintedLine {
     origin: gpui::Point<Pixels>,
     /// The usage count's row above `line` (`SPEC-0292` behaviour 4), not the line itself.
     above: bool,
+    /// Byte ranges of `display` drawn in an italic font (`SPEC-0060` v13 behaviour 19).
+    italic: Vec<Range<usize>>,
 }
 
 /// Where the last frame put things.
@@ -306,7 +394,12 @@ struct LastLayout {
     author_hints: Vec<(Bounds<Pixels>, usize, String)>,
     /// Widths of the carets drawn, in pixels (`SPEC-0057` v6 behaviour 25).
     caret_widths: Vec<f32>,
+    /// Pills drawn behind parameter name hints: line and colour (`SPEC-0291` v9 behaviour 4b).
+    hint_pills: Vec<(usize, u32)>,
 }
+
+#[path = "editor_gutter_focus.rs"]
+mod gutter_focus;
 
 /// A gutter icon with a tooltip (`SPEC-0294` behaviour 4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -436,6 +529,8 @@ pub enum EditorEvent {
     /// A click on a declaration's author hint: show or hide the annotations of this view
     /// (`SPEC-0292` v4 behaviour 7e).
     ToggleAnnotations,
+    /// A line for the status bar, e.g. that no gutter icon is drawn (`SPEC-0058` v5 behaviour 13).
+    Note(String),
 }
 
 impl gpui::EventEmitter<EditorEvent> for EditorView {}
@@ -467,6 +562,11 @@ pub struct EditorView {
     dragging: bool,
     /// Line and column where an ⌥-drag column selection started (`SPEC-0130`).
     column_drag: Option<idecraft_editor::Position>,
+    /// The button that drags the column selection: the primary or the middle one (`SPEC-0130` v3
+    /// behaviour 6).
+    column_button: MouseButton,
+    /// Clone Caret Above/Below by the doubled modifier (`SPEC-0025` v5 behaviour 9).
+    caret_gesture: crate::caret_gesture::CaretGesture,
     /// Column selection mode: plain clicks, drags and ⇧-arrows select rectangles (SPEC-0151).
     column_mode: bool,
     /// Corner, moving corner (columns may lie past the line end) and the caret offset the last
@@ -538,6 +638,9 @@ pub struct EditorView {
     method_breakpoints: std::collections::BTreeMap<usize, bool>,
     /// The gutter icons moved since the last render: draw again so their tooltips follow.
     gutter_moved: bool,
+    /// The gutter icon that has the keys: 0-based line and place in the line, left to right
+    /// (`EditorFocusGutter`, `SPEC-0058` v5 behaviour 13).
+    gutter_focus: Option<(usize, usize)>,
     /// Line (0-based) where the debugged program is stopped (`SPEC-0091` behaviour 4).
     execution_line: Option<usize>,
     /// Values the debugger shows after lines, 0-based line and text (`SPEC-0091` v5 behaviour 13).
@@ -709,6 +812,8 @@ impl EditorView {
             marked: None,
             dragging: false,
             column_drag: None,
+            column_button: MouseButton::Left,
+            caret_gesture: Default::default(),
             column_mode: false,
             column_block: None,
             last: LastLayout::default(),
@@ -746,6 +851,7 @@ impl EditorView {
             breakpoints_unbound: std::collections::BTreeSet::new(),
             method_breakpoints: Default::default(),
             gutter_moved: false,
+            gutter_focus: None,
             execution_line: None,
             inline_values: Vec::new(),
             line_notes: Vec::new(),
@@ -2688,6 +2794,31 @@ impl EditorView {
         &self.last.line_end_texts
     }
 
+    /// The pieces of `line`'s text the last frame drew in an italic font, in order, neighbouring
+    /// runs joined (`SPEC-0060` v13 behaviour 19); hints count as text of the line.
+    pub fn painted_italic_texts(&self, line: usize) -> Vec<String> {
+        let Some(painted) = self.last.lines.iter().find(|l| l.line == line && !l.above) else {
+            return Vec::new();
+        };
+        let mut out: Vec<String> = Vec::new();
+        let mut end = None;
+        for r in &painted.italic {
+            let piece = painted.display.text.get(r.clone()).unwrap_or_default();
+            match out.last_mut() {
+                Some(last) if end == Some(r.start) => last.push_str(piece),
+                _ => out.push(piece.to_owned()),
+            }
+            end = Some(r.end);
+        }
+        out
+    }
+
+    /// Pills the last frame drew behind parameter name hints: line and colour (`SPEC-0291` v9
+    /// behaviour 4b).
+    pub fn painted_hint_pills(&self) -> &[(usize, u32)] {
+        &self.last.hint_pills
+    }
+
     /// Whether the usage counts stand at the end of their lines.
     pub fn usage_counts_at_line_end(&self) -> bool {
         self.folds.at_line_end()
@@ -3787,8 +3918,13 @@ impl EditorView {
         if !settings.fold_one_line_methods {
             return;
         }
+        // Only a body whose folded line stays within Code Style's right margin (`SPEC-0083` v10
+        // behaviour 7a).
+        let margin = crate::fonts::code_style().right_margin as usize;
         for b in doc.one_line_bodies() {
-            if jumped_to.is_some_and(|l| b.start_line <= l && l <= b.end_line) {
+            if jumped_to.is_some_and(|l| b.start_line <= l && l <= b.end_line)
+                || b.folded_width > margin
+            {
                 continue;
             }
             self.folds
@@ -3897,6 +4033,12 @@ impl EditorView {
 
     /// Carries out the editor command bound to `stroke`; returns whether one was.
     fn press(&mut self, stroke: &Keystroke, cx: &mut Context<Self>) -> bool {
+        // The gutter has the keys (SPEC-0058 v5 behaviour 13).
+        if self.gutter_focus.is_some()
+            && self.gutter_key(&stroke.key, stroke.modifiers.is_empty(), cx)
+        {
+            return true;
+        }
         let keymap = crate::keymaps::current();
         // A shortcut of two keystrokes (SPEC-0083 v8 behaviour 23, the folding levels): the first
         // one waits, the second one picks the action. Another key acts as itself.
@@ -3951,6 +4093,9 @@ impl EditorView {
     /// Carries out an editor action by keymap id; returns whether it is one (also used by Search
     /// Everywhere, SPEC-0067).
     pub fn run_action(&mut self, id: &str, cx: &mut Context<Self>) -> bool {
+        if id == "EditorFocusGutter" {
+            return self.focus_gutter(cx);
+        }
         // Save All saves every editor of the window, also when this one is read-only; the window
         // asks each for `SaveDocument` (SPEC-0058 v4 behaviour 12).
         if id == "SaveAll" && self.save_all_in_window {
@@ -4750,6 +4895,20 @@ impl EditorView {
             return; // The input method owns keys while it composes.
         }
         let m = &event.keystroke.modifiers;
+        // ↑/↓ with the doubled multi-caret modifier held clone the carets (SPEC-0025 v5
+        // behaviour 9); any other key ends the gesture.
+        let alone = crate::caret_gesture::modifier_alone(m);
+        if let Some(id) = self
+            .caret_gesture
+            .action_for(&event.keystroke.key, alone)
+            .filter(|_| !self.field)
+        {
+            self.run_action(id, cx);
+            cx.stop_propagation();
+            cx.notify();
+            return;
+        }
+        self.caret_gesture.key();
         let Some(stroke) =
             Keystroke::from_platform(&event.keystroke.key, m.control, m.alt, m.shift, m.platform)
         else {
@@ -4759,6 +4918,25 @@ impl EditorView {
             cx.stop_propagation();
             cx.notify();
         }
+    }
+
+    /// Follows the multi-caret modifier for Clone Caret Above/Below (SPEC-0025 v5 behaviour 9).
+    fn on_modifiers(
+        &mut self,
+        event: &gpui::ModifiersChangedEvent,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) {
+        if self.field {
+            return;
+        }
+        let m = &event.modifiers;
+        let none = !(m.alt || m.control || m.shift || m.platform || m.function);
+        self.caret_gesture.modifiers(
+            crate::caret_gesture::modifier_alone(m),
+            none,
+            Instant::now(),
+        );
     }
 
     /// Char offset under a window position, from the last frame.
@@ -5004,6 +5182,7 @@ impl EditorView {
             let corner = self.column_at(event.position);
             self.column_select(corner, corner, cx);
             self.column_drag = Some(corner);
+            self.column_button = MouseButton::Left;
             self.dragging = true;
             return;
         }
@@ -5086,7 +5265,12 @@ impl EditorView {
             self.track_problem_hover(event.position, cx);
             self.track_doc_hover(event.position, cx);
         }
-        if !self.dragging || event.pressed_button != Some(MouseButton::Left) {
+        let button = if self.column_drag.is_some() {
+            self.column_button
+        } else {
+            MouseButton::Left
+        };
+        if !self.dragging || event.pressed_button != Some(button) {
             self.dragging = false;
             return;
         }
@@ -5099,6 +5283,43 @@ impl EditorView {
         let anchor = self.state.carets.primary().anchor;
         self.state.carets = Carets::from_carets(vec![Caret::select(anchor, at)]);
         cx.notify();
+    }
+
+    /// The middle button starts a column selection, the mouse shortcut of
+    /// `EditorCreateRectangularSelectionOnMouseDrag`; with the one of
+    /// `EditorCreateRectangularSelection` (⌥⇧) the rectangle goes from the primary caret to the
+    /// click (`SPEC-0130` v3 behaviour 6). Dragging with the button held stretches it.
+    fn on_middle_mouse_down(
+        &mut self,
+        event: &MouseDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.field || event.click_count != 1 || event.position.x < self.last.gutter_x {
+            return;
+        }
+        let bound = crate::keymaps::click_actions(2, &event.modifiers);
+        let at = self.column_at(event.position);
+        let corner = if bound
+            .iter()
+            .any(|a| a == "EditorCreateRectangularSelection")
+        {
+            let head = self.state.carets.primary().head;
+            self.state.buffer.offset_to_position(head).unwrap_or(at)
+        } else if bound
+            .iter()
+            .any(|a| a == "EditorCreateRectangularSelectionOnMouseDrag")
+        {
+            at
+        } else {
+            return;
+        };
+        window.focus(&self.focus);
+        self.column_select(corner, at, cx);
+        self.column_drag = Some(corner);
+        self.column_button = MouseButton::Middle;
+        self.dragging = true;
+        cx.stop_propagation();
     }
 
     /// Line and column under a window position, from the last frame; columns go on past the end
@@ -5369,34 +5590,8 @@ impl EditorView {
             underline: None,
             strikethrough: None,
         };
-        let styled = |len: usize, style: &idecraft_ui::theme::TextStyle| TextRun {
-            len,
-            font: Font {
-                weight: if style.bold {
-                    gpui::FontWeight::BOLD
-                } else {
-                    base.weight
-                },
-                style: if style.italic {
-                    gpui::FontStyle::Italic
-                } else {
-                    base.style
-                },
-                ..base.clone()
-            },
-            color: color(style.foreground.unwrap_or(p.text)),
-            background_color: style.background.map(color),
-            // A line under the text in the effect colour, e.g. a reassigned variable
-            // (`SPEC-0027` v11).
-            underline: style
-                .effect
-                .filter(|_| style.underline)
-                .map(|c| gpui::UnderlineStyle {
-                    thickness: px(1.0),
-                    color: Some(color(c)),
-                    wavy: false,
-                }),
-            strikethrough: None,
+        let styled = |len: usize, style: &idecraft_ui::theme::TextStyle| {
+            styled_run(len, style, &base, p.text)
         };
         let digits = layout::gutter_digits(total);
         let digit_width = text_system
@@ -5517,6 +5712,7 @@ impl EditorView {
         let mut caret_widths = Vec::new();
         let mut line_end_texts = Vec::new();
         let mut author_hints = Vec::new();
+        let mut hint_pills = Vec::new();
         let mut gutter_tips = Vec::new();
         for i in 0..count {
             // A usage count's own row above its declaration, indented like it (SPEC-0292
@@ -5548,6 +5744,7 @@ impl EditorView {
                     shaped: text_system.shape_line("".into(), font_size, &[], None),
                     origin,
                     above: true,
+                    italic: Vec::new(),
                 });
                 continue;
             }
@@ -5603,39 +5800,41 @@ impl EditorView {
                     })
                     .collect()
             };
-            let (display, coloured, hint_labels) = if here.is_empty() && values.is_empty() {
-                (display, coloured, Vec::new())
-            } else {
-                let (folded, drawn) = crate::value_fold_model::with_folds(&display, &values);
-                let (shown, labels) = crate::inlay_model::with_hints(&folded, &here);
-                let value_style = p.key_style("FOLDED_TEXT_ATTRIBUTES");
-                let value_labels: Vec<_> = drawn
-                    .into_iter()
-                    .map(|(column, len)| {
-                        let at = shown.byte_of(column);
-                        (at..at + len, value_style.clone())
-                    })
-                    .collect();
-                let moved = coloured
-                    .into_iter()
-                    .map(|(r, c)| {
-                        (
-                            shown.byte_of(display.column_of(r.start))
-                                ..shown.byte_of(display.column_of(r.end)),
-                            c,
-                        )
-                    })
-                    // A run inside a placeholder that shows its value has no text left.
-                    .filter(|(r, _): &(Range<usize>, _)| r.start < r.end)
-                    .collect();
-                let hint_style = p.key_style("INLINE_PARAMETER_HINT");
-                let labels = labels
-                    .into_iter()
-                    .map(|r| (r, hint_style.clone()))
-                    .chain(value_labels)
-                    .collect();
-                (shown, moved, labels)
-            };
+            let (display, coloured, hint_labels, hint_ranges) =
+                if here.is_empty() && values.is_empty() {
+                    (display, coloured, Vec::new(), Vec::new())
+                } else {
+                    let (folded, drawn) = crate::value_fold_model::with_folds(&display, &values);
+                    let (shown, labels) = crate::inlay_model::with_hints(&folded, &here);
+                    let value_style = p.key_style("FOLDED_TEXT_ATTRIBUTES");
+                    let value_labels: Vec<_> = drawn
+                        .into_iter()
+                        .map(|(column, len)| {
+                            let at = shown.byte_of(column);
+                            (at..at + len, value_style.clone())
+                        })
+                        .collect();
+                    let moved = coloured
+                        .into_iter()
+                        .map(|(r, c)| {
+                            (
+                                shown.byte_of(display.column_of(r.start))
+                                    ..shown.byte_of(display.column_of(r.end)),
+                                c,
+                            )
+                        })
+                        // A run inside a placeholder that shows its value has no text left.
+                        .filter(|(r, _): &(Range<usize>, _)| r.start < r.end)
+                        .collect();
+                    let hint_style = p.key_style("INLINE_PARAMETER_HINT");
+                    let ranges = labels.clone();
+                    let labels = labels
+                        .into_iter()
+                        .map(|r| (r, hint_style.clone()))
+                        .chain(value_labels)
+                        .collect();
+                    (shown, moved, labels, ranges)
+                };
             // Semantic tokens over the syntax colours (SPEC-0290 behaviour 4).
             let semantic: Vec<_> = self
                 .semantic
@@ -5677,21 +5876,16 @@ impl EditorView {
                 })
                 .collect();
             let coloured = crate::semantic_model::overlay(&coloured, &unused);
-            let mut runs = Vec::new();
-            let mut at = 0usize;
-            for (r, c) in coloured {
-                if r.start < at || r.end <= r.start || r.end > display.text.len() {
-                    continue;
-                }
-                if r.start > at {
-                    runs.push(run(r.start - at, p.text));
-                }
-                runs.push(styled(r.end - r.start, &c));
-                at = r.end;
-            }
-            if at < display.text.len() || runs.is_empty() {
-                runs.push(run(display.text.len() - at, p.text));
-            }
+            let runs = line_runs(&coloured, display.text.len(), &base, p.text);
+            let italic: Vec<Range<usize>> = runs
+                .iter()
+                .scan(0usize, |start, r| {
+                    let range = *start..*start + r.len;
+                    *start += r.len;
+                    Some((range, r.font.style == gpui::FontStyle::Italic))
+                })
+                .filter_map(|(range, slanted)| slanted.then_some(range))
+                .collect();
             if let Some(m) = &self.marked
                 && m.start < line_end.max(line_start + 1)
                 && m.end > line_start
@@ -5718,6 +5912,8 @@ impl EditorView {
             let plain = ghost_here.as_ref().map(|_| {
                 text_system.shape_line(display.text.clone().into(), font_size, &runs, None)
             });
+            // Where the inline completion goes in and how long it is.
+            let mut ghost_shift: Option<(usize, usize)> = None;
             let shaped = match &ghost_here {
                 Some((at, text)) => {
                     let mut lines = text.lines();
@@ -5733,6 +5929,7 @@ impl EditorView {
                         .or_else(|| p.scheme_foreground("LINE_COMMENT"))
                         .unwrap_or(p.line_number);
                     let byte = display.byte_of(at - line_start);
+                    ghost_shift = Some((byte, shown.len()));
                     let mut with = display.text.clone();
                     with.insert_str(byte, &shown);
                     let runs = insert_run(&runs, byte, run(shown.len(), colour));
@@ -6289,6 +6486,22 @@ impl EditorView {
             if line == caret_line && primary.is_empty() && !self.field {
                 frame.caret_row = Some(origin.y);
             }
+            // A hint stands on a rounded pill of its scheme background (SPEC-0291 v9 behaviour
+            // 4b); the inline completion moves the hints after the caret.
+            if let Some(bg) = p.key_style("INLINE_PARAMETER_HINT").background {
+                let moved_by = |at: usize| match ghost_shift {
+                    Some((byte, len)) if at >= byte => at + len,
+                    _ => at,
+                };
+                for r in &hint_ranges {
+                    let from = origin.x + shaped.x_for_index(moved_by(r.start));
+                    let to = origin.x + shaped.x_for_index(moved_by(r.end));
+                    frame
+                        .hint_pills
+                        .push((hint_pill(from, to, origin.y, px(line_height())), bg));
+                    hint_pills.push((line, bg));
+                }
+            }
             frame.lines.push((origin, shaped.clone()));
             painted.push(PaintedLine {
                 line,
@@ -6296,11 +6509,13 @@ impl EditorView {
                 shaped: plain.unwrap_or(shaped),
                 origin,
                 above: false,
+                italic,
             });
         }
         if gutter_tips != self.last.gutter_tips {
             self.gutter_moved = true;
         }
+        frame.gutter_focus = self.focused_gutter_bounds(&gutter_tips);
         self.last = LastLayout {
             lines: painted,
             gutter_x: bounds.origin.x + gutter,
@@ -6313,6 +6528,7 @@ impl EditorView {
             gutter_tips,
             author_hints,
             caret_widths,
+            hint_pills,
         };
         frame
     }
@@ -6322,6 +6538,8 @@ impl EditorView {
 #[derive(Default)]
 struct Frame {
     bounds: Bounds<Pixels>,
+    /// The ring around the gutter icon that has the keys (`SPEC-0058` v5 behaviour 13).
+    gutter_focus: Option<Bounds<Pixels>>,
     caret_row: Option<Pixels>,
     /// x of the line between gutter and text.
     gutter_x: Pixels,
@@ -6369,6 +6587,9 @@ struct Frame {
     inline_values: Vec<(gpui::Point<Pixels>, ShapedLine)>,
     /// Person symbols before author hints: head and body, colour (`SPEC-0292` v4 behaviour 7c).
     author_icons: Vec<(Bounds<Pixels>, Bounds<Pixels>, u32)>,
+    /// Rounded backgrounds behind parameter name hints and their colour (`SPEC-0291` v9
+    /// behaviour 4b).
+    hint_pills: Vec<(Bounds<Pixels>, u32)>,
 }
 
 fn paint(frame: Frame, focused: bool, window: &mut Window, cx: &mut App) {
@@ -6494,6 +6715,12 @@ fn paint(frame: Frame, focused: bool, window: &mut Window, cx: &mut App) {
             window.paint_quad(fill(inner, color(0xf2f2f2)).corner_radii(inner.size.width / 2.0));
         }
     }
+    if let Some(ring) = frame.gutter_focus {
+        window.paint_quad(
+            gpui::outline(ring, color(p.accent.rgb), gpui::BorderStyle::Solid)
+                .corner_radii(px(3.0)),
+        );
+    }
     for (square, letter) in &frame.bookmarks {
         window.paint_quad(fill(*square, color(p.accent.rgb)).corner_radii(px(3.0)));
         if let Some(letter) = letter {
@@ -6512,6 +6739,9 @@ fn paint(frame: Frame, focused: bool, window: &mut Window, cx: &mut App) {
         .unwrap_or(p.selection);
     for bounds in &frame.fold_braces {
         window.paint_quad(fill(*bounds, color(folded_bg)).corner_radii(px(3.0)));
+    }
+    for (bounds, rgb) in &frame.hint_pills {
+        window.paint_quad(fill(*bounds, color(*rgb)).corner_radii(px(HINT_PILL_CORNER)));
     }
     for (head, body, rgb) in &frame.author_icons {
         window.paint_quad(fill(*head, color(*rgb)).corner_radii(head.size.width / 2.0));
@@ -6759,12 +6989,24 @@ impl Render for EditorView {
             .on_key_down(cx.listener(Self::on_key_down))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
             .on_mouse_down(MouseButton::Right, cx.listener(Self::on_right_mouse_down))
+            .on_mouse_down(MouseButton::Middle, cx.listener(Self::on_middle_mouse_down))
+            .on_modifiers_changed(cx.listener(Self::on_modifiers))
             .on_mouse_move(cx.listener(Self::on_mouse_move))
             .on_mouse_up(
                 MouseButton::Left,
                 cx.listener(|this, _, _, _| {
                     this.dragging = false;
                     this.column_drag = None;
+                }),
+            )
+            .on_mouse_up(
+                MouseButton::Middle,
+                cx.listener(|this, _, _, _| {
+                    if this.column_button == MouseButton::Middle {
+                        this.dragging = false;
+                        this.column_drag = None;
+                        this.column_button = MouseButton::Left;
+                    }
                 }),
             )
             .on_scroll_wheel(cx.listener(Self::on_scroll))
@@ -6940,6 +7182,24 @@ fn margin_column(
 mod tests {
     use super::menu_keeps_selection;
     use idecraft_editor::Caret;
+
+    /// SPEC-0291 v9 AK-9: the pill is a pixel wider than the label on each side and stays inside
+    /// its line.
+    #[test]
+    fn a_hint_pill_wraps_its_label_inside_the_line() {
+        use gpui::px;
+        let b = super::hint_pill(px(100.), px(140.), px(32.), px(16.));
+        assert_eq!(b.origin.x, px(99.));
+        assert_eq!(b.size.width, px(42.));
+        assert_eq!(b.origin.y, px(34.));
+        assert_eq!(b.origin.y + b.size.height, px(46.));
+        const {
+            assert!(
+                super::HINT_PILL_CORNER * 2.0 <= 12.0,
+                "rounded, not a circle"
+            )
+        };
+    }
 
     /// SPEC-0137 v2 AK-5: `max_line_length` wins over Code Style, `off` draws none, without it
     /// Code Style decides.
@@ -7411,6 +7671,141 @@ mod file_property_tests {
         assert_eq!(std::fs::read(&wide).unwrap(), [0xFE, 0xFF, 0, 0xE9]);
         for p in [path, wide] {
             let _ = std::fs::remove_dir_all(p.parent().unwrap());
+        }
+    }
+}
+
+#[cfg(test)]
+mod static_call_tests {
+    use super::*;
+    use crate::palette::ThemeId;
+    use idecraft_languages::insight::Encoding;
+    use idecraft_ui::theme::KeyFamily;
+
+    /// `Inventory.java` of the test project `cmp-java-ij` (OBS-0079, OBS-0084).
+    const INVENTORY: &str = "package lab.inventory;\n\nimport java.util.List;\n\npublic final class Inventory {\n    public record Item(String sku, String name, int qty, int unitPriceCents) {\n        int totalCents() {\n            return qty * unitPriceCents;\n        }\n    }\n\n    public static int totalValue(List<Item> items) {\n        return items.stream().mapToInt(Item::totalCents).sum();\n    }\n\n    public static void main(String[] args) {\n        System.out.println(totalValue(List.of(new Item(\"A-1\", \"Bolt\", 3, 25))));\n    }\n}\n";
+
+    /// The answer to `textDocument/semanticTokens/full` for [`INVENTORY`], recorded from the
+    /// jdtls 1.64 IDECraft starts for the project (2026-11-17, OBS-0084 L2).
+    const LIVE_DATA: [u64; 225] = [
+        0, 8, 3, 0, 0, 0, 4, 9, 0, 0, 2, 7, 4, 0, 4096, 0, 5, 4, 0, 4096, 0, 5, 4, 2, 5184, 2, 0,
+        6, 11, 0, 0, 7, 5, 11, 0, 0, 6, 5, 11, 0, 0, 6, 9, 1, 84, 1, 4, 6, 11, 0, 0, 7, 6, 11, 0,
+        0, 7, 4, 15, 86, 0, 5, 6, 1, 68, 0, 7, 3, 16, 16, 0, 5, 6, 1, 68, 0, 7, 4, 16, 16, 0, 10,
+        3, 16, 16, 0, 9, 14, 16, 16, 1, 12, 10, 7, 16, 1, 19, 3, 8, 132, 0, 6, 14, 8, 132, 4, 4, 6,
+        11, 0, 0, 7, 6, 11, 0, 0, 11, 10, 7, 82, 0, 11, 4, 2, 1088, 0, 5, 4, 15, 2118, 0, 6, 5, 10,
+        16, 1, 15, 5, 10, 0, 0, 6, 6, 7, 1088, 0, 9, 8, 7, 1089, 0, 9, 4, 15, 70, 0, 6, 10, 7, 0,
+        0, 12, 3, 7, 65, 3, 4, 6, 11, 0, 0, 7, 6, 11, 0, 0, 12, 4, 7, 82, 0, 5, 6, 1, 68, 0, 9, 4,
+        10, 16, 1, 8, 6, 1, 68, 0, 7, 3, 8, 70, 0, 4, 7, 7, 64, 0, 8, 10, 7, 66, 0, 11, 4, 2, 64,
+        0, 5, 2, 7, 1090, 0, 7, 4, 15, 8256,
+    ];
+
+    /// The legend of that jdtls.
+    fn legend() -> (Vec<String>, Vec<String>) {
+        let names = |n: &[&str]| n.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
+        (
+            names(&[
+                "namespace",
+                "class",
+                "interface",
+                "enum",
+                "enumMember",
+                "type",
+                "typeParameter",
+                "method",
+                "property",
+                "variable",
+                "parameter",
+                "modifier",
+                "keyword",
+                "decorator",
+                "annotationMember",
+                "record",
+                "recordComponent",
+            ]),
+            names(&[
+                "abstract",
+                "static",
+                "readonly",
+                "deprecated",
+                "declaration",
+                "documentation",
+                "public",
+                "private",
+                "protected",
+                "native",
+                "generic",
+                "typeArgument",
+                "importDeclaration",
+                "constructor",
+            ]),
+        )
+    }
+
+    /// SPEC-0290 behaviour 4, SPEC-0060 behaviour 19 (OBS-0084 L2): with the tokens the live
+    /// jdtls sends, the calls of the static methods `totalValue` and `List.of` in `main` are shaped
+    /// in the italic font like the static field `out`, although they have the text colour of the
+    /// run before them; `println` stays upright.
+    #[test]
+    fn static_calls_in_the_text_colour_are_shaped_in_italics() {
+        let (types, modifiers) = legend();
+        let tokens = idecraft_languages::semantic::decode(
+            &LIVE_DATA,
+            &types,
+            &modifiers,
+            INVENTORY,
+            Encoding::Utf16,
+            KeyFamily::Java,
+        );
+        let line = 16usize;
+        let text = INVENTORY.lines().nth(line).unwrap();
+        // The server marks both calls `static` (and `out` as a static field).
+        let named = |name: &str| {
+            tokens
+                .iter()
+                .find(|t| t.line == line as u64 && &text[t.start as usize..t.end as usize] == name)
+                .unwrap_or_else(|| panic!("a token for {name}"))
+        };
+        for name in ["totalValue", "of"] {
+            assert!(
+                named(name).modifiers.iter().any(|m| m == "static"),
+                "{name}"
+            );
+            assert_eq!(named(name).key, Some("STATIC_METHOD_ATTRIBUTES"), "{name}");
+        }
+        assert_eq!(named("out").key, Some("STATIC_FINAL_FIELD_ATTRIBUTES"));
+        // As the editor paints the line: the tokens' styles over plain text, then gpui's runs.
+        let starts: Vec<usize> = std::iter::once(0)
+            .chain(INVENTORY.match_indices('\n').map(|(i, _)| i + 1))
+            .collect();
+        let spans = crate::semantic_model::SemanticSpans::from_tokens(&tokens, |l| {
+            starts.get(l as usize).copied()
+        });
+        let at = starts[line];
+        for theme in [ThemeId::IslandsLight, ThemeId::Light] {
+            let p = Palette::for_theme(theme);
+            let coloured: Vec<_> = spans
+                .within(at..at + text.len())
+                .iter()
+                .map(|(r, key)| (r.start - at..r.end - at, p.key_style(key)))
+                .collect();
+            let base = font(crate::fonts::EDITOR_FONT);
+            let runs = line_runs(&coloured, text.len(), &base, p.text);
+            // The font of a run as the platform resolves it: one face per weight and style.
+            let face = |f: &Font| {
+                gpui::FontId(
+                    usize::from(f.weight == gpui::FontWeight::BOLD)
+                        + 2 * usize::from(f.style == gpui::FontStyle::Italic),
+                )
+            };
+            let mut italic = Vec::new();
+            let mut start = 0;
+            for (len, id) in gpui::font_runs_of(&runs, face) {
+                if id.0 & 2 != 0 {
+                    italic.push(&text[start..start + len]);
+                }
+                start += len;
+            }
+            assert_eq!(italic, ["out", "totalValue", "of"], "{theme:?}");
         }
     }
 }

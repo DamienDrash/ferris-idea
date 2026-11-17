@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <a href="#development-status"><img alt="Status: beta" src="https://img.shields.io/badge/status-beta-A3BE8C?style=flat-square"></a>
+  <a href="#development-status"><img alt="Status: 1.0" src="https://img.shields.io/badge/status-1.0-A3BE8C?style=flat-square"></a>
   <a href="#license"><img alt="License: PolyForm Shield 1.0.0, source-available" src="https://img.shields.io/badge/license-PolyForm%20Shield%201.0.0-4C566A?style=flat-square"></a>
   <a href="#platforms-and-requirements"><img alt="Desktop window verified on macOS, Apple Silicon" src="https://img.shields.io/badge/desktop-macOS%20(Apple%20Silicon)-4C566A?style=flat-square"></a>
 </p>
@@ -38,9 +38,9 @@
 
 IDECraft is a desktop IDE written in Rust: editor, code insight through language servers,
 debugger, Git, database tools, HTTP client and terminal in one window. It is also what we call an
-**IDE AI harness**: 318 of its operations are typed MCP tools, so an agent you bring can rename a
+**IDE AI harness**: 327 of its operations are typed MCP tools, so an agent you bring can rename a
 symbol, stop at a breakpoint or run SQL through the IDE instead of through a shell, and every tool
-that changes something checks one of 14 rights you grant per workspace, or a database permission
+that changes something checks one of 15 rights you grant per workspace, or a database permission
 you grant per connection. The first commit
 is from 2026-10-30; the code was written almost entirely by AI agents, and no person has read all
 of it. One human project owner decides scope and approvals, and its functional target is the scope of IntelliJ IDEA Ultimate, including
@@ -49,9 +49,9 @@ database tooling.
 <sub>Independent project: not affiliated with, endorsed by, or sponsored by JetBrains. Full notice: <a href="#independent-project-notice">Independent Project Notice</a>.</sub>
 
 > [!WARNING]
-> **Alpha (v0.17.0). Not a daily driver.** Nothing to download: you build it from source, about
-> 16 minutes cold on the one machine it was measured on. The window is verified on macOS on Apple
-> Silicon only. Of 57 feature rows, 37 are checked side by side against the reference; many newer
+> **Version 1.0 (v1.0.0), for two workflows.** A signed and notarized download for macOS on Apple
+> Silicon is on the [v1.0.0 release](https://github.com/DamienDrash/idecraft/releases/tag/v1.0.0);
+> elsewhere you build it from source. The window is verified on macOS on Apple Silicon only. Of 57 feature rows, 37 are checked side by side against the reference; many newer
 > features have only automated tests. No external security review. Every known gap:
 > [Development Status](#development-status).
 
@@ -380,22 +380,22 @@ only.
 <details>
 <summary><b>Tools by area</b></summary>
 
-Grouped by tool name; each tool is counted in one group, and the groups add up to all 318 tools. A
+Grouped by tool name; each tool is counted in one group, and the groups add up to all 327 tools. A
 count says nothing about depth.
 
 | Area | Tools |
 |---|---|
-| Workspace, files, search, local history | 32 |
+| Workspace, files, search, local history | 33 |
 | Code insight and inspections, through the language servers you installed | 35 |
-| Refactoring, code actions, formatting | 22 |
+| Refactoring, code actions, formatting | 23 |
 | Git: status to rebase, with hooks and conflicts | 30 |
-| Debugger: breakpoints, stepping, variables, evaluate | 24 |
-| Databases: schemas, SQL, data, comparison, export | 39 |
-| Run, build, terminal, HTTP client, profiler | 27 |
+| Debugger: breakpoints, stepping, variables, evaluate | 27 |
+| Databases: schemas, SQL, data, comparison, export | 41 |
+| Run, build, terminal, HTTP client, profiler | 28 |
 | Languages and environments, containers | 25 |
 | Remote hosts over SSH, remote projects, pairing, shared rooms | 45 |
 | Rights, trust, settings, plugins, the AI assistant | 20 |
-| Window: tabs, tool windows, dialogs, notifications, keymap | 10 |
+| Window: tabs, tool windows, dialogs, notifications, keymap | 11 |
 | Operate the window by role and name (`ui_*`) | 9 |
 
 </details>
@@ -404,8 +404,9 @@ count says nothing about depth.
 
 - **Rights per workspace.** Reading files of the workspace and previews are free. Every tool that
   changes something (project files, the repository, your settings, the state of the window, a
-  process, a database) checks one of 14 rights: `write`, `vcs-write`, `run`, `http`, `debug`,
-  `remote`, `ssh`, `trust`, `quit`, `terminal-read`, `ports`, `ui`, `secret-read`, `settings`. One
+  process, a database) checks one of 15 rights: `write`, `vcs-write`, `run`, `http`, `debug`,
+  `remote`, `ssh`, `trust`, `quit`, `terminal-read`, `ports`, `ui`, `secret-read`, `settings`,
+  `recent-projects` (reading the folders of your other recent projects). One
   table has a row per tool that names what it changes and which rights it checks, and tests fail
   for a tool without a row and for a change without a right
   ([SPEC-0053](docs/specifications/SPEC-0053-agent-permissions.md)).
@@ -781,7 +782,7 @@ which the repository records as reached on 2026-11-16, with named limits
 
 ### Timeline
 
-17 tagged versions on 14 days; v0.1.0 to v0.7.0 were cut retroactively on 2026-11-06.
+20 tagged versions on 16 days; v0.1.0 to v0.7.0 were cut retroactively on 2026-11-06.
 
 <details>
 <summary><b>Version by version</b></summary>
@@ -799,6 +800,7 @@ which the repository records as reached on 2026-11-16, with named limits
 | 2026-11-14 | Unreleased | Changelists, file properties, TODO window, window layouts. After a security review: database permissions moved out of the project to the user, and every changing tool checks a right ([ADR-0031](docs/adr/0031-project-files-never-grant-agents.md)) |
 | 2026-11-15 to 11-16 | Unreleased | Quality gate QG-1 recorded as reached, with named limits: 20 green CI runs of `main` in a row, the window self-test passed on macOS and once on Linux ([gate report](docs/quality/QG-1-REPORT.md)) |
 | 2026-11-17 | v0.19.0, v0.20.0, beta | Beta for both priority workflows: every hand test of the project workflow and of SQL against PostgreSQL and MySQL passed in agent runs, the window self-test green on the tagged commit |
+| 2026-11-17 | v1.0.0 | First GitHub release, with a signed, notarized and stapled macOS download; [STABILITY.md](docs/STABILITY.md) says what stays stable from now on |
 
 Sources: [CHANGELOG.md](CHANGELOG.md), `scripts/parity.sh`. The score is the project's own
 weighted measure at each date.
@@ -842,7 +844,7 @@ What stands in for line-by-line human review:
   criteria;
 - functional tests that drive IDECraft from outside, for 55 of 57 feature rows;
 - a window self-test that presses real keys and clicks;
-- side-by-side comparison with the reference for 37 of 57 feature rows, with the differences
+- side-by-side comparison with the reference for 44 of 57 feature rows, with the differences
   recorded;
 - ratchet tests that fail when the state of the project falls behind what is written down: an
   agent tool that changes something without checking a right or without a log line, a changelog
@@ -856,7 +858,7 @@ The number in [Development Status](#development-status) is a feature-presence sc
 own weighted checklist of how much of the reference's functional scope exists in IDECraft. Weights
 and stages are the project's judgment, the rows are coarse (one row stands for all of Java and
 Kotlin support), and the score says nothing about quality, depth or polish. The count that cannot
-be misread is the one at the top of this page: 37 of 57 rows have a documented side-by-side
+be misread is the one at the top of this page: 44 of 57 rows have a documented side-by-side
 comparison. IDECraft is not a substitute for the reference.
 
 ## How It Is Built
@@ -881,7 +883,7 @@ comparison. IDECraft is not a substitute for the reference.
   [porting rules](docs/legal/APACHE_PORTING.md), [provenance](docs/legal/PROVENANCE.md).
 - **Traceability.** The rule is: every feature has a specification, and each acceptance criterion
   is mapped to a test in [TRACEABILITY.md](docs/specifications/TRACEABILITY.md). There are 245
-  [specifications](docs/specifications/README.md), 32 decision records and 68 observation
+  [specifications](docs/specifications/README.md), 34 decision records and 80 observation
   records; the observation records stay in the project's working repository and are not
   published.
 - **Five layers of checking.** Unit and integration tests; functional tests from outside for 55 of
@@ -913,30 +915,31 @@ comparison. IDECraft is not a substitute for the reference.
 
 ## Development Status
 
-**Stage: beta, since v0.20.0 (2026-11-17), for both priority workflows:** a project in a priority
+**Stage: 1.0, since v1.0.0 (2026-11-17), for both priority workflows:** a project in a priority
 language (open, edit, navigate, run or debug, commit with Git) and SQL against PostgreSQL or MySQL.
 Every hand test of both workflows passed in an agent run, the window self-test is green on the
-tagged commit, and the rows of both workflows are at parity stage 3 or higher. 1.0 also needs a
-published release. The quality gate QG-1
+tagged commit, the rows of both workflows are at parity stage 3 or higher, and v1.0.0 is a GitHub
+release with a signed and notarized macOS download. 1.0 is a claim about these two workflows, not
+about every feature: the gaps below still hold. The quality gate QG-1
 ([ADR-0015](docs/adr/0015-quality-gate-ai-native.md)) asks whether the classical IDE is complete
 enough for the AI-native phase; the repository records it as reached on 2026-11-16, with the limits
 named in the [gate report](docs/quality/QG-1-REPORT.md). The gate is not a stage.
 
 | | |
 |---|---|
-| Version and stage | v0.20.0, beta |
-| Age | first commit 2026-10-30; 17 tagged versions on 14 days |
-| Size | 29 crates, about 589,000 lines of Rust in 960 files |
-| For agents | 318 MCP tools, 14 workspace rights, 4 permissions per database connection |
+| Version and stage | v1.0.0, 1.0 (`stable`) |
+| Age | first commit 2026-10-30; 20 tagged versions on 16 days |
+| Size | 29 crates, about 624,000 lines of Rust in 997 files |
+| For agents | 327 MCP tools, 15 workspace rights, 4 permissions per database connection |
 | Tests | 3,703 passed and 32 skipped in the Linux run of the workspace on 2026-11-15, including tests that return early without their external tool |
-| Feature rows compared side by side | 37 of 57; 19 more usable in the window or over MCP, 1 open |
-| Feature-presence score (own weighted measure, not a quality claim) | 91.8 %; 75.4 % of the weight compared side by side (the quality gate asks for 85 % and 50 %) |
-| Downloads, installers, releases | none |
+| Feature rows compared side by side | 44 of 57; 12 more usable in the window or over MCP, 1 open |
+| Feature-presence score (own weighted measure, not a quality claim) | 94.2 %; 83.4 % of the weight compared side by side (the quality gate asks for 85 % and 50 %) |
+| Downloads, installers, releases | v1.0.0: a DMG for macOS on Apple Silicon, signed with a Developer ID, notarized and stapled |
 
 <details>
 <summary><b>How each number was measured</b></summary>
 
-Measured on `main` at commit `4223536e`, 2026-11-16, unless a date is given.
+Measured on `main` at commit `110652ee`, 2026-11-17, unless a date is given.
 
 - Version and stage: `Cargo.toml`, `crates/core/src/release.rs`.
 - Age and versions: `git log --reverse`, `git tag`, the headings of CHANGELOG.md.
@@ -964,8 +967,8 @@ What is missing or weak:
   the headless tests run, and the window self-test passed once in a virtual machine on a virtual
   X display ([report](docs/quality/QG-1-LINUX-WINDOW.md)); the window on a real Linux desktop is
   not verified. There is no Windows desktop build.
-- **Nothing to download.** No installers, no Developer ID signature, no notarization, no
-  auto-update.
+- **One download.** The DMG is for macOS on Apple Silicon only. There are no Linux or Windows
+  packages and no auto-update.
 - **You install the language tools.** Language servers and debug adapters are not bundled.
 - **Database tools are the weakest group** in the score (87.1 %): six of its eleven rows are not
   yet compared side by side. 28 of 41 connectors were never run against the real system.
@@ -991,7 +994,8 @@ What is missing or weak:
 
 ## Platforms and Requirements
 
-There are no prebuilt releases. Build from source.
+The [v1.0.0 release](https://github.com/DamienDrash/idecraft/releases/tag/v1.0.0) has a signed and
+notarized DMG for macOS on Apple Silicon. On every other platform, build from source.
 
 | Target | State |
 |---|---|
@@ -1114,6 +1118,7 @@ the `.idecraft` folder of each project, and remove its entries from the keychain
 | Research rules and legal summary | [docs/legal](docs/legal/README.md) |
 | Roadmap | [ROADMAP](ROADMAP.md) |
 | Changes per version | [CHANGELOG.md](CHANGELOG.md) |
+| What stays stable from 1.0 | [STABILITY.md](docs/STABILITY.md) |
 | Contributing, checks, security reports, conduct | [CONTRIBUTING.md](CONTRIBUTING.md), [checks and self-test](docs/testing/CHECKS_AND_SELFTEST.md), [SECURITY.md](SECURITY.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) |
 | Licensing, name and logo | [LICENSING.md](LICENSING.md), [TRADEMARKS.md](TRADEMARKS.md) |
 | Brand and documentation rules | [docs/design](docs/design/README.md) |
@@ -1126,7 +1131,8 @@ There is no chat and no support promise.
 **Versioning.** [Semantic Versioning](https://semver.org/) with `0.x` versions until 1.0. A
 working day with user-visible changes gets a minor version and an annotated tag; there are no
 GitHub releases. File formats carry a version and older ones are migrated on read. No
-compatibility promise is recorded for tool names and schemas before 1.0.
+compatibility promise is recorded for tool names and schemas before 1.0. What 1.0 is to keep
+stable is proposed in [STABILITY.md](docs/STABILITY.md).
 
 ## FAQ
 
@@ -1197,7 +1203,7 @@ free.
 <details>
 <summary><b>Is it a replacement for the reference IDE?</b></summary>
 
-No. The reference defines the functional target. IDECraft is beta: usable day to day for its two priority workflows, not yet 1.0.
+No. The reference defines the functional target. IDECraft 1.0 is usable day to day for its two priority workflows; many other features are less complete than the reference.
 
 </details>
 
@@ -1241,8 +1247,8 @@ licensor's written consent. The licensor is Damien Frigewski; ask by e-mail to
 <dfrigewski@gmail.com> (details in [LICENSING.md](LICENSING.md)). It is not open-source software. This paragraph is a summary, not the terms: the license text decides, and
 [LICENSING.md](LICENSING.md) answers common questions.
 
-IDECraft comes as is, without warranty, as far as the law allows (license, "No Liability"). It is
-beta software: keep backups of what you open with it.
+IDECraft comes as is, without warranty, as far as the law allows (license, "No Liability"). Keep
+backups of what you open with it.
 
 The name and logo are not covered by the license: [TRADEMARKS.md](TRADEMARKS.md) says how the
 project wants them used. "IDECraft" is not a registered trademark. Third-party parts keep their own licenses: [NOTICE](NOTICE),

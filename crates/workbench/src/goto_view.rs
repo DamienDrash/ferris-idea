@@ -90,6 +90,9 @@ pub struct GotoView {
     tool_selected: usize,
     /// Indexes of the Recent Locations rows shown.
     places_shown: Vec<usize>,
+    /// In Rename mode: the new name is checked by the planner, which says why it refuses one
+    /// (a CSS class or id, `SPEC-0042` v22 behaviour 38b), not by the popup.
+    planner_checks_name: bool,
     _watch: Subscription,
 }
 
@@ -236,8 +239,17 @@ impl GotoView {
             in_tools: false,
             tool_selected: 0,
             places_shown: Vec::new(),
+            planner_checks_name: false,
             _watch: watch,
         }
+    }
+
+    /// The rename popup of a CSS class or id: any name but the empty one goes to the planner,
+    /// which refuses one that is no CSS identifier with its reason (`SPEC-0042` v22 behaviour 38b);
+    /// `-` is part of such names.
+    pub fn with_name_checked_by_planner(mut self) -> Self {
+        self.planner_checks_name = true;
+        self
     }
 
     /// Focus handle of the field.
@@ -351,8 +363,9 @@ impl GotoView {
                 let options = *options;
                 let name = self.field.read(cx).state.buffer.text().trim().to_owned();
                 let valid = !name.is_empty()
-                    && name.chars().all(|c| c.is_alphanumeric() || c == '_')
-                    && !name.starts_with(|c: char| c.is_ascii_digit());
+                    && (self.planner_checks_name
+                        || name.chars().all(|c| c.is_alphanumeric() || c == '_')
+                            && !name.starts_with(|c: char| c.is_ascii_digit()));
                 if name == *old {
                     cx.emit(GotoEvent::Close);
                 } else if valid {
@@ -412,13 +425,7 @@ impl GotoView {
                     )
                 })
             }
-            Mode::Locations(_) => {
-                k.key == "e"
-                    && k.modifiers.platform
-                    && k.modifiers.shift
-                    && !k.modifiers.alt
-                    && !k.modifiers.control
-            }
+            Mode::Locations(_) => locations_toggle(&k.key, &k.modifiers, cfg!(target_os = "macos")),
             _ => false,
         };
         if toggles {
@@ -539,7 +546,7 @@ impl Render for GotoView {
         )
         .w_full()
         .h(px((self.shown.len().clamp(1, 14) as f32) * 24.0));
-        let check = |on: bool, label: &'static str, key: &'static str| {
+        let check = |on: bool, label: &'static str, key: String| {
             div()
                 .flex()
                 .items_center()
@@ -689,16 +696,23 @@ impl Render for GotoView {
                     .child(div().flex_1().text_color(c(p.ui_muted)).child(title))
                     .when(recent_mode, |d| {
                         d.child(
-                            check(self.edited_only, "Show edited only", "⌘E")
-                                .id("recent-edited-only")
-                                .on_click(cx.listener(|this, _, _, cx| {
-                                    this.set_edited_only(!this.edited_only, cx)
-                                })),
+                            check(
+                                self.edited_only,
+                                "Show edited only",
+                                crate::keymaps::current().shortcut_label(
+                                    crate::keymap_actions::EDITED_ONLY_ACTION,
+                                    cfg!(target_os = "macos"),
+                                ),
+                            )
+                            .id("recent-edited-only")
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.set_edited_only(!this.edited_only, cx)
+                            })),
                         )
                     })
                     .when(locations_mode, |d| {
                         d.child(
-                            check(self.edited_only, "Show edited only", "⇧⌘E")
+                            check(self.edited_only, "Show edited only", keys("⇧⌘E"))
                                 .id("locations-edited-only")
                                 .on_click(cx.listener(|this, _, _, cx| {
                                     this.set_edited_only(!this.edited_only, cx)
@@ -735,9 +749,13 @@ impl Render for GotoView {
                         .child(check(
                             o.comments_and_strings,
                             "Search in comments and strings",
-                            "⌥C",
+                            keys("⌥C"),
                         ))
-                        .child(check(o.text_files, "Search for text occurrences", "⌥T")),
+                        .child(check(
+                            o.text_files,
+                            "Search for text occurrences",
+                            keys("⌥T"),
+                        )),
                 )
             })
             .when(recent_mode, |d| {
@@ -784,4 +802,46 @@ fn shortcut_of(action: &str) -> String {
         .find(|s| !matches!(s, idecraft_ui::keymap::Shortcut::Mouse { .. }))
         .map(|s| s.display(cfg!(target_os = "macos")))
         .unwrap_or_default()
+}
+
+/// Whether a key toggles "Show edited only" in Recent Locations: ⇧⌘E, Ctrl+Shift+E outside
+/// macOS (`SPEC-0028` v8 behaviour 13).
+fn locations_toggle(key: &str, m: &gpui::Modifiers, macos: bool) -> bool {
+    let (primary, other) = if macos {
+        (m.platform, m.control)
+    } else {
+        (m.control, m.platform)
+    };
+    key == "e" && primary && m.shift && !m.alt && !other
+}
+
+/// A shortcut of this dialog written for the platform: ⌘ is Ctrl and ⌥ is Alt outside macOS
+/// (`SPEC-0028` v8 behaviour 13).
+fn keys(text: &str) -> String {
+    idecraft_ui::keymap::local_keys(text, cfg!(target_os = "macos"))
+}
+
+#[cfg(test)]
+mod platform_tests {
+    use super::*;
+
+    /// SPEC-0028 v8 AK-15: Recent Locations takes Ctrl+Shift+E outside macOS.
+    #[test]
+    fn the_locations_toggle_follows_the_platform() {
+        let m = |control: bool, platform: bool| gpui::Modifiers {
+            control,
+            platform,
+            shift: true,
+            ..Default::default()
+        };
+        assert!(locations_toggle("e", &m(false, true), true));
+        assert!(!locations_toggle("e", &m(true, false), true));
+        assert!(locations_toggle("e", &m(true, false), false));
+        assert!(!locations_toggle("e", &m(false, true), false));
+        assert_eq!(
+            idecraft_ui::keymap::local_keys("⇧⌘E", false),
+            "Ctrl+Shift+E"
+        );
+        assert_eq!(idecraft_ui::keymap::local_keys("⌥C", false), "Alt+C");
+    }
 }

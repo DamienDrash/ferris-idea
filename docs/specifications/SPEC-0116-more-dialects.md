@@ -1,6 +1,7 @@
 # SPEC-0116: More dialects — MariaDB and SQL Server
 
-- **Version:** 7 · **Date:** 2026-11-16 (v7: the CA file is the only trust anchor — IDECraft reads the
+- **Version:** 8 · **Date:** 2026-11-17 (v8: SQL Server's procedures, functions and triggers in the catalog with
+  their definitions, behaviour 5, AK-12 — OBS-0083 L5); 2026-11-16 (v7: the CA file is the only trust anchor — IDECraft reads the
   server's certificate chain from the handshake and checks it against the file before the login
   leaves, behaviour 15, AK-11 — SPEC-0016 v4, IMP-0426); 2026-11-16 (v6: TLS with SQL Server works on macOS — the records of a
   handshake flight go to the server as one pre-login message; the server's TLS version is checked; a CA
@@ -60,6 +61,10 @@ SQLite: connect, run scripts, browse, complete, edit results, compare schemas, e
    indexes are not read; SQL Server from `sys.objects`, `sys.columns`, `sys.types`,
    `sys.key_constraints`, `sys.foreign_keys`, `sys.indexes` in the user's default schema, with
    lengths, precision and `IDENTITY(seed,increment)` in the type. [DOC]
+   **v8 (OBS-0083 L5):** procedures and functions (`sys.objects` of types `P`, `PC`, `FN`, `IF`,
+   `TF`, `FS`, `FT`) and DML triggers (`sys.triggers` with `sys.trigger_events`: table, `AFTER` or
+   `INSTEAD OF` and the events) of that schema are listed with its objects, without the system's
+   own (`is_ms_shipped`); a definition is the text SQL Server keeps (`OBJECT_DEFINITION`). [DOC]
 6. **Quoting, literals, editing:** identifiers in backticks (MariaDB) or brackets (SQL Server);
    SQL Server literals as `N'…'`; edits compare the loaded value with `<=>` (MariaDB) or `=` /
    `IS NULL` (SQL Server, which only knows `IS NOT DISTINCT FROM` from 2022); transactions start
@@ -204,6 +209,11 @@ SQLite: connect, run scripts, browse, complete, edit results, compare schemas, e
   made of the broken stream (`sqlserver::tests::the_ca_files_refusal_is_the_error`). Live against the SQL Server of the reference environment
   (SPEC-0016 v4 AK-14, `tests/tls.rs` `sql_server_modes`): `verify-full` with the test CA connects to
   `localhost`, with a CA file that did not sign the certificate it fails naming the file.
+
+- **AK-12 (v8, behaviour 5)** Live against SQL Server 2022 (`crates/database/tests/it/sqlserver.rs`
+  `routines_and_triggers`): a procedure, a function and a trigger `AFTER INSERT, UPDATE` are listed
+  with kind, table and `AFTER INSERT OR UPDATE`; the function's definition starts with its
+  `CREATE FUNCTION`. Unit: `schema_objects::tests` (queries and definition statements).
 
 ## Out of scope
 Oracle (no pure-Rust driver without the proprietary client libraries), Windows and Azure AD

@@ -1,13 +1,22 @@
 //! SPEC-0158 AK-2: IDECraft's backend on a host reached by SSH — against a real `sshd` started as
 //! the current user (skipped without one). The local binary is uploaded to a test folder in the
-//! home folder, started for a project folder and asked through MCP.
+//! sessions' home folder (one of the test's own, never the user's), started for a project folder
+//! and asked through MCP.
 
 use idecraft_remote::{Backend, Installed, Remote, ensure_backend, testing::TestHost};
 
 #[test]
 fn backend_is_uploaded_started_and_answers_tools() {
+    // One test at a time uploads and starts a backend on a test host (see the helper).
+    let _turn = idecraft_remote::testing::one_host_at_a_time();
     let base = std::env::temp_dir().join(format!("idecraft-backend-{}", std::process::id()));
-    let Some(host) = TestHost::start(&base.join("ssh")) else {
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(base.join("home")).unwrap();
+    let base = base.canonicalize().unwrap();
+    let home = base.join("home");
+    let Some(host) =
+        TestHost::start_with_env(&base.join("ssh"), &[("HOME", &home.display().to_string())])
+    else {
         eprintln!("skipped: no sshd");
         return;
     };
@@ -81,9 +90,5 @@ fn backend_is_uploaded_started_and_answers_tools() {
     assert!(backend.alive());
     drop(backend);
 
-    let home = std::env::var_os("HOME")
-        .map(std::path::PathBuf::from)
-        .unwrap();
-    let _ = std::fs::remove_dir_all(home.join(&dir));
     let _ = std::fs::remove_dir_all(&base);
 }

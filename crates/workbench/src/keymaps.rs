@@ -36,6 +36,22 @@ pub fn current() -> Arc<Keymap> {
     current()
 }
 
+/// The first shortcut of `action` in the keymap in use, written for this system: `⌥F7` on
+/// macOS, `Alt+F7` elsewhere; empty when the action has none (`SPEC-0028` v9 behaviour 14).
+pub fn label(action: &str) -> String {
+    current().shortcut_label(action, cfg!(target_os = "macos"))
+}
+
+/// A key in parentheses after a space, ` (⌥F7)`, or nothing for an empty key (`SPEC-0028` v9
+/// behaviour 14).
+pub fn in_parens(key: &str) -> String {
+    if key.is_empty() {
+        String::new()
+    } else {
+        format!(" ({key})")
+    }
+}
+
 /// The user's changes: the keymap file, or an empty user keymap when there is none.
 pub fn user_keymap(cx: &App) -> KeymapFile {
     KeymapFile::read_user(keymap_file(cx).as_deref())
@@ -114,15 +130,53 @@ pub fn tree_action_key(k: &gpui::Keystroke) -> Option<crate::tree_nav::TreeKey> 
 /// The actions whose mouse shortcut in the keymap in use is a single click of the primary button
 /// with the modifiers `m` (`SPEC-0130` v2 behaviour 5).
 pub fn primary_click_actions(m: &gpui::Modifiers) -> Vec<String> {
+    click_actions(1, m)
+}
+
+/// The actions whose mouse shortcut in the keymap in use is a single click of `button` (1 the
+/// primary, 2 the middle one) with the modifiers `m` (`SPEC-0130` v3 behaviour 6).
+pub fn click_actions(button: u8, m: &gpui::Modifiers) -> Vec<String> {
+    click_actions_in(&current(), button, m)
+}
+
+fn click_actions_in(keymap: &Keymap, button: u8, m: &gpui::Modifiers) -> Vec<String> {
     let held = idecraft_ui::keymap::MouseModifiers {
         ctrl: m.control,
         alt: m.alt,
         shift: m.shift,
         meta: m.platform,
     };
-    current()
-        .mouse_actions(1, false, held)
+    keymap
+        .mouse_actions(button, false, held)
         .into_iter()
         .map(str::to_owned)
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// SPEC-0130 AK-6 (v3): the middle button alone means the column selection by dragging, ⌥⇧
+    /// with it the rectangle from the caret, in the bundled macOS and default keymaps.
+    #[test]
+    fn middle_click_actions() {
+        const DRAG: &str = "EditorCreateRectangularSelectionOnMouseDrag";
+        const FROM_CARET: &str = "EditorCreateRectangularSelection";
+        let alt_shift = gpui::Modifiers {
+            alt: true,
+            shift: true,
+            ..Default::default()
+        };
+        for keymap in [Keymap::bundled_macos(), Keymap::bundled_default()] {
+            let plain = click_actions_in(&keymap, 2, &gpui::Modifiers::default());
+            assert!(plain.iter().any(|a| a == DRAG), "{plain:?}");
+            assert!(!plain.iter().any(|a| a == FROM_CARET), "{plain:?}");
+            let both = click_actions_in(&keymap, 2, &alt_shift);
+            assert!(both.iter().any(|a| a == FROM_CARET), "{both:?}");
+            assert!(!both.iter().any(|a| a == DRAG), "{both:?}");
+            let primary = click_actions_in(&keymap, 1, &gpui::Modifiers::default());
+            assert!(!primary.iter().any(|a| a == DRAG || a == FROM_CARET));
+        }
+    }
 }

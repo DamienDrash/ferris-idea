@@ -1,6 +1,6 @@
 # SPEC-0077: Quick Documentation from the editor
 
-- **Version:** 7 · **Date:** 2026-11-14 (v7: Type Info (`ExpressionTypeInfo`), the type of the expression at the caret
+- **Version:** 8 · **Date:** 2026-11-16 (v8: External Documentation, behaviour 7, AK-13; eleventh package of docs/research/KEYMAP_COVERAGE.md); 2026-11-14 (v7: Type Info (`ExpressionTypeInfo`), the type of the expression at the caret
   from the language server's hover, behaviour 6, AK-12; seventh package of docs/research/KEYMAP_COVERAGE.md; v2: links show their text, repeated documentation once; hand test Nr. 110;
   v3: links whose target holds unbalanced parentheses, labelled sections, inline code; OBS-0012;
   v4: single-star emphasis removed, OBS-0016; v5: jdtls signature as code with one parameter per line,
@@ -114,6 +114,12 @@ Read a symbol's signature and documentation comment without leaving the place yo
    [OSS: the id, the title "Type Info" from `ActionsBundle.properties` and the chords of the
    bundled keymap files; STD: LSP `textDocument/hover`; GEN. How the reference shows the type,
    and that it widens the expression on a second press, was not observed and is not built.]
+7. **External Documentation (v8):** `ExternalJavaDoc` (⇧F1 in the bundled keymaps) asks the
+   language server for the documentation at the caret, as behaviour 1 does, and opens its first
+   `https://` link in the system's browser; the status bar names the address. Without such a
+   link, or without a language for the file, the status bar says "No external documentation
+   link for the symbol at the caret". Links of other schemes (`http:`, `file:`, `jdt:`) are
+   never opened. [OSS, GEN]
 
 ## Acceptance criteria
 - **AK-1** Hover on unsaved text as Markdown with the signature and the documentation comment
@@ -159,6 +165,10 @@ Read a symbol's signature and documentation comment without leaving the place yo
   (`menus::tests::seventh_package_items_are_in_their_menus`,
   `everywhere::tests::seventh_package_actions_have_titles`). With a running language server
   and on screen: not checked.
+- **AK-13 (v8, behaviour 7)** Unit test
+  `workbench_keymap_eleventh::tests::the_first_https_link_is_opened` (Markdown link, angle
+  brackets, no other scheme); window test `eleventh_package_keymap.rs`:
+  `find_usages_asks_for_the_scope` (the message without a link, macOS).
 
 ## Out of scope
 A setting to switch documentation on hover off or change its delay, the documentation tool window,
@@ -174,3 +184,7 @@ type of a selection that the server does not answer for at its first character.
 The reference renders its own documentation for its languages; IDECraft shows what the language server
 sends, so content depends on the server. Lists other than javadoc tag sections are shown as plain text, links as their text (not clickable,
 also `jdt://` links). Inline code keeps the proportional font, marked by colour and background.
+- **External Documentation (v8):** the reference opens the address of the library's
+  documentation that is set up for the SDK or library. IDECraft has no such setting and takes
+  the first https link of the server's documentation; a server that gives no link (jdtls gives
+  `jdt:` links) leads to the message.

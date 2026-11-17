@@ -528,9 +528,9 @@ impl Render for RebaseView {
             .when_some(self.note.clone(), |d, n| {
                 d.child(div().text_color(c(p.ui_muted)).child(n))
             })
-            .child(div().text_xs().text_color(c(p.ui_dim)).child(
+            .child(div().text_xs().text_color(c(p.ui_dim)).child(keys(
                 "P pick · R reword · S squash · F fixup · D drop · ⌥↑/⌥↓ move · Tab files · Enter starts · Escape cancels",
-            ))
+            )))
     }
 }
 
@@ -705,7 +705,8 @@ impl RebaseView {
                 .flex_col()
                 .gap_1()
                 .child(div().text_color(c(p.ui_muted)).child(format!(
-                    "{path} — F7/⇧F7 next/previous change, Escape closes"
+                    "{path} — {}",
+                    keys("F7/⇧F7 next/previous change, Escape closes")
                 )))
                 .child(
                     div()
@@ -720,6 +721,12 @@ impl RebaseView {
                 .into_any_element(),
         )
     }
+}
+
+/// A shortcut of this dialog written for the platform: ⌘ is Ctrl and ⌥ is Alt outside macOS
+/// (`SPEC-0028` v8 behaviour 13).
+fn keys(text: &str) -> String {
+    idecraft_ui::keymap::local_keys(text, cfg!(target_os = "macos"))
 }
 
 #[cfg(test)]

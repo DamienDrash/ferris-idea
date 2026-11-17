@@ -1,6 +1,7 @@
 # SPEC-0015: SQL inspections
 
-- **Version:** 4 · **Date:** 2026-11-16 (v4: unknown columns of a `WITH` query, behaviour 12 — OBS-0068
+- **Version:** 5 · **Date:** 2026-11-17 (v5: `DUAL` is a known table on Oracle, MySQL and MariaDB, behaviour 13,
+  AK-12 — OBS-0083 L4); 2026-11-16 (v4: unknown columns of a `WITH` query, behaviour 12 — OBS-0068
   L3); 2026-11-13 (v3: hidden columns of virtual tables are known — notes from the
   SQLite check in PR 650; v2 2026-11-03: closest-name fixes, unqualified columns, table named in the
   unsafe-change warning; IMP-0060, IMP-0062)
@@ -61,6 +62,10 @@ accident, and definitions the database will silently ignore.
     column reference (`x`, `t.x`, maybe with a `::type` cast) whose name it takes. A query with `*`
     or `t.*`, with an item that is an expression without an alias, or that is no `SELECT` (`VALUES`)
     is not checked. Names compare as in behaviour 6. [GEN, STD]
+13. **v5 – `DUAL` (OBS-0083 L4):** on Oracle, MySQL and MariaDB `DUAL` (any case) is the
+    system's one-row table, never "unknown table", and its columns are not checked; before, `select
+    sysdate from dual` on Oracle was an error. On the other dialects it is checked like any name.
+    [STD]
 
 ## Acceptance criteria
 With the reference schema of SPEC-0014:
@@ -85,6 +90,10 @@ With the reference schema of SPEC-0014:
   `text_body as body`, with `big(id, body)` and with `select *` → none; `with big as (select id,
   text_bodi from pd_note) select b.text_body from big b` → the fix `text_bodi` (unit test
   `inspect::tests::columns_of_with_queries`).
+
+- **AK-12 (v5)** `select sysdate, dummy from dual` and `SELECT 1 FROM DUAL` → none on Oracle, MySQL
+  and MariaDB; on PostgreSQL "unknown table `dual`"; `select * from stok, dual` on Oracle → only
+  `stok` (unit test `inspect::tests::dual_is_known_where_the_dialect_has_it`).
 
 ## Out of scope
 Type checking, ambiguity of unqualified columns, unused aliases, dialect-specific syntax validation, fixes

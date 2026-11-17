@@ -1,6 +1,8 @@
 # SPEC-0060: Themes and editor colour schemes
 
-- **Version:** 11 · **Date:** 2026-11-14 (v2: editor font; v3: icons and hover; v4: Islands Dark default;
+- **Version:** 12 · **Date:** 2026-11-17 (v12: `themes` follows Sync with OS — names it with the
+  preferred themes, switches it, a theme chosen while it is on becomes the preferred theme of its
+  kind; behaviour 18, AK-18 — headless check of F-085, OBS-0077); 2026-11-14 (v2: editor font; v3: icons and hover; v4: Islands Dark default;
   v5: switching themes at run time; v6: IDECraft brand themes as default, app icon at run time;
   v7: ⌃` on layouts without a plain backquote, icon of a selected tool window button; hand tests 28, 35;
   v8: coloured icons keep their colours, OBS-0019 item 5; v9: the light root scheme counts last,
@@ -214,6 +216,19 @@ from the reference's own open theme files instead of hand-picked values.
       `#3E5871`), `IDECraft Light`, `Islands Light`, `Dark` and `Light` keep their frame, island and
       selection colours; the same test pins them.
 
+18. **`themes` and Sync with OS (v12):** the MCP tool answers like the window does with Sync
+    with OS (SPEC-0131 behaviours 2, 3 and 3a). It returns `sync_with_os`, the preferred
+    `dark_theme` and `light_theme` (a name that is no bundled theme gives the default of its kind,
+    `IDECraft Dark` or `IDECraft Light`) and `shown`, the theme the windows draw, which it names only
+    while Sync with OS is off (the system's appearance decides otherwise). `sync_with_os: true|false`
+    switches it, before a `set` of the same call. While it is on, `set` makes the theme the
+    preferred theme of its kind, as the theme popup does, and leaves `chosen` (the theme chosen
+    without syncing) as it is; `saved_as` says where the choice went (`theme`, `dark_theme`,
+    `light_theme`). Both changes need the `settings` right. Until v12 `themes` named only
+    `chosen`, which with Sync with OS on is not what is shown, and `set` wrote `chosen` there, so an
+    agent's choice changed nothing on screen until Sync with OS was switched off; an agent could
+    not switch Sync with OS at all. [GEN, ADR-0008]
+
 **Contrast, all bundled themes (v10; WCAG 2.2, AA = 4.5 : 1 for text, 3 : 1 for marks; checked
 2026-11-13 by `palette::tests::contrast_table`, 70 pairs per theme):** UI text and muted text on
 islands, the window and popups; links and the four status texts on islands and popups; error and
@@ -325,6 +340,14 @@ error text on the dark window background (3.97, used on islands only).
   `C77DBB` italic in `Islands Dark`, the brand schemes' static fields their field colour
   (`theme::tests::doc_comments_and_fields_take_the_scheme_colours`). A side-by-side look at the
   tree selection with the focus in the tree is open (PO-STATUS question 39).
+
+- **AK-18 (v12, behaviour 18)** MCP protocol test `themes_follow_sync_with_os`: a new install lists
+  Sync with OS off, the brand themes as preferred and `shown` `IDECraft Dark`; `set` without
+  syncing is `saved_as` `theme`; switched on with `set` `islands dark` in one call it is
+  `dark_theme`, `chosen` stays `Light` and `shown` is null; `islands light` goes to `light_theme`;
+  both are in the settings file; a preferred name that is no theme reads as the default of its
+  kind; switched off, `shown` is `Light` again and the preferred dark theme is kept. In a window:
+  not checked (the theme popup already follows behaviour 3 of SPEC-0131).
 
 ## Out of scope
 Brand typography (Inter) in the application, a brand splash or about screen, a window icon on

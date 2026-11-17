@@ -31,6 +31,9 @@ pub struct Conn {
     pub schemas: Vec<(String, Load)>,
     /// The sequences of its current schema, read with it (v5 behaviour 12; every dialect with sequences, SPEC-0116 v3).
     pub sequences: Vec<String>,
+    /// Whether the session that read the schema was encrypted (v12 behaviour 24); `None` before
+    /// the read and when the server does not say.
+    pub tls: Option<bool>,
     /// The routines, triggers and types of its current schema, read with it (`SPEC-0089` v13
     /// behaviour 18, `SPEC-0013` v6 behaviour 18).
     pub objects: Vec<idecraft_database::SchemaObject>,
@@ -223,6 +226,16 @@ pub fn connection_detail(p: &ConnectionProfile) -> String {
     }
 }
 
+/// The end of a read connection's detail: whether its session is encrypted (v12 behaviour 24,
+/// SPEC-0016 v3). Nothing before the read, after a failed one or when the server does not say.
+fn tls_note(conn: &Conn) -> &'static str {
+    match (&conn.load, conn.tls) {
+        (Load::Loaded(_), Some(true)) => " · TLS",
+        (Load::Loaded(_), Some(false)) => " · TLS: no",
+        _ => "",
+    }
+}
+
 fn row(node: Option<Node>, depth: usize, label: String, detail: String, icon: &'static str) -> Row {
     Row {
         node,
@@ -277,7 +290,7 @@ pub fn rows(conns: &[Conn], expanded: &HashSet<Node>) -> Vec<Row> {
                 Some(node),
                 0,
                 conn.profile.name.clone(),
-                connection_detail(&conn.profile),
+                connection_detail(&conn.profile) + tls_note(conn),
                 "nodes/dataSchema",
             )
         });
@@ -650,6 +663,10 @@ fn index_detail(ix: &Index) -> String {
     if let Some(condition) = ix.condition_line() {
         detail.push_str(&format!(" · where {condition}"));
     }
+    // SPEC-0089 v15 behaviour 27: an access method other than the default one.
+    if let Some(method) = &ix.method {
+        detail.push_str(&format!(" · {method}"));
+    }
     detail
 }
 
@@ -737,11 +754,13 @@ fn table_rows(ci: usize, t: &Table, expanded: &HashSet<Node>, out: &mut Vec<Row>
                         fk.name.clone().map(|n| Node::Key(ci, t.name.clone(), n)),
                         4,
                         fk.name.clone().unwrap_or_else(|| "foreign key".into()),
+                        // SPEC-0089 v15 behaviour 27: with its actions.
                         format!(
-                            "({}) → {}({})",
+                            "({}) → {}({}){}",
                             fk.columns.join(", "),
                             fk.referenced_table,
-                            fk.referenced_columns.join(", ")
+                            fk.referenced_columns.join(", "),
+                            fk.actions_sql().to_lowercase()
                         ),
                         "idecraft/dbKeyForeign",
                     ));
@@ -925,6 +944,9 @@ mod tests {
             nullable,
             default: None,
             generated: None,
+            expression: None,
+            identity: None,
+            comment: None,
         };
         vec![
             Table {
@@ -947,6 +969,8 @@ mod tests {
                     columns: vec!["customer_id".into()],
                     referenced_table: "customers".into(),
                     referenced_columns: vec!["id".into()],
+                    on_delete: None,
+                    on_update: None,
                 }],
                 indexes: vec![Index {
                     name: "orders_by_customer".into(),
@@ -954,9 +978,13 @@ mod tests {
                     columns: vec!["customer_id".into()],
                     condition: None,
                     collations: Vec::new(),
+                    method: None,
+                    orders: Vec::new(),
+                    prefixes: Vec::new(),
                 }],
                 unreadable: None,
                 constraints: Vec::new(),
+                comment: None,
             },
             Table {
                 storage: Vec::new(),
@@ -969,6 +997,7 @@ mod tests {
                 indexes: vec![],
                 unreadable: None,
                 constraints: Vec::new(),
+                comment: None,
             },
         ]
     }
@@ -979,6 +1008,33 @@ mod tests {
             .collect()
     }
 
+    /// SPEC-0089 v12 AK-26: "· TLS" or "· TLS: no" once read, nothing before or when unknown.
+    #[test]
+    fn a_read_connection_says_whether_it_is_encrypted() {
+        let pg =
+            ConnectionProfile::from_url("orders", "postgresql://u@localhost:5432/shop").unwrap();
+        let mut conns = vec![Conn {
+            profile: pg,
+            load: Load::NotLoaded,
+            schemas: Vec::new(),
+            sequences: Vec::new(),
+            tls: Some(false),
+            objects: Vec::new(),
+        }];
+        let open = HashSet::new();
+        let detail = |conns: &[Conn]| rows(conns, &open)[0].detail.clone();
+        assert_eq!(detail(&conns), "PostgreSQL · localhost:5432/shop");
+        conns[0].load = Load::Loaded(Vec::new());
+        assert_eq!(detail(&conns), "PostgreSQL · localhost:5432/shop · TLS: no");
+        conns[0].tls = Some(true);
+        assert_eq!(detail(&conns), "PostgreSQL · localhost:5432/shop · TLS");
+        conns[0].tls = None;
+        assert_eq!(detail(&conns), "PostgreSQL · localhost:5432/shop");
+        conns[0].tls = Some(false);
+        conns[0].load = Load::Failed("refused".into());
+        assert_eq!(detail(&conns), "PostgreSQL · localhost:5432/shop");
+    }
+
     #[test]
     fn connection_states() {
         let mut conns = vec![Conn {
@@ -986,6 +1042,7 @@ mod tests {
             load: Load::NotLoaded,
             schemas: Vec::new(),
             sequences: Vec::new(),
+            tls: None,
             objects: Vec::new(),
         }];
         let mut open = HashSet::new();
@@ -1024,6 +1081,7 @@ mod tests {
             load: Load::Loaded(tables()),
             schemas: Vec::new(),
             sequences: Vec::new(),
+            tls: None,
             objects: Vec::new(),
         }];
         let mut open: HashSet<Node> =
@@ -1059,6 +1117,44 @@ mod tests {
         assert!(all.contains(&(4, "orders_by_customer".into(), "(customer_id)".into())));
     }
 
+    /// SPEC-0089 v15 AK-30: a foreign key's row names its actions, an index's row its method.
+    #[test]
+    fn foreign_key_actions_and_index_methods_in_rows() {
+        let mut t = tables();
+        t[0].foreign_keys[0].on_delete = Some("CASCADE".into());
+        t[0].foreign_keys[0].on_update = Some("SET NULL".into());
+        t[0].indexes[0].method = Some("gin".into());
+        t[0].indexes[0].condition = Some("NOT deleted".into());
+        let conns = vec![Conn {
+            profile: profile("shop"),
+            load: Load::Loaded(t),
+            schemas: Vec::new(),
+            sequences: Vec::new(),
+            tls: None,
+            objects: Vec::new(),
+        }];
+        let mut open: HashSet<Node> = [
+            Node::Conn(0),
+            Node::Group(0, false),
+            Node::Table(0, "orders".into()),
+        ]
+        .into();
+        for s in [Section::Keys, Section::Indexes] {
+            open.insert(Node::Section(0, "orders".into(), s));
+        }
+        let all = labels(&rows(&conns, &open));
+        assert!(all.contains(&(
+            4,
+            "foreign key".into(),
+            "(customer_id) → customers(id) on delete cascade on update set null".into()
+        )));
+        assert!(all.contains(&(
+            4,
+            "orders_by_customer".into(),
+            "(customer_id) · where NOT deleted · gin".into()
+        )));
+    }
+
     /// SPEC-0089 v9 AK-21: the condition of a partial index and the collation of a term.
     #[test]
     fn index_rows_show_condition_and_collation() {
@@ -1070,6 +1166,9 @@ mod tests {
                     columns: columns.iter().map(|c| (*c).to_owned()).collect(),
                     condition: condition.map(str::to_owned),
                     collations: collations.iter().map(|c| c.map(str::to_owned)).collect(),
+                    method: None,
+                    orders: Vec::new(),
+                    prefixes: Vec::new(),
                 })
             };
         assert_eq!(index(false, &["city"], None, &[]), "(city)");
@@ -1103,6 +1202,7 @@ mod tests {
             load: Load::Loaded(all),
             schemas: Vec::new(),
             sequences: Vec::new(),
+            tls: None,
             objects: Vec::new(),
         }];
         let open: HashSet<Node> = [
@@ -1135,12 +1235,14 @@ mod tests {
             unreadable: Some("no such table: main.gone".into()),
             constraints: Vec::new(),
             hidden_columns: vec![],
+            comment: None,
         });
         let mut conns = vec![Conn {
             profile: profile("shop"),
             load: Load::Loaded(all.clone()),
             schemas: vec![("side".into(), Load::Loaded(all))],
             sequences: Vec::new(),
+            tls: None,
             objects: Vec::new(),
         }];
         let open: HashSet<Node> = [
@@ -1203,6 +1305,7 @@ mod tests {
             load: Load::Failed("connection `shop`: no such file".into()),
             schemas: Vec::new(),
             sequences: Vec::new(),
+            tls: None,
             objects: Vec::new(),
         }];
         let open: HashSet<Node> = [Node::Conn(0)].into();
@@ -1227,6 +1330,7 @@ mod tests {
                 ("staging".into(), Load::Failed("permission denied".into())),
             ],
             sequences: Vec::new(),
+            tls: None,
             objects: Vec::new(),
         }];
         let mut open: HashSet<Node> = [Node::Conn(0)].into();
@@ -1261,6 +1365,7 @@ mod tests {
             load: Load::Loaded(tables()),
             schemas: vec![("audit".into(), Load::NotLoaded)],
             sequences: vec!["orders_id_seq".into()],
+            tls: None,
             objects: Vec::new(),
         }];
         let mut open: HashSet<Node> = [Node::Conn(0)].into();
@@ -1298,6 +1403,7 @@ mod tests {
             load: Load::Loaded(Vec::new()),
             schemas: Vec::new(),
             sequences: Vec::new(),
+            tls: None,
             objects: vec![
                 object("type", "mood", None, Some("enum")),
                 object(
@@ -1368,6 +1474,7 @@ mod tests {
             load: Load::Loaded(t),
             schemas: Vec::new(),
             sequences: vec!["orders_id_seq".into()],
+            tls: None,
             objects: Vec::new(),
         }];
         let open: HashSet<Node> = [
@@ -1405,6 +1512,7 @@ mod tests {
             load: Load::Loaded(tables()),
             schemas: Vec::new(),
             sequences: Vec::new(),
+            tls: None,
             objects: Vec::new(),
         }];
         let open: HashSet<Node> = [Node::Conn(0), Node::Group(0, false)].into();

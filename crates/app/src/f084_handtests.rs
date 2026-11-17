@@ -232,7 +232,7 @@ fn hand_test_202_the_window_asks_http_clients_for_a_right(cx: &mut TestAppContex
     let call = start(
         client,
         "create_file",
-        json!({"dir": "src", "name": "recht1.txt"}),
+        json!({"dir": "src", "name": "recht1.txt", "dry_run": false}),
     );
     let (message, detail) = question(w.cx, &call);
     let name = root.file_name().unwrap().to_string_lossy().into_owned();
@@ -252,7 +252,9 @@ fn hand_test_202_the_window_asks_http_clients_for_a_right(cx: &mut TestAppContex
         "{detail}"
     );
     assert!(
-        detail.contains("Action: create_file {\"dir\":\"src\",\"name\":\"recht1.txt\"}"),
+        detail.contains(
+            "Action: create_file {\"dir\":\"src\",\"name\":\"recht1.txt\",\"dry_run\":false}"
+        ),
         "{detail}"
     );
     assert!(
@@ -274,7 +276,7 @@ fn hand_test_202_the_window_asks_http_clients_for_a_right(cx: &mut TestAppContex
     let call = start(
         client,
         "create_file",
-        json!({"dir": "src", "name": "recht1.txt"}),
+        json!({"dir": "src", "name": "recht1.txt", "dry_run": false}),
     );
     let (_, again) = finish(w.cx, call);
     assert!(again.expect_err("denied").starts_with("denied:"));
@@ -285,7 +287,7 @@ fn hand_test_202_the_window_asks_http_clients_for_a_right(cx: &mut TestAppContex
     let call = start(
         client,
         "create_file",
-        json!({"dir": "src", "name": "recht1.txt"}),
+        json!({"dir": "src", "name": "recht1.txt", "dry_run": false}),
     );
     let (message, _) = question(w.cx, &call);
     assert!(message.contains("the right \"write\""), "{message}");
@@ -297,7 +299,7 @@ fn hand_test_202_the_window_asks_http_clients_for_a_right(cx: &mut TestAppContex
     let call = start(
         client,
         "create_file",
-        json!({"dir": "src", "name": "recht2.txt"}),
+        json!({"dir": "src", "name": "recht2.txt", "dry_run": false}),
     );
     let (message, _) = question(w.cx, &call);
     assert!(message.contains("the right \"write\""), "{message}");
@@ -308,7 +310,7 @@ fn hand_test_202_the_window_asks_http_clients_for_a_right(cx: &mut TestAppContex
     let call = start(
         client,
         "create_file",
-        json!({"dir": "src", "name": "recht3.txt"}),
+        json!({"dir": "src", "name": "recht3.txt", "dry_run": false}),
     );
     let (client, created) = finish(w.cx, call);
     assert!(created.is_ok(), "{created:?}");
@@ -328,7 +330,7 @@ fn hand_test_202_the_window_asks_http_clients_for_a_right(cx: &mut TestAppContex
     let call = start(
         agent(&settings, "claude-code"),
         "create_file",
-        json!({"dir": "src", "name": "recht4.txt"}),
+        json!({"dir": "src", "name": "recht4.txt", "dry_run": false}),
     );
     let (_, created) = finish(w.cx, call);
     assert!(created.is_ok(), "{created:?}");

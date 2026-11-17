@@ -4,7 +4,7 @@ members = ["crates/*"]
 exclude = ["fuzz", "vendor/gpui"]
 
 [workspace.package]
-version = "0.18.0"
+version = "0.20.0"
 edition = "2024"
 rust-version = "1.89"
 license = "LicenseRef-PolyForm-Shield-1.0.0"
@@ -39,7 +39,14 @@ idecraft-uidriver = { path = "crates/uidriver" }
 mysql_async = { version = "0.37", default-features = false, features = ["minimal-rust", "native-tls-tls"] }
 native-tls = "0.2"
 postgres-native-tls = "0.5"
+# On Linux `linux-native` is the kernel keyring: session only, read once to move old passwords into
+# the Secret Service (`SPEC-0008` v8 behaviour 18); new secrets go to the Secret Service through oo7.
 keyring = { version = "3.6", features = ["apple-native", "windows-native", "linux-native"] }
+# The Secret Service on Linux (`ADR-0025` §3, `SPEC-0321` behaviour 20, `SPEC-0008` v8): one
+# release and runtime feature for every crate, the same as GPUI's Linux build (async-io, not tokio:
+# oo7 refuses both at once), so the window links one copy.
+oo7 = { version = "0.5", default-features = false, features = ["async-std", "native_crypto"] }
+futures-lite = "2"
 ropey = "1.6"
 rusqlite = { version = "0.41", features = ["bundled"] }
 duckdb = { version = "1.20000", default-features = false, features = ["bundled"] }

@@ -29,6 +29,9 @@ pub(crate) struct Server {
     /// It publishes an opened file's diagnostics twice; the second list is the answer
     /// (`SPEC-0042` v20 behaviour 36). How many lists came for each open file.
     publishes_twice: bool,
+    /// It publishes an opened file's diagnostics in steps; the last list is the answer
+    /// (`SPEC-0042` v23 behaviour 41).
+    publishes_in_steps: bool,
     publication_counts: StdMutex<HashMap<String, u32>>,
     loading_text: Option<&'static str>,
     resend_on_open: bool,
@@ -221,7 +224,32 @@ impl Server {
         wait: Duration,
     ) -> Option<Vec<Value>> {
         let deadline = tokio::time::Instant::now() + wait;
+        // A list published before this question is the one the editor already shows; one that
+        // comes while it waits may be the first of several steps (`SPEC-0042` v23 behaviour 41).
+        let waited = !lock(&self.published)
+            .get(uri)
+            .is_some_and(|(n, _)| *n > after);
         let first = self.published_after(uri, after, wait).await;
+        if self.publishes_in_steps && waited && first.is_some() {
+            let mut last = first;
+            while lock(&self.publication_counts)
+                .get(uri)
+                .copied()
+                .unwrap_or(0)
+                < crate::servers::STEPS
+            {
+                let left = deadline.saturating_duration_since(tokio::time::Instant::now());
+                let number = self.publication(uri);
+                match self
+                    .published_after(uri, number, crate::insight::STEP_QUIET.min(left))
+                    .await
+                {
+                    Some(next) => last = Some(next),
+                    None => break,
+                }
+            }
+            return last;
+        }
         if self.publishes_twice
             && first.is_some()
             && lock(&self.publication_counts)
@@ -565,6 +593,7 @@ impl Pool {
                 diagnoses_first: server.candidate.diagnoses_first,
                 refines_diagnostics: server.candidate.refines_diagnostics,
                 publishes_twice: server.candidate.publishes_twice,
+                publishes_in_steps: server.candidate.publishes_in_steps,
                 publication_counts: StdMutex::default(),
                 loading_text: server.candidate.loading_text,
                 resend_on_open: server.candidate.resend_on_open,
@@ -857,6 +886,36 @@ pub fn disk_changed(root: &Path, changes: Vec<(PathBuf, crate::watched_files::Ki
             .unwrap_or_default();
         tell_disk_changes(pool, &root, &changes).await;
     });
+}
+
+/// Files IDECraft itself wrote on disk outside an editor buffer — a refactoring, its undo or
+/// redo over MCP — are told to the running servers of `root` at once, as changed, before the
+/// call returns (`SPEC-0042` v24 behaviour 42): the next question then sees the new text, also
+/// when it comes sooner than the window's look at the disk, or in a server without a window
+/// (`idecraft mcp`, `idecraft call`). Paths are filtered like [`disk_changed`]'s. Waits at most
+/// 5 s; a server that does not answer is not waited for again.
+pub fn files_written(root: &Path, paths: &[&Path]) {
+    use crate::watched_files::{Kind, inside, told};
+    let Some(pool) = pool() else {
+        return;
+    };
+    let root = canonical(root);
+    let changes: Vec<(PathBuf, Kind)> = paths
+        .iter()
+        .filter_map(|path| {
+            let relative = inside(&root, &canonical(path))?;
+            told(&root, &relative).then_some((relative, Kind::Changed))
+        })
+        .collect();
+    if changes.is_empty() {
+        return;
+    }
+    let (tx, rx) = std::sync::mpsc::channel();
+    pool.handle.spawn(async move {
+        tell_disk_changes(pool, &root, &changes).await;
+        let _ = tx.send(());
+    });
+    let _ = rx.recv_timeout(Duration::from_secs(5));
 }
 
 /// [`disk_changed`] for the changes of a snapshot comparison (`SPEC-0026`).

@@ -184,6 +184,8 @@ fn same_index(a: &Index, b: &Index) -> bool {
     a.unique == b.unique
         && a.columns == b.columns
         && a.condition == b.condition
+        && a.method == b.method
+        && (0..a.columns.len()).all(|i| a.order(i) == b.order(i) && a.prefix(i) == b.prefix(i))
         && (0..a.columns.len())
             .all(|i| a.collation(i).map(str::to_lowercase) == b.collation(i).map(str::to_lowercase))
 }
@@ -192,6 +194,8 @@ fn same_foreign_key(a: &ForeignKey, b: &ForeignKey) -> bool {
     a.columns == b.columns
         && a.referenced_table == b.referenced_table
         && a.referenced_columns == b.referenced_columns
+        && a.on_delete == b.on_delete
+        && a.on_update == b.on_update
 }
 
 /// Constraints match by kind and definition, case and white space folded, names ignored.
@@ -442,6 +446,11 @@ pub fn object_ddl(
     for i in indexes {
         out.push_str(&create_index(t, i, d));
         out.push_str(";\n");
+    }
+    let comments = comment_statements(t, d);
+    if !comments.is_empty() {
+        out.push('\n');
+        out.push_str(&comments);
     }
     Some(out)
 }
@@ -1184,18 +1193,78 @@ fn sequence_of(default: &str) -> Option<String> {
 
 fn column_def(c: &Column, d: Dialect) -> String {
     let mut out = format!("{} {}", quote_identifier(&c.name, d), c.data_type);
+    // SPEC-0013 v9 behaviour 26: a generated column with its expression where it is read, right
+    // after the type as MySQL's grammar asks.
+    let computed = match (&c.generated, &c.expression) {
+        (Some(kind), Some(expression)) => {
+            out.push_str(&format!(
+                " GENERATED ALWAYS AS {} {}",
+                bracketed(expression),
+                kind.to_ascii_uppercase()
+            ));
+            true
+        }
+        _ => false,
+    };
     if !c.nullable {
         out.push_str(" NOT NULL");
     }
-    if let Some(default) = &c.default {
+    if let Some(default) = c.default.as_ref().filter(|_| !computed) {
         out.push_str(" DEFAULT ");
         out.push_str(&default_expr(default, d));
     }
-    if let Some(kind) = &c.generated {
+    if let Some(identity) = &c.identity {
+        out.push(' ');
+        out.push_str(identity);
+    }
+    if let (Some(kind), false) = (&c.generated, computed) {
         // The catalogue does not give the expression (SPEC-0018 v4 behaviour 15).
         out.push_str(&format!(
             " /* generated ({kind}) in the source: written here as an ordinary column */"
         ));
+    }
+    // v9 behaviour 27: MySQL and MariaDB keep a column's comment in its definition.
+    if let Some(comment) = c.comment.as_ref().filter(|_| d.mysql_like()) {
+        out.push_str(" COMMENT ");
+        out.push_str(&literal(&Some(comment.clone()), d));
+    }
+    out
+}
+
+/// `text` bracketed once: `(qty * 2)` stays, `qty * 2` becomes `(qty * 2)`.
+fn bracketed(text: &str) -> String {
+    let text = text.trim();
+    if crate::introspect::enclosed(text) {
+        text.to_owned()
+    } else {
+        format!("({text})")
+    }
+}
+
+/// The comments of table `t` as `COMMENT ON` statements, each ending in `;` and a line break
+/// (PostgreSQL, `SPEC-0013` v9 behaviour 27); empty on the other systems, which keep them in the
+/// definition or do not read them.
+fn comment_statements(t: &Table, d: Dialect) -> String {
+    if d != Dialect::PostgreSql {
+        return String::new();
+    }
+    let table = quote_identifier(&t.name, d);
+    let mut out = String::new();
+    let kind = if t.kind == "view" { "VIEW" } else { "TABLE" };
+    if let Some(comment) = &t.comment {
+        out.push_str(&format!(
+            "COMMENT ON {kind} {table} IS {};\n",
+            literal(&Some(comment.clone()), d)
+        ));
+    }
+    for c in &t.columns {
+        if let Some(comment) = &c.comment {
+            out.push_str(&format!(
+                "COMMENT ON COLUMN {table}.{} IS {};\n",
+                quote_identifier(&c.name, d),
+                literal(&Some(comment.clone()), d)
+            ));
+        }
     }
     out
 }
@@ -1214,11 +1283,13 @@ fn foreign_key_clause(f: &ForeignKey, d: Dialect) -> String {
         }
         _ => String::new(),
     };
+    // SPEC-0013 v8 behaviour 21: with the referential actions the database keeps.
     format!(
-        "{constraint}FOREIGN KEY ({}) REFERENCES {} ({})",
+        "{constraint}FOREIGN KEY ({}) REFERENCES {} ({}){}",
         column_list(&f.columns, d),
         quote_identifier(&f.referenced_table, d),
-        column_list(&f.referenced_columns, d)
+        column_list(&f.referenced_columns, d),
+        f.actions_sql()
     )
 }
 
@@ -1237,6 +1308,11 @@ fn create_table(t: &Table, d: Dialect, with_fks: bool, name: &str) -> String {
         quote_identifier(name, d),
         parts.join(",\n    ")
     );
+    // SPEC-0013 v9 behaviour 27: MySQL and MariaDB keep the table's comment in its definition.
+    let create = match t.comment.as_ref().filter(|_| d.mysql_like()) {
+        Some(comment) => format!("{create} COMMENT={}", literal(&Some(comment.clone()), d)),
+        None => create,
+    };
     // v9 behaviour 21: with its storage parameters.
     if t.storage.is_empty() {
         create
@@ -1319,25 +1395,16 @@ fn index_name(t: &Table, i: &Index) -> String {
 }
 
 fn create_index(t: &Table, i: &Index, d: Dialect) -> String {
-    let parts: Vec<String> = i
-        .columns
-        .iter()
-        .enumerate()
-        .map(|(n, c)| {
-            let term = if t.columns.iter().any(|col| &col.name == c) {
-                quote_identifier(c, d)
-            } else {
-                format!("({c})")
-            };
-            // SPEC-0013 v4 behaviour 15: the collation of a term and the condition are kept.
-            match i.collation(n) {
-                Some(collation) => format!("{term} COLLATE {}", quote_identifier(collation, d)),
-                None => term,
-            }
-        })
+    let parts: Vec<String> = (0..i.columns.len())
+        .map(|n| index_term(t, i, n, d, true))
         .collect();
+    // SPEC-0013 v8 behaviour 22: an access method other than the default one is kept.
+    let method = match (&i.method, d) {
+        (Some(m), Dialect::PostgreSql) => format!(" USING {m}"),
+        _ => String::new(),
+    };
     format!(
-        "CREATE {}INDEX {} ON {} ({}){}",
+        "CREATE {}INDEX {} ON {}{method} ({}){}",
         if i.unique { "UNIQUE " } else { "" },
         quote_identifier(&index_name(t, i), d),
         quote_identifier(&t.name, d),
@@ -1348,6 +1415,32 @@ fn create_index(t: &Table, i: &Index, d: Dialect) -> String {
             .map(|c| format!(" WHERE {c}{}", if c.contains("--") { "\n" } else { "" }))
             .unwrap_or_default()
     )
+}
+
+/// Term `n` of index `i` of table `t` as SQL: a column quoted, an expression bracketed; on MySQL
+/// and MariaDB with its prefix length (`SPEC-0013` v9 behaviour 25); with `options` also its
+/// collation (v4 behaviour 15, PostgreSQL since v9) and sort order (v9 behaviour 24).
+pub(crate) fn index_term(t: &Table, i: &Index, n: usize, d: Dialect, options: bool) -> String {
+    let c = &i.columns[n];
+    let mut term = if t.columns.iter().any(|col| &col.name == c) {
+        quote_identifier(c, d)
+    } else {
+        format!("({c})")
+    };
+    if let Some(length) = i.prefix(n).filter(|_| d.mysql_like()) {
+        term.push_str(&format!("({length})"));
+    }
+    if !options {
+        return term;
+    }
+    if let Some(collation) = i.collation(n) {
+        term.push_str(&format!(" COLLATE {}", quote_identifier(collation, d)));
+    }
+    if let Some(order) = i.order(n) {
+        term.push(' ');
+        term.push_str(order);
+    }
+    term
 }
 
 fn drop_index(t: &Table, i: &Index, d: Dialect) -> String {
@@ -1653,6 +1746,9 @@ mod tests {
             nullable,
             default: default.map(str::to_owned),
             generated: None,
+            expression: None,
+            identity: None,
+            comment: None,
         }
     }
 
@@ -1663,6 +1759,9 @@ mod tests {
             columns: columns.iter().map(|c| c.to_string()).collect(),
             condition: None,
             collations: Vec::new(),
+            method: None,
+            orders: Vec::new(),
+            prefixes: Vec::new(),
         }
     }
 
@@ -1672,6 +1771,8 @@ mod tests {
             columns: vec![column.into()],
             referenced_table: table.into(),
             referenced_columns: vec!["id".into()],
+            on_delete: None,
+            on_update: None,
         }
     }
 
@@ -1687,6 +1788,7 @@ mod tests {
             indexes: vec![],
             unreadable: None,
             constraints: Vec::new(),
+            comment: None,
         }
     }
 
@@ -2527,6 +2629,147 @@ mod tests {
 
     /// SPEC-0013 v4 AK-10: a generated `CREATE INDEX` keeps the collation of a term and the
     /// condition of a partial index, a changed condition or collation is a difference, and a
+    /// SPEC-0013 v8 AK-21: generated DDL keeps referential actions and PostgreSQL's access method;
+    /// a changed action or method is a difference.
+    #[test]
+    fn generated_ddl_keeps_actions_and_methods() {
+        let (mut tables, views) = shop();
+        tables[0].foreign_keys[0].on_delete = Some("CASCADE".into());
+        tables[0].foreign_keys[0].on_update = Some("SET NULL".into());
+        tables[0].indexes[1].method = Some("gin".into());
+        let ddl = object_ddl(&tables, &views, "orders", Dialect::PostgreSql).unwrap();
+        assert!(
+            ddl.contains("REFERENCES \"customers\" (\"id\") ON DELETE CASCADE ON UPDATE SET NULL"),
+            "{ddl}"
+        );
+        assert!(
+            ddl.contains(
+                "CREATE INDEX \"orders_customer_idx\" ON \"orders\" USING gin (\"customer_id\")"
+            ),
+            "{ddl}"
+        );
+        // Other systems have no USING clause in this place; the actions stay.
+        let mysql = object_ddl(&tables, &views, "orders", Dialect::MySql).unwrap();
+        assert!(!mysql.contains("USING"), "{mysql}");
+        assert!(
+            mysql.contains("ON DELETE CASCADE ON UPDATE SET NULL"),
+            "{mysql}"
+        );
+        let (plain, _) = shop();
+        let diff = compare(&tables, &plain, Dialect::PostgreSql);
+        assert_eq!(diff.changed.len(), 1);
+        assert_eq!(diff.changed[0].foreign_keys_added.len(), 1);
+        assert_eq!(diff.changed[0].foreign_keys_removed.len(), 1);
+        assert_eq!(diff.changed[0].indexes_added.len(), 1);
+    }
+
+    /// SPEC-0013 v9 AK-22 (OBS-0076 D4, D5): generated `CREATE INDEX` keeps a term's collation,
+    /// sort order and (on MySQL and MariaDB) prefix length; a changed order or prefix is a
+    /// difference.
+    #[test]
+    fn generated_indexes_keep_order_and_prefix() {
+        let (mut tables, views) = shop();
+        tables[0].columns.push(col("note", "text", true, None));
+        tables[0].indexes.push(Index {
+            orders: vec![Some("DESC".into()), Some("NULLS FIRST".into())],
+            collations: vec![None, Some("C".into())],
+            ..index("orders_mixed", false, &["total", "note"])
+        });
+        let ddl = object_ddl(&tables, &views, "orders", Dialect::PostgreSql).unwrap();
+        assert!(
+            ddl.contains(
+                "CREATE INDEX \"orders_mixed\" ON \"orders\" (\"total\" DESC, \"note\" COLLATE \"C\" NULLS FIRST);"
+            ),
+            "{ddl}"
+        );
+        let mut mysql = tables.clone();
+        mysql[0].indexes[2] = Index {
+            orders: vec![Some("DESC".into()), None],
+            prefixes: vec![None, Some(20)],
+            ..index("orders_mixed", false, &["total", "note"])
+        };
+        let ddl = object_ddl(&mysql, &views, "orders", Dialect::MySql).unwrap();
+        assert!(
+            ddl.contains("CREATE INDEX `orders_mixed` ON `orders` (`total` DESC, `note`(20));"),
+            "{ddl}"
+        );
+        // Only MySQL and MariaDB have prefix lengths.
+        let pg = object_ddl(&mysql, &views, "orders", Dialect::PostgreSql).unwrap();
+        assert!(pg.contains("(\"total\" DESC, \"note\");"), "{pg}");
+        let mut other = mysql.clone();
+        other[0].indexes[2].prefixes = vec![None, Some(10)];
+        let diff = compare(&mysql, &other, Dialect::MySql);
+        assert_eq!(diff.changed.len(), 1);
+        assert_eq!(diff.changed[0].indexes_added, [mysql[0].indexes[2].clone()]);
+        other[0].indexes[2].prefixes = mysql[0].indexes[2].prefixes.clone();
+        other[0].indexes[2].orders.clear();
+        assert!(!compare(&mysql, &other, Dialect::MySql).is_empty());
+        assert!(compare(&mysql, &mysql, Dialect::MySql).is_empty());
+    }
+
+    /// SPEC-0013 v9 AK-24 (OBS-0076 D6, D7): generated DDL writes identity, generated columns with
+    /// their expression and comments as each system keeps them.
+    #[test]
+    fn generated_ddl_keeps_identity_generation_and_comments() {
+        let (mut tables, views) = shop();
+        let orders = &mut tables[0];
+        orders.comment = Some("the shop's orders".into());
+        orders.columns[0] = Column {
+            identity: Some("GENERATED ALWAYS AS IDENTITY".into()),
+            comment: Some("the key".into()),
+            ..col("id", "integer", false, None)
+        };
+        orders.columns.push(Column {
+            generated: Some("stored".into()),
+            expression: Some("(total * 2)".into()),
+            // A default the catalogue reports beside the expression is not written.
+            default: Some("(total * 2)".into()),
+            ..col("twice", "numeric", true, None)
+        });
+        orders.columns.push(Column {
+            generated: Some("virtual".into()),
+            expression: Some("total + 1".into()),
+            ..col("more", "numeric", false, None)
+        });
+        let ddl = object_ddl(&tables, &views, "orders", Dialect::PostgreSql).unwrap();
+        assert!(
+            ddl.contains("\"id\" integer NOT NULL GENERATED ALWAYS AS IDENTITY,"),
+            "{ddl}"
+        );
+        assert!(
+            ddl.contains("\"twice\" numeric GENERATED ALWAYS AS (total * 2) STORED,"),
+            "{ddl}"
+        );
+        assert!(
+            ddl.contains("\"more\" numeric GENERATED ALWAYS AS (total + 1) VIRTUAL NOT NULL,"),
+            "{ddl}"
+        );
+        assert!(
+            ddl.ends_with(
+                "\nCOMMENT ON TABLE \"orders\" IS 'the shop''s orders';\nCOMMENT ON COLUMN \"orders\".\"id\" IS 'the key';\n"
+            ),
+            "{ddl}"
+        );
+        let mut mysql = tables.clone();
+        mysql[0].columns[0].identity = Some("AUTO_INCREMENT".into());
+        let ddl = object_ddl(&mysql, &views, "orders", Dialect::MySql).unwrap();
+        assert!(
+            ddl.contains("`id` integer NOT NULL AUTO_INCREMENT COMMENT 'the key',"),
+            "{ddl}"
+        );
+        assert!(ddl.contains("\n) COMMENT='the shop''s orders';\n"), "{ddl}");
+        assert!(!ddl.contains("COMMENT ON"), "{ddl}");
+        // Without the expression (SQLite) the column stays an ordinary one with the note.
+        let mut sqlite = tables.clone();
+        sqlite[0].columns[3].expression = None;
+        let ddl = object_ddl(&sqlite, &views, "orders", Dialect::Sqlite).unwrap();
+        assert!(
+            ddl.contains("DEFAULT (total * 2) /* generated (stored)"),
+            "{ddl}"
+        );
+        assert!(!ddl.contains("COMMENT"), "{ddl}");
+    }
+
     /// unique partial index over the key's columns is not taken for the key's own index.
     #[test]
     fn generated_indexes_keep_collation_and_condition() {

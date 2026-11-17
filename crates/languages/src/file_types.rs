@@ -22,8 +22,14 @@ pub const FILE: &str = ".idecraft/file-types.toml";
 /// How often a registered project's file is looked at for changes on disk (behaviour 12).
 const RECHECK: Duration = Duration::from_secs(1);
 
-/// The most of a file read for its hashbang line (behaviour 9).
+/// The most of a file's first line looked at for its hashbang (behaviour 9).
 const HASHBANG_BYTES: usize = 256;
+
+/// The most of a file's start and of its end read for an editor modeline (v9 behaviour 18).
+const MODELINE_BYTES: u64 = 1024;
+
+/// How many lines at a file's start and at its end can hold a Vim modeline (v9 behaviour 18).
+const MODELINE_LINES: usize = 5;
 
 /// A file type a user can choose: a language or plain text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -93,6 +99,8 @@ pub enum Source {
     Name,
     /// The hashbang line.
     Hashbang,
+    /// An editor modeline (v9 behaviour 18).
+    Modeline,
     /// Nothing: plain text.
     None,
 }
@@ -105,6 +113,7 @@ impl Source {
             Self::Pattern => "pattern",
             Self::Name => "name",
             Self::Hashbang => "hashbang",
+            Self::Modeline => "modeline",
             Self::None => "none",
         }
     }
@@ -403,12 +412,121 @@ fn project_decision(path: &Path, name: &str) -> Option<(Choice, Source, Option<S
         .decide(relative_key(&stale, path).as_deref(), name)
 }
 
-type HashbangCache = HashMap<PathBuf, (Option<SystemTime>, Option<LanguageId>)>;
-static HASHBANGS: Mutex<Option<HashbangCache>> = Mutex::new(None);
+/// The language an editor modeline names (v9 behaviour 18): Emacs' `-*- mode: python -*-` or
+/// `-*- python -*-`, Vim's `vim: set ft=python :`, `vi:ft=sh` or `ex: syntax=yaml` (also
+/// `filetype=` and `syn=`). Modes are compared ignoring case and an Emacs `-mode` suffix.
+pub fn modeline_language(line: &str) -> Option<LanguageId> {
+    emacs_mode(line)
+        .or_else(|| vim_filetype(line))
+        .and_then(|m| mode_language(&m))
+}
 
-/// The language of the hashbang line of the regular file at the absolute `path`, kept until its
-/// modification time changes (behaviour 9).
-fn hashbang_of(path: &Path) -> Option<LanguageId> {
+/// The mode between Emacs' two `-*-` marks.
+fn emacs_mode(line: &str) -> Option<String> {
+    let (_, rest) = line.split_once("-*-")?;
+    let (inside, _) = rest.split_once("-*-")?;
+    let inside = inside.trim();
+    if !inside.contains(':') {
+        return (!inside.is_empty()).then(|| inside.to_owned());
+    }
+    inside.split(';').find_map(|part| {
+        let (key, value) = part.split_once(':')?;
+        key.trim()
+            .eq_ignore_ascii_case("mode")
+            .then(|| value.trim().to_owned())
+    })
+}
+
+/// The file type a Vim modeline sets: `vi:`, `vim:` or `ex:` at the line's start or after a
+/// blank, then options separated by blanks or `:` (after `set`, ended by `:`).
+fn vim_filetype(line: &str) -> Option<String> {
+    let at = ["vim:", "vi:", "ex:"].iter().find_map(|marker| {
+        line.match_indices(marker)
+            .find(|(i, _)| *i == 0 || line[..*i].ends_with(char::is_whitespace))
+            .map(|(i, _)| i + marker.len())
+    })?;
+    let rest = line[at..].trim_start();
+    let rest = rest
+        .strip_prefix("set ")
+        .or_else(|| rest.strip_prefix("se "))
+        .unwrap_or(rest);
+    rest.split(|c: char| c.is_whitespace() || c == ':')
+        .find_map(|option| {
+            let (key, value) = option.split_once('=')?;
+            matches!(key, "ft" | "filetype" | "syn" | "syntax").then(|| value.trim().to_owned())
+        })
+        .filter(|v| !v.is_empty())
+}
+
+/// The language of an editor's mode or file type name.
+fn mode_language(mode: &str) -> Option<LanguageId> {
+    let lower = mode.to_ascii_lowercase();
+    let mode = lower.strip_suffix("-mode").unwrap_or(&lower);
+    use LanguageId as L;
+    let alias = match mode {
+        "py" | "python3" => Some(L::Python),
+        "sh" | "bash" | "zsh" | "shell" | "shell-script" => Some(L::Shell),
+        "js" | "js2" => Some(L::JavaScript),
+        "ts" => Some(L::TypeScript),
+        "c++" => Some(L::Cpp),
+        "nxml" => Some(L::Xml),
+        "md" | "gfm" => Some(L::Markdown),
+        "conf-toml" => Some(L::Toml),
+        "less-css" => Some(L::Less),
+        "ess-r" => Some(L::R),
+        "kt" => Some(L::Kotlin),
+        "rs" => Some(L::Rust),
+        "yml" => Some(L::Yaml),
+        _ => None,
+    };
+    alias.or_else(|| {
+        L::ALL
+            .into_iter()
+            .find(|l| l.lsp_id() == mode || l.title().eq_ignore_ascii_case(mode))
+    })
+}
+
+/// The language a file's text says it has (v9 behaviour 18, behaviour 9): an Emacs modeline on
+/// its first line (its second after a hashbang line), a Vim modeline on one of its first or last
+/// five lines, else its hashbang line. `head` is the start of the file, `tail` its end (empty when
+/// the start holds the whole file).
+pub fn content_language(head: &str, tail: &str) -> Option<(LanguageId, Source)> {
+    let first: Vec<&str> = head.lines().take(MODELINE_LINES).collect();
+    let emacs_lines = if first.first().is_some_and(|l| l.starts_with("#!")) {
+        2
+    } else {
+        1
+    };
+    let emacs = first
+        .iter()
+        .take(emacs_lines)
+        .find_map(|l| emacs_mode(l).and_then(|m| mode_language(&m)));
+    let ends = if tail.is_empty() { head } else { tail };
+    let last: Vec<&str> = ends.lines().rev().take(MODELINE_LINES).collect();
+    let vim = || {
+        first
+            .iter()
+            .chain(last.iter())
+            .find_map(|l| vim_filetype(l).and_then(|m| mode_language(&m)))
+    };
+    if let Some(l) = emacs.or_else(vim) {
+        return Some((l, Source::Modeline));
+    }
+    let line = first.first()?;
+    let end = (0..=HASHBANG_BYTES.min(line.len()))
+        .rev()
+        .find(|i| line.is_char_boundary(*i))
+        .unwrap_or(0);
+    let line = &line[..end];
+    hashbang_language(line).map(|l| (l, Source::Hashbang))
+}
+
+type ContentCache = HashMap<PathBuf, (Option<SystemTime>, Option<(LanguageId, Source)>)>;
+static CONTENTS: Mutex<Option<ContentCache>> = Mutex::new(None);
+
+/// The language the text of the regular file at the absolute `path` names (behaviours 9, 18),
+/// kept until its modification time changes.
+fn content_of(path: &Path) -> Option<(LanguageId, Source)> {
     if !path.is_absolute() {
         return None;
     }
@@ -417,45 +535,48 @@ fn hashbang_of(path: &Path) -> Option<LanguageId> {
         return None;
     }
     let modified = meta.modified().ok();
-    let mut cache = HASHBANGS.lock().unwrap_or_else(|e| e.into_inner());
+    let mut cache = CONTENTS.lock().unwrap_or_else(|e| e.into_inner());
     let cache = cache.get_or_insert_with(HashMap::new);
-    if let Some((at, language)) = cache.get(path)
+    if let Some((at, found)) = cache.get(path)
         && *at == modified
     {
-        return *language;
+        return *found;
     }
-    let language = read_head(path).and_then(|head| {
-        let line = head.lines().next().unwrap_or_default().to_owned();
-        hashbang_language(&line)
-    });
+    let found = read_ends(path, meta.len()).and_then(|(head, tail)| content_language(&head, &tail));
     if cache.len() > 4096 {
         cache.clear();
     }
-    cache.insert(path.to_path_buf(), (modified, language));
-    language
+    cache.insert(path.to_path_buf(), (modified, found));
+    found
 }
 
-fn read_head(path: &Path) -> Option<String> {
-    use std::io::Read;
-    let mut buf = [0u8; HASHBANG_BYTES];
+/// The first and the last [`MODELINE_BYTES`] of a file of `len` bytes; the last are empty when
+/// the first hold the whole file. A file whose start holds a NUL byte is not text: `None`.
+fn read_ends(path: &Path, len: u64) -> Option<(String, String)> {
+    use std::io::{Read, Seek, SeekFrom};
     let mut file = std::fs::File::open(path).ok()?;
-    let mut n = 0;
-    while n < buf.len() {
-        match file.read(&mut buf[n..]) {
-            Ok(0) => break,
-            Ok(k) => n += k,
-            Err(_) => return None,
-        }
-    }
-    let head = &buf[..n];
-    if !head.starts_with(b"#!") {
+    let mut head = Vec::new();
+    (&mut file)
+        .take(MODELINE_BYTES)
+        .read_to_end(&mut head)
+        .ok()?;
+    if head.contains(&0) {
         return None;
     }
-    Some(String::from_utf8_lossy(head).into_owned())
+    let mut tail = Vec::new();
+    if len > MODELINE_BYTES {
+        let from = len.saturating_sub(MODELINE_BYTES).max(MODELINE_BYTES);
+        file.seek(SeekFrom::Start(from)).ok()?;
+        file.take(MODELINE_BYTES).read_to_end(&mut tail).ok()?;
+    }
+    Some((
+        String::from_utf8_lossy(&head).into_owned(),
+        String::from_utf8_lossy(&tail).into_owned(),
+    ))
 }
 
-/// The language of the file at `path` and what decided it (behaviours 9–12): the override of its
-/// registered project, a pattern of it, the name, the hashbang line.
+/// The language of the file at `path` and what decided it (behaviours 9–12, 18): the override of
+/// its registered project, a pattern of it, the name, an editor modeline, the hashbang line.
 pub fn detect(path: &Path) -> Detected {
     let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
     if path.is_absolute()
@@ -474,10 +595,10 @@ pub fn detect(path: &Path) -> Detected {
             pattern: None,
         };
     }
-    match hashbang_of(path) {
-        Some(language) => Detected {
+    match content_of(path) {
+        Some((language, source)) => Detected {
             language: Some(language),
-            source: Source::Hashbang,
+            source,
             pattern: None,
         },
         None => Detected {
@@ -565,6 +686,74 @@ mod tests {
             .unwrap();
         f.set_modified(later).unwrap();
         assert_eq!(detect(&root.join("deploy")).language, Some(L::Shell));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// SPEC-0004 v9 AK-14: the modelines of behaviour 18.
+    #[test]
+    fn modelines_name_the_language() {
+        for (line, language) in [
+            ("# -*- mode: python; coding: utf-8 -*-", Some(L::Python)),
+            ("/* -*- C++ -*- */", Some(L::Cpp)),
+            (";; -*- Mode: Shell-Script -*-", Some(L::Shell)),
+            ("-*- js2-mode -*-", Some(L::JavaScript)),
+            ("# vim: set ft=yaml ts=2 :", Some(L::Yaml)),
+            ("// vim:ft=rust", Some(L::Rust)),
+            ("# vi: filetype=sh", Some(L::Shell)),
+            ("<!-- vim: syntax=html -->", Some(L::Html)),
+            ("# ex: syn=toml", Some(L::Toml)),
+            ("# vim: ts=4 sw=4", None),
+            ("# vim: set ft=perl :", None),
+            ("# envim: ft=python", None),
+            ("-*- coding: utf-8 -*-", None),
+            ("plain text", None),
+        ] {
+            assert_eq!(modeline_language(line), language, "{line}");
+        }
+        // Emacs: the first line, or the second after a hashbang line; it wins over the hashbang.
+        let d = |head: &str, tail: &str| content_language(head, tail);
+        assert_eq!(
+            d("#!/bin/sh\n# -*- mode: python -*-\n", ""),
+            Some((L::Python, Source::Modeline))
+        );
+        assert_eq!(d("one\n# -*- mode: python -*-\n", ""), None);
+        // Vim: one of the first or the last five lines.
+        let middle = format!("{}# vim: ft=lua\n{}", "x\n".repeat(5), "y\n".repeat(5));
+        assert_eq!(d(&middle, ""), None);
+        let last = format!("{}# vim: ft=lua\n", "x\n".repeat(20));
+        assert_eq!(d(&last, ""), Some((L::Lua, Source::Modeline)));
+        assert_eq!(
+            d("x\n", "z\n-- vim: ft=lua\n"),
+            Some((L::Lua, Source::Modeline))
+        );
+        // Without a modeline the hashbang line decides.
+        assert_eq!(
+            d("#!/usr/bin/env node\n", ""),
+            Some((L::JavaScript, Source::Hashbang))
+        );
+    }
+
+    /// SPEC-0004 v9 AK-14: a file without a known name is read at its start and its end; a name
+    /// that says its language is not overruled; a file with a NUL byte is not text.
+    #[test]
+    fn files_with_a_modeline() {
+        let root = project("modeline");
+        std::fs::write(root.join("settings.conf"), "a: 1\n# vim: set ft=yaml :\n").unwrap();
+        let long = format!(
+            "{}\n{}\n# vim: ft=python\n",
+            "#!/bin/sh",
+            "x = 1\n".repeat(2000)
+        );
+        std::fs::write(root.join("job"), long).unwrap();
+        std::fs::write(root.join("x.rb"), "# vim: ft=python\n").unwrap();
+        std::fs::write(root.join("blob"), b"\0\0# vim: ft=python\n").unwrap();
+        let d = detect(&root.join("settings.conf"));
+        assert_eq!((d.language, d.source), (Some(L::Yaml), Source::Modeline));
+        assert_eq!(Source::Modeline.name(), "modeline");
+        let d = detect(&root.join("job"));
+        assert_eq!((d.language, d.source), (Some(L::Python), Source::Modeline));
+        assert_eq!(detect(&root.join("x.rb")).language, Some(L::Ruby));
+        assert_eq!(detect(&root.join("blob")).source, Source::None);
         let _ = std::fs::remove_dir_all(&root);
     }
 

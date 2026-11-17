@@ -1,6 +1,6 @@
 # SPEC-0045: Test results — reading test reports into a result tree
 
-- **Version:** 5 · **Date:** 2026-11-13 (v5: ▶ at the tests of pytest, Go and Rust files and a run from the context of only the test at the caret, behaviour 13, AK-14, OBS-0034 part 15 R1); 2026-11-09 (v4: ▶ at the tests of Vitest and Jest files; v2: the test line after a subtest only names it; from hand test 15;
+- **Version:** 6 · **Date:** 2026-11-17 (v6: Jest/Vitest suites keep their test file, Debug at the ▶ of a Jest test, behaviours 8 and 12, AK-15–AK-16, beta screen run of workflow (a), hand tests 19 and 208); 2026-11-13 (v5: ▶ at the tests of pytest, Go and Rust files and a run from the context of only the test at the caret, behaviour 13, AK-14, OBS-0034 part 15 R1); 2026-11-09 (v4: ▶ at the tests of Vitest and Jest files; v2: the test line after a subtest only names it; from hand test 15;
   v3: Jest/Vitest JSON and `go test -json`, test configurations for Vitest, Jest, pytest and Go)
 - **Sources:** GEN (IDEs show test results as a tree of suites and tests with status, duration, failure
   message and output, and can import results from files; F-078), STD (JUnit XML as written by Ant, Maven
@@ -42,7 +42,9 @@ Turn the output of any common test tool into one result tree the IDE and agents 
 8. **Jest/Vitest JSON (v3):** one suite per test file, named relative to the folder all files share;
    `describe` titles become nested suites; `pending`, `skipped`, `todo` and `disabled` are skipped; the
    failure messages are the details, their first line the message; a file that failed without tests (a
-   syntax error) becomes the error "Test suite failed to run" with the runner's message. [STD]
+   syntax error) becomes the error "Test suite failed to run" with the runner's message. (v6) Each
+   file's suite keeps the file's path as the report gives it (`testResults[].name`), so the tree
+   can open a test's source (SPEC-0088 v5 behaviour 12); nested suites keep none. [STD]
 9. **`go test -json` (v3):** one suite per package; subtests (`TestA/case`) nest under their test, which
    becomes a suite; the output of a failed test is kept and its first line that is not a `===`/`---`
    frame is the message; a package that failed without tests (a build error) becomes the error "build"
@@ -65,6 +67,15 @@ Turn the output of any common test tool into one result tree the IDE and agents 
     suite's is followed by a space). `RunClass` with the caret inside a test or suite runs only that
     one (innermost first), also on a remote project's host. Names computed at run time get no marker.
     `run_markers` (MCP) lists them. [GEN, STD, OBS-0028]
+    (v6) For Jest the menu also offers "Debug '<file>: <full name>'", as a package script's ▶
+    does: the same command, `npx jest …`, runs under js-debug as a `package.json` script does
+    (SPEC-0168 behaviour 1), with `--runInBand` added unless it is there, so the tests run in the
+    process the debugger follows; breakpoints in the test file stop it. Jest runs its transformed
+    test files at once and the transformation can move a test's lines, so js-debug is asked to
+    wait for each script's source map before it runs (`pauseForSourceMap`); without that a
+    breakpoint below a leading comment was set only after the test had run. Vitest keeps Run
+    only: its workers were not checked under js-debug. [STD: Jest's `--runInBand`; OSS: js-debug's
+    launch option `pauseForSourceMap`; GEN; beta screen run of workflow (a), hand test 208]
 
 13. **One test of pytest, Go and Rust (v5, OBS-0034 item 62):** ▶ markers stand at the tests of
     `test_*.py`/`*_test.py` (pytest's default collection: `test*` functions of the module, `Test*`
@@ -116,10 +127,20 @@ Turn the output of any common test tool into one result tree the IDE and agents 
   configurations, their names and the Rust file run (`crates/core/tests/it/run_context.rs::single_tests_of_pytest_go_and_rust`);
   MCP `run_markers` on a pytest and a Go file (`protocol.rs::single_tests_and_rerun_failed_tools`).
   In the window by hand: ⌃⇧R in `test_total` of `test_prices.py` runs one test. Open.
+
+- **AK-15 (v6, behaviour 12)** `npx jest …` is planned for js-debug with `--runInBand`, Vitest and
+  other npx commands are not (`debug_plan::tests::jest_through_npx_runs_under_js_debug`); with
+  js-debug and Jest a breakpoint below a leading comment stops the test
+  (`crates/debugger/tests/it/jsdebug.rs::jest_test_stops_at_breakpoint`); in the harness window
+  with Jest and js-debug installed: the ▶ menu of a Jest test lists Run and Debug,
+  and Debug stops at a breakpoint in the test (`workflow_a_beta_handtests.rs::hand_test_19_jest_tree`).
+- **AK-16 (v6, behaviour 8)** The suites of a real Jest report keep their files, nested suites none
+  (`crates/core/tests/it/testreport.rs::jest_report`); the history keeps no path
+  (`test_history::tests::the_last_ten_runs_are_kept_without_output`).
 ## Out of scope
 Running tests (run configurations, F-077), live streaming results while tests run, rerunning failed
-tests, history of runs, other formats (NUnit, xUnit.net, TRX) — later. Running a single test or
-`describe` block from the gutter — later.
+tests, history of runs, other formats (NUnit, xUnit.net, TRX) — later. Debugging a single Vitest
+test from the gutter — later.
 
 ## Known deviations from the reference
 Not compared yet; the reference's import of test results was not observed. Improvement (IMP-0036): a

@@ -247,6 +247,97 @@ fn review_and_update() {
     let _ = std::fs::remove_dir_all(&base);
 }
 
+/// SPEC-0211 v3 AK-6: installing writes exactly the bytes that were reviewed, and grants carry
+/// over only to the same plugin (same manifest name), never to a new or a different one.
+#[test]
+fn reviewed_bytes_and_grants_of_the_same_plugin_only() {
+    use idecraft_plugins::{Holder, Target, grant_network, install_reviewed, network_grants};
+    let base = std::env::temp_dir().join(format!("idecraft-plugin-same-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let (download, dir) = (base.join("download"), base.join("plugins"));
+    std::fs::create_dir_all(&download).unwrap();
+    let source = std::fs::read_to_string(samples().join("panel.wat")).unwrap();
+    let module = |name: &str, version: &str| {
+        let text = source
+            .replace(
+                r#"\"version\":\"1.0\""#,
+                &format!(r#"\"version\":\"{version}\""#),
+            )
+            .replace(
+                r#"\"name\":\"Sample Panel\""#,
+                &format!(r#"\"name\":\"{name}\""#),
+            )
+            .replace(
+                r#"\"actions\":"#,
+                r#"\"permissions\":[\"project-read\"],\"actions\":"#,
+            );
+        wat::parse_str(&text).unwrap()
+    };
+    let file = download.join("panel.wasm");
+    let target = Target {
+        host: "127.0.0.1".into(),
+        port: 5432,
+    };
+
+    // A grant left behind by a plugin removed by hand is not shown and not kept for a new one.
+    std::fs::create_dir_all(&dir).unwrap();
+    set_granted(&dir, "panel", Permission::ProjectRead, true).unwrap();
+    grant_network(&dir, "panel", &target, Holder::User).unwrap();
+    std::fs::write(&file, module("Sample Panel", "1.0")).unwrap();
+    let r = review(&dir, &file).unwrap();
+    assert_eq!(r.kind, ReviewKind::Install);
+    assert_eq!(r.permissions, [(Permission::ProjectRead, false)]);
+
+    // The file changes after the review: the reviewed module is installed, not the new file.
+    std::fs::write(&file, module("Evil", "9.9")).unwrap();
+    let m = install_reviewed(&dir, &r).unwrap();
+    assert_eq!(
+        (m.name.as_str(), m.version.as_str()),
+        ("Sample Panel", "1.0")
+    );
+    assert_eq!(
+        std::fs::read(dir.join("panel.wasm")).unwrap(),
+        module("Sample Panel", "1.0")
+    );
+    assert!(!granted(&dir, "panel", Permission::ProjectRead));
+    assert!(network_grants(&dir).is_empty(), "the stale host grant went");
+    assert!(!dir.join("panel.wasm.part").exists());
+
+    // The same plugin, newer: an update that keeps what the user granted.
+    set_granted(&dir, "panel", Permission::ProjectRead, true).unwrap();
+    grant_network(&dir, "panel", &target, Holder::User).unwrap();
+    std::fs::write(&file, module("Sample Panel", "1.1")).unwrap();
+    let r = review(&dir, &file).unwrap();
+    assert_eq!(r.headline(), "Update Sample Panel 1.0 → 1.1");
+    assert_eq!(r.permissions, [(Permission::ProjectRead, true)]);
+    install(&dir, &file).unwrap();
+    assert!(granted(&dir, "panel", Permission::ProjectRead));
+    assert_eq!(network_grants(&dir).len(), 1);
+
+    // Another plugin under the same file name replaces it: a warning, nothing carries over.
+    std::fs::write(&file, module("Other Panel", "2.0")).unwrap();
+    let r = review(&dir, &file).unwrap();
+    assert_eq!(
+        r.kind,
+        ReviewKind::Replace {
+            from_name: "Sample Panel".into(),
+            from: "1.1".into()
+        }
+    );
+    assert_eq!(
+        r.headline(),
+        "Replace Sample Panel 1.1 with Other Panel 2.0"
+    );
+    assert_eq!(r.permissions, [(Permission::ProjectRead, false)]);
+    let json = serde_json::to_value(&r).unwrap();
+    assert_eq!(json["kind"], "replace");
+    assert_eq!(json["from_name"], "Sample Panel");
+    install(&dir, &file).unwrap();
+    assert!(!granted(&dir, "panel", Permission::ProjectRead));
+    assert!(network_grants(&dir).is_empty());
+    let _ = std::fs::remove_dir_all(&base);
+}
+
 /// SPEC-0276 AK-1: the run configuration sample suggests commands; the host drops the shell and
 /// the folder outside, runs nothing without the grant, and the grant goes with an update that no
 /// longer asks for it and with removal.

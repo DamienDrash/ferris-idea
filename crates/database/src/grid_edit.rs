@@ -223,6 +223,9 @@ mod tests {
             nullable,
             default: None,
             generated: None,
+            expression: None,
+            identity: None,
+            comment: None,
         };
         Table {
             storage: Vec::new(),
@@ -235,6 +238,7 @@ mod tests {
             foreign_keys: Vec::new(),
             unreadable: None,
             constraints: Vec::new(),
+            comment: None,
         }
     }
 

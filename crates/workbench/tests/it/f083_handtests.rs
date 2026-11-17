@@ -1,19 +1,23 @@
-//! Re-checks without a screen of the hand tests that hold F-083 (Profiler, Docker, Kubernetes,
-//! Remote) at stage 2 in PARITY.md: the steps of hand tests 46, 62, 170–173, 180, 181 and 183 in a
-//! window of the test harness with real keys against the real programs — a Docker Engine and a
-//! k3s cluster in the reference environment's Lima VMs (started by its container script), the
-//! Compose CLI, JDK Flight Recorder, tracemalloc, macOS `leaks` and `sample`, and the system
-//! `sshd` started as the current user. Nothing is a stand-in for the program it tests; the
-//! sources the window talks to are set with the window's test calls instead of the user's
-//! settings, and choosing a run configuration or an SSH host from the user's lists is a call too.
+//! Re-checks without a screen of the hand tests that held F-083 (Profiler, Docker, Kubernetes,
+//! Remote) at stage 2 in PARITY.md: the steps of hand tests 46, 62, 170–173, 180, 181, 182 (its
+//! Gradle part) and 183 in a window of the test harness with real keys against the real programs —
+//! a Docker Engine and a k3s cluster in the reference environment's Lima VMs
+//! (started by its container script), the Compose CLI, JDK Flight Recorder, Gradle,
+//! tracemalloc, macOS `leaks` and `sample`, and the system `sshd` started as the current user.
+//! Nothing is a stand-in for the program it tests; the sources the window talks to are set with
+//! the window's test calls instead of the user's settings, and choosing a run configuration or an
+//! SSH host from the user's lists is a call too. Hand tests 84 and 184 need the `idecraft` program
+//! as the host's backend and live with its tests (`crates/app/tests/it/f083_handtests.rs`).
 //!
 //! What needs eyes stays in the hand tests: how the rows and the flame graph are drawn, a real
 //! keyboard, the browser a port opens, and the comparison with the reference. Each test is skipped
 //! when its programs are missing; the Docker and Kubernetes test needs the variables
-//! `containers.sh env` prints.
+//! `containers.sh env` prints. Steps on the test host wait for the window's own answer instead of
+//! a fixed time (`until_host`).
 //!
 //! `SPEC-0119` v4 AK-7, `SPEC-0240`–`SPEC-0243` (hand tests 46, 170–173), `SPEC-0136` v2 AK-6 (62),
-//! `SPEC-0250` v3 AK-6 (180), `SPEC-0251` v3 AK-6 (181), `SPEC-0253` v2 AK-6 (183).
+//! `SPEC-0250` v3 AK-6 (180), `SPEC-0251` v3 AK-6 (181), `SPEC-0252` v2 AK-6 (182), `SPEC-0253` v2
+//! AK-6 (183).
 
 #![cfg(target_os = "macos")]
 
@@ -824,6 +828,160 @@ fn hand_tests_62_and_180_profiles_with_keys(cx: &mut TestAppContext) {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+const BUSY: &str = "package demo;\n\npublic class Busy {\n    static long inner(long n) {\n        long s = 0;\n        for (long i = 0; i < n; i++) s += i % 7;\n        return s;\n    }\n    public static void main(String[] args) {\n        long t = 0;\n        for (int k = 0; k < 1500; k++) t += inner(1_000_000);\n        System.out.println(\"done \" + t);\n    }\n}\n";
+
+/// Whether the Gradle distribution the wrapper in `root` names is unpacked in the Gradle cache,
+/// so `./gradlew` runs without downloading anything.
+fn wrapper_distribution_cached(root: &Path) -> bool {
+    let properties = std::fs::read_to_string(root.join("gradle/wrapper/gradle-wrapper.properties"))
+        .unwrap_or_default();
+    let Some(zip) = properties
+        .lines()
+        .find_map(|l| l.strip_prefix("distributionUrl="))
+        .and_then(|u| u.rsplit('/').next())
+    else {
+        return false;
+    };
+    let name = zip.trim_end_matches(".zip");
+    let unpacked = name.trim_end_matches("-bin").trim_end_matches("-all");
+    let user_home = std::env::var_os("GRADLE_USER_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".gradle")));
+    let Some(dists) = user_home.map(|h| h.join("wrapper/dists").join(name)) else {
+        return false;
+    };
+    std::fs::read_dir(dists).is_ok_and(|entries| {
+        entries
+            .flatten()
+            .any(|e| e.path().join(unpacked).join("bin/gradle").is_file())
+    })
+}
+
+/// Hand test 182, Gradle part (`SPEC-0252` behaviour 3): a Gradle application (`application`
+/// plugin) with the run configuration `./gradlew run`, Find Action › Profile Selected with keys:
+/// JDK Flight Recorder records the application's JVM, not Gradle's — `Busy.inner` is the hottest
+/// method with its file and line, no Gradle frame is among the hot spots — and Enter opens the
+/// line. The wrapper is made by the installed Gradle (`gradle wrapper`, offline) and runs the
+/// distribution already in the Gradle cache; the project's `gradle.properties` turns the daemon
+/// off, so no Gradle process outlives the test. Skipped without `gradle` or `java`, or when the
+/// wrapper's distribution is not cached (it would be downloaded).
+#[gpui::test]
+fn hand_test_182_gradle_run_profiles_the_application(cx: &mut TestAppContext) {
+    let root = workspace("gradle");
+    if on_path("gradle").is_none() || on_path("java").is_none() {
+        eprintln!("182 skipped: gradle or java is missing");
+        return;
+    }
+    std::fs::create_dir_all(root.join("src/main/java/demo")).unwrap();
+    std::fs::write(root.join("settings.gradle"), "rootProject.name = 'busy'\n").unwrap();
+    std::fs::write(
+        root.join("build.gradle"),
+        "plugins { id 'application' }\napplication { mainClass = 'demo.Busy' }\n",
+    )
+    .unwrap();
+    std::fs::write(root.join("gradle.properties"), "org.gradle.daemon=false\n").unwrap();
+    std::fs::write(root.join("src/main/java/demo/Busy.java"), BUSY).unwrap();
+    let wrapped = Command::new("gradle")
+        .args(["-q", "--offline", "wrapper"])
+        .current_dir(&root)
+        .output()
+        .unwrap();
+    assert!(
+        wrapped.status.success(),
+        "gradle wrapper: {}",
+        String::from_utf8_lossy(&wrapped.stderr)
+    );
+    if !wrapper_distribution_cached(&root) {
+        eprintln!("182 skipped: the wrapper's Gradle distribution is not in the Gradle cache");
+        let _ = std::fs::remove_dir_all(&root);
+        return;
+    }
+    cx.executor().allow_parking();
+    idecraft_core::trust::trust_for_process(&root);
+    let (bench, cx) = window(&root, cx);
+    run_toml(&root, "app", &["./gradlew", "run"]);
+    bench.update(cx, |b, cx| b.select_run_configuration("app", cx));
+    bench.update_in(cx, |b, window, cx| b.focus_tree(window, cx));
+    cx.run_until_parked();
+    keys(cx, "cmd-shift-a");
+    cx.simulate_input("ProfileSelected");
+    until(cx, 10, "Find Action offers Profile Selected", |cx| {
+        bench.read_with(cx, |b, cx| {
+            b.everywhere().is_some_and(|v| {
+                matches!(
+                    v.read(cx).results().selected_row(),
+                    Some(idecraft_workbench::everywhere_model::Row::Action(a))
+                        if a.id == "Profiler.ProfileSelected"
+                )
+            })
+        })
+    });
+    keys(cx, "enter");
+    until_shown(
+        cx,
+        20,
+        "the Profiler window records the configuration",
+        |cx| bench.read_with(cx, |b, _| b.profiler_view().is_some()),
+        |cx| status(&bench, cx),
+    );
+    // Gradle starts its own JVM and then the application's; under load that takes minutes. The
+    // window says when it is done (no longer busy), with the profile or the reason it failed.
+    let end = Instant::now() + Duration::from_secs(900);
+    let summary = loop {
+        cx.run_until_parked();
+        let (busy, summary) = bench.read_with(cx, |b, cx| {
+            b.profiler_view()
+                .map(|v| (v.read(cx).busy(), v.read(cx).summary()))
+                .unwrap_or_default()
+        });
+        if !busy {
+            break summary;
+        }
+        assert!(Instant::now() < end, "Profile Selected hangs: {summary}");
+        std::thread::sleep(Duration::from_millis(100));
+        cx.executor().advance_clock(Duration::from_millis(100));
+    };
+    assert!(
+        summary.starts_with("app · JFR · "),
+        "{summary}: {}",
+        status(&bench, cx)
+    );
+    // The run is kept with its output (SPEC-0120 behaviour 6): the application's line, none of
+    // the recorder's.
+    let kept: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(root.join(".idecraft/profiles/last.json")).unwrap(),
+    )
+    .unwrap();
+    let output = kept["output"].as_str().unwrap_or_default();
+    assert!(
+        output.contains("done ")
+            && !output.contains("jdk.jfr")
+            && !output.contains("Started recording"),
+        "the application ran under Gradle: {output}"
+    );
+    assert_eq!(kept["exit_code"], serde_json::json!(0), "{output}");
+    focus_profiler(&bench, cx);
+    keys(cx, "2");
+    let rows = profiler_texts(&bench, cx);
+    let first = rows.first().cloned().unwrap_or_default();
+    assert!(
+        first.starts_with("Busy.inner") && first.contains("Busy.java:6"),
+        "the application's method is the hottest: {rows:#?}"
+    );
+    assert!(
+        !rows.iter().any(|r| r.contains("org.gradle")),
+        "the recording is the application's, not Gradle's: {rows:#?}"
+    );
+    keys(cx, "enter");
+    until(cx, 20, "Enter opens Busy.java at the line", |cx| {
+        bench.read_with(cx, |b, cx| {
+            b.active_file().is_some_and(|p| p.ends_with("Busy.java"))
+                && b.caret_position(cx).map(|(l, _)| l) == Some(6)
+        })
+    });
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 /// Hand test 181 (`SPEC-0251` v2): Attach Profiler to Process lists the running processes;
 /// typed text narrows the list, Enter attaches; the program goes on running and a sampled call
 /// tree of it is shown; a look-alike of the reference is refused with the reason. macOS samples
@@ -956,6 +1114,73 @@ fn remote_texts(bench: &Bench, cx: &mut VisualTestContext) -> Vec<String> {
     })
 }
 
+/// How long a step on the test host may take before it counts as hanging. Every call of the
+/// window has its own limit (10 s to connect, 30 s a command, SPEC-0121 behaviour 2) and shows
+/// an error when it is exceeded, so a slow machine only waits longer for the same result.
+const HOST_HANG: Duration = Duration::from_secs(300);
+
+/// A local `sshd` as the test host, ready: it has completed a whole SSH session through
+/// IDECraft's own `ssh`, so the steps that follow do not race the server's start under load.
+fn ready_host(dir: &Path) -> Option<idecraft_remote::testing::TestHost> {
+    let host = idecraft_remote::testing::TestHost::start(dir)?;
+    if let Err(e) = host.wait_ready(HOST_HANG) {
+        panic!("the test host started but never let a session in: {e}");
+    }
+    Some(host)
+}
+
+/// The Remote Host window's state, for a failure message.
+fn remote_state(bench: &Bench, cx: &mut VisualTestContext) -> String {
+    bench.read_with(cx, |b, cx| {
+        b.remote_view()
+            .map(|v| {
+                let v = v.read(cx);
+                format!(
+                    "place {:?} field {:?} busy {} error {:?} rows {:?} status {:?}",
+                    v.place(),
+                    v.field_text(cx),
+                    v.busy(),
+                    v.error(),
+                    v.texts(),
+                    b.status_message(cx)
+                )
+            })
+            .unwrap_or_default()
+    })
+}
+
+/// Waits until `done` holds after a step on the test host: on the window's own answer, not a
+/// fixed time. An error the window shows ends the wait at once with that error; a step that
+/// neither finishes nor fails within [`HOST_HANG`] is a hang.
+fn until_host(
+    bench: &Bench,
+    cx: &mut VisualTestContext,
+    what: &str,
+    mut done: impl FnMut(&mut VisualTestContext) -> bool,
+) {
+    let end = Instant::now() + HOST_HANG;
+    while Instant::now() < end {
+        cx.run_until_parked();
+        if done(cx) {
+            return;
+        }
+        let failed = bench.read_with(cx, |b, cx| {
+            b.remote_view()
+                .and_then(|v| v.read(cx).error().map(str::to_owned))
+        });
+        if let Some(e) = failed {
+            panic!(
+                "{what}: the window reports {e:?}\n{}",
+                remote_state(bench, cx)
+            );
+        }
+        std::thread::sleep(Duration::from_millis(50));
+        cx.executor().advance_clock(Duration::from_millis(50));
+    }
+    let state = remote_state(bench, cx);
+    panic!("timed out: {what}\n{state}");
+}
+
 /// Moves the Remote Host window's selection with ↑/↓ to the row `name`, focus on the list.
 fn go_remote(bench: &Bench, cx: &mut VisualTestContext, name: &str) {
     let view = bench
@@ -983,13 +1208,15 @@ fn go_remote(bench: &Bench, cx: &mut VisualTestContext, name: &str) {
 /// Hand test 183 (`SPEC-0253` v2) against the system `sshd` started as the current user: in a
 /// test folder ⌘N with a typed name and Enter creates and opens a file, ⇧F6 renames it, ⇧⌘N
 /// creates a folder, ⌘⌫ on the folder asks first and names what it holds, Enter deletes it, and
-/// ⌘⌫ on the file deletes it.
+/// ⌘⌫ on the file deletes it. Each step waits for the window's own answer (the result, or the
+/// error it shows), after the test host has let a first session in (`ready_host`): under load the
+/// first connection once took longer than a fixed 60 s.
 #[gpui::test]
 fn hand_test_183_files_on_the_host_with_keys(cx: &mut TestAppContext) {
     let base = std::env::temp_dir().join(format!("idecraft-f083-ssh-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
     std::fs::create_dir_all(&base).unwrap();
-    let Some(host) = idecraft_remote::testing::TestHost::start(&base) else {
+    let Some(host) = ready_host(&base) else {
         eprintln!("skipped: no sshd or ssh-keygen");
         return;
     };
@@ -1002,7 +1229,7 @@ fn hand_test_183_files_on_the_host_with_keys(cx: &mut TestAppContext) {
         b.toggle_remote(window, cx);
         b.remote_connect(host.target.clone(), cx);
     });
-    until(cx, 60, "the home folder of the host is shown", |cx| {
+    until_host(&bench, cx, "the home folder of the host is shown", |cx| {
         bench.read_with(cx, |b, cx| {
             b.remote_view()
                 .is_some_and(|v| v.read(cx).place().is_some())
@@ -1016,49 +1243,28 @@ fn hand_test_183_files_on_the_host_with_keys(cx: &mut TestAppContext) {
     keys(cx, "cmd-a");
     cx.simulate_input(&folder.display().to_string());
     keys(cx, "enter");
-    until_shown(
-        cx,
-        30,
-        "the test folder is shown",
-        |cx| {
-            bench.read_with(cx, |b, cx| {
-                b.remote_view().is_some_and(|v| {
-                    v.read(cx)
-                        .place()
-                        .is_some_and(|(_, p)| Path::new(p) == folder)
-                })
+    until_host(&bench, cx, "the test folder is shown", |cx| {
+        bench.read_with(cx, |b, cx| {
+            b.remote_view().is_some_and(|v| {
+                v.read(cx)
+                    .place()
+                    .is_some_and(|(_, p)| Path::new(p) == folder)
             })
-        },
-        |cx| {
-            bench.read_with(cx, |b, cx| {
-                b.remote_view()
-                    .map(|v| {
-                        let v = v.read(cx);
-                        format!(
-                            "place {:?} field {:?} error {:?} rows {:?}",
-                            v.place(),
-                            v.field_text(cx),
-                            v.error(),
-                            v.texts()
-                        )
-                    })
-                    .unwrap_or_default()
-            })
-        },
-    );
+        })
+    });
 
     // ⌘N, a name, Enter: the file is made and opens.
     go_remote(&bench, cx, "..");
     keys(cx, "cmd-n");
     cx.simulate_input("neu.txt");
     keys(cx, "enter");
-    until(cx, 30, "neu.txt is made on the host and opens", |cx| {
+    until_host(&bench, cx, "neu.txt is made on the host and opens", |cx| {
         folder.join("neu.txt").is_file()
             && bench.read_with(cx, |b, _| {
                 b.active_file().is_some_and(|p| p.ends_with("neu.txt"))
             })
     });
-    until(cx, 30, "the list shows it", |cx| {
+    until_host(&bench, cx, "the list shows it", |cx| {
         remote_texts(&bench, cx)
             .iter()
             .any(|t| t.contains("neu.txt"))
@@ -1074,7 +1280,7 @@ fn hand_test_183_files_on_the_host_with_keys(cx: &mut TestAppContext) {
     keys(cx, "cmd-a");
     cx.simulate_input("umbenannt.txt");
     keys(cx, "enter");
-    until(cx, 30, "the file is renamed on the host", |_| {
+    until_host(&bench, cx, "the file is renamed on the host", |_| {
         folder.join("umbenannt.txt").is_file() && !folder.join("neu.txt").exists()
     });
 
@@ -1083,12 +1289,12 @@ fn hand_test_183_files_on_the_host_with_keys(cx: &mut TestAppContext) {
     keys(cx, "cmd-shift-n");
     cx.simulate_input("ordner");
     keys(cx, "enter");
-    until(cx, 30, "the folder is made on the host", |_| {
+    until_host(&bench, cx, "the folder is made on the host", |_| {
         folder.join("ordner").is_dir()
     });
     std::fs::write(folder.join("ordner/inhalt.txt"), "x\n").unwrap();
     keys(cx, "f5");
-    until(cx, 30, "the list shows the folder", |cx| {
+    until_host(&bench, cx, "the list shows the folder", |cx| {
         remote_texts(&bench, cx)
             .iter()
             .any(|t| t.contains("ordner"))
@@ -1097,9 +1303,9 @@ fn hand_test_183_files_on_the_host_with_keys(cx: &mut TestAppContext) {
     // ⌘⌫ on the folder asks and names what it holds; Enter deletes it.
     go_remote(&bench, cx, "ordner");
     keys(cx, "cmd-backspace");
-    until(
+    until_host(
+        &bench,
         cx,
-        30,
         "the question names the folder and its one entry",
         |cx| {
             bench.read_with(cx, |b, cx| {
@@ -1118,13 +1324,13 @@ fn hand_test_183_files_on_the_host_with_keys(cx: &mut TestAppContext) {
         "nothing is deleted before Enter"
     );
     keys(cx, "enter");
-    until(cx, 30, "the folder is deleted on the host", |_| {
+    until_host(&bench, cx, "the folder is deleted on the host", |_| {
         !folder.join("ordner").exists()
     });
 
     // ⌘⌫ on the file.
     keys(cx, "f5");
-    until(cx, 30, "the list is read again", |cx| {
+    until_host(&bench, cx, "the list is read again", |cx| {
         !remote_texts(&bench, cx)
             .iter()
             .any(|t| t.contains("ordner"))
@@ -1135,7 +1341,7 @@ fn hand_test_183_files_on_the_host_with_keys(cx: &mut TestAppContext) {
     if folder.join("umbenannt.txt").exists() {
         keys(cx, "enter");
     }
-    until(cx, 30, "the file is deleted on the host", |_| {
+    until_host(&bench, cx, "the file is deleted on the host", |_| {
         !folder.join("umbenannt.txt").exists()
     });
     drop(host);

@@ -34,11 +34,26 @@ roxmltree = "0.20"
 # Same version and features as GPUI's, so no new crates (SVG → PNG for the ER diagram export).
 resvg = { version = "0.45", default-features = false, features = ["text", "system-fonts", "memmap-fonts"] }
 tokio-util.workspace = true
+# The chain of a SQL Server's certificate checked against the profile's CA file alone (`SPEC-0116`
+# v7 behaviour 15); already in the workspace through rustls (ISC, MIT or Apache-2.0).
+rustls-pki-types = { version = "1", default-features = false, features = ["std"] }
+webpki = { package = "rustls-webpki", version = "0.103", default-features = false, features = ["ring", "std"] }
+
+# Database passwords in the Secret Service on Linux (`SPEC-0008` v8 behaviour 18): the same crate
+# and features as the remote key store (`ADR-0025` §3), no second implementation stack.
+[target.'cfg(target_os = "linux")'.dependencies]
+futures-lite.workspace = true
+oo7.workspace = true
 
 [dev-dependencies]
+# Test certificate authorities and server certificates (same version and features as `web`).
+rcgen = { version = "0.14", default-features = false, features = ["crypto", "pem", "ring"] }
 rusqlite.workspace = true
 duckdb.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+tempfile = "3"
 
 [lints]
 workspace = true

@@ -1,6 +1,6 @@
 # SPEC-0193: One undo step for a refactoring across files
 
-- **Version:** 5 · **Date:** 2026-11-14 (v5: an agent's refactoring over MCP is an undo group of the window, SPEC-0220 v4; v4, 2026-11-10: ⌘Z of a refactoring in one editor says what it took back, window run of hand test Nr. 210; v3: a refused group stays locked instead of a single-file undo, OBS-0030, IMP-0393; v2: the refactoring is named in each file's local history, open files keep their saved state there; hand test Nr. 123, D46)
+- **Version:** 6 · **Date:** 2026-11-17 (v6: MCP `redo_refactoring`, and redo takes the group undone last; found by driving undo and redo headless for F-011, OBS-0075; v5: an agent's refactoring over MCP is an undo group of the window, SPEC-0220 v4; v4, 2026-11-10: ⌘Z of a refactoring in one editor says what it took back, window run of hand test Nr. 210; v3: a refused group stays locked instead of a single-file undo, OBS-0030, IMP-0393; v2: the refactoring is named in each file's local history, open files keep their saved state there; hand test Nr. 123, D46)
 - **Sources:** GEN (IDEs undo a refactoring that changed several files with one Undo, in every file it
   touched, and refuse when one of those files was changed afterwards; refactorings leave a named entry in
   the local history; F-072, F-073), SPEC-0003 (grouped undo in a buffer), SPEC-0040, SPEC-0041 v2,
@@ -70,6 +70,20 @@ the files it changed, and without silently losing edits made afterwards.
     the change is never taken back twice nor in one file alone. Changes that rename
     files, or whose files are shown in more than one project window or only in a split, are not
     kept as a window group (each editor undoes its own step). [GEN, ADR-0008]
+11. **Redo over MCP (v6).** The tool `redo_refactoring` (no arguments) applies again the
+    refactoring that `undo_refactoring` took back last, in every file at once, with the checks of
+    behaviour 4: every file must still hold the text the undo left, else nothing changes, the
+    changed file is named ("cannot redo <name>: <file> changed since") and the group is dropped.
+    Open files change through their editors as one step each, which the window keeps as a group
+    named "Redo <name>" (behaviour 10); files on disk are recorded in the local history under the
+    same label (behaviour 5). A refactoring applied after an undo ends redo (as typing ends redo
+    in an editor). With several groups undone, redo takes them in the order they were made: the
+    one undone last first. Before v6 an agent could undo but not redo, and the redo of files on
+    disk took the newest undone group, which fails its check when an older undone group touched
+    the same file and then dropped it. The groups live as long as the MCP server: a one-shot
+    `idecraft call` keeps none, so its "nothing to undo" ("nothing to redo") says so and points to
+    `local_history` and `restore_local_revision`, where each refactoring is labelled (behaviour 2).
+    [GEN, ADR-0008]
 
 ## Acceptance criteria
 - **AK-1** Group bookkeeping (unit tests): the group of an editor step is found for undo, an undone
@@ -100,6 +114,11 @@ the files it changed, and without silently losing edits made afterwards.
   the refactoring's text again, the whole group passes the check (unit test
   `undo_group::tests::a_refused_group_stays_until_it_can_be_undone`); by hand: a second ⌘Z leaves
   every file with the new name.
+- **AK-10 (v6)** MCP (protocol test with clangd): after `undo_refactoring`, `redo_refactoring`
+  applies the code action again and the local history has "Redo <name>"; a second redo has nothing
+  to redo; a file changed after an undo refuses the redo and stays as it is. Redo order (unit test
+  `undo_group::tests::redo_takes_the_group_undone_last`): two groups of one file, both undone, are
+  redone oldest first.
 
 ## Out of scope
 Undoing Move (it renames a file; SPEC-0114 undoes nothing yet), SQL refactorings applied to a database

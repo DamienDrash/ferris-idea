@@ -57,13 +57,16 @@ pub const TRIGGER_INVOKED: u64 = 1;
 
 /// The actions an agent is shown (`SPEC-0041` v3 behaviour 6): those that can be applied first,
 /// then the disabled ones with their reason, each part in the server's order; with
-/// `applicable_only` the disabled ones are left out.
+/// `applicable_only` the disabled ones are left out. A title is listed once, as in the editor's
+/// list (`SPEC-0041` v4 behaviour 7): `apply_code_action` chooses by title and takes the first.
 pub fn applicable_first(actions: Vec<CodeAction>, applicable_only: bool) -> Vec<CodeAction> {
     let (mut applicable, disabled): (Vec<_>, Vec<_>) =
         actions.into_iter().partition(|a| a.disabled.is_none());
     if !applicable_only {
         applicable.extend(disabled);
     }
+    let mut seen = std::collections::HashSet::new();
+    applicable.retain(|a| seen.insert(a.title.clone()));
     applicable
 }
 
@@ -572,6 +575,25 @@ fn content_of(file: &Path, text: Option<&str>) -> Option<String> {
     }
 }
 
+/// What the status bar says for a `refactoring` that neither the language server of `file` nor
+/// IDECraft offers for its language (`SPEC-0095` v13 behaviour 7a): Extract Field and Introduce
+/// Parameter in Python, Introduce Parameter in JavaScript and TypeScript. In place of the hint of
+/// [`Refactoring::none_message`], which would ask for a selection that cannot help.
+pub fn missing_message(file: &Path, refactoring: Refactoring) -> Option<String> {
+    let python = crate::LanguageId::detect(file) == Some(crate::LanguageId::Python);
+    let script = crate::ts_structure::is_script(file);
+    let (name, language) = match refactoring {
+        Refactoring::Field if python => ("Extract Field", "Python"),
+        Refactoring::Parameter if python => ("Introduce Parameter", "Python"),
+        Refactoring::Parameter if script => ("Introduce Parameter", "JavaScript and TypeScript"),
+        _ => return None,
+    };
+    Some(format!(
+        "{name} is not available for {language} files yet: the language server offers none and \
+         IDECraft has no own one. Extract Variable and Extract Method are."
+    ))
+}
+
 /// Why IDECraft's own refactoring refuses `range` of `file` (content `text`, or the disk
 /// content), for the status bar in place of [`Refactoring::none_message`]; `None` where there is
 /// no own refactoring (`SPEC-0330` behaviour 14).
@@ -581,6 +603,9 @@ pub fn own_refusal(
     range: &Range,
     refactoring: Refactoring,
 ) -> Option<String> {
+    if let Some(missing) = missing_message(file, refactoring) {
+        return Some(missing);
+    }
     if !own_offers(file, refactoring) {
         return None;
     }
@@ -845,8 +870,9 @@ pub async fn plan_code_action_in(
     result
 }
 
-/// Whether the code action titled `title` extracts a variable, a constant or a method, which
-/// introduces a name the user should choose (`SPEC-0095` v3 behaviour 8).
+/// Whether the code action titled `title` extracts a variable, a constant, a field or a method or
+/// introduces a parameter, which introduces a name the user should choose (`SPEC-0095` v3
+/// behaviour 8, v13 behaviour 8d).
 pub fn introduces_name(title: &str) -> bool {
     let action = CodeAction {
         title: title.to_owned(),
@@ -858,7 +884,9 @@ pub fn introduces_name(title: &str) -> bool {
     [
         Refactoring::Variable,
         Refactoring::Constant,
+        Refactoring::Field,
         Refactoring::Method,
+        Refactoring::Parameter,
     ]
     .iter()
     .any(|r| r.matches(&action))
@@ -1161,6 +1189,18 @@ mod tests {
                 "Extract to constant in enclosing scope"
             ]
         );
+        // SPEC-0041 v4 AK-7: jdtls sends "Organize imports" twice at an unused import (headless
+        // check of 2026-11-16); the agent sees it once.
+        let twice = vec![
+            a("Organize imports", None),
+            a("Organize imports", None),
+            a("Add all missing imports", None),
+            a("Add all missing imports", Some("nothing to add")),
+        ];
+        assert_eq!(
+            titles(&applicable_first(twice, false)),
+            ["Organize imports", "Add all missing imports"]
+        );
     }
 
     /// SPEC-0095 v9 AK-16: a question is given up at its limit, naming the server; one answered
@@ -1182,6 +1222,79 @@ mod tests {
         );
     }
 
+    /// SPEC-0095 v13 AK-24: the name jdtls gives an extracted field or an introduced parameter
+    /// (`i`, seen in a headless check on 2026-11-16) is found like an extracted variable's.
+    #[test]
+    fn fields_and_parameters_introduce_a_name() {
+        let before = "class Shop {\n    int total(int price, int qty) {\n        int sum = price * qty + 42;\n        return sum;\n    }\n}\n";
+        let field = "class Shop {\n    private int i;\n\n    int total(int price, int qty) {\n        i = price * qty;\n        int sum = i + 42;\n        return sum;\n    }\n}\n";
+        assert_eq!(
+            introduced_name(before, field),
+            Some(IntroducedName {
+                name: "i".into(),
+                line: 1,
+                character: 16
+            })
+        );
+        let parameter = "class Shop {\n    int total(int price, int qty, int i) {\n        int sum = i + 42;\n        return sum;\n    }\n}\n";
+        assert_eq!(
+            introduced_name(before, parameter).map(|n| (n.name, n.line)),
+            Some(("i".into(), 1))
+        );
+    }
+
+    /// SPEC-0095 v13 AK-25: a refactoring nobody offers for the language says so instead of
+    /// asking for another selection.
+    #[test]
+    fn missing_refactorings_say_so() {
+        let py = Path::new("/p/shop.py");
+        let ts = Path::new("/p/shop.ts");
+        let js = Path::new("/p/shop.js");
+        let field = missing_message(py, Refactoring::Field).unwrap();
+        assert!(
+            field.starts_with("Extract Field is not available for Python files"),
+            "{field}"
+        );
+        assert!(
+            missing_message(py, Refactoring::Parameter)
+                .unwrap()
+                .starts_with("Introduce Parameter is not available for Python files")
+        );
+        for f in [ts, js] {
+            assert!(
+                missing_message(f, Refactoring::Parameter)
+                    .unwrap()
+                    .contains("JavaScript and TypeScript files"),
+                "{f:?}"
+            );
+            assert_eq!(missing_message(f, Refactoring::Field), None);
+        }
+        for r in [
+            Refactoring::Variable,
+            Refactoring::Constant,
+            Refactoring::Method,
+            Refactoring::Inline,
+            Refactoring::Any,
+        ] {
+            assert_eq!(missing_message(py, r), None, "{r:?}");
+        }
+        assert_eq!(
+            missing_message(Path::new("/p/A.java"), Refactoring::Parameter),
+            None
+        );
+        // It is the refusal the window and `code_actions` show.
+        let range = Range {
+            start_line: 0,
+            start_character: 0,
+            end_line: 0,
+            end_character: 1,
+        };
+        assert_eq!(
+            own_refusal(py, Some("x = 1\n"), &range, Refactoring::Field),
+            Some(field)
+        );
+    }
+
     #[test]
     fn extractions_introduce_a_name() {
         assert!(introduces_name("Extract subexpression to variable"));
@@ -1192,6 +1305,10 @@ mod tests {
             "Extract to local variable (replace all occurrences)"
         ));
         assert!(introduces_name("Extract to method"));
+        // SPEC-0095 v13 AK-24: jdtls's field and parameter are named too.
+        assert!(introduces_name("Extract to field"));
+        assert!(introduces_name("Introduce Parameter..."));
+        assert!(!introduces_name("Create parameter 'rate'"));
         assert!(!introduces_name("Inline variable"));
         assert!(!introduces_name("Add missing import"));
     }

@@ -1,6 +1,6 @@
 # SPEC-0310: Non-relational stores — connections, browser tree, catalogue, MCP
 
-- **Version:** 3 · **Date:** 2026-11-14 (v3: for agents the rights of a store are the user's grants of SPEC-0012 v3 — kept outside the project, nothing granted by default, `ai` only an upper limit, no store usable in safe mode, changing commands need `apply: true`, the log holds no command text; behaviour 8; v2 2026-11-05: v2: the connection dialog builds the store URL from its fields; MCP `run_store_command` takes the database; catalogue keys of the planned systems)
+- **Version:** 4 · **Date:** 2026-11-16 (v4: the dialog's SSL mode `prefer` gives TLS without certificate checks for a store off the loopback and plain text only on the loopback, behaviour 3, AK-10 — SPEC-0016 v3, IMP-0421); 2026-11-14 (v3: for agents the rights of a store are the user's grants of SPEC-0012 v3 — kept outside the project, nothing granted by default, `ai` only an upper limit, no store usable in safe mode, changing commands need `apply: true`, the log holds no command text; behaviour 8; v2 2026-11-05: v2: the connection dialog builds the store URL from its fields; MCP `run_store_command` takes the database; catalogue keys of the planned systems)
 - **Sources:** GEN (database IDEs list document and key-value stores beside SQL databases and browse
   them as a tree; connection strings of MongoDB and Redis are URLs), STD (MongoDB connection string
   format incl. the `mongodb+srv` DNS seed list; Redis URL scheme `redis://` / `rediss://` with the
@@ -35,7 +35,11 @@ permission rules as SQL connections.
    `mongodb://` mean TLS with certificate and host name checked. `tlsAllowInvalidCertificates=true`
    (MongoDB) and `rediss://…?insecure=true` (Redis) turn checking off and the tree row says
    "TLS, certificate not checked". TLS is never weakened silently: a TLS profile does not fall back to
-   plain text. [STD, SPEC-0016]
+   plain text. [STD, SPEC-0016] **v4:** in the connection dialog the SSL mode `prefer` becomes a URL
+   with TLS without certificate checks (as `require`: `tls=true&tlsAllowInvalidCertificates=true`,
+   `rediss://…?insecure=true`) when the host is off the loopback, and a plain URL only for a host on
+   the loopback (`localhost`, 127.0.0.0/8, `::1`; SPEC-0016 v3 behaviour 3). Up to v3 `prefer` always
+   became a plain URL, also for a store on another machine. [SPEC-0016, rule 12]
 4. **Connect.** Opening a store session reads the password from the keychain without waiting for
    input; a missing entry fails before any network access with "password missing in keychain entry
    <service>/<account>". Connecting and the first command are bounded by 10 s; failures name the
@@ -101,6 +105,9 @@ permission rules as SQL connections.
   connector catalogue, once SPEC-0300 is merged).
 - **AK-9** Window self-test: a store profile appears in the Database tool window with its system and
   address.
+- **AK-10 (v4, behaviour 3)** `form::tests::prefer_needs_tls_off_the_loopback`: `prefer` for
+  `db.local` gives the TLS URL of `require` for MongoDB and Redis, for `localhost` and `127.0.0.1`
+  the plain URL.
 
 ## Out of scope
 SSH tunnels; Redis Cluster and Sentinel topologies (single endpoint only); MongoDB Kerberos/LDAP/X.509

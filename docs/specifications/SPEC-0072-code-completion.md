@@ -1,7 +1,7 @@
 # SPEC-0072: Code completion in the editor
 
 - **Version:** 14 · **Date:** 2026-11-15 (v14: Insert Live Template, behaviour 50, and Next and Previous Template Variable, behaviour 51, AK-33 and AK-34; tenth package of docs/research/KEYMAP_COVERAGE.md); 2026-11-14 (v13: Class name completion, behaviour 48, and inserting a suggestion with a dot, behaviour 49, AK-31 and AK-32; eighth package of docs/research/KEYMAP_COVERAGE.md; v12: the documentation panel prefers the right side of the list and
-  stays inside the editor area on the left, behaviour 16, AK-33; second window check of 2026-11-14; v11: Enter and Tab of the list are the keymap actions
+  stays inside the editor area on the left, behaviour 16, AK-35; second window check of 2026-11-14; v11: Enter and Tab of the list are the keymap actions
   `EditorChooseLookupItem` and `EditorChooseLookupItemReplace`, behaviour 47; v10 2026-11-12; v2: ⌥Esc on macOS, IMP-0032; v3: the list opens by itself while typing;
   v4: every row is one line, long details are cut off with an ellipsis; v5: icons, highlighted prefix,
   right-aligned type, server ranking, documentation beside the list, hint line; OBS-0012 side by side;
@@ -465,7 +465,7 @@ editor.
   neither, Up, Down and Escape, and nothing but closing while the focus is elsewhere (unit test
   `completion_model::tests::list_keys_follow_the_keymap`); the titles
   (`everywhere::tests::second_package_actions_have_titles`).
-- **AK-33 (v12, behaviour 16)** The panel's place with a tool window left of the editor: right and
+- **AK-35 (v12, behaviour 16)** The panel's place with a tool window left of the editor: right and
   narrowed where it went over the tool window before, left only inside the editor area, the roomier
   side with the right one first, none when no side has 160 px; inside the window, beside the list
   and never before the editor area for every place of the list (unit test

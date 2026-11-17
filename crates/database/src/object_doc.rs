@@ -96,12 +96,14 @@ pub fn object_doc(
         lines.push(format!("Primary key: {}", t.primary_key.join(", ")));
     }
     for fk in &t.foreign_keys {
+        // SPEC-0013 v8 behaviour 21: with its actions, `… → item(sku) ON DELETE CASCADE`.
         lines.push(format!(
-            "Foreign key {}({}) → {}({})",
+            "Foreign key {}({}) → {}({}){}",
             fk.name.as_deref().unwrap_or(""),
             fk.columns.join(", "),
             fk.referenced_table,
-            fk.referenced_columns.join(", ")
+            fk.referenced_columns.join(", "),
+            fk.actions_sql()
         ));
     }
     let referenced: Vec<String> = tables
@@ -126,9 +128,14 @@ pub fn object_doc(
 /// behaviour 20).
 fn index_line(i: &Index) -> String {
     format!(
-        "{} {} ({}){}",
+        "{} {}{} ({}){}",
         if i.unique { "Unique index" } else { "Index" },
         i.name,
+        // SPEC-0013 v8 behaviour 22: an access method other than the default one.
+        i.method
+            .as_ref()
+            .map(|m| format!(" using {m}"))
+            .unwrap_or_default(),
         i.terms().join(", "),
         i.condition_line()
             .map(|c| format!(" where {c}"))
@@ -148,6 +155,9 @@ mod tests {
             nullable,
             default: default.map(Into::into),
             generated: None,
+            expression: None,
+            identity: None,
+            comment: None,
         };
         vec![
             Table {
@@ -161,6 +171,7 @@ mod tests {
                 indexes: vec![],
                 unreadable: None,
                 constraints: Vec::new(),
+                comment: None,
             },
             Table {
                 storage: Vec::new(),
@@ -181,6 +192,8 @@ mod tests {
                     columns: vec!["sku".into()],
                     referenced_table: "item".into(),
                     referenced_columns: vec!["sku".into()],
+                    on_delete: None,
+                    on_update: None,
                 }],
                 indexes: vec![
                     Index {
@@ -189,6 +202,9 @@ mod tests {
                         columns: vec!["qty".into()],
                         condition: None,
                         collations: Vec::new(),
+                        method: None,
+                        orders: Vec::new(),
+                        prefixes: Vec::new(),
                     },
                     Index {
                         name: "stock_open".into(),
@@ -196,10 +212,14 @@ mod tests {
                         columns: vec!["sku".into(), "qty".into()],
                         condition: Some("qty > 0\n  and sku <> ''".into()),
                         collations: vec![Some("NOCASE".into()), None],
+                        method: None,
+                        orders: Vec::new(),
+                        prefixes: Vec::new(),
                     },
                 ],
                 unreadable: None,
                 constraints: Vec::new(),
+                comment: None,
             },
         ]
     }
@@ -246,6 +266,26 @@ mod tests {
         assert!(object_doc(&p, &tables(), "stock", Some("nope")).is_none());
     }
 
+    /// SPEC-0089 v15 AK-30: the actions of a foreign key and an index's access method.
+    #[test]
+    fn foreign_key_actions_and_index_methods_in_the_documentation() {
+        let p = ConnectionProfile::from_url("ref-pg", "postgresql://u@h/inventory").unwrap();
+        let mut t = tables();
+        t[1].foreign_keys[0].on_delete = Some("CASCADE".into());
+        t[1].indexes[0].method = Some("gin".into());
+        let doc = object_doc(&p, &t, "stock", None).unwrap();
+        assert!(
+            doc.contains(
+                &"Foreign key stock_sku_fkey(sku) → item(sku) ON DELETE CASCADE".to_owned()
+            ),
+            "{doc:?}"
+        );
+        assert!(
+            doc.contains(&"Index stock_qty using gin (qty)".to_owned()),
+            "{doc:?}"
+        );
+    }
+
     /// SPEC-0089 v9 AK-22: a view the database refuses to describe says why instead of
     /// listing no columns.
     #[test]
@@ -262,6 +302,7 @@ mod tests {
             unreadable: Some("no such table: main.gone".into()),
             constraints: Vec::new(),
             hidden_columns: vec![],
+            comment: None,
         };
         let doc = object_doc(&p, &[broken], "orphan", None).unwrap();
         assert_eq!(doc[0], "view orphan");

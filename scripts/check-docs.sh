@@ -66,6 +66,31 @@ scripts/changelog.sh selftest >/dev/null || { scripts/changelog.sh selftest; exi
 scripts/crate-graph.sh --check >/dev/null
 # Every feature-matrix row must be rated in docs/research/PARITY.md.
 scripts/parity.sh >/dev/null
+# No key is given twice: a TRACEABILITY row's spec/AK cell, an AK number within one spec, an IMP
+# number (2026-11-16: parallel merges brought duplicate rows back after #922 removed them). A row
+# with its own qualifier, such as "SPEC-0116/AK-1 (v2)", is a key of its own; AK-6a differs from AK-6.
+dups=$(
+  awk -F'|' '/^\| *SPEC-/ {
+      k = $2; gsub(/^ +| +$/, "", k); gsub(/  +/, " ", k)
+      if (k in seen) printf "%s:%d: duplicate row %s (first at line %d)\n", FILENAME, FNR, k, seen[k]
+      else seen[k] = FNR
+    }' docs/specifications/TRACEABILITY.md
+  awk 'match($0, /^- \*\*AK-[0-9]+[a-z]?/) {
+      k = substr($0, 5, RLENGTH - 4)
+      if ((FILENAME, k) in seen) printf "%s:%d: duplicate %s (first at line %d)\n", FILENAME, FNR, k, seen[FILENAME, k]
+      else seen[FILENAME, k] = FNR
+    }' docs/specifications/SPEC-*.md
+  awk -F'|' '/^\| *IMP-[0-9]/ {
+      k = $2; gsub(/ /, "", k)
+      if (k in seen) printf "%s:%d: duplicate %s (first at line %d)\n", FILENAME, FNR, k, seen[k]
+      else seen[k] = FNR
+    }' docs/specifications/IMPROVEMENTS.md
+)
+if [ -n "$dups" ]; then
+  echo "error: duplicate keys in the specifications:" >&2
+  echo "$dups" >&2
+  exit 1
+fi
 # No tracked file keeps the markers of an unfinished merge (2026-11-16: a spec reached main with them).
 if git grep -n -I -E '^(<<<<<<< |>>>>>>> )' -- . ':!scripts/check-docs.sh' >/dev/null 2>&1; then
   echo "error: conflict markers left in tracked files:" >&2

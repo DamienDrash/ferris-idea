@@ -1,6 +1,7 @@
 # SPEC-0191: Copying a table to another schema or table
 
-- **Version:** 1 · **Date:** 2026-11-03
+- **Version:** 2 · **Date:** 2026-11-16 (v1 2026-11-03; v2: the Services Output names the
+  connection the copy ran on, behaviour 6 — screen run of 2026-11-16, B2)
 - **Sources:** GEN (database tools copy a table's structure and rows into another schema or under
   another name, with a preview of the DDL), STD (`CREATE TABLE`, `PRIMARY KEY`, `UNIQUE`, `NOT NULL`,
   `DEFAULT`, `CHECK`, `INSERT … SELECT`; catalogs `pg_constraint`, `information_schema.CHECK_CONSTRAINTS`,
@@ -38,6 +39,11 @@ and get a table that behaves like the original: same columns, same keys and rule
    table again. The result — the number of rows copied, or the failing statement with the database
    message — is shown in the dialog and in the Services Output; an error file is written only when the
    user named one. The Database tool window reads the connection again afterwards. [STD, IMP-0058]
+   **v2 (B2):** the Services window's header names the connection the copy ran on while its result
+   is shown in Output, as after a console run on it; until v2 it kept the connection of the last
+   console run, so a copy on one connection was shown under another's name. The Database tool window
+   keeps the copied table selected while it reads the connection again (SPEC-0089 v14 behaviour
+   26). [GEN]
 7. **Agents.** MCP `copy_table` (connection, table, `target_schema`, `target_table`, the switches,
    `apply`): without `apply` it returns the statements; it needs `read-schema`, and `modify-schema` plus
    `modify-data` (when rows are copied) to apply. [ADR-0008, IMP-0007]
@@ -53,6 +59,10 @@ and get a table that behaves like the original: same columns, same keys and rule
 - **AK-4** Window self-test: F5 on `customers` opens the dialog with `customers_copy`, the preview shows
   `PRIMARY KEY`; copying adds `customers_copy` to the tree with the same rows.
 - **AK-5** By hand (round 4, hand test 114): copy `item` to a second schema next to the reference.
+- **AK-6** (v2) Window test in the test harness (`tests/it/sql_beta_handtests.rs`,
+  `b2_b3_copy_table_names_its_connection_and_keeps_the_selection`, SQLite): a console ran on a
+  second connection `other` first; after F5 and Enter on `shop`'s `item` Output says "Table copied:
+  3 row(s)" and the Services header names `shop`.
 
 ## Out of scope
 Copying between different connections or dialects, mapping or converting columns, copying indexes

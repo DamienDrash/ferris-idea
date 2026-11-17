@@ -14,7 +14,7 @@ use gpui::{
 use idecraft_languages::LanguageId;
 use idecraft_languages::file_types::{Associations, Choice, FILE};
 use idecraft_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
-use idecraft_workbench::{ChoiceView, EditorView, MenuPlace, WorkbenchView};
+use idecraft_workbench::{ChoiceView, EditorView, MenuPlace, WorkbenchView, semantics};
 
 type Bench = Entity<WorkbenchView>;
 
@@ -578,5 +578,71 @@ fn the_tree_selection_and_the_menus(cx: &mut TestAppContext) {
     keys(cx, "enter");
     assert_eq!(status(&bench, cx), "a.cfg is treated as JSON");
     assert_eq!(language(&editor, cx).as_deref(), Some("json"));
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// The status bar widget `status-file-type`'s text, as the window drew it last.
+fn status_file_type(bench: &Bench, cx: &mut VisualTestContext) -> Option<String> {
+    bench.read_with(cx, |b, cx| b.status_file_type(cx))
+}
+
+/// SPEC-0004 v9 AK-16: a file whose name says nothing is YAML by its Vim modeline; a script's
+/// hashbang line typed and saved with ⌘S makes it Python at once, its text and caret kept; the
+/// status bar names the type and a real click on it opens Override File Type for the file.
+#[gpui::test]
+fn modelines_saved_hashbangs_and_the_status_bar(cx: &mut TestAppContext) {
+    semantics::set_consumer(semantics::Consumer::SelfTest, true);
+    let root = workspace(
+        "modeline",
+        &[
+            ("settings.conf", "a: 1\n# vim: set ft=yaml :\n"),
+            ("job", "print(1)\n"),
+        ],
+    );
+    let (bench, cx) = window(&root, cx);
+    let conf = open(&bench, cx, &root.join("settings.conf"));
+    assert_eq!(language(&conf, cx).as_deref(), Some("yaml"));
+    assert_eq!(status_file_type(&bench, cx).as_deref(), Some("YAML"));
+
+    let job = open(&bench, cx, &root.join("job"));
+    assert_eq!(language(&job, cx), None);
+    assert_eq!(status_file_type(&bench, cx).as_deref(), Some("Plain Text"));
+    // The modification time must differ from the one the first detection kept.
+    std::thread::sleep(Duration::from_millis(20));
+    // The caret stands at the start of the newly opened file.
+    cx.simulate_input("#!/usr/bin/env python3\n");
+    assert_eq!(language(&job, cx), None, "not before it is saved");
+    keys(cx, "cmd-s");
+    assert_eq!(language(&job, cx).as_deref(), Some("python"));
+    assert_eq!(text(&job, cx), "#!/usr/bin/env python3\nprint(1)\n");
+    assert!(!job.read_with(cx, |e, _| e.is_modified()));
+    assert_eq!(status_file_type(&bench, cx).as_deref(), Some("Python"));
+
+    // A real click on the widget, found by its test id in the semantic tree (SPEC-0319), opens
+    // the list for the active file.
+    cx.update(|window, cx| window.draw(cx).clear());
+    let at = cx
+        .update(|window, _| {
+            let tree = semantics::tree(semantics::window_id(window))?;
+            let node = tree
+                .iter()
+                .find(|n| n.test_id() == Some("status-file-type"))?;
+            let r = node.visible_bounds.filter(|r| r.w > 0. && r.h > 0.)?;
+            Some(gpui::point(px(r.x + r.w / 2.), px(r.y + r.h / 2.)))
+        })
+        .expect("the status bar shows the file type");
+    cx.simulate_mouse_down(at, MouseButton::Left, Modifiers::none());
+    cx.simulate_mouse_up(at, MouseButton::Left, Modifiers::none());
+    cx.run_until_parked();
+    assert!(
+        bench.read_with(cx, |b, _| b.jvm_popup()).is_some(),
+        "the list is open"
+    );
+    cx.simulate_input("plain text");
+    keys(cx, "enter");
+    assert_eq!(status(&bench, cx), "job is treated as Plain Text");
+    assert_eq!(language(&job, cx), None);
+    assert_eq!(status_file_type(&bench, cx).as_deref(), Some("Plain Text"));
+    assert_eq!(saved(&root).overrides.get("job"), Some(&Choice::PlainText));
     let _ = std::fs::remove_dir_all(&root);
 }

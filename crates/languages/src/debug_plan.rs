@@ -96,6 +96,18 @@ pub fn plan(command: &[String], cwd: &Path) -> Option<DebugPlan> {
         let runner = which(&name).unwrap_or_else(|| PathBuf::from(first));
         return Some((Kind::PackageScript, None, runner, args));
     }
+    // `npx jest …` of a Jest test configuration or ▶ marker (SPEC-0045 v6 behaviour 12): npx
+    // under js-debug like a package script, the tests in Jest's own process (`--runInBand`), where
+    // the debugger is attached.
+    if is_npx_jest(command) {
+        let manager = name.trim_end_matches(".cmd").to_owned();
+        let runner = which(&manager).unwrap_or_else(|| PathBuf::from(first));
+        let mut args = command[1..].to_vec();
+        if !args.iter().any(|a| a == "--runInBand" || a == "-i") {
+            args.push("--runInBand".to_owned());
+        }
+        return Some((Kind::PackageScript, None, runner, args));
+    }
     // `sh -c "<build> && kotlin -cp <classes> <MainKt>"` of a Kotlin module (SPEC-0132).
     if name == "sh"
         && command.get(1).map(String::as_str) == Some("-c")
@@ -131,6 +143,19 @@ pub fn plan(command: &[String], cwd: &Path) -> Option<DebugPlan> {
     }
     let (program, args) = program_of(command, cwd)?;
     Some((Kind::Native, None, program, args))
+}
+
+/// Whether `command` runs Jest through npx (`npx jest …`), which can be debugged with js-debug
+/// (`SPEC-0045` v6 behaviour 12).
+pub fn is_npx_jest(command: &[String]) -> bool {
+    let Some(first) = command.first() else {
+        return false;
+    };
+    let name = Path::new(first)
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    name.trim_end_matches(".cmd") == "npx" && command.get(1).is_some_and(|w| w == "jest")
 }
 
 /// What [`plan`] returns: the kind, the interpreter for a script, the program and its arguments.
@@ -182,6 +207,36 @@ mod tests {
 
     fn words(text: &str) -> Vec<String> {
         text.split_whitespace().map(str::to_owned).collect()
+    }
+
+    /// SPEC-0045 v6 AK-15 (behaviour 12): Jest through npx is debugged with js-debug, in one
+    /// process; Vitest and other npx commands are not planned for js-debug.
+    #[test]
+    fn jest_through_npx_runs_under_js_debug() {
+        let cwd = Path::new("/work/app");
+        let command =
+            words("npx jest --json --outputFile=.idecraft/jest.json sum.test.js -t ^sum$");
+        assert!(is_npx_jest(&command));
+        let (kind, interpreter, program, args) = plan(&command, cwd).unwrap();
+        assert_eq!(kind, Kind::PackageScript);
+        assert_eq!(kind.adapter_name(), "js-debug");
+        assert_eq!(interpreter, None);
+        assert!(program.ends_with("npx"), "{program:?}");
+        assert_eq!(
+            args,
+            words("jest --json --outputFile=.idecraft/jest.json sum.test.js -t ^sum$ --runInBand")
+        );
+        // Already in one process: nothing added.
+        let (_, _, _, args) = plan(&words("npx jest -i a.test.js"), cwd).unwrap();
+        assert_eq!(args, words("jest -i a.test.js"));
+        for other in ["npx vitest run --reporter=json", "npx eslint ."] {
+            assert!(!is_npx_jest(&words(other)), "{other}");
+            assert_ne!(
+                plan(&words(other), cwd).unwrap().0,
+                Kind::PackageScript,
+                "{other}"
+            );
+        }
     }
 
     /// The commands of a Go file, of its tests and of one test function (the ▶ markers) are

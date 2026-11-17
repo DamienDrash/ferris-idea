@@ -108,8 +108,8 @@ pub use permissions::{
     user_config_dir,
 };
 pub use project::{
-    Dependency, Module, ModuleKind, ProjectModel, library_entries, read_project, split_pep508,
-    suggest_run_configs,
+    Dependency, Module, ModuleKind, ProjectModel, SERVER_TIMEOUT_SECS, library_entries,
+    read_project, split_pep508, suggest_run_configs,
 };
 pub use python::{
     EnvironmentTools, Interpreter, InterpreterKind, Package, PythonEnvironments, PythonSearch,

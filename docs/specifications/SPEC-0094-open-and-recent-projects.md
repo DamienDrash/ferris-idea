@@ -1,6 +1,7 @@
 # SPEC-0094: Open project and recent projects
 
-- **Version:** 7 · **Date:** 2026-11-15 (v7: a path to a file opens the file's project and the file in an editor, never a project with the file as its root, behaviours 18 to 21, AK-16 to AK-18 — window check of 2026-11-15, `idecraft ui <folder>/queries/file.sql` showed the file as the project folder and opened nothing; 2026-11-14 (v6: `NextWindow` and `PreviousWindow` step through every window of the application, behaviour 17, AK-15; sixth package of docs/research/KEYMAP_COVERAGE.md; v5: the popup's actions New Project…, Clone Repository… and its Open Projects section, behaviours 1 and 12 to 15, AK-10 to AK-14; the window that opens the popup or closes projects is read directly, behaviour 16 — crash of the window check of 2026-11-14 — comparison next to the reference of 2026-11-14, F-001; v4: the window's close button closes as Close Project,
+- **Version:** 8 · **Date:** 2026-11-17 (v8: each recent project once, by its canonical path,
+  behaviour 22, AK-19 — headless check of F-001, OBS-0077); 2026-11-15 (v7: a path to a file opens the file's project and the file in an editor, never a project with the file as its root, behaviours 18 to 21, AK-16 to AK-18 — window check of 2026-11-15, `idecraft ui <folder>/queries/file.sql` showed the file as the project folder and opened nothing; 2026-11-14 (v6: `NextWindow` and `PreviousWindow` step through every window of the application, behaviour 17, AK-15; sixth package of docs/research/KEYMAP_COVERAGE.md; v5: the popup's actions New Project…, Clone Repository… and its Open Projects section, behaviours 1 and 12 to 15, AK-10 to AK-14; the window that opens the popup or closes projects is read directly, behaviour 16 — crash of the window check of 2026-11-14 — comparison next to the reference of 2026-11-14, F-001; v4: the window's close button closes as Close Project,
   behaviour 11, AK-9; v3: closing project windows — the current one, all, all others —
   behaviours 6 to 10, AK-5 to AK-8; v2: next and previous project window, the keymap's `NextProjectWindow` and `PreviousProjectWindow`, behaviour 5, AK-4); 2026-11-01 (v1)
 - **Sources:** GEN (the project widget at the left of the main toolbar opens a popup with Open… and the
@@ -182,6 +183,14 @@ Switch between projects and open a new one without the command line.
     state like `list`. A path outside the workspace (also through `..` or a link), a folder and
     a missing file are refused. Needs the `ui` right like the other actions that change tabs.
     [ADR-0008, SPEC-0053]
+22. **One entry per folder (v8):** the recent list names each folder by its canonical path
+    (links resolved, no trailing `/`, no `.` or `..`). Reading the list resolves every line and
+    keeps the first of several lines that name the same folder, so the popup, `recent_projects`
+    and the next start see it once, at the place of the most recent; remembering a project
+    stores its canonical path. Until v8 the lines were compared as written: a list with
+    `…/proj`, `…/proj/` and `…/proj/../proj` (a list edited by hand, kept from an older version
+    or written by another tool through a link such as `/tmp` for `/private/tmp` on macOS) showed the same
+    project three times, against SPEC-0001 behaviour 1 and AK-1. [GEN]
 ## Acceptance criteria
 - **AK-1** Most recent first, no duplicates, missing folders left out, at most 25
   (`crates/core/tests/it/recent.rs`); the tool is listed (`crates/mcp/tests/it/protocol.rs`).
@@ -263,6 +272,12 @@ Switch between projects and open a new one without the command line.
   window as an absolute path; a path outside the workspace, through `..`, a folder and a missing
   file are refused before the window is asked; the action is listed. By hand: not checked
   (`idecraft ui <file>` with and without a running window).
+
+- **AK-19 (v8, behaviour 22)** `crates/core/tests/it/recent.rs`:
+  `spellings_of_one_folder_are_one_entry`: a list with a folder with a trailing `/`, through
+  `..` and by its canonical path, and another folder, reads as the two canonical folders in order;
+  remembering a link to the second puts that folder's canonical path first and the file holds
+  each folder once. By hand: not needed (the popup reads the same list).
 
 ## Out of scope
 A welcome screen without a project (v3: after the last window the folder chooser stands in for it), removing entries from the list, opening a project in the current

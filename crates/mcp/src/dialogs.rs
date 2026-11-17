@@ -731,7 +731,11 @@ pub const DIALOGS: &[Dialog] = &[
         spec: "SPEC-0275",
         presentation: Presentation::Drawn,
         ui_type: "NamePrompt",
-        decisions: &[tool("Create", "create_file", "dir, name, kind?")],
+        decisions: &[tool(
+            "Create",
+            "create_file",
+            "dir, name, kind?, text?, dry_run: false",
+        )],
         evidence: &["crates/mcp/tests/it/protocol.rs::creates_renames_and_deletes_files"],
     },
     Dialog {

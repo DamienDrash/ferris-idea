@@ -1,6 +1,6 @@
 # SPEC-0095: Refactoring shortcuts
 
-- **Version:** 12 · **Date:** 2026-11-14 (v12: Safe Delete of a declaration with a usage check, and of files in the Project tree, behaviours 15 and 16, AK-20 to AK-22; ninth package of docs/research/KEYMAP_COVERAGE.md); 2026-11-14 (v11: Introduce Parameter, behaviour 14, AK-19; eighth package of docs/research/KEYMAP_COVERAGE.md; v10: the status bar says from the first moment what is
+- **Version:** 13 · **Date:** 2026-11-16 (v13: jdtls gets the file's indentation too, behaviour 3b, AK-23; the name popup and `new_name` also after Extract Field and Introduce Parameter, behaviour 8d, AK-24; a refactoring that nobody offers for the language says so, behaviour 7a, AK-25; headless check of F-073 on 2026-11-16, OBS-0072); 2026-11-14 (v12: Safe Delete of a declaration with a usage check, and of files in the Project tree, behaviours 15 and 16, AK-20 to AK-22; ninth package of docs/research/KEYMAP_COVERAGE.md); 2026-11-14 (v11: Introduce Parameter, behaviour 14, AK-19; eighth package of docs/research/KEYMAP_COVERAGE.md; v10: the status bar says from the first moment what is
   asked, a language server that is still loading the project is not taken at its word and is
   asked again once when it is ready, and every request ends in a list, an edit or one status line,
   behaviours 11a, 12 and 13, AK-17 and AK-18; OBS-0027 W1b, where ⌥⌘N on a Java method showed
@@ -74,6 +74,14 @@ Reach the common refactorings with the reference's shortcuts instead of looking 
    Variable wrote `    const newLocal = x > 3;` in a file indented by two, and Extract Function
    indented the new function's body by four. IDECraft's own extractions take the statement's own
    indentation (SPEC-0320 v7 behaviour 26). [OBS-0028, STD]
+   3b. **jdtls's indentation (v13):** jdtls asks the same before each code action and quick fix,
+   as the two settings `java.format.insertSpaces` and `java.format.tabSize` of the file
+   (`workspace/configuration` with the file as `scopeUri`). They get the values of behaviour 3a;
+   when the file says nothing (no `.editorconfig`, no indented line), four spaces, the usual Java
+   indentation. Before v13 they had no answer and jdtls indented with tabs: in a file indented by
+   four spaces, Extract Variable, Extract Field, Extract Method and Extract Constant wrote their
+   new lines and the rewritten statement with `\t` (headless check of 2026-11-16, OBS-0072). [STD,
+   OSS (eclipse.jdt.ls, EPL-2.0: the two setting names the server asks for)]
 4. **Refactor This:** `Refactorings.QuickListPopupAction` (⌃T on macOS, Ctrl+Alt+Shift+T elsewhere)
    opens the popup with every refactoring available at the caret or selection. [GEN, OSS]
    4a. **Own entries (v5):** the server's `refactor` actions at the caret or selection come first;
@@ -106,6 +114,13 @@ Reach the common refactorings with the reference's shortcuts instead of looking 
    whole value, is not extracted." (selection shown trimmed, first line, at most 40 characters; a bare
    caret is "anything at the caret"). Inline says that not every server can inline (clangd cannot). A
    file without a language says that the refactoring needs a language server. [GEN]
+   7a. **Not available for the language (v13):** where neither the language server nor IDECraft
+   offers the refactoring for the file's language at all — Extract Field and Introduce Parameter
+   in Python, Introduce Parameter in JavaScript and TypeScript — the status bar (and `message` of
+   `code_actions`) says so: "Extract Field is not available for Python files yet: the language
+   server offers none and IDECraft has no own one. Extract Variable and Extract Method are."
+   Before v13 it asked for "an expression inside a class" or "inside a method or function" also
+   when the selection was one. [GEN]
 8. **Name right after extracting (v3):** after an Extract Variable, Extract Constant or Extract
    Method (by its shortcut, ⌃T or ⌥↩; recognised by the title as in behaviour 2) has been applied,
    IDECraft finds the name it introduced in the file — the name the server chose, such as clangd's
@@ -129,6 +144,10 @@ Reach the common refactorings with the reference's shortcuts instead of looking 
    again the field has the keyboard focus. A name half typed is not lost by switching to another
    application or a screenshot tool, and keys typed after returning never reach the editor
    behind. [GEN]
+   8d. **Field and parameter (v13):** behaviours 8–10 also follow an Extract Field and an
+   Introduce Parameter (recognised by the title as in behaviour 2: "extract" or "introduce" with
+   "field", "introduce", "extract" or "promote" with "parameter"): jdtls names the new field or
+   parameter `i` for `price * qty`, and the popup and `new_name` start there. [GEN]
 9. **MCP (v3):** `apply_code_action` reports the introduced name and its position as `new_name`
    (`name`, `line`, `character`), so an agent can pass it to `rename_symbol`. [ADR-0008]
 10. **Every use follows (v4, D55):** when the introduced name occurred nowhere in the file before the
@@ -398,6 +417,17 @@ Reach the common refactorings with the reference's shortcuts instead of looking 
   skipped (`safe_delete::tests::mentions_are_whole_words_in_other_files`); in a window ⌘⌦ in
   the tree on an unmentioned file asks the Delete question, on a mentioned file opens the list
   and "Delete anyway" deletes (`ninth_package_keymap.rs::safe_delete_in_the_project_tree`).
+- **AK-23 (v13, behaviour 3b)** `lsp::tests::formatting_options_follow_the_file`: the two jdtls
+  settings of a Java file indented by two spaces, of one indented by tabs and of one without
+  indented lines (four spaces). Headless with jdtls (OBS-0072): Extract Variable, Field, Method and
+  Constant in a file indented by four spaces write no tab.
+- **AK-24 (v13, behaviour 8d)** `actions::tests::{fields_and_parameters_introduce_a_name,
+  extractions_introduce_a_name}`: jdtls's field and parameter `i` are found at their declaration;
+  "Extract to field" and "Introduce Parameter..." introduce a name, "Create parameter 'rate'" does
+  not. Headless with jdtls (OBS-0072): `apply_code_action` returns `new_name` `i` for both.
+- **AK-25 (v13, behaviour 7a)** `actions::tests::missing_refactorings_say_so`: the message for
+  Extract Field and Introduce Parameter in Python and Introduce Parameter in JavaScript and
+  TypeScript, none for the refactorings that exist, the same text as the own refusal.
 
 ## Out of scope
 IntelliJ's own refactoring engine (the dialogs with name suggestions, occurrences "Replace all", a list

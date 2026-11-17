@@ -36,6 +36,9 @@ if [ "${1:-}" != "--no-db" ]; then
   if [ -s "${XDG_CONFIG_HOME:-$HOME/.config}/idecraft/mssql-test.pw" ] && nc -z 127.0.0.1 1433 2>/dev/null; then
     export IDECRAFT_TEST_SQLSERVER="${IDECRAFT_TEST_SQLSERVER:-sqlserver://idecraft@127.0.0.1:1433/inventory}"
     export IDECRAFT_TEST_SQLSERVER_PASSWORD_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/idecraft/mssql-test.pw"
+    # The test CA that `mssql.sh start` gives the server (public certificate, SPEC-0016 v4).
+    mssql_ca="${XDG_CONFIG_HOME:-$HOME/.config}/idecraft/mssql-tls/ca.pem"
+    if [ -r "$mssql_ca" ] && [ -z "${IDECRAFT_TEST_SQLSERVER_CA:-}" ]; then export IDECRAFT_TEST_SQLSERVER_CA="$mssql_ca"; fi
   fi
   if [ -x "${REFERENCE_ENV_DIR:-$HOME/ReferenceEnv}/db/mariadb-12.3.3/bin/mariadbd" ]; then
     export IDECRAFT_TEST_MARIADB="${IDECRAFT_TEST_MARIADB:-mariadb://idecraft@127.0.0.1:33079/inventory?ssl-mode=DISABLED}"

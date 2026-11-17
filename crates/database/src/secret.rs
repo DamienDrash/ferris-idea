@@ -61,11 +61,35 @@ pub trait SecretStore {
     fn delete(&self, reference: &SecretRef) -> Result<(), SecretError>;
 }
 
-/// The operating system's credential store.
+impl<T: SecretStore + ?Sized> SecretStore for &T {
+    fn get(&self, reference: &SecretRef) -> Result<Option<Secret>, SecretError> {
+        (**self).get(reference)
+    }
+
+    fn set(&self, reference: &SecretRef, secret: &Secret) -> Result<(), SecretError> {
+        (**self).set(reference, secret)
+    }
+
+    fn delete(&self, reference: &SecretRef) -> Result<(), SecretError> {
+        (**self).delete(reference)
+    }
+}
+
+/// The operating system's credential store: the macOS Keychain, the Windows Credential Manager,
+/// and on Linux the Secret Service (`SPEC-0008` v8 behaviour 18) — encrypted at rest under the
+/// user's login keyring, so passwords survive a restart. On Linux a password still kept in the
+/// kernel keyring from an older version is moved into the Secret Service when it is first read.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct KeychainStore;
 
-impl KeychainStore {
+/// The store of the `keyring` crate: the macOS Keychain, the Windows Credential Manager, and on
+/// Linux the kernel keyring — which lives only as long as the login session. On Linux
+/// [`KeychainStore`] uses it only to read and remove passwords stored there by older versions
+/// (`SPEC-0008` v8 behaviour 18); nothing new is written to it.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct KeyringStore;
+
+impl KeyringStore {
     fn entry(reference: &SecretRef) -> Result<keyring::Entry, SecretError> {
         keyring::Entry::new(&reference.service, &reference.account).map_err(|e| match e {
             // keyring reports a session without a usable keyring (Linux: none, or an expired one
@@ -82,15 +106,23 @@ impl KeychainStore {
 }
 
 /// Why the system's credential store cannot be used in this session (SPEC-0008 v6 behaviour 17).
-pub const UNREACHABLE: &str = "the system keychain cannot be reached in this session (on Linux: no usable session keyring); nothing was read, stored or deleted";
+pub const UNREACHABLE: &str = "the system keychain cannot be reached in this session (on Linux: no usable session keyring for passwords of older versions); nothing was read, stored or deleted";
 
 /// Whether the system's credential store can be reached in this session (SPEC-0008 v6
-/// behaviour 17); on Linux it needs a session keyring of the user.
+/// behaviour 17; v8 behaviour 18: on Linux the Secret Service on the session bus, with its default
+/// keyring unlocked).
 pub fn keychain_reachable() -> bool {
-    keyring::Entry::new("idecraft", "reachability-check").is_ok()
+    #[cfg(target_os = "linux")]
+    {
+        secret_service::SecretService::connect().is_ok()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        keyring::Entry::new("idecraft", "reachability-check").is_ok()
+    }
 }
 
-impl SecretStore for KeychainStore {
+impl SecretStore for KeyringStore {
     fn get(&self, reference: &SecretRef) -> Result<Option<Secret>, SecretError> {
         match Self::entry(reference)?.get_password() {
             Ok(value) => Ok(Some(Secret::new(value))),
@@ -109,6 +141,271 @@ impl SecretStore for KeychainStore {
         match Self::entry(reference)?.delete_credential() {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
             Err(e) => Err(store_error(reference, &e)),
+        }
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+impl SecretStore for KeychainStore {
+    fn get(&self, reference: &SecretRef) -> Result<Option<Secret>, SecretError> {
+        KeyringStore.get(reference)
+    }
+
+    fn set(&self, reference: &SecretRef, secret: &Secret) -> Result<(), SecretError> {
+        KeyringStore.set(reference, secret)
+    }
+
+    fn delete(&self, reference: &SecretRef) -> Result<(), SecretError> {
+        KeyringStore.delete(reference)
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl SecretStore for KeychainStore {
+    fn get(&self, reference: &SecretRef) -> Result<Option<Secret>, SecretError> {
+        SecretServiceStore::with_legacy(KeyringStore).get(reference)
+    }
+
+    fn set(&self, reference: &SecretRef, secret: &Secret) -> Result<(), SecretError> {
+        SecretServiceStore::with_legacy(KeyringStore).set(reference, secret)
+    }
+
+    fn delete(&self, reference: &SecretRef) -> Result<(), SecretError> {
+        SecretServiceStore::with_legacy(KeyringStore).delete(reference)
+    }
+}
+
+/// Linux: passwords in the Secret Service, with `legacy` (normally the kernel keyring of older
+/// versions) read once to move a password over (`SPEC-0008` v8 behaviour 18). [`KeychainStore`]
+/// is this store with [`KeyringStore`]; another `legacy` is for tests.
+#[cfg(target_os = "linux")]
+#[derive(Debug, Default, Clone)]
+pub struct SecretServiceStore<L = KeyringStore> {
+    legacy: L,
+}
+
+#[cfg(target_os = "linux")]
+impl<L: SecretStore> SecretServiceStore<L> {
+    /// The Secret Service, moving passwords out of `legacy` when they are read.
+    pub fn with_legacy(legacy: L) -> Self {
+        Self { legacy }
+    }
+
+    fn persistent(reference: &SecretRef) -> Result<secret_service::SecretService, SecretError> {
+        secret_service::SecretService::connect().map_err(|reason| unreachable(reference, &reason))
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl<L: SecretStore> SecretStore for SecretServiceStore<L> {
+    fn get(&self, reference: &SecretRef) -> Result<Option<Secret>, SecretError> {
+        persistent::get(Self::persistent(reference), &self.legacy, reference)
+    }
+
+    fn set(&self, reference: &SecretRef, secret: &Secret) -> Result<(), SecretError> {
+        persistent::set(Self::persistent(reference), &self.legacy, reference, secret)
+    }
+
+    fn delete(&self, reference: &SecretRef) -> Result<(), SecretError> {
+        persistent::delete(Self::persistent(reference), &self.legacy, reference)
+    }
+}
+
+/// The refusal when the Secret Service cannot be used (`SPEC-0008` v8 behaviour 18): names the
+/// reason and what to do, never a value. Contains "cannot be reached in this session" like the
+/// other stores (behaviour 17).
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn unreachable(reference: &SecretRef, reason: &str) -> SecretError {
+    SecretError {
+        service: reference.service.clone(),
+        account: reference.account.clone(),
+        message: format!(
+            "the Secret Service (the desktop keyring, such as GNOME Keyring or KWallet) cannot be \
+             reached in this session: {reason}. On Linux IDECraft keeps passwords only there, \
+             encrypted under your login keyring, never in a file; nothing was stored or deleted. \
+             Log in to a desktop session with an unlocked keyring and try again"
+        ),
+    }
+}
+
+/// Which store a Linux password operation uses (`SPEC-0008` v8 behaviour 18). Platform-neutral so
+/// its rules are tested everywhere; only the Linux [`SecretServiceStore`] calls it.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+mod persistent {
+    use super::{Secret, SecretError, SecretStore};
+    use crate::SecretRef;
+
+    /// The persistent store, or why it cannot be used; then `legacy` is read as before, and a
+    /// password found only in `legacy` is moved: written to the persistent store and, once that
+    /// worked, removed from `legacy`. A failed move still gives the password and leaves `legacy`
+    /// as it was.
+    pub fn get<P: SecretStore>(
+        persistent: Result<P, SecretError>,
+        legacy: &dyn SecretStore,
+        reference: &SecretRef,
+    ) -> Result<Option<Secret>, SecretError> {
+        let persistent = match persistent {
+            Ok(store) => store,
+            Err(_) => return legacy.get(reference),
+        };
+        if let Some(secret) = persistent.get(reference)? {
+            return Ok(Some(secret));
+        }
+        // A kernel keyring that cannot be reached holds nothing to move.
+        let Ok(Some(old)) = legacy.get(reference) else {
+            return Ok(None);
+        };
+        if persistent.set(reference, &old).is_ok() {
+            // A copy that cannot be removed ends with the session; the persistent one wins.
+            let _ = legacy.delete(reference);
+        }
+        Ok(Some(old))
+    }
+
+    /// Stores only in the persistent store; without one the save fails with its reason and
+    /// nothing weaker is tried. An older copy in `legacy` is removed.
+    pub fn set<P: SecretStore>(
+        persistent: Result<P, SecretError>,
+        legacy: &dyn SecretStore,
+        reference: &SecretRef,
+        secret: &Secret,
+    ) -> Result<(), SecretError> {
+        persistent?.set(reference, secret)?;
+        let _ = legacy.delete(reference);
+        Ok(())
+    }
+
+    /// Removes the password from both stores. Without the persistent store the removal fails,
+    /// since a password there would be left behind (behaviour 17).
+    pub fn delete<P: SecretStore>(
+        persistent: Result<P, SecretError>,
+        legacy: &dyn SecretStore,
+        reference: &SecretRef,
+    ) -> Result<(), SecretError> {
+        let persistent = persistent?;
+        persistent.delete(reference)?;
+        let _ = legacy.delete(reference);
+        Ok(())
+    }
+}
+
+#[cfg(target_os = "linux")]
+mod secret_service {
+    //! The Secret Service (freedesktop.org) on the session bus through `oo7` over `zbus`, the same
+    //! crate and features as the remote key store (`ADR-0025` §3, `SPEC-0321` behaviour 20). Only
+    //! an encrypted Secret Service session and the default collection are used, and nothing is
+    //! unlocked here: a locked keyring is refused instead of showing a prompt (resolving
+    //! credentials never waits for input, behaviour 13).
+
+    use std::collections::HashMap;
+
+    use futures_lite::future::block_on;
+    use oo7::dbus::{Collection, Service};
+
+    use super::{Secret, SecretError, SecretStore};
+    use crate::SecretRef;
+
+    pub struct SecretService {
+        // Keeps the D-Bus connection and the encrypted session open for the collection.
+        _service: Service<'static>,
+        collection: Collection<'static>,
+    }
+
+    fn attributes(reference: &SecretRef) -> HashMap<&str, &str> {
+        HashMap::from([
+            ("application", "idecraft"),
+            ("service", reference.service.as_str()),
+            ("account", reference.account.as_str()),
+        ])
+    }
+
+    impl SecretService {
+        /// Connects and checks the default collection; the error is the reason, without values.
+        pub fn connect() -> Result<Self, String> {
+            block_on(async {
+                let service = Service::encrypted().await.map_err(|e| {
+                    format!("no Secret Service answers on the session bus over an encrypted session ({e})")
+                })?;
+                let collection = service
+                    .with_alias(Service::DEFAULT_COLLECTION)
+                    .await
+                    .map_err(|e| format!("the Secret Service failed ({e})"))?
+                    .ok_or_else(|| "the Secret Service has no default keyring".to_string())?;
+                let locked = collection
+                    .is_locked()
+                    .await
+                    .map_err(|e| format!("the Secret Service failed ({e})"))?;
+                if locked {
+                    return Err("the default keyring of the Secret Service is locked".into());
+                }
+                Ok(Self {
+                    _service: service,
+                    collection,
+                })
+            })
+        }
+    }
+
+    fn failed(reference: &SecretRef, e: &oo7::dbus::Error) -> SecretError {
+        SecretError {
+            service: reference.service.clone(),
+            account: reference.account.clone(),
+            message: format!("the Secret Service failed: {e}"),
+        }
+    }
+
+    impl SecretStore for SecretService {
+        fn get(&self, reference: &SecretRef) -> Result<Option<Secret>, SecretError> {
+            block_on(async {
+                let items = self
+                    .collection
+                    .search_items(&attributes(reference))
+                    .await
+                    .map_err(|e| failed(reference, &e))?;
+                let Some(item) = items.first() else {
+                    return Ok(None);
+                };
+                let secret = item.secret().await.map_err(|e| failed(reference, &e))?;
+                let text = std::str::from_utf8(secret.as_bytes()).map_err(|_| SecretError {
+                    service: reference.service.clone(),
+                    account: reference.account.clone(),
+                    message: "the Secret Service holds an entry that is not text".into(),
+                })?;
+                Ok(Some(Secret::new(text)))
+            })
+        }
+
+        fn set(&self, reference: &SecretRef, secret: &Secret) -> Result<(), SecretError> {
+            block_on(async {
+                self.collection
+                    .create_item(
+                        &format!(
+                            "IDECraft password ({}/{})",
+                            reference.service, reference.account
+                        ),
+                        &attributes(reference),
+                        oo7::Secret::text(secret.expose()),
+                        true,
+                        None,
+                    )
+                    .await
+                    .map(|_| ())
+                    .map_err(|e| failed(reference, &e))
+            })
+        }
+
+        fn delete(&self, reference: &SecretRef) -> Result<(), SecretError> {
+            block_on(async {
+                let items = self
+                    .collection
+                    .search_items(&attributes(reference))
+                    .await
+                    .map_err(|e| failed(reference, &e))?;
+                for item in items {
+                    item.delete(None).await.map_err(|e| failed(reference, &e))?;
+                }
+                Ok(())
+            })
         }
     }
 }
@@ -486,6 +783,163 @@ mod tests {
         );
         store.delete(&reference).unwrap();
         assert!(store.get(&reference).unwrap().is_none());
+    }
+
+    /// SPEC-0008 v8 AK-18: which store a Linux password operation uses, tested on every
+    /// platform with in-memory stands-ins for the Secret Service and the kernel keyring.
+    mod linux_store_rules {
+        use super::super::persistent;
+        use super::*;
+
+        /// A store that cannot be reached; every call fails with `why`.
+        struct Unreachable(&'static str);
+
+        impl SecretStore for Unreachable {
+            fn get(&self, r: &SecretRef) -> Result<Option<Secret>, SecretError> {
+                Err(self.fail(r))
+            }
+            fn set(&self, r: &SecretRef, _: &Secret) -> Result<(), SecretError> {
+                Err(self.fail(r))
+            }
+            fn delete(&self, r: &SecretRef) -> Result<(), SecretError> {
+                Err(self.fail(r))
+            }
+        }
+
+        impl Unreachable {
+            fn fail(&self, r: &SecretRef) -> SecretError {
+                SecretError {
+                    service: r.service.clone(),
+                    account: r.account.clone(),
+                    message: self.0.into(),
+                }
+            }
+        }
+
+        fn no_service(r: &SecretRef) -> Result<&'static MemoryStore, SecretError> {
+            Err(super::super::unreachable(r, "no session bus"))
+        }
+
+        fn leak(store: MemoryStore) -> &'static MemoryStore {
+            Box::leak(Box::new(store))
+        }
+
+        #[test]
+        fn saving_goes_only_to_the_secret_service_and_drops_an_old_copy() {
+            let r = reference();
+            let service = leak(MemoryStore::default());
+            let kernel = MemoryStore::default();
+            kernel.set(&r, &Secret::new("old")).unwrap();
+            persistent::set(Ok(service), &kernel, &r, &Secret::new("new")).unwrap();
+            assert_eq!(service.get(&r).unwrap().unwrap().expose(), "new");
+            assert!(kernel.get(&r).unwrap().is_none());
+            // A kernel keyring that cannot be reached does not stop the save.
+            persistent::set(
+                Ok(service),
+                &Unreachable("no keyring"),
+                &r,
+                &Secret::new("x"),
+            )
+            .unwrap();
+            assert_eq!(service.get(&r).unwrap().unwrap().expose(), "x");
+        }
+
+        #[test]
+        fn without_a_secret_service_saving_fails_with_the_reason_and_writes_nothing() {
+            let r = reference();
+            let kernel = MemoryStore::default();
+            let err = persistent::set(no_service(&r), &kernel, &r, &Secret::new("hunter2"))
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains("Secret Service"), "{err}");
+            assert!(err.contains("cannot be reached in this session"), "{err}");
+            assert!(err.contains("no session bus"), "{err}");
+            assert!(err.contains("never in a file"), "{err}");
+            assert!(!err.contains("hunter2"), "{err}");
+            // Nothing weaker took the password instead.
+            assert!(kernel.get(&r).unwrap().is_none());
+        }
+
+        #[test]
+        fn reading_moves_a_kernel_keyring_password_once() {
+            let r = reference();
+            let service = leak(MemoryStore::default());
+            let kernel = MemoryStore::default();
+            kernel.set(&r, &Secret::new("from-kernel")).unwrap();
+            let got = persistent::get(Ok(service), &kernel, &r).unwrap().unwrap();
+            assert_eq!(got.expose(), "from-kernel");
+            assert_eq!(service.get(&r).unwrap().unwrap().expose(), "from-kernel");
+            assert!(kernel.get(&r).unwrap().is_none());
+            // The Secret Service wins over a copy left in the kernel keyring.
+            kernel.set(&r, &Secret::new("stale")).unwrap();
+            let got = persistent::get(Ok(service), &kernel, &r).unwrap().unwrap();
+            assert_eq!(got.expose(), "from-kernel");
+        }
+
+        #[test]
+        fn a_failed_move_still_gives_the_password_and_keeps_the_old_copy() {
+            let r = reference();
+            let kernel = MemoryStore::default();
+            kernel.set(&r, &Secret::new("keep")).unwrap();
+            struct ReadOnly;
+            impl SecretStore for ReadOnly {
+                fn get(&self, _: &SecretRef) -> Result<Option<Secret>, SecretError> {
+                    Ok(None)
+                }
+                fn set(&self, r: &SecretRef, _: &Secret) -> Result<(), SecretError> {
+                    Err(Unreachable("refused").fail(r))
+                }
+                fn delete(&self, _: &SecretRef) -> Result<(), SecretError> {
+                    Ok(())
+                }
+            }
+            let got = persistent::get(Ok(ReadOnly), &kernel, &r).unwrap().unwrap();
+            assert_eq!(got.expose(), "keep");
+            assert_eq!(kernel.get(&r).unwrap().unwrap().expose(), "keep");
+        }
+
+        #[test]
+        fn without_a_secret_service_reading_stays_as_before() {
+            let r = reference();
+            let kernel = MemoryStore::default();
+            assert!(
+                persistent::get(no_service(&r), &kernel, &r)
+                    .unwrap()
+                    .is_none()
+            );
+            kernel.set(&r, &Secret::new("session")).unwrap();
+            let got = persistent::get(no_service(&r), &kernel, &r)
+                .unwrap()
+                .unwrap();
+            assert_eq!(got.expose(), "session");
+            // An unreachable kernel keyring is still named as such (behaviour 17).
+            let err = persistent::get(no_service(&r), &Unreachable(UNREACHABLE), &r).unwrap_err();
+            assert!(err.message.contains("cannot be reached in this session"));
+            // A Secret Service that answers but holds nothing, with no kernel keyring: no password.
+            let service = leak(MemoryStore::default());
+            assert!(
+                persistent::get(Ok(service), &Unreachable(UNREACHABLE), &r)
+                    .unwrap()
+                    .is_none()
+            );
+        }
+
+        #[test]
+        fn removing_clears_both_and_fails_without_a_secret_service() {
+            let r = reference();
+            let service = leak(MemoryStore::default());
+            let kernel = MemoryStore::default();
+            service.set(&r, &Secret::new("a")).unwrap();
+            kernel.set(&r, &Secret::new("b")).unwrap();
+            persistent::delete(Ok(service), &kernel, &r).unwrap();
+            assert!(service.get(&r).unwrap().is_none());
+            assert!(kernel.get(&r).unwrap().is_none());
+            persistent::delete(Ok(service), &kernel, &r).unwrap();
+
+            kernel.set(&r, &Secret::new("b")).unwrap();
+            let err = persistent::delete(no_service(&r), &kernel, &r).unwrap_err();
+            assert!(err.message.contains("cannot be reached in this session"));
+        }
     }
 
     /// Behaviour 14: a release build neither contains nor honours the test store. Run by

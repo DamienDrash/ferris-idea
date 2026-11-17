@@ -1,6 +1,6 @@
 //! The Run tool window and the run configuration chooser (`SPEC-0087`).
 
-use crate::semantics::Annotated;
+use crate::semantics::{Annotated, Role, Semantics};
 use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 use std::path::{Path, PathBuf};
@@ -23,6 +23,7 @@ use crate::run_list_model::{
 use crate::run_model::{Console, LineKind, command_line};
 use crate::test_tree_model::{
     Row as TestRow, RowPath, all_suites, rows as test_rows, status_line, test_at, test_details,
+    test_source,
 };
 use crate::tips::{Tipped, declared};
 use crate::workbench_view::c;
@@ -45,6 +46,11 @@ pub enum RunViewEvent {
     /// Run only the tests of this configuration that failed in this report (`SPEC-0088` v3
     /// behaviour 7).
     RerunFailed(String, TestReport),
+    /// Open this file with the caret at the start of this 0-based line: the source of a test
+    /// (`SPEC-0088` v5 behaviour 12).
+    OpenSource(PathBuf, usize),
+    /// Say this in the status bar.
+    Status(String),
 }
 
 /// What the test results tree of a tab shows, for checks.
@@ -163,13 +169,20 @@ impl TestTree {
             .collect()
     }
 
-    /// Carries out a command of the shared tree behaviour (`SPEC-0275` behaviours 8–11); a test
-    /// has nothing to open yet.
-    fn apply(&mut self, command: crate::tree_nav::TreeCommand) {
+    /// Carries out a command of the shared tree behaviour (`SPEC-0275` behaviours 8–11); opening
+    /// a test returns its path, for the jump to its source (`SPEC-0088` v5 behaviour 12).
+    fn apply(&mut self, command: crate::tree_nav::TreeCommand) -> Option<RowPath> {
         use crate::tree_nav::TreeCommand as C;
         let rows = self.rows();
         match command {
-            C::Select(i) | C::Open(i) => self.selected = i.min(rows.len().saturating_sub(1)),
+            C::Select(i) => self.selected = i.min(rows.len().saturating_sub(1)),
+            C::Open(i) => {
+                self.selected = i.min(rows.len().saturating_sub(1));
+                return rows
+                    .get(self.selected)
+                    .filter(|r| r.is_test)
+                    .map(|r| r.path.clone());
+            }
             C::Expand(i) => {
                 if let Some(r) = rows.get(i) {
                     self.expanded.insert(r.path.clone());
@@ -188,25 +201,34 @@ impl TestTree {
             }
             C::None => {}
         }
+        None
     }
 
-    fn key(&mut self, key: &str) -> bool {
-        let Some(key) = crate::tree_nav::tree_key(key, false, false) else {
-            return false;
-        };
-        self.nav_key(key);
-        true
+    /// A key of the tree: `None` when the tree has no use for it, else the test to open, if any.
+    fn key(&mut self, key: &str) -> Option<Option<RowPath>> {
+        let key = crate::tree_nav::tree_key(key, false, false)?;
+        Some(self.nav_key(key))
     }
 
-    fn nav_key(&mut self, key: crate::tree_nav::TreeKey) {
+    fn nav_key(&mut self, key: crate::tree_nav::TreeKey) -> Option<RowPath> {
         let command = crate::tree_nav::on_key(&self.nav_rows(), self.selected, key);
-        self.apply(command);
+        self.apply(command)
     }
 
-    fn click(&mut self, i: usize, on_arrow: bool, clicks: usize) {
+    /// A click on row `i`; returns the test a double click opens.
+    fn click(&mut self, i: usize, on_arrow: bool, clicks: usize) -> Option<RowPath> {
+        let mut open = None;
         for c in crate::tree_nav::on_click(&self.nav_rows(), i, on_arrow, clicks) {
-            self.apply(c);
+            if let Some(path) = self.apply(c) {
+                open = Some(path);
+            }
         }
+        open
+    }
+
+    /// The lines the console shows for the selected test, if a test is selected.
+    fn detail_lines(&self) -> Option<usize> {
+        self.details().map(|d| d.lines().count())
     }
 }
 
@@ -420,14 +442,72 @@ impl RunView {
         self.follow
     }
 
+    /// The number of lines the console shows: the selected test's details, else the output.
+    fn shown_lines(&self) -> usize {
+        let Some(tab) = self.tabs.get(self.selected) else {
+            return 0;
+        };
+        tab.tests
+            .as_ref()
+            .and_then(TestTree::detail_lines)
+            .unwrap_or_else(|| tab.console.lines().len())
+    }
+
     fn scroll_to_end(&self) {
-        let rows = self
-            .tabs
-            .get(self.selected)
-            .map_or(0, |t| t.console.lines().len());
+        let rows = self.shown_lines();
         if rows > 0 {
             self.scroll
                 .scroll_to_item(rows - 1, gpui::ScrollStrategy::Top);
+        }
+    }
+
+    /// After the console's content changed: a selected test's details start at their first line,
+    /// where the message and the expected and received values are (`SPEC-0088` v5 behaviour 13);
+    /// the output follows Scroll to End.
+    fn scroll_console(&self) {
+        let details = self
+            .tabs
+            .get(self.selected)
+            .and_then(|t| t.tests.as_ref())
+            .and_then(TestTree::detail_lines)
+            .is_some();
+        if details {
+            self.scroll.scroll_to_item(0, gpui::ScrollStrategy::Top);
+        } else if self.follow {
+            self.scroll_to_end();
+        }
+    }
+
+    /// Whether the console has more lines than it shows, for checks.
+    pub fn console_scrollable(&self) -> bool {
+        self.scroll.is_scrollable()
+    }
+
+    /// The first line the console shows, for checks.
+    pub fn console_top_line(&self) -> usize {
+        let state = self.scroll.0.borrow();
+        if let Some(asked) = &state.deferred_scroll_to_item {
+            return asked.item_index;
+        }
+        // The console's lines are 18 px high.
+        let down = -f32::from(state.base_handle.offset().y);
+        (down / 18.).round().max(0.) as usize
+    }
+
+    /// Opens the source of the test at `path` of the selected tab's tree (`SPEC-0088` v5
+    /// behaviour 12), or says that it cannot be found.
+    fn open_test(&mut self, path: &[usize], cx: &mut Context<Self>) {
+        let Some(tree) = self.tabs.get(self.selected).and_then(|t| t.tests.as_ref()) else {
+            return;
+        };
+        match test_source(&tree.report, path, &self.root) {
+            Some((file, line)) => cx.emit(RunViewEvent::OpenSource(file, line)),
+            None => {
+                let name = test_at(&tree.report, path).map_or("", |t| t.name.as_str());
+                cx.emit(RunViewEvent::Status(format!(
+                    "The source of test {name} was not found"
+                )));
+            }
         }
     }
 
@@ -669,9 +749,7 @@ impl RunView {
                         }
                     }
                     if grew {
-                        if this.follow {
-                            this.scroll_to_end();
-                        }
+                        this.scroll_console();
                         cx.notify();
                     }
                     if grew {
@@ -739,6 +817,16 @@ impl RunView {
         cx.notify();
     }
 
+    /// After a click or key in the test tree: the console starts at the new selection's first
+    /// line, and a test that was opened (double click, Enter) opens in the editor.
+    fn tree_changed(&mut self, open: Option<RowPath>, cx: &mut Context<Self>) {
+        self.scroll_console();
+        if let Some(path) = open {
+            self.open_test(&path, cx);
+        }
+        cx.notify();
+    }
+
     fn on_key(&mut self, event: &KeyDownEvent, _window: &mut Window, cx: &mut Context<Self>) {
         let k = &event.keystroke;
         if k.key == "escape" && !k.modifiers.shift {
@@ -753,9 +841,9 @@ impl RunView {
                 .get_mut(self.selected)
                 .and_then(|t| t.tests.as_mut())
         {
-            tree.nav_key(key);
+            let open = tree.nav_key(key);
             cx.stop_propagation();
-            cx.notify();
+            self.tree_changed(open, cx);
             return;
         }
         let plain =
@@ -765,10 +853,10 @@ impl RunView {
                 .tabs
                 .get_mut(self.selected)
                 .and_then(|t| t.tests.as_mut())
-            && tree.key(&k.key)
+            && let Some(open) = tree.key(&k.key)
         {
             cx.stop_propagation();
-            cx.notify();
+            self.tree_changed(open, cx);
         }
     }
 }
@@ -832,8 +920,11 @@ impl Render for RunView {
         // Soft-Wrap gives lines of different heights, so the wrapped console is a plain scrolled
         // column (v6 behaviour 12); without it the fixed-height list draws only what is visible.
         let console = if self.soft_wrap {
+            // Keyed by the selected row: another test's details start at the top (v5
+            // behaviour 13).
+            let row = tab.and_then(|t| t.tests.as_ref()).map_or(0, |t| t.selected);
             div()
-                .id("run-console-wrapped")
+                .id(("run-console-wrapped", row))
                 .overflow_y_scroll()
                 .font(mono)
                 .text_size(px(crate::fonts::EDITOR_FONT_SIZE))
@@ -1328,6 +1419,12 @@ impl RunView {
                         };
                         div()
                             .id(("test-row", i))
+                            .semantics(
+                                Semantics::new(Role::TreeItem)
+                                    .name(row.label.clone())
+                                    .test_id(format!("test-row-{i}"))
+                                    .selected(i == selected),
+                            )
                             .h(px(crate::palette::Palette::current().tree_row_height))
                             .flex()
                             .items_center()
@@ -1355,7 +1452,7 @@ impl RunView {
                                             {
                                                 tree.click(i, true, 1);
                                             }
-                                            cx.notify();
+                                            this.tree_changed(None, cx);
                                         },
                                     ))
                                     .into_any_element(),
@@ -1369,14 +1466,12 @@ impl RunView {
                                     .map(|d| div().flex_none().text_color(c(p.ui_dim)).child(d)),
                             )
                             .on_click(cx.listener(move |this, e: &gpui::ClickEvent, _, cx| {
-                                if let Some(tree) = this
+                                let open = this
                                     .tabs
                                     .get_mut(this.selected)
                                     .and_then(|t| t.tests.as_mut())
-                                {
-                                    tree.click(i, false, e.click_count().min(2));
-                                }
-                                cx.notify();
+                                    .and_then(|tree| tree.click(i, false, e.click_count().min(2)));
+                                this.tree_changed(open, cx);
                             }))
                     })),
             )

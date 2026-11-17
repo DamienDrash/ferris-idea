@@ -1,6 +1,6 @@
 # SPEC-0043: Code formatting through the language server
 
-- **Version:** 7 · **Date:** 2026-11-13 (v7: yaml-language-server formats from 1.19 on; v6: what the second comparison after v5 found, OBS-0036 FM5b and FM6b: in SQL a join stands under the table name of its `from` line and the column list of `create table` opens on a line of its own, behaviour 11; in Markdown a blank line separates setext headings, lists with different markers, tables and fenced code blocks from their neighbours, the delimiter row of a table is filled with dashes, and several spaces in a paragraph become one, behaviour 12; the Markdown formatter checks its own result); 2026-11-13 (v5: what the side-by-side run of Reformat Code found, OBS-0036 FM1 to FM7: the indentation nobody chose comes from Code Style per language, behaviour 1; IDECraft formats SQL and Markdown itself, behaviours 11 and 12; typescript-language-server formats with the indentation asked for, behaviour 13; options for the HTML and XML servers, behaviour 14; the differences that stay are named under "Known deviations"); 2026-11-13 (v4: the HTML, CSS and JSON servers are asked to format; a file nothing can format, a server that formats whole files only, a missing tool of the server and a server that asks or complains instead of formatting are said in words the user can act on; behaviours 8 to 10, headless run of every language for F-039); 2026-11-12 (v3: `format_file` uses the project's Prettier where Reformat Code does and names the formatter, SPEC-0123 v5, OBS-0028 T3; v2: `format_file` on a Python file uses the project's ruff or black, SPEC-0329; OBS-0034 L9)
+- **Version:** 8 · **Date:** 2026-11-17 (v8: headless pre-check for F-039, OBS-0074: a selection in a file whose server formats whole files only, or formats ranges unreliably (kotlin-language-server), is formatted through the whole file's result, behaviour 15, AK-15; trimming trailing whitespace and the final newline follow `.editorconfig`, behaviour 1, AK-16); 2026-11-13 (v7: yaml-language-server formats from 1.19 on; v6: what the second comparison after v5 found, OBS-0036 FM5b and FM6b: in SQL a join stands under the table name of its `from` line and the column list of `create table` opens on a line of its own, behaviour 11; in Markdown a blank line separates setext headings, lists with different markers, tables and fenced code blocks from their neighbours, the delimiter row of a table is filled with dashes, and several spaces in a paragraph become one, behaviour 12; the Markdown formatter checks its own result); 2026-11-13 (v5: what the side-by-side run of Reformat Code found, OBS-0036 FM1 to FM7: the indentation nobody chose comes from Code Style per language, behaviour 1; IDECraft formats SQL and Markdown itself, behaviours 11 and 12; typescript-language-server formats with the indentation asked for, behaviour 13; options for the HTML and XML servers, behaviour 14; the differences that stay are named under "Known deviations"); 2026-11-13 (v4: the HTML, CSS and JSON servers are asked to format; a file nothing can format, a server that formats whole files only, a missing tool of the server and a server that asks or complains instead of formatting are said in words the user can act on; behaviours 8 to 10, headless run of every language for F-039); 2026-11-12 (v3: `format_file` uses the project's Prettier where Reformat Code does and names the formatter, SPEC-0123 v5, OBS-0028 T3; v2: `format_file` on a Python file uses the project's ruff or black, SPEC-0329; OBS-0034 L9)
 - **Sources:** GEN (IDEs reformat a file or a selection according to style rules; F-039), STD (LSP
   `textDocument/formatting`, `textDocument/rangeFormatting`, `FormattingOptions` with `tabSize`,
   `insertSpaces`, `trimTrailingWhitespace`, `insertFinalNewline`), SPEC-0040 (edits, preview, apply);
@@ -57,6 +57,8 @@
   continuation lines, code spans, thematic breaks, link reference definitions, hard line breaks
   written as two trailing spaces; GitHub Flavored Markdown: a table's delimiter row needs no
   spaces around its dashes)
+  v8: OBS-0074 (IDECraft alone, without a screen), STD (EditorConfig `trim_trailing_whitespace`,
+  `insert_final_newline`)
 - **Feature matrix rows:** F-039
 
 ## Purpose
@@ -77,6 +79,11 @@ with a preview.
    SCSS, Less and Ruby, tabs for Go, four spaces for CSS and every other language. The editor
    takes its indentation from the same table, so the window and `format_file` agree. [OBS,
    SPEC-0137, SPEC-0150]
+   **Trailing whitespace and final newline (v8):** both stay yes unless the file's `.editorconfig`
+   sets `trim_trailing_whitespace` or `insert_final_newline`; then the request carries its value,
+   in `format_file` and in the window. Before v8 both were always yes, so a server that honours
+   them could add a final newline the `.editorconfig` forbids and that saving then removes again
+   (SPEC-0137). [STD]
 2. A server without the matching capability is refused with a message saying so (whole file or range).
    [STD] (v4) The message names the server and what it lacks, behaviour 8.
 3. The server's text edits become a plan as in SPEC-0040; the preview also gives the formatted text and
@@ -119,10 +126,10 @@ with a preview.
    - **The server has no formatter** (groovy-language-server; until v5 also marksman, whose
      Markdown files behaviour 12 now formats): "`<server>` has no formatter, so `<language>`
      files are not reformatted."
-   - **The server formats whole files but no ranges**, and a range was asked for (gopls,
-     rust-analyzer, taplo, yaml-language-server, svelteserver): "`<server>` formats whole files
-     only, not a selection: reformat without a selection (MCP: without `range`)". The whole file
-     is not formatted instead: that would change text outside the selection.
+   - ~~The server formats whole files but no ranges~~ (until v7: "`<server>` formats whole files
+     only, not a selection: …" for gopls, rust-analyzer, taplo, yaml-language-server and
+     svelteserver). (v8) Such a selection is formatted through the whole file, behaviour 15; the
+     sentence there replaces this one when that is not possible.
 
    Where Prettier formats files of that type (SPEC-0123 behaviour 1: Markdown, GraphQL, …) the
    first, second and fifth message add that the project's Prettier does it once `prettier` is in
@@ -292,6 +299,37 @@ with a preview.
     element ends with `/>` without a space before it. Both are what the reference's result
     looks like. [OSS, OBS]
 
+15. **A selection through the whole file (v8, OBS-0074):** gopls, rust-analyzer, taplo,
+    yaml-language-server and svelteserver format whole files but no ranges, so before v8 a
+    selection in a Go, Rust, TOML, YAML or Svelte file was refused; kotlin-language-server offers
+    range formatting, but formats the selected text as if it stood alone: a selection that ends
+    inside a line split the name at its end (`Int` became `I` and `nt` on the next line), one that
+    ends inside a block failed with the server's internal error, and selected members lost their
+    indentation. For these servers a selection — in Reformat Code, in Reformat File's options and
+    in `format_file` with `range` — is formatted so:
+    - the server formats the whole text (the editor's text, unsaved changes included), with the
+      options of behaviour 1;
+    - the **selected lines** — from the line of the selection's start to the line of its end, the
+      line after it not when the selection ends at its start — take the layout of that result, and
+      every other line stays as it is. The visible characters of the text and the result are
+      matched from the start and from the end; the text between the first and the last visible
+      character of the lines is the result's, the indentation before it is what the result has
+      after as many line breaks as stay before the lines, and the end of the last line is the
+      result's white space after it up to as many line breaks as the lines held. Where the
+      formatter joins the first line with the line before it, or the last with the line after it,
+      the text's own indentation or line break stays at that end;
+    - the plan is one edit of the selected lines, whitespace only; when they are already laid out
+      so, there are no edits ("Already formatted.");
+    - when the result changes visible characters among the selected lines or next to them
+      (rustfmt sorting `use` lines, a formatter adding a trailing comma), nothing is changed and
+      the answer is "`<server>` formats a selection only as part of the whole file, and there it
+      changes more than white space in the selected lines or next to them, so they were left as
+      they are: reformat without a selection (MCP: without `range`)". Changes of visible
+      characters elsewhere in the file do not matter.
+    Other servers keep their own range formatting. IDECraft's SQL and Markdown formatters still
+    format whole files only (behaviours 11 and 12; how the reference formats a selection there is
+    not observed). [GEN: an IDE reformats the selected lines; OBS-0074; STD]
+
 ## Acceptance criteria
 - **AK-1** Whitespace-only detection for unchanged, re-indented and reordered texts.
 - **AK-2** With `clangd`: a badly indented C file is formatted (whitespace-only, compiles, idempotent: a
@@ -389,6 +427,25 @@ with a preview.
 - **AK-14 (v5)** Next to the reference again, per language of OBS-0036: done once after v5 (OBS-0036,
   "Nachvergleich nach #635"); after v6 for `query.sql` and `notes.md`: open.
 
+- **AK-15 (v8, behaviour 15)** The selected lines from a whole file's result: lines in the middle,
+  the first and the last line of a file (with and without a final line break), blank lines the
+  formatter removes, white-space-only lines, a formatter that joins a line with the next, sorted
+  imports outside the lines (taken) and among them (refused), a selection past the end, and a
+  second run without change (`format::tests::a_selection_through_the_whole_file`); the edit, its
+  range and old text, no edits for a laid-out selection, the sentence of a refusal
+  (`format::tests::the_edit_of_a_selection_through_the_whole_file`); only kotlin-language-server's
+  ranges go through the whole file (`format::tests::formatting_a_server_does_not_offer`). With the
+  real servers (`crates/languages/tests/it/servers.rs::servers_that_cannot_format_say_why`, each
+  part skipped without its server): a selection of the first Go function is laid out and the
+  second function stays, the same lines again have no edits; in a Kotlin file a selection inside
+  the signature line no longer splits `Int`, the lines after it stay, and a selection of two body
+  lines gets the class's indentation. MCP: `format_file` with `range` on a Go file, `idecraft
+  call` in OBS-0074.
+- **AK-16 (v8, behaviour 1)** `trim_trailing_whitespace = false` and `insert_final_newline = false`
+  in an `.editorconfig` reach the options of the file, each alone
+  (`format::tests::default_options_per_language`); the window builds its options with the same
+  `FormatOptions::with_editorconfig`.
+
 ## Out of scope
 Format on save and on type (`onTypeFormatting`), IDECraft's own formatter for further languages without a
 formatting server (Groovy among them; decision 2026-11-13: none for JavaScript, Groovy, Kotlin, CSS, HTML
@@ -441,4 +498,8 @@ own for the language:
   missing `shfmt` for a shell script (the reference leaves the script without a word).
 
 Not compared: Go, Rust, C, C++, PHP, Ruby, Python, Scala, Swift, Lua, R, Vue, Svelte, and formatting a
-selection.
+selection (v8: the plan for that comparison is OBS-0074, part 2).
+
+(v8) Without `.clang-format` clangd lays out C and C++ with its built-in style (two spaces) and
+ignores the tab size it is asked for, also the one of an `.editorconfig`; the reference is not
+compared for C and C++ (it needs a plugin).

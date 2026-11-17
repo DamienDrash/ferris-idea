@@ -1,6 +1,7 @@
 # SPEC-0134: Jakarta EE (CDI), Quarkus and Micronaut beans
 
-- **Version:** 5 · **Date:** 2026-11-14 (v5: configuration keys lead to their lines and back,
+- **Version:** 6 · **Date:** 2026-11-16 (v6: completion of keys in `@ConfigProperty` and
+  `@Property` names, behaviour 8, headless pre-check of F-040, OBS-0073; v5 2026-11-14: configuration keys lead to their lines and back,
   resolved values and gutter marks for the three frameworks, behaviour 7, after OBS-0037 findings
   KS2 to KS4 for Spring; v4 2026-11-13: field injection in Micronaut projects and why not in
   Jakarta EE and Quarkus projects, behaviour 6, after OBS-0037 finding FW1; v3: producers,
@@ -146,6 +147,14 @@ typing. IDECraft's own model, built in a clean room from the rules above.
    - **Tool window and MCP:** the filters, the test beans, the dependencies panel, `config_key`
      and the additions to `spring_beans` are the same for every framework.
 
+8. **Completion of keys (v6):** SPEC-0115 behaviour 19 holds for these frameworks; in addition,
+   with the caret inside the string of `name = "…"` of `@ConfigProperty` (Quarkus,
+   MicroProfile) or `@Property` (Micronaut), the list holds the defined keys as in a `${…}`
+   placeholder, and the item replaces the whole string's key. Micronaut's `@Value("${…}")` is a
+   placeholder already. `%profile.` keys and `application-{environment}` files count as in
+   behaviour 7. The prefixes of `@ConfigMapping` and `@ConfigurationProperties` are not
+   completed. [GEN; OBS-0073 part 1]
+
 ## Acceptance criteria
 - **AK-1** CDI with Quarkus: scope and `@Path` beans, a named producer, `@Alternative @Priority`
   winning, `@Named` qualifier without bean, `@ConfigProperty` with and without default, frameworks
@@ -192,6 +201,11 @@ typing. IDECraft's own model, built in a clean room from the rules above.
   `GreetingResource.java`, `NoteController.java` and `BookResource.java` (Jakarta EE) with the
   beans their injection points get, a producer method as the target and its mark leading back
   (`crates/languages/tests/it/frameworks.rs`: `keys_and_marks_of_the_other_samples`).
+- **AK-14 (v6)** Behaviour 8: `@ConfigProperty(name = "…")` and `@Property(name = "…")` complete
+  the defined keys, another annotation's `name` does not (unit test
+  `config_completion::tests::keys_in_config_property_names`); MCP `complete_code` in a
+  `@ConfigProperty` name of a Quarkus project (`crates/mcp/tests/it/protocol.rs`:
+  `configuration_keys_complete_and_quarkus_starts_in_dev_mode`).
 - **AK-9 (v3)** The sample projects `jakarta-library`, `quarkus-greeting` and `micronaut-notes`
   (`crates/languages/tests/fixtures/frameworks/`): each gives its beans and the problems it is
   written to have — one ambiguous injection point, one type without a bean and, for Quarkus and
@@ -202,7 +216,8 @@ typing. IDECraft's own model, built in a clean room from the rules above.
 ## Out of scope
 CDI interceptors, decorators, events and stereotypes declared by the project, `@Any`, qualifier
 members (`@Pay(method = CARD)`), `Instance<T>`, Quarkus build steps and Dev UI, evaluating
-Micronaut `@Requires` conditions and build profiles, `@EachProperty`, `beans.xml` discovery modes,
+Micronaut `@Requires` conditions and build profiles, the keys the frameworks and extensions
+declare (`quarkus.http.port`, `micronaut.server.port`) for completion and checking (v6), `@EachProperty`, `beans.xml` discovery modes,
 which profile is active, the keys a `@ConfigMapping` interface or a `@ConfigurationProperties`
 class reads.
 

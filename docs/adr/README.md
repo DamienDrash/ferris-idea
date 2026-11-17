@@ -24,7 +24,7 @@
 | [0020](0020-database-connectors.md) | Database connectors: protocol families, declarative definitions, ODBC as the generic route | accepted |
 | [0021](0021-idecraft-file-formats.md) | IDECraft file formats: one envelope, own extensions for files that travel | accepted |
 | [0022](0022-non-relational-data-sources.md) | Non-relational data sources: document and key-value store families beside the SQL dialects | accepted |
-| [0023](0023-idecraft-as-agent-harness.md) | IDECraft as an agent harness: tools, verification and orchestration, no agent loop of our own | proposed (rule 7 applies now; rest after QG-1) |
+| [0023](0023-idecraft-as-agent-harness.md) | IDECraft as an agent harness: tools, verification and orchestration, no agent loop of our own | accepted 2026-11-17 (rule 7 applies now; the rest is planned in M10–M12 and M19) |
 | [0024](0024-plugin-network-to-profile-host.md) | Network for WebAssembly connector plugins: only to the picked profile's host and port | accepted (amends 0016) |
 | [0025](0025-network-security-for-remote-connections.md) | Network security for remote connections: system SSH with strict host keys, Noise with pinned keys for paired channels, pairing with SAS, mandatory security tests | accepted (three questions with defaults for the Project Owner) |
 | [0026](0026-session-protocol-window-and-serve.md) | Session protocol between the window and `idecraft serve`: framed JSON-RPC with streams, backend-owned documents with server-sequenced operations, resumable sessions | accepted |

@@ -239,16 +239,47 @@ pub fn diagram_metrics(boxes: &[DiagramBox], char_width: f32, line_height: f32) 
     }
 }
 
-/// The zoom the diagram is drawn at (v14 behaviour 21). Fitted, it is the ER diagram's fit
-/// (`SPEC-0111` behaviour 8): the largest zoom, at most 100 % and at least 25 %, at which the whole
-/// diagram is inside `area` (width, height), and 100 % while the area is not known yet. Not
-/// fitted, it is 100 %.
-pub fn diagram_zoom(metrics: &DiagramMetrics, area: (f32, f32), fit: bool) -> f32 {
-    if fit {
-        idecraft_database::er_layout::fit_zoom(metrics.width, metrics.height, area.0, area.1)
-    } else {
-        1.0
+/// The smallest zoom the Diagram view opens at: below it the boxes' text is too small to read
+/// (OBS-0070 P3; `SPEC-0110` v15 behaviour 22).
+pub const READABLE_ZOOM: f32 = 0.6;
+
+/// How the Diagram view is scaled (v14 behaviour 21, v15 behaviour 22).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DiagramZoom {
+    /// As it opens: fitted into the area, but not below [`READABLE_ZOOM`]; a larger diagram
+    /// scrolls, starting at its top step.
+    Readable,
+    /// Fit chosen: the whole diagram inside the area, down to 25 %.
+    Fit,
+    /// 100 % chosen.
+    Full,
+}
+
+/// The zoom the diagram is drawn at (v14 behaviour 21, v15 behaviour 22). Fit is the ER diagram's
+/// fit (`SPEC-0111` behaviour 8): the largest zoom, at most 100 % and at least 25 %, at which the
+/// whole diagram is inside `area` (width, height), and 100 % while the area is not known yet.
+/// Readable is that fit, but not below [`READABLE_ZOOM`]. Full is 100 %.
+pub fn diagram_zoom(metrics: &DiagramMetrics, area: (f32, f32), zoom: DiagramZoom) -> f32 {
+    let fit =
+        || idecraft_database::er_layout::fit_zoom(metrics.width, metrics.height, area.0, area.1);
+    match zoom {
+        DiagramZoom::Fit => fit(),
+        DiagramZoom::Readable => fit().clamp(READABLE_ZOOM, 1.0),
+        DiagramZoom::Full => 1.0,
     }
+}
+
+/// Where the Diagram view starts when it does not fit (v15 behaviour 22): the horizontal scroll
+/// offset that puts the top step (the box at `top_x` slots) in the middle of an area `area_width`
+/// wide, within the diagram drawn at `zoom`; 0 when the diagram is not wider than the area.
+pub fn top_step_offset(metrics: &DiagramMetrics, zoom: f32, top_x: f32, area_width: f32) -> f32 {
+    let width = metrics.width * zoom;
+    if area_width <= 0. || width <= area_width {
+        return 0.;
+    }
+    let slot = (metrics.box_w + metrics.slot_gap) * zoom;
+    let middle = top_x * slot + metrics.slot_gap * zoom / 2. + metrics.box_w * zoom / 2.;
+    (middle - area_width / 2.).clamp(0., width - area_width)
 }
 
 /// The hints the head of the Plan tab shows (v14 behaviour 21): every hint while they are open
@@ -538,21 +569,89 @@ mod tests {
         assert_eq!((m.box_w, m.box_h, m.gap, m.slot_gap), (120., 80., 28., 24.));
         assert_eq!((m.width, m.height), (288., 296.), "2 slots, 3 rows");
         assert_eq!(
-            diagram_zoom(&m, (288., 296.), true),
+            diagram_zoom(&m, (288., 296.), DiagramZoom::Fit),
             1.0,
             "it fits at 100 %"
         );
         assert_eq!(
-            diagram_zoom(&m, (2000., 2000.), true),
+            diagram_zoom(&m, (2000., 2000.), DiagramZoom::Fit),
             1.0,
             "never above 100 %"
         );
-        assert_eq!(diagram_zoom(&m, (144., 600.), true), 0.5, "by width");
-        assert_eq!(diagram_zoom(&m, (1000., 148.), true), 0.5, "by height");
-        assert_eq!(diagram_zoom(&m, (10., 10.), true), 0.25, "at least 25 %");
-        assert_eq!(diagram_zoom(&m, (0., 0.), true), 1.0, "area not known yet");
-        assert_eq!(diagram_zoom(&m, (144., 148.), false), 1.0, "100 % chosen");
+        assert_eq!(
+            diagram_zoom(&m, (144., 600.), DiagramZoom::Fit),
+            0.5,
+            "by width"
+        );
+        assert_eq!(
+            diagram_zoom(&m, (1000., 148.), DiagramZoom::Fit),
+            0.5,
+            "by height"
+        );
+        assert_eq!(
+            diagram_zoom(&m, (10., 10.), DiagramZoom::Fit),
+            0.25,
+            "at least 25 %"
+        );
+        assert_eq!(
+            diagram_zoom(&m, (0., 0.), DiagramZoom::Fit),
+            1.0,
+            "area not known yet"
+        );
+        assert_eq!(
+            diagram_zoom(&m, (144., 148.), DiagramZoom::Full),
+            1.0,
+            "100 % chosen"
+        );
         assert_eq!(diagram_metrics(&[], 7.8, 24.).height, 0.);
+
+        // SPEC-0110 v15 AK-27: as it opens, the fit stops at 60 %; Fit chosen goes on to 25 %.
+        let readable = |area| diagram_zoom(&m, area, DiagramZoom::Readable);
+        assert_eq!(readable((288., 296.)), 1.0, "fits at 100 %: as before");
+        assert_eq!(readable((216., 600.)), 0.75, "fits at 75 %: as before");
+        assert_eq!(
+            readable((1000., 148.)),
+            READABLE_ZOOM,
+            "would be 50 %: 60 %"
+        );
+        assert_eq!(readable((10., 10.)), READABLE_ZOOM, "would be 25 %: 60 %");
+        assert_eq!(readable((0., 0.)), 1.0, "area not known yet");
+        // A tool window about 220 px high with six steps in a column: Fit makes it unreadable.
+        let six = DiagramMetrics {
+            box_w: 160.,
+            box_h: 80.,
+            gap: 28.,
+            slot_gap: 24.,
+            width: 184.,
+            height: 6. * 108. - 28.,
+        };
+        assert!(diagram_zoom(&six, (900., 220.), DiagramZoom::Fit) < 0.4);
+        assert_eq!(
+            diagram_zoom(&six, (900., 220.), DiagramZoom::Readable),
+            READABLE_ZOOM
+        );
+
+        // Wider than its area: it starts with the top step in the middle, within the diagram.
+        assert_eq!(
+            top_step_offset(&m, 1.0, 0.5, 400.),
+            0.,
+            "not wider than the area"
+        );
+        let wide = DiagramMetrics {
+            width: 10. * 144.,
+            ..m
+        };
+        // Top step over slot 4.5 at 60 %: middle at (4.5 × 144 + 12 + 60) × 0.6 = 432.
+        assert!((top_step_offset(&wide, 0.6, 4.5, 300.) - (432. - 150.)).abs() < 1e-3);
+        assert_eq!(
+            top_step_offset(&wide, 0.6, 0., 300.),
+            0.,
+            "never before the start"
+        );
+        assert!(
+            (top_step_offset(&wide, 0.6, 9.5, 300.) - (1440. * 0.6 - 300.)).abs() < 1e-3,
+            "never past the end"
+        );
 
         let hints: Vec<String> = ["full scan of `a`", "full scan of `b`", "misestimate"]
             .map(String::from)

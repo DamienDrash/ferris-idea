@@ -468,6 +468,20 @@ fn keep_message(kept: &StdMutex<Vec<String>>, message: String) {
     kept.push(message);
 }
 
+/// jdtls's `java.format.insertSpaces` or `java.format.tabSize` (`key`) for the file of a
+/// `workspace/configuration` item (`SPEC-0095` v13 behaviour 3b): from [`formatting_options`];
+/// when the file says nothing, four spaces, the usual Java indentation.
+fn java_format_setting(item: &Value, key: &str) -> Value {
+    let options = item
+        .get("scopeUri")
+        .and_then(Value::as_str)
+        .and_then(crate::insight::uri_to_path)
+        .map(|path| formatting_options(&path))
+        .filter(|o| !o.is_null())
+        .unwrap_or_else(|| json!({"tabSize": 4, "insertSpaces": true}));
+    options[key].clone()
+}
+
 /// Answer to a request from the server (`SPEC-0023` behaviour 4).
 fn answer_server_request(
     method: &str,
@@ -495,6 +509,14 @@ fn answer_server_request(
                                 .and_then(crate::insight::uri_to_path)
                         {
                             return formatting_options(&path);
+                        }
+                        // jdtls asks the same before its code actions, as two settings of the
+                        // file; unanswered it indents with a tab (`SPEC-0095` v13 behaviour 3b).
+                        if let Some(key) = section
+                            .and_then(|s| s.strip_prefix("java.format."))
+                            .filter(|k| matches!(*k, "insertSpaces" | "tabSize"))
+                        {
+                            return java_format_setting(item, key);
                         }
                         if settings.is_null() {
                             return Value::Null;
@@ -1668,6 +1690,30 @@ mod tests {
             );
         }
         assert_eq!(ask(), json!([{"tabSize": 2, "insertSpaces": true}]));
+        // SPEC-0095 v13 AK-23: jdtls asks the two settings of a Java file before a code action;
+        // the file's indentation, four spaces when it has none, never no answer.
+        std::fs::write(
+            dir.join("A.java"),
+            "class A {\n  int a() {\n    return 1;\n  }\n}\n",
+        )
+        .unwrap();
+        std::fs::write(dir.join("sub/B.java"), "class B {\n\tint b;\n}\n").unwrap();
+        std::fs::write(dir.join("Empty.java"), "class Empty {}\n").unwrap();
+        let java = |file: &str| {
+            let uri = format!("file://{}", dir.join(file).display());
+            answer_server_request(
+                "workspace/configuration",
+                &json!({"items": [
+                    {"scopeUri": uri, "section": "java.format.insertSpaces"},
+                    {"scopeUri": uri, "section": "java.format.tabSize"},
+                ]}),
+                &Value::Null,
+            )
+            .unwrap()
+        };
+        assert_eq!(java("A.java"), json!([true, 2]));
+        assert_eq!(java("Empty.java"), json!([true, 4]));
+        assert_eq!(java("sub/B.java")[0], json!(false));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

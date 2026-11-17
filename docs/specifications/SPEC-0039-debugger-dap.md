@@ -1,6 +1,6 @@
 # SPEC-0039: Debugger — Debug Adapter Protocol client and session model
 
-- **Version:** 7 · **Date:** 2026-11-13 (v7: Go programs and tests under Delve; v6: a condition or log message the adapter fails to evaluate is told, also for java-debug and debugpy; what each adapter does with a failure, a hit count and a log message; v2: conditional breakpoints, hit counts, logpoints; v3: launching through MCP with SPEC-0054; v4: pending breakpoints and source maps, IMP-0030; v5: js-debug with child sessions)
+- **Version:** 8 · **Date:** 2026-11-17 (v8: Step Into a call in the arguments of another call with js-debug, AK-16, beta finding B4 of hand test 20); 2026-11-13 (v7: Go programs and tests under Delve; v6: a condition or log message the adapter fails to evaluate is told, also for java-debug and debugpy; what each adapter does with a failure, a hit count and a log message; v2: conditional breakpoints, hit counts, logpoints; v3: launching through MCP with SPEC-0054; v4: pending breakpoints and source maps, IMP-0030; v5: js-debug with child sessions)
 - **Sources:** GEN (IDEs launch a program under a debugger, stop at line breakpoints, show threads, call
   stack, variables, evaluate expressions and step over/into/out; F-070), STD (Debug Adapter Protocol
   specification: base protocol with `Content-Length` framing, requests/responses/events, `initialize`,
@@ -95,6 +95,11 @@ Drive any debug adapter so the IDE can debug programs in every language that has
    first connection and the server live as long as the session. Other reverse requests are still refused.
    The MCP tool `debug_start` (SPEC-0054) uses js-debug for `.js`, `.mjs` and `.cjs` programs.
    [STD (DAP `startDebugging`), OSS (js-debug's DAP server)]
+   (v8) Step Into is DAP `stepIn` with the stopped thread only, no `targetId` (that is optional
+   and only for Smart Step Into, SPEC-0091 v11 behaviour 18); on a line such as
+   `console.log("result", result, helper(1))` js-debug stops in `helper`, whose call is evaluated
+   before `console.log`'s, from a stop at a breakpoint on the line and after Step Over onto it.
+   [STD (DAP `stepIn`); beta screen run of workflow (a), finding B4]
 11. **Go under Delve (v7):** a `go run` or `go test` command is debugged with `dlv dap`; Delve builds
    the program itself, without optimisations. [OSS, GEN]
    - **Command.** `go run [build flags] <file or package> [arguments]` debugs that file or package
@@ -144,7 +149,7 @@ Drive any debug adapter so the IDE can debug programs in every language that has
 - **AK-3** A failed request (evaluating an unknown name) returns the adapter's error message; a request the
   adapter leaves unanswered ends with a timeout error.
 - **AK-4** The MCP tool lists the adapters with availability.
-- **AK-5** A program compiled with its absolute source path through a symbolic link: the breakpoint on
+- **AK-15** A program compiled with its absolute source path through a symbolic link: the breakpoint on
   the resolved path is reported as pending with a symbolic-link hint at the end; with a source map from
   the link to the real folder it binds and stops on the line.
 - **AK-5** With `lldb-dap`: a condition `i == 3` in a loop stops once with `i` = 3; a hit condition 3 first
@@ -154,6 +159,11 @@ Drive any debug adapter so the IDE can debug programs in every language that has
 - **AK-10 (v5)** With node and js-debug: a script stops at a breakpoint in a function through the child
   session with its locals (`doubled = 42`), evaluates `n + 1`, and runs to its end with its output
   (`crates/debugger/tests/it/jsdebug.rs`; skipped without them).
+- **AK-16 (v8, behaviour 10)** With node and js-debug: stopped at a breakpoint on
+  `console.log("result", result, helper(1))`, Step Into stops in `helper`
+  (`crates/debugger/tests/it/jsdebug.rs::step_into_an_argument_call_stops_in_it`); in the harness
+  window, with F7, after Step Over onto the line and from a breakpoint on it
+  (`workflow_a_beta_handtests.rs::hand_test_20_debug_node`).
 - **AK-11 (v6)** Against a scripted adapter (`crates/debugger/tests/it/condition_errors.rs`): a
   `usernotification` reaches the console on a line of its own; an adapter with the id `debugpy`
   gets `setDebuggerProperty` with both lists empty before `setBreakpoints`, another adapter does
@@ -183,6 +193,13 @@ sessions.
 ## Known deviations from the reference
 Not yet compared with the reference debugger (its Java debugger uses JDWP, not DAP; DAP covers the other
 languages).
+
+**(v8) Finding B4 of the beta screen run (2026-11-17):** in the reference-style run, F7 on the
+`console.log` line was reported to run the program to its end. It was not reproduced: the DAP
+request, the debug model and the window (key F7, the editor focused) step into `helper` in both
+paths of AK-16, in the debug build of the same `main` with #927. The step is sent as DAP defines
+it, so nothing of IDECraft's was found to change; when it is seen again, the program and the
+steps before F7 are to be recorded with it.
 
 **(v7) Delve's limits, stated as deviations:** it builds exactly one package per session, so a
 configuration over several packages (`go test ./...`) is refused with the reason instead of

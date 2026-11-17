@@ -1,6 +1,6 @@
 # SPEC-0027: Syntax highlighting with Tree-sitter
 
-- **Version:** 12 · **Date:** 2026-11-15 (v12: AK-15; v11: reassigned Java locals and parameters underlined, OBS-0050; v10: doc comments and Java fields by syntax, OBS-0047 T2/T3; v9: fields have their own colour in the brand schemes; v2: C++; v3: thirteen more languages, Markdown colour keys; v4:
+- **Version:** 13 · **Date:** 2026-11-17 (v13: roles before the bundled queries of C, C++, YAML, Ruby, Lua, Swift and R, which name every identifier or scalar first, OBS-0074; AK-16); 2026-11-15 (v12: AK-15; v11: reassigned Java locals and parameters underlined, OBS-0050; v10: doc comments and Java fields by syntax, OBS-0047 T2/T3; v9: fields have their own colour in the brand schemes; v2: C++; v3: thirteen more languages, Markdown colour keys; v4:
   Kotlin; v5: Ruby and PHP; v6: colour roles per language after OBS-0033; v7: SQL built-in functions in
   the function-declaration colour, italic, after the AK-9 window check; v8: Kotlin functions and
   properties by role, OBS-0035 L8)
@@ -147,6 +147,31 @@ listed and not counted. IDECraft does the same by syntax, without a language ser
 - **Servers:** the underline is drawn over the server's semantic tokens (SPEC-0290), which do not say
   whether a variable is reassigned.
 
+**v13 – Roles where the bundled query names everything first (OBS-0074):** for the same node the earlier
+pattern wins (behaviour 2). The bundled queries of C (also read for C++), Ruby, Lua, Swift and R begin with a
+pattern that names every identifier a variable, and YAML's names every scalar a string before its key
+patterns, so their own function, constant, parameter and key patterns never applied: in `highlight_file` and
+in the editor a C function, a Ruby method, a YAML key were plain variables or strings. IDECraft therefore
+places short role queries of its own (`queries/<language>-roles.scm`) before them, as for Python,
+JavaScript and SQL (v6):
+- **C and C++:** the name of a declared or defined function → `function` (function declaration); a called
+  function, also through a field (`ops.run()`, `p->run()`) → `function.call`; a macro with parameters →
+  `function.macro`; a name in capitals (`MAX_SIZE`) → `constant`. **C++** in addition: a method declared
+  in a class body, `Class::method` and a destructor → `function`; a call of a qualified name (`std::max`)
+  or of a template function → `function.call`.
+- **YAML:** keys of block and flow mappings, plain or quoted → `property` (as TOML keys).
+- **Ruby:** method names in `def` and `def self.` → `function`; a called method → `function.call`;
+  `private`, `protected`, `public` → `keyword`.
+- **Lua:** declared functions (also `M.run`, `obj:stop`) → `function`, called ones → `function.call`,
+  parameters → `variable.parameter`.
+- **Swift:** declared functions → `function`, called ones (also `list.append`) → `function.call`.
+- **R:** a function assigned with `<-` or `=` → `function`, a call → `function.call`, parameters →
+  `variable.parameter`.
+The colours are those of the roles (behaviour 4: function declaration, function call, constant, parameter,
+instance field). A language server's semantic tokens still paint over them where it has them (SPEC-0290).
+What the reference shows for these languages is not observed (it needs plugins for most of them); the
+comparison plan is OBS-0074, part 2. [STD, GEN, OBS-0074]
+
 ## Acceptance criteria
 - **AK-1** A Rust snippet gives `keyword` for `fn`/`let`, `function` for the defined name, `string` for the
   literal and `comment` for the comment, at the right char offsets (with non-ASCII text before them).
@@ -197,6 +222,12 @@ listed and not counted. IDECraft does the same by syntax, without a language ser
   `hand_test_110_ruby_and_php_are_coloured`): in an opened Ruby and PHP file the keyword, the
   comment, the string and (PHP) the variable carry their captures and scheme colours, and keyword,
   comment and string differ in colour (`EditorView::syntax_style_at`).
+
+- **AK-16 (v13)** A C sample with a macro, a declared function, a constant and calls (also through `.` and
+  `->`), a C++ sample with a method in a class, `G::other`, `std::max` and a method call, a YAML sample with
+  plain, quoted and flow keys, a Ruby sample with `private`, `def`, `def self.`, a call and `puts`, and Lua,
+  Swift and R samples with declared and called functions and parameters get exactly these roles
+  (`syntax::tests::roles_before_the_bundled_queries`).
 
 ## Out of scope
 Themes and colours (UI, ADR-0009), language injections (e.g. CSS inside HTML, Markdown inline

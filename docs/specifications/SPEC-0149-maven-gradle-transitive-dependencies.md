@@ -1,6 +1,6 @@
 # SPEC-0149: Transitive Maven and Gradle dependencies
 
-- **Version:** 4 · **Date:** 2026-11-06 (v2 after OBS-0024: missing artifacts, the build tools
+- **Version:** 5 · **Date:** 2026-11-17 (v5: a library source shows no problems at all, also none of IDECraft's own inspections, however it was opened, AK-10, beta finding B2 of hand test 209); 2026-11-06 (v2 after OBS-0024: missing artifacts, the build tools
   window's options in the resolution, Gradle's task list; behaviours 6–8 new; v3 for the open gap L7
   of OBS-0024: the entries Maven leaves out (conflicts, duplicates), downloading sources and
   documentation, library sources in the editor; behaviours 9–11 new; v4 after the window check:
@@ -80,7 +80,13 @@ See what a Maven or Gradle module really pulls in, not only what its build file 
     `<archive>`, read-only, not checked and not used by the build; no diagnostics are shown for it (outside its project the language
     server reports errors that are none). Without a sources archive the status line
     names the class and says that Download Sources in the build tools window fetches it.
-    [GEN, STD]
+    (v5) "Not checked" holds for every source of problems: neither the language server's
+    diagnostics nor IDECraft's own inspections (SPEC-0098) nor the project's or a plugin's
+    findings are shown in the editor, and the Problems window's File tab lists nothing for it.
+    This holds for every editor of a file below `<user cache>/library-sources`, however it was
+    opened (⌘B, the Recent Files list, a restored tab), and such an editor is always read-only.
+    Before v5 the own inspections still marked 18 warnings in the JDK's `String.java`. [GEN, STD;
+    beta screen run of workflow (a), hand test 209]
 
 ## Acceptance criteria
 - **AK-1** Parsing of Maven and Gradle output, keeping and staleness, wrapper choice
@@ -108,6 +114,10 @@ See what a Maven or Gradle module really pulls in, not only what its build file 
   archive beside the jar and in another folder of the Gradle cache, is copied and opened at the
   declaration (`javadoc::tests::library_source_from_archives`); ⌘B on a library class in the window
   is checked by hand next to the reference.
+- **AK-10 (v5, behaviour 11)** An editor that is not checked shows no problems, also after its text
+  changed, and the File tab lists none (`crates/workbench/tests/it/library_source_unchecked.rs`);
+  with jdtls and a JDK's `src.zip`: ⌘B on `String` opens `String.java` with no problems and an
+  empty File tab (`workflow_a_beta_handtests.rs::hand_test_209_java_in_a_single_file`).
 
 ## Out of scope
 Resolving through an embedded Maven or the Gradle Tooling API, reloading automatically while the

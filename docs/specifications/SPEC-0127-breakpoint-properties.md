@@ -1,6 +1,7 @@
 # SPEC-0127: Breakpoint properties in the window
 
-- **Version:** 13.1 · **Date:** 2026-11-16 (v13.1: AK-3 follows behaviour 19 — on the caret's breakpoint ⇧⌘F8 opens its popup and ⇧⌘F8 there the dialog; its wording from before v10 had ⇧⌘F8 open the dialog at once; no change of behaviour, found by the Linux window self-test; v13: one breakpoint, two views — the popup and the dialog show a line breakpoint's Enabled, Suspend and All/Thread by one rule from the breakpoint's own state, the popup's switches in the semantic tree, behaviour 29; OBS-0056 D1, D2; v12: the dialog shows All chosen and its switches as a vertical list of check boxes, behaviours 27 and 28; OBS-0056 D1, D2; the dependency chosen by clicks in a window test, OBS-0054 B4; v11: the popup's title, check boxes and options, All chosen, Watch, the condition's expansion and history; OBS-0056 P2–P6; v10: the small popup at the gutter, Suspend All/Thread, a check box per row, "Disable until hitting" chosen from the breakpoints; OBS-0054 B2–B4; v9: acceptance criterion AK-14, the rest of hand test 54 in a window of the test harness with real keys; v8: Toggle Temporary Line Breakpoint, the keymap's `ToggleTemporaryLineBreakpoint`; v7: Go sessions, where Delve evaluates the properties; v6: agents get the breakpoints as the adapter has them after the first wait, change them while a session goes on and start with the saved ones; v5: a breakpoint the running session cannot bind is
+- **Version:** 14 · **Date:** 2026-11-16 (v14: the popup's and the dialog's keys in the system's
+  notation, More from the keymap, behaviour 30 — PR #866 Linux window self-test); 2026-11-16 (v13.1: AK-3 follows behaviour 19 — on the caret's breakpoint ⇧⌘F8 opens its popup and ⇧⌘F8 there the dialog; its wording from before v10 had ⇧⌘F8 open the dialog at once; no change of behaviour, found by the Linux window self-test; v13: one breakpoint, two views — the popup and the dialog show a line breakpoint's Enabled, Suspend and All/Thread by one rule from the breakpoint's own state, the popup's switches in the semantic tree, behaviour 29; OBS-0056 D1, D2; v12: the dialog shows All chosen and its switches as a vertical list of check boxes, behaviours 27 and 28; OBS-0056 D1, D2; the dependency chosen by clicks in a window test, OBS-0054 B4; v11: the popup's title, check boxes and options, All chosen, Watch, the condition's expansion and history; OBS-0056 P2–P6; v10: the small popup at the gutter, Suspend All/Thread, a check box per row, "Disable until hitting" chosen from the breakpoints; OBS-0054 B2–B4; v9: acceptance criterion AK-14, the rest of hand test 54 in a window of the test harness with real keys; v8: Toggle Temporary Line Breakpoint, the keymap's `ToggleTemporaryLineBreakpoint`; v7: Go sessions, where Delve evaluates the properties; v6: agents get the breakpoints as the adapter has them after the first wait, change them while a session goes on and start with the saved ones; v5: a breakpoint the running session cannot bind is
   drawn hollow and its tooltip says why, agents get `verified` and the reason, OBS-0035 L14; v2: no line background for a switched-off breakpoint; v3:
   suspend policy, hit message and stack, removal after the hit, dependent breakpoints, instance,
   class and caller filters, groups in the dialog; OBS-0025 L14; v4: the dialog's rows name the file
@@ -223,6 +224,14 @@ gutter's, a switched-off one grey. [OBS]
     Remove once hit) stay the dialog's. The named deviations stay: no Emulated switch, and a
     method breakpoint shows no Suspend in either view (behaviours 19 and 25). Until v12 the two
     views agreed in their results but each had its own copy of the rule. [OBS, GEN]
+30. **Keys in the system's notation (v14):** the popup's button "More" names the first shortcut of
+    View Breakpoints (`ViewBreakpoints`) in the keymap in use — "More (⇧⌘F8)" on macOS with the
+    bundled keymap, "More (Ctrl+Shift+F8)" on Linux and Windows with the default one, "More" when
+    the action has no shortcut. The popup's mnemonics (⌥E, ⌥S …) and its hint "⇧↩ collapse · ⌘↩
+    done", and the dialog's mnemonics and buttons ("+ Method Breakpoint (⌘N)", "+ Field Watchpoint
+    (⇧⌘N)", "(⌥D)", "(⌥K)", "(⌥C)", "(⌥U)"), are written for the platform as SPEC-0028 v7
+    behaviour 12 says: `Alt+E`, `Shift+Enter collapse · Ctrl+Enter done`, `Ctrl+N`, `Ctrl+Shift+N`.
+    The keys themselves do not change. [GEN]
 
 ## Acceptance criteria
 - **AK-1** Looks, properties following moved breakpoints, what is sent to the debugger (switched-off
@@ -339,6 +348,9 @@ gutter's, a switched-off one grey. [OBS]
   Suspend state (`breakpoint_dialog::tests::shared_switches_are_the_popups_rows`); All saved only
   with another change (`breakpoint_popup::tests::all_is_saved_only_with_a_change`). Not covered:
   the look on screen next to the reference (window recheck).
+- **AK-19 (v14, behaviour 30)** Unit test `breakpoint_popup::tests::keys_follow_the_platform`:
+  "More (⇧⌘F8)" with the bundled macOS keymap on macOS, "More (Ctrl+Shift+F8)" with the default
+  keymap on Linux, "More" without a shortcut; the hint and a mnemonic for both.
 
 ## Out of scope
 Conditions with completion, breakpoints of the reference's own project files, user-made groups of

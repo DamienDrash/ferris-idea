@@ -382,3 +382,143 @@ fn typescript_file_stops_at_breakpoint() {
     stops_in_twice(launch, &script, 3);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Hand test 20 (beta of workflow (a), B4): stopped on a line whose call's argument calls a
+/// function of the program, Step Into stops in that function. Skipped without node or js-debug.
+#[test]
+fn step_into_an_argument_call_stops_in_it() {
+    let Some(command) = known_adapters()
+        .into_iter()
+        .find(|a| a.name == "js-debug")
+        .and_then(|a| a.command)
+    else {
+        eprintln!("skipped: node or js-debug is not installed");
+        return;
+    };
+    let dir = temp_project("stepin-arg");
+    let script: PathBuf = dir.join("app.js");
+    std::fs::write(
+        &script,
+        "function helper(n) {\n  const next = n + 1;\n  return next;\n}\n\nconst result = 5;\nconsole.log(\"result\", result, helper(1));\nconsole.log(\"done\");\n",
+    )
+    .unwrap();
+    let server = JsDebugServer::start(&command).unwrap();
+    let address = server.address();
+    let breakpoints = BTreeMap::from([(script.clone(), vec![SourceBreakpoint::from(7)])]);
+    let launch = node_launch(&script, None, &[], &dir, &Default::default());
+    let (mut session, _) = DebugSession::launch_js(
+        &address,
+        "launch",
+        launch,
+        &breakpoints,
+        &Default::default(),
+        Box::new(server),
+    )
+    .unwrap();
+    let thread = match session.wait_state(WAIT, 10).unwrap() {
+        StopState::Stopped {
+            frames, thread_id, ..
+        } => {
+            assert_eq!(frames[0].line, 7, "{frames:?}");
+            thread_id
+        }
+        other => panic!("not stopped: {other:?}"),
+    };
+    session.step_in(thread).unwrap();
+    match session.wait_state(WAIT, 10).unwrap() {
+        StopState::Stopped { frames, .. } => {
+            assert!(frames[0].name.ends_with("helper"), "{frames:?}");
+        }
+        other => panic!("Step Into did not stop in helper: {other:?}"),
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// SPEC-0045 v6 AK-15: a Jest test run through `npx jest … --runInBand` under js-debug stops at a
+/// breakpoint in the test file, also where Jest's transformed code has the line elsewhere (js-debug
+/// waits for the source map). Skipped without js-debug, npx or an installed Jest.
+#[test]
+fn jest_test_stops_at_breakpoint() {
+    let Some(command) = known_adapters()
+        .into_iter()
+        .find(|a| a.name == "js-debug")
+        .and_then(|a| a.command)
+    else {
+        eprintln!("skipped: node or js-debug is not installed");
+        return;
+    };
+    let find = |name: &str| {
+        std::env::var_os("PATH").and_then(|p| {
+            std::env::split_paths(&p)
+                .map(|d| d.join(name))
+                .find(|f| f.is_file())
+        })
+    };
+    let (Some(npx), Some(jest)) = (find("npx"), find("jest")) else {
+        eprintln!("skipped: npx or jest is not installed");
+        return;
+    };
+    // …/node_modules/jest/bin/jest.js → the package folder.
+    let package = std::fs::canonicalize(jest)
+        .ok()
+        .and_then(|j| j.parent()?.parent().map(PathBuf::from))
+        .filter(|p| p.join("package.json").is_file());
+    let Some(package) = package else {
+        eprintln!("skipped: the jest package is not found");
+        return;
+    };
+    let dir = temp_project("jestdebug");
+    std::fs::write(
+        dir.join("package.json"),
+        "{ \"name\": \"t\", \"private\": true, \"devDependencies\": { \"jest\": \"*\" } }\n",
+    )
+    .unwrap();
+    let test = dir.join("calc.test.js");
+    std::fs::write(
+        &test,
+        // The comment and the blank line move the test's lines in Jest's transformed code: the
+        // breakpoint binds only through the source map.
+        "// Tests of the sums.\n\ntest(\"good\", () => {\n  expect(1 + 2).toBe(3);\n});\n\ntest(\"broken\", () => {\n  const sum = 1 + 2;\n  expect(sum).toBe(4);\n});\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(dir.join("node_modules/.bin")).unwrap();
+    std::os::unix::fs::symlink(&package, dir.join("node_modules/jest")).unwrap();
+    std::os::unix::fs::symlink("../jest/bin/jest.js", dir.join("node_modules/.bin/jest")).unwrap();
+    let server = JsDebugServer::start(&command).unwrap();
+    let address = server.address();
+    let breakpoints = BTreeMap::from([(test.clone(), vec![SourceBreakpoint::from(9)])]);
+    let args: Vec<String> = [
+        "jest",
+        "--json",
+        "--outputFile=.idecraft/jest.json",
+        "calc.test.js",
+        "-t",
+        "broken$",
+        "--runInBand",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+    // The working folder as a run configuration without `cwd` gives it: with a trailing slash.
+    let cwd = PathBuf::from(format!("{}/", dir.display()));
+    let launch = node_launch(&npx, Some(&npx), &args, &cwd, &Default::default());
+    let (mut session, _) = DebugSession::launch_js(
+        &address,
+        "launch",
+        launch,
+        &breakpoints,
+        &Default::default(),
+        Box::new(server),
+    )
+    .unwrap();
+    match session.wait_state(Duration::from_secs(120), 10).unwrap() {
+        StopState::Stopped { frames, locals, .. } => {
+            assert_eq!(frames[0].line, 9, "{frames:?}");
+            let sum = locals.iter().find(|v| v.name == "sum").unwrap();
+            assert_eq!(sum.value, "3");
+        }
+        other => panic!("not stopped: {other:?}\n{}", session.output()),
+    }
+    let _ = session.disconnect();
+    let _ = std::fs::remove_dir_all(&dir);
+}

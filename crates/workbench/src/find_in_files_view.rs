@@ -63,6 +63,9 @@ pub struct FindInFilesView {
     scope_tab: ScopeTab,
     /// Files open in editors (workspace-relative), for the Open Files scope.
     open_files: Vec<PathBuf>,
+    /// The text of editors with unsaved changes (workspace-relative path and text): the list shows
+    /// their matches (`SPEC-0066` v7 behaviour 19).
+    unsaved: Vec<(PathBuf, String)>,
     /// Comments and string literals filter (v3 behaviour 11).
     context: SearchContext,
     /// Also search and replace in libraries and ignored files (v4 behaviour 15).
@@ -197,6 +200,7 @@ impl FindInFilesView {
             directory,
             scope_tab: ScopeTab::Project,
             open_files: Vec::new(),
+            unsaved: Vec::new(),
             context: SearchContext::Anywhere,
             include_non_project: false,
             context_menu: false,
@@ -299,6 +303,11 @@ impl FindInFilesView {
             Some(_) => String::new(),
             None => self.list.not_searched.clone().unwrap_or_default(),
         }
+    }
+
+    /// The text of the editors with unsaved changes, for the next search (behaviour 19).
+    pub fn set_unsaved(&mut self, texts: Vec<(PathBuf, String)>) {
+        self.unsaved = texts;
     }
 
     /// Searches again after files changed (a replacement).
@@ -495,6 +504,7 @@ impl FindInFilesView {
         self.searched = Some(current.clone());
         let root = self.root.clone();
         let remote = self.remote.clone();
+        let unsaved = self.unsaved.clone();
         cx.spawn(async move |this, cx| {
             let result = cx
                 .background_executor()
@@ -512,7 +522,7 @@ impl FindInFilesView {
                     let workspace = Workspace::open(&root).map_err(|e| e.to_string())?;
                     // The same request a replacement plans with (SPEC-0066 v5 behaviour 17).
                     current
-                        .list(&workspace, MAX_MATCHES)
+                        .list_with(&workspace, MAX_MATCHES, &unsaved)
                         .map(|found| (found, None))
                         .map_err(|e| e.to_string())
                 })

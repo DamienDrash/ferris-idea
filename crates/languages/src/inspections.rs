@@ -451,7 +451,21 @@ pub fn inspect_text(path: &Path, text: &str) -> Vec<Finding> {
     }
 }
 
+/// [`inspect_text`] of a project file named by its path `rel` relative to the project, which
+/// lives at `absolute`: the project's other files are found from there (Python's import fixes,
+/// `SPEC-0098` v14 behaviour 19a), the rules and filters see `rel` as before.
+pub fn inspect_text_of(rel: &Path, absolute: &Path, text: &str) -> Vec<Finding> {
+    if rel.is_absolute() {
+        return inspect_text(rel, text);
+    }
+    inspect_text_unfiltered_in(rel, absolute, text)
+}
+
 fn inspect_text_unfiltered(path: &Path, text: &str) -> Vec<Finding> {
+    inspect_text_unfiltered_in(path, path, text)
+}
+
+fn inspect_text_unfiltered_in(path: &Path, absolute: &Path, text: &str) -> Vec<Finding> {
     let tsx = path.extension().is_some_and(|e| e == "tsx");
     let language =
         LanguageId::detect(path).filter(|_| text.len() <= crate::syntax::MAX_SYNTAX_BYTES);
@@ -459,8 +473,9 @@ fn inspect_text_unfiltered(path: &Path, text: &str) -> Vec<Finding> {
         Some(doc) if doc.language() == LanguageId::Python => {
             let mut out = inspect(&doc);
             // SPEC-0098 v9 behaviours 17–19: the places of IDECraft's own quick fixes.
-            out.extend(crate::python_quick_fixes::analyze(
+            out.extend(crate::python_quick_fixes::analyze_in(
                 path,
+                absolute,
                 doc.tree().root_node(),
                 text,
             ));
@@ -538,7 +553,8 @@ pub fn inspect_project_only(root: &Path, files: &[PathBuf], only: Option<&str>) 
         let Ok(text) = std::fs::read_to_string(&path) else {
             continue;
         };
-        let found = crate::project_dictionary::filter(&path, &text, inspect_text(rel, &text));
+        let found =
+            crate::project_dictionary::filter(&path, &text, inspect_text_of(rel, &path, &text));
         // Grammar findings whose text the project ignores (SPEC-0155 v3 behaviour 10).
         let mut found = crate::grammar_ignore::filter(&path, &text, found);
         if let Some(id) = only {

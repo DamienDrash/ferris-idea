@@ -1,6 +1,6 @@
 # IDECraft roadmap
 
-**As of 2026-11-16 (main `4223536e`) · v0.17.0 · stage alpha · quality gate QG-1 recorded as reached.** This is the
+**As of 2026-11-16 (main `4223536e`) · v0.20.0 · stage beta · quality gate QG-1 recorded as reached.** This is the
 roadmap for readers outside the project.
 It is written from the project's internal tracking and carries no dates for future work: the
 project does not promise delivery dates. Items use the status words of the
@@ -61,6 +61,8 @@ the feature status words: Done, In progress, Planned, Not reached.
 | M16 | Remote control of the local app from paired devices | In progress |
 | M17 | Mobile apps for iOS and Android | In progress |
 | M18 | Web IDE in the browser | Planned; its WebSocket endpoint is In progress |
+| M19 | Harness MVP: tool selection for agents, context packs, verification gates, change sets, agent host with visible agent states, local models, desktop sandbox, session history, benchmark, a heartbeat that wakes stalled agents, a task scheduler, memory layers, an encrypted vault from which agents use credentials without ever reading them | Planned, after 1.0 |
+| M20 | Project cockpit with KPIs per project, tickets for people and agents, boards to choose from (Kanban, Scrum, Scrumban, Gantt, Lean, to-do lists with Gantt) | Planned, after 1.0 |
 
 ## Done: the quality gate
 
@@ -113,7 +115,7 @@ Work in this phase, all **In progress**:
 ## Later: the AI-native phase
 
 **Planned, after the database tools.** QG-1 opens this phase. The direction is described in
-[ADR-0023](docs/adr/0023-idecraft-as-agent-harness.md) (status: proposed) and
+[ADR-0023](docs/adr/0023-idecraft-as-agent-harness.md) (accepted on 2026-11-17) and
 [the vision](docs/architecture/AI_NATIVE_VISION.md). The rule stays that IDECraft ships no agent
 loop and no model of its own.
 

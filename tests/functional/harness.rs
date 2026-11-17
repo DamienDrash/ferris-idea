@@ -218,9 +218,13 @@ impl Project {
         String::from_utf8_lossy(&out.stdout).into_owned()
     }
 
-    /// `git init` and one commit of everything.
+    /// `git init` and one commit of everything. The repository gets its own identity, so commits
+    /// the IDE makes in it (a merge through `git_merge`, a commit tool) work on a machine without a
+    /// global Git identity, such as a CI runner.
     pub fn git_repo(&self) -> &Self {
         self.git(&["init", "-q"]);
+        self.git(&["config", "user.name", "Func Test"]);
+        self.git(&["config", "user.email", "func@example.invalid"]);
         self.git(&["add", "-A"]);
         self.git(&["commit", "-q", "-m", "initial"]);
         self

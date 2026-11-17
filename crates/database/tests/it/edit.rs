@@ -15,6 +15,9 @@ fn table() -> Table {
         nullable,
         default: None,
         generated: None,
+        expression: None,
+        identity: None,
+        comment: None,
     };
     Table {
         storage: Vec::new(),
@@ -31,6 +34,7 @@ fn table() -> Table {
         indexes: vec![],
         unreadable: None,
         constraints: Vec::new(),
+        comment: None,
     }
 }
 

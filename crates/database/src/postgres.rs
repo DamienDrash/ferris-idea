@@ -8,7 +8,10 @@ use tokio_postgres::error::ErrorPosition;
 
 use tokio_postgres::{AsyncMessage, Client, Connection, NoTls, SimpleQueryMessage};
 
-use crate::session::{SessionError, Via, mode_name, prepare, profile_tls_connector};
+use crate::session::{
+    SessionError, TlsPlan, Via, mode_name, prefer_needs_tls, prepare, profile_tls_connector,
+    tls_plan,
+};
 use crate::{
     ConnectionProfile, Credentials, DbError, Dialect, OnError, Outcome, ScriptRun, SslMode,
     split_statements,
@@ -60,6 +63,11 @@ fn connect_message(e: &tokio_postgres::Error) -> String {
         Some(c) if !e.to_string().contains(c) => format!("{e}: {c}"),
         _ => e.to_string(),
     }
+}
+
+/// Whether connecting failed in the TLS step: the server offers no TLS, or the handshake broke.
+fn tls_failed(e: &tokio_postgres::Error) -> bool {
+    e.as_db_error().is_none() && e.to_string().starts_with("error performing TLS handshake")
 }
 
 impl PgSession {
@@ -125,9 +133,11 @@ impl PgSession {
 
         let timeout = || format!("no answer within {} s", limit.as_secs());
         let mode = profile.ssl;
+        // `prefer` off the loopback needs TLS like `require` (`SPEC-0016` v3 behaviour 3).
+        let plan = tls_plan(profile);
         // Connection tasks end when the client is dropped or the server closes the connection.
         let notices = Notices::default();
-        let result: Result<Client, String> = if mode == SslMode::Disable {
+        let result: Result<Client, String> = if plan == TlsPlan::Off {
             config.ssl_mode(tokio_postgres::config::SslMode::Disable);
             match tokio::time::timeout(limit, config.connect(NoTls)).await {
                 Ok(Ok((client, connection))) => {
@@ -138,7 +148,7 @@ impl PgSession {
                 Err(_) => Err(timeout()),
             }
         } else {
-            config.ssl_mode(if mode == SslMode::Prefer {
+            config.ssl_mode(if plan == TlsPlan::Optional {
                 tokio_postgres::config::SslMode::Prefer
             } else {
                 tokio_postgres::config::SslMode::Require
@@ -154,6 +164,12 @@ impl PgSession {
                 Ok(Ok((client, connection))) => {
                     drive(connection, notices.clone());
                     Ok(client)
+                }
+                // `prefer` off the loopback without TLS: what to do (`SPEC-0016` v3 behaviour 13).
+                Ok(Err(e))
+                    if mode == SslMode::Prefer && plan == TlsPlan::Required && tls_failed(&e) =>
+                {
+                    return Err(prefer_needs_tls(profile, &address, &connect_message(&e)));
                 }
                 Ok(Err(e)) if mode != SslMode::Prefer => {
                     return Err(SessionError::Tls {

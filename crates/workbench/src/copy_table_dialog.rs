@@ -10,6 +10,7 @@ use idecraft_database::{
 use crate::database_view::RenameTarget;
 use crate::editor_view::EditorView;
 use crate::palette::Palette;
+use crate::semantics::{Annotated, Role, Semantics};
 use crate::table_session::TableSession;
 use crate::workbench_view::c;
 
@@ -248,12 +249,29 @@ impl Render for CopyTableDialog {
                 .items_center()
                 .gap_2()
                 .child(div().w(px(110.)).text_color(c(p.ui_muted)).child(label))
-                .child(crate::metrics::field_frame().flex_1().child(field))
+                .child(
+                    crate::metrics::field_frame()
+                        .relative()
+                        .semantics(
+                            Semantics::new(Role::TextInput)
+                                .name(label)
+                                .test_id(format!("copy-table-{label}")),
+                        )
+                        .flex_1()
+                        .child(field),
+                )
         };
         let switches = SWITCHES.iter().enumerate().map(|(n, (id, label))| {
             let on = *switch(&mut self.options.clone(), n);
             div()
                 .id(*id)
+                .relative()
+                .semantics(
+                    Semantics::new(Role::CheckBox)
+                        .name(*label)
+                        .checked(on)
+                        .test_id(*id),
+                )
                 .px_2()
                 .rounded(px(4.))
                 .hover(|s| s.bg(c(p.tree_hover)))
@@ -338,16 +356,29 @@ impl Render for CopyTableDialog {
                     )
                     .child(div().flex_1())
                     .child(
-                        crate::metrics::button("copy-table-cancel", "Cancel", false).on_click(
-                            cx.listener(|_, _: &gpui::ClickEvent, _, cx| {
+                        crate::metrics::button("copy-table-cancel", "Cancel", false)
+                            .relative()
+                            .semantics(
+                                Semantics::new(Role::Button)
+                                    .name("Cancel")
+                                    .test_id("copy-table-cancel"),
+                            )
+                            .on_click(cx.listener(|_, _: &gpui::ClickEvent, _, cx| {
                                 cx.emit(CopyTableEvent::Close)
-                            }),
-                        ),
+                            })),
                     )
                     .child(
-                        crate::metrics::button("copy-table-do", "Copy", !self.running).on_click(
-                            cx.listener(|this, _: &gpui::ClickEvent, _, cx| this.copy(cx)),
-                        ),
+                        crate::metrics::button("copy-table-do", "Copy", !self.running)
+                            .relative()
+                            .semantics(
+                                Semantics::new(Role::Button)
+                                    .name("Copy")
+                                    .enabled(!self.running)
+                                    .test_id("copy-table-do"),
+                            )
+                            .on_click(
+                                cx.listener(|this, _: &gpui::ClickEvent, _, cx| this.copy(cx)),
+                            ),
                     ),
             )
     }

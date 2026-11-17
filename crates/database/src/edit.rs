@@ -722,6 +722,9 @@ mod tests {
             nullable,
             default: None,
             generated: None,
+            expression: None,
+            identity: None,
+            comment: None,
         }
     }
 
@@ -741,6 +744,7 @@ mod tests {
             indexes: vec![],
             unreadable: None,
             constraints: Vec::new(),
+            comment: None,
         }
     }
 
@@ -871,6 +875,9 @@ mod tests {
             columns: vec!["note".into()],
             condition: None,
             collations: Vec::new(),
+            method: None,
+            orders: Vec::new(),
+            prefixes: Vec::new(),
         });
         assert_eq!(
             EditTarget::new(&t, Dialect::Sqlite).unwrap_err(),
@@ -882,6 +889,9 @@ mod tests {
             columns: vec!["name".into()],
             condition: None,
             collations: Vec::new(),
+            method: None,
+            orders: Vec::new(),
+            prefixes: Vec::new(),
         });
         assert_eq!(EditTarget::new(&t, Dialect::Sqlite).unwrap().key, ["name"]);
     }
@@ -897,6 +907,9 @@ mod tests {
             columns: vec!["name".into()],
             condition: Some("deleted = 0".into()),
             collations: Vec::new(),
+            method: None,
+            orders: Vec::new(),
+            prefixes: Vec::new(),
         });
         assert_eq!(
             EditTarget::new(&t, Dialect::Sqlite).unwrap_err(),

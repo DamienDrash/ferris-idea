@@ -147,6 +147,11 @@ pub struct TestSuite {
     pub output: Option<String>,
     /// Counts of the whole subtree.
     pub totals: Totals,
+    /// The file of the suite's tests as the runner named it, if the format names one (Jest and
+    /// Vitest: the test file; `SPEC-0045` v6 behaviour 8), so the tree can open a test's source
+    /// (`SPEC-0088` v5 behaviour 12).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
 }
 
 impl TestSuite {
@@ -469,6 +474,7 @@ fn jest(text: &str) -> Result<Vec<TestSuite>, ReportError> {
         let full = f["name"].as_str().unwrap_or("tests");
         let name = full.strip_prefix(common.unwrap_or("")).unwrap_or(full);
         let mut suite = TestSuite::named(name);
+        suite.file = f["name"].as_str().map(str::to_owned);
         if let (Some(a), Some(b)) = (f["startTime"].as_f64(), f["endTime"].as_f64()) {
             suite.duration = Some((b - a).max(0.0) / 1000.0);
         }

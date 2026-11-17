@@ -2629,6 +2629,52 @@ impl WorkbenchView {
         Ok(state)
     }
 
+    /// The selection of the active editor of the focused tab group (`SPEC-0006` v56 behaviour
+    /// 11): `None` without an editor.
+    pub fn editor_selection(&self, cx: &gpui::App) -> Option<EditorSelectionState> {
+        let path = self.active_path()?;
+        let editor = self.active_editor()?;
+        let e = editor.read(cx);
+        let primary = e.state.carets.primary();
+        let (start, end) = (
+            primary.anchor.min(primary.head),
+            primary.anchor.max(primary.head),
+        );
+        let at = |offset: usize| {
+            e.state
+                .buffer
+                .offset_to_position(offset)
+                .map(|p| (p.line, p.column))
+                .unwrap_or((0, 0))
+        };
+        let ((start_line, start_character), (end_line, end_character)) = (at(start), at(end));
+        Some(EditorSelectionState {
+            path,
+            start_line,
+            start_character,
+            end_line,
+            end_character,
+            text: e.state.buffer.slice(start..end).unwrap_or_default(),
+            carets: e.state.carets.carets().len(),
+        })
+    }
+
+    /// `editor_selection` for the project window of `workspace` (MCP over HTTP).
+    pub fn editor_selection_in(
+        workspace: &Path,
+        cx: &mut gpui::App,
+    ) -> Result<Option<EditorSelectionState>, String> {
+        let wanted = workspace.canonicalize().unwrap_or(workspace.to_path_buf());
+        let bench = crate::project_windows::workbenches(cx)
+            .into_iter()
+            .find(|b| {
+                let root = b.read(cx).root.clone();
+                root.canonicalize().unwrap_or(root) == wanted
+            })
+            .ok_or("no project window is open for this workspace")?;
+        Ok(bench.read(cx).editor_selection(cx))
+    }
+
     /// `editor_tabs` for the project window of `workspace` (MCP over HTTP).
     pub fn editor_tabs_in(
         workspace: &Path,
@@ -2652,4 +2698,24 @@ impl WorkbenchView {
             })
             .map_err(|e| e.to_string())?
     }
+}
+
+/// The selection of an editor as the window reports it to agents (`SPEC-0006` v56 behaviour 11):
+/// 0-based lines and characters.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EditorSelectionState {
+    /// The editor's file.
+    pub path: PathBuf,
+    /// Where the selection starts.
+    pub start_line: usize,
+    /// See `start_line`.
+    pub start_character: usize,
+    /// Where it ends (the caret when nothing is selected).
+    pub end_line: usize,
+    /// See `end_line`.
+    pub end_character: usize,
+    /// The selected text.
+    pub text: String,
+    /// How many carets the editor has.
+    pub carets: usize,
 }

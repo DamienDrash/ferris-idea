@@ -1,6 +1,7 @@
 # SPEC-0108: Connection dialog
 
-- **Version:** 11 · **Date:** 2026-11-16 (v11: `test_connection` and `remove_connection` take the connection as `connection` too, behaviour 21, AK-22, OBS-0071 G6); 2026-11-14 (v10: the result of a test has its area from the start, so the buttons stay where they are, behaviour 20, AK-21; second window check of 2026-11-14; v9: the SSL button goes to the stricter modes first, a changed form marks the test result outdated, the labels keep to one line, behaviours 17 to 19); 2026-11-13 (v8: testing a SQLite file reads it and names what is wrong with it in
+- **Version:** 12 · **Date:** 2026-11-17 (v12: a MariaDB server's version is its number, without the product's name
+  and build suffix the server appends, behaviour 22, AK-23 — OBS-0076 C2); 2026-11-16 (v11: `test_connection` and `remove_connection` take the connection as `connection` too, behaviour 21, AK-22, OBS-0071 G6); 2026-11-14 (v10: the result of a test has its area from the start, so the buttons stay where they are, behaviour 20, AK-21; second window check of 2026-11-14; v9: the SSL button goes to the stricter modes first, a changed form marks the test result outdated, the labels keep to one line, behaviours 17 to 19); 2026-11-13 (v8: testing a SQLite file reads it and names what is wrong with it in
   words — not a database, locked, not readable, a folder; a relative file is found from the workspace; v7 2026-11-12: the SSH tunnel counts as open once ssh reports its listening socket, not when it names the forward, found by the server CI; v6: a long value stays inside its field; v5: the tunnel comes from the one start point of `ssh`, every
   jump host with the post-quantum key exchange, ADR-0025 v5; v4: pages General, SSH/SSL and Options; SSH tunnel through the
   system `ssh`, TLS files, connection options, colour, comment, driver line and URL field; keychain
@@ -161,6 +162,10 @@ The user adds, changes, tests and removes database connections in the window ins
     `connection`; `test_connection` and `remove_connection` take it as `connection` as well as by
     their older name `id`. Giving neither is an error that names both; giving both with different
     connections is an error too. [GEN; OBS-0071 G6]
+22. **v12 – MariaDB's version number (OBS-0076 C2):** a MariaDB server reports its version with the
+    product's name and the build's suffix appended (`12.3.3-MariaDB`, `10.11.6-MariaDB-0+deb12u1-log`).
+    The test result (behaviour 6 v3, MCP `server_version`) gives the number before `-MariaDB`, so the
+    line reads `Server: MariaDB 12.3.3` and no longer names the product twice. [STD, GEN]
 
 ## Acceptance criteria
 - **AK-1** Form to profile and back; port, host and name checks; SQLite drops server fields and
@@ -237,6 +242,9 @@ The user adds, changes, tests and removes database connections in the window ins
   on a SQLite profile with the `read-schema` grant, `test_connection` connects with `connection`,
   with `id` and with both given alike; with neither the error names `connection`, with two different
   ones it says so; `remove_connection` with `connection` removes the profile.
+- **AK-23 (v12, behaviour 22)** `connection_form::tests::a_refused_certificate_points_to_the_ca_file`:
+  `12.3.3-MariaDB` and `10.11.6-MariaDB-0+deb12u1-log` give `12.3.3` and `10.11.6`, a MySQL version
+  stays as it is; live headless against MariaDB 12.3 (OBS-0076): `Server: MariaDB 12.3.3`.
 
 ## Out of scope
 Driver properties, other database systems (F-060), importing data sources of the reference, a choice of

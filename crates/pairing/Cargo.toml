@@ -31,8 +31,8 @@ nix = { version = "0.28", default-features = false, features = ["user", "fs"] }
 # runtime feature as GPUI's Linux build (async-io, not tokio: oo7 refuses both at once), so the
 # window links one copy and the backend adds nothing GPUI does not already bring.
 [target.'cfg(target_os = "linux")'.dependencies]
-futures-lite = "2"
-oo7 = { version = "0.5", default-features = false, features = ["async-std", "native_crypto"] }
+futures-lite.workspace = true
+oo7.workspace = true
 
 [dev-dependencies]
 curve25519-dalek = "4"

@@ -1,6 +1,6 @@
 # SPEC-0042: Language server registry
 
-- **Version:** 21 · **Date:** 2026-11-14 (v21: definitions, references, type definitions and
+- **Version:** 24 · **Date:** 2026-11-17 (v24: files IDECraft writes on disk outside an editor are told to the servers at once, behaviour 42, AK-46; headless check of F-011, OBS-0075, where the second of two renames over MCP left the other file with the old name); 2026-11-16 (v23: typescript-language-server's diagnostics come in steps and the last list is the answer, behaviour 41, AK-45; headless check of F-033, OBS-0072, where one in four `code_actions` calls missed "Add import" because only the syntax check's list had come; v22 is taken by an open change); 2026-11-14 (v21: definitions, references, type definitions and
   implementations get the wait they are asked with, behaviour 37, AK-38; v20: a question to kotlin-language-server waits for its
   diagnostics of the file, behaviour 35; intelephense's second list of an opened file is the answer,
   behaviour 36; v19: intelephense is ready also by its own notification and when it read
@@ -470,6 +470,29 @@ one — instead of failing with "command not found" in the middle of a feature.
     A server that builds its search index on the first such question (jdtls) may answer later than
     the wait under load; the pooled server keeps building it, so a question asked again is
     answered. [GEN]
+41. **Diagnostics in steps (v23):** typescript-language-server publishes an opened file's
+    diagnostics in up to three lists, one after each check of TypeScript's server (syntax, semantic,
+    suggestions), each with everything found so far; lists that come within a few milliseconds are
+    merged into one. A question that waits for a file's diagnostics (code actions and their quick
+    fixes, `file_diagnostics`) therefore does not stop at the first list: after each list it waits
+    up to 2 s for the next, and stops at once after the third. A list followed by 2 s without
+    another is the answer. In the pool this applies only while the file's first three lists have
+    not all come and the list came while the question waited; a list published before the
+    question is what the editor already shows, and is the answer at once. Before v23 a question
+    right after opening could take the syntax check's list alone, which has no unresolved names,
+    so `code_actions` on `helper(2)` without its import missed "Add import from "./util"" in one
+    of four calls (OBS-0072). [OSS (typescript-language-server, Apache-2.0: one list per check
+    kind, published 50 ms after the last change), STD (LSP `textDocument/publishDiagnostics`)]
+42. **What IDECraft wrote reaches the servers at once (v24):** when IDECraft itself writes files
+    on disk that no editor holds — a rename, code action or other refactoring, `undo_refactoring`
+    or `redo_refactoring` over MCP, also through `idecraft mcp` and `idecraft call`, where no
+    window looks at the disk — it tells the running servers of the project that these files
+    changed (`workspace/didChangeWatchedFiles`, type 2, with the paths, servers and folders of
+    behaviour 20) before the tool answers, waiting at most 5 s. The next question then works on
+    the new text. Behaviour 20 alone left this to the window's next look at the disk, up to two
+    seconds later, and without a window to nobody: a pooled pyright kept the old text of a file a
+    rename had written, so a second rename right after the first changed only the file it started
+    from and left `from calc import aa` behind in the other (OBS-0075). [STD, GEN]
 ## Acceptance criteria
 - **AK-1** With a crafted `PATH`: the first available candidate wins over later ones; a missing program is
   skipped; a non-executable file is skipped; a rustup proxy whose `rustup which` fails is reported as such,
@@ -653,6 +676,17 @@ one — instead of failing with "command not found" in the middle of a feature.
   stress on all cores, the question asked again after a timeout until the pooled server answers;
   three stress runs green (report `kotlin-live-test-under-load.md`; before v21 one in three failed
   with `Timeout("textDocument/implementation", 60)` although 120 s were asked).
+- **AK-45 (v23, behaviour 41)** `insight::tests::the_last_step_of_a_server_that_publishes_in_steps_is_the_answer`:
+  three lists end with the third, two lists with the second after the quiet time, a pause longer
+  than the quiet time ends with the list so far, a server without the property keeps its first
+  list. Headless with typescript-language-server (OBS-0072): six `code_actions` calls in a row on
+  `helper(2)` all list "Add import from "./util"".
+- **AK-46 (v24, behaviour 42)** With a pooled pyright (`crates/languages/tests/py_written_pool.rs`:
+  `a_second_rename_sees_what_the_first_wrote`): two renames in a row, each written on disk and
+  told with `pool::files_written`, both change the other file; without the notification the
+  second plan has only the file it started from. Headless (OBS-0075): two `rename_symbol` calls
+  and `undo_refactoring`/`redo_refactoring` in one `idecraft mcp` session change both files each
+  time.
 ## Out of scope
 Installing servers automatically, per-project server settings, servers over TCP, version checks;
 showing the sources of library classes (`java/classFileContents`); Java files outside the project

@@ -1,10 +1,14 @@
 # SPEC-0142: Oracle connections through Instant Client
 
-- **Version:** 1 · **Date:** 2026-11-02
+- **Version:** 3 · **Date:** 2026-11-16 (v3: SSL mode `prefer` connects through `tcps://` to a
+  server off the loopback, as `require` does, behaviour 2 — SPEC-0016 v3, IMP-0421); 2026-11-16 (v2: a PL/SQL unit that does not compile is an error with the
+  lines of its compile errors, behaviour 3a, AK-5 — F-060 run without a screen); 2026-11-02 (v1)
 - **Sources:** SPEC-0135 (Oracle without a connection), STD (Oracle Call Interface through ODPI-C
   as wrapped by the crate `oracle` 0.6, UPL-1.0 OR Apache-2.0; EZConnect `//host:port/service`
   and `tcps://`; data dictionary views `user_tables`, `user_tab_columns`, `user_constraints`,
-  `user_cons_columns`, `user_indexes`, `user_ind_columns`; `EXPLAIN PLAN SET STATEMENT_ID … FOR`
+  `user_cons_columns`, `user_indexes`, `user_ind_columns`; v2: `user_errors` and the warning
+  ORA-24344, success with compilation error, that Oracle returns for a unit it stored but could not
+  compile; `EXPLAIN PLAN SET STATEMENT_ID … FOR`
   into `PLAN_TABLE`; `sys_context('USERENV', 'NETWORK_PROTOCOL')`), the project owner's approval of
   2026-11-02 (Instant Client may be used), SPEC-0005, SPEC-0008, SPEC-0016, SPEC-0018, SPEC-0108,
   ADR-0008
@@ -23,10 +27,24 @@ installs it, IDECraft loads it at runtime.
    SSL mode require or verify-full becomes `tcps://`. The password comes from the keychain as for
    every profile. Test Connection reports the server version and whether the session is
    encrypted (`NETWORK_PROTOCOL = tcps`). [STD, SPEC-0108]
+   **v3:** `prefer` becomes `tcps://` too when the host is not on the loopback (SPEC-0016 v3
+   behaviour 3): Oracle offers TLS on a listener port of its own, so there is nothing to try first
+   and no plain connection to fall back to. On the loopback `prefer` stays `//host:port/service`
+   and Test Connection says "TLS: no". When the `tcps://` connection of a `prefer` profile fails,
+   the error names `prefer`, the server off this machine and that it needs a TCPS listener with a
+   wallet whose port the profile names (SPEC-0016 v3 behaviour 13). [STD, GEN]
 3. **Scripts:** statements and PL/SQL blocks split as in SPEC-0135 run one by one; result sets,
    update counts and errors with `ORA-nnnnn` and the error position. Autocommit after each DML
    statement unless a transaction was started with `SET TRANSACTION`; `COMMIT` and `ROLLBACK`
    go through the driver. Blocking calls run off the UI thread. [STD, SPEC-0005]
+3a. **v2 – Units that do not compile:** Oracle stores a procedure, function, package, package
+   body, trigger or type even when it does not compile and answers with a warning, not an error.
+   IDECraft reports such a statement as failed: the message starts with `ORA-24344` and names
+   each compile error of the unit from `user_errors`, with its line and column in the unit
+   (`line 3, column 3: PLS-00201: …`), at most ten. The error position points at the first one,
+   counted from the statement's first line (for a trigger, whose lines Oracle counts from its
+   body, the position is left out). With `OnError::Stop` the run stops there, as after any
+   error. [STD]
 4. **Read-only profiles** refuse DML, DDL and anonymous PL/SQL blocks (`BEGIN`/`DECLARE`) before
    they reach the server; queries run. `BEGIN` counts as a schema change for Oracle and, unless
    `TRAN`/`TRANSACTION`/`DISTRIBUTED` follows, for SQL Server too. [SPEC-0016]
@@ -49,6 +67,17 @@ installs it, IDECraft loads it at runtime.
   unreachable address `127.0.0.1:1`.
 - **AK-4** Hand test (round 4, no. 68): connection dialog against the container, schema tree,
   a script, Explain Plan, a read-only profile.
+- **AK-5 (v2, behaviour 3a)** Live against Oracle Free 23
+  (`crates/database/tests/it/dialect_steps_live.rs::oracle_steps`, skipped without
+  `IDECRAFT_TEST_ORACLE`): a script with an anonymous block and a procedure ended by `/` lines,
+  `q'[…]'` holding `;` and `/`, a `CALL` and a failing query gives seven outcomes at their lines,
+  the error with ORA-00904 and its column; Test Connection names Oracle and its version; a
+  procedure calling an unknown name is an error with ORA-24344, PLS-00201 and line 3, pointing at
+  that line; the table with its key; a cell edited and read back; Explain Plan. Unit:
+  `oracle::tests::compile_errors_name_their_lines`.
+- **AK-6 (v3, behaviour 2)** `oracle::tests::prefer_off_the_loopback_is_tcps`: `prefer` gives
+  `tcps://` for `db.example` and `//` for `localhost` and `127.0.0.1`; `disable` gives `//` on every
+  host.
 
 ## Out of scope
 Shipping Instant Client, Oracle Wallet and LDAP/TNS names, Kerberos, Explain Analyze

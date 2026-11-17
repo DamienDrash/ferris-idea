@@ -146,10 +146,26 @@ impl SettingsView {
             .border_color(c(p.separator))
             .child(
                 div()
-                    .flex_1()
                     .font_weight(gpui::FontWeight::SEMIBOLD)
                     .child(self.page.title()),
             )
+            // Where the page's settings belong (`SPEC-0105` v9 behaviour 13).
+            .child({
+                let scope = self.page.scope().1;
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .text_xs()
+                    .text_color(c(p.ui_muted))
+                    .child(scope)
+                    .semantics(
+                        Semantics::new(Role::Label)
+                            .name(scope)
+                            .test_id("settings-page-scope"),
+                    )
+            })
             .when(self.page_changed(), |d| {
                 d.child(button("settings-revert", "Revert changes").on_click(
                     cx.listener(|this, _: &gpui::ClickEvent, _, cx| this.revert_page(cx)),

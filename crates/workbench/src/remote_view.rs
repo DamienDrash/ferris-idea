@@ -10,6 +10,7 @@ use idecraft_remote::{EntryKind, HostInfo, RemoteEntry};
 
 use crate::editor_view::EditorView;
 use crate::palette::Palette;
+use crate::semantics::{Annotated, Role, Semantics};
 use crate::workbench_view::c;
 
 /// What the window asks the workbench to do.
@@ -105,6 +106,11 @@ pub struct RemoteView {
     hits: Option<Vec<(String, usize, String)>>,
     /// Run configurations shown instead of the folder.
     configs: Option<Vec<(String, String)>>,
+    /// The field's text when the last query was sent to the backend (`?text`, `@name`, `!`, `>`).
+    asked: Option<String>,
+    /// The field's text that the hits or configurations shown answer: Enter with this text acts
+    /// on the selected row instead of asking again (`SPEC-0158` v4 behaviour 10).
+    listed_for: Option<String>,
     /// A change waiting for a name or a confirmation.
     pending: Option<Pending>,
     /// Entry to select once the folder is read again.
@@ -197,6 +203,8 @@ impl RemoteView {
             backend: None,
             hits: None,
             configs: None,
+            asked: None,
+            listed_for: None,
             pending: None,
             select_after: None,
             project_mode: false,
@@ -245,6 +253,7 @@ impl RemoteView {
     /// Shows run configurations of the host's project (`SPEC-0158` behaviour 9).
     pub fn show_configs(&mut self, configs: Vec<(String, String)>, cx: &mut Context<Self>) {
         self.configs = Some(configs);
+        self.listed_for = self.asked.take();
         self.hits = None;
         self.busy = None;
         self.error = None;
@@ -267,6 +276,7 @@ impl RemoteView {
     /// Shows search hits (absolute host paths, 0-based lines) instead of the folder.
     pub fn show_hits(&mut self, hits: Vec<(String, usize, String)>, cx: &mut Context<Self>) {
         self.hits = Some(hits);
+        self.listed_for = self.asked.take();
         self.configs = None;
         self.busy = None;
         self.error = None;
@@ -334,6 +344,8 @@ impl RemoteView {
         self.backend = None;
         self.hits = None;
         self.configs = None;
+        self.asked = None;
+        self.listed_for = None;
         self.pending = None;
         self.entries.clear();
         self.selected = 0;
@@ -389,6 +401,7 @@ impl RemoteView {
 
     /// Shows why the last request failed.
     pub fn show_error(&mut self, error: String, cx: &mut Context<Self>) {
+        self.asked = None;
         self.busy = None;
         self.error = Some(error);
         cx.notify();
@@ -449,6 +462,24 @@ impl RemoteView {
     /// Text of the selected row (for tests).
     pub fn selected_text(&self) -> Option<String> {
         self.rows.get(self.selected).map(row_text)
+    }
+
+    /// Whether the rows shown are the hits or configurations that the field's text `typed`
+    /// listed (or the field is empty), so Enter acts on them (`SPEC-0158` v4 behaviour 10).
+    fn on_listed(&self, typed: &str) -> bool {
+        (self.hits.is_some() || self.configs.is_some())
+            && (typed.is_empty() || self.listed_for.as_deref() == Some(typed))
+    }
+
+    /// Opens the selected hit at its line or runs the selected configuration; false when the
+    /// selected row is neither.
+    fn act_on_listed(&mut self, cx: &mut Context<Self>) -> bool {
+        match self.rows.get(self.selected).cloned() {
+            Some(Row::Hit(path, line, _)) => cx.emit(RemoteEvent::OpenAt(path, line)),
+            Some(Row::Config(name, _)) => cx.emit(RemoteEvent::RunConfig(name)),
+            _ => return false,
+        }
+        true
     }
 
     fn path_from_field(&self, text: &str) -> String {
@@ -546,19 +577,29 @@ impl RemoteView {
                 };
                 cx.emit(RemoteEvent::AskDelete(path));
             }
+            // The rows a query listed: Enter acts on the selected one while the field still holds
+            // that query, or nothing (SPEC-0158 v4 behaviour 10).
+            "enter" if self.on_listed(&typed) => {
+                if !self.act_on_listed(cx) {
+                    return false;
+                }
+            }
             "enter" if typed.starts_with('@') && self.backend.is_some() => {
                 let query = typed[1..].trim();
                 if query.is_empty() {
                     return true;
                 }
-                cx.emit(RemoteEvent::Symbols(query.to_owned()));
+                let query = query.to_owned();
+                self.asked = Some(typed);
+                cx.emit(RemoteEvent::Symbols(query));
             }
-            "enter" if typed == "!" && self.backend.is_some() => cx.emit(RemoteEvent::Problems),
-            "enter" if typed == ">" && self.backend.is_some() => cx.emit(RemoteEvent::RunConfigs),
-            "enter" if self.configs.is_some() => {
-                if let Some(Row::Config(name, _)) = self.rows.get(self.selected) {
-                    cx.emit(RemoteEvent::RunConfig(name.clone()));
-                }
+            "enter" if typed == "!" && self.backend.is_some() => {
+                self.asked = Some(typed);
+                cx.emit(RemoteEvent::Problems);
+            }
+            "enter" if typed == ">" && self.backend.is_some() => {
+                self.asked = Some(typed);
+                cx.emit(RemoteEvent::RunConfigs);
             }
             "down" if n > 0 => self.selected = (self.selected + 1).min(n - 1),
             "up" => self.selected = self.selected.saturating_sub(1),
@@ -569,7 +610,9 @@ impl RemoteView {
                     && !query.is_empty()
                     && self.backend.is_some()
                 {
-                    cx.emit(RemoteEvent::Search(query.to_owned()));
+                    let query = query.to_owned();
+                    self.asked = Some(typed.clone());
+                    cx.emit(RemoteEvent::Search(query));
                 } else if let Some(Row::Hit(path, line, _)) = self
                     .rows
                     .get(self.selected)
@@ -634,6 +677,7 @@ impl RemoteView {
             "escape" if self.hits.is_some() || self.configs.is_some() => {
                 self.hits = None;
                 self.configs = None;
+                self.listed_for = None;
                 self.selected = 0;
                 self.rebuild();
             }
@@ -711,9 +755,14 @@ impl Render for RemoteView {
         } else {
             "Hosts from ~/.ssh/config · Enter connects with your SSH keys and agent"
         };
+        // Each button and row is annotated with its id, so window tests click it with real mouse
+        // events (the semantic tree; nothing unless a consumer is active).
         let button = |id: &'static str, label: &'static str| {
             div()
                 .id(id)
+                .relative()
+                .flex_none()
+                .whitespace_nowrap()
                 .px_2()
                 .py(px(2.))
                 .rounded(px(4.))
@@ -721,6 +770,7 @@ impl Render for RemoteView {
                 .border_color(c(p.separator))
                 .hover(|s| s.bg(c(p.tab_hover)))
                 .child(label)
+                .semantics(Semantics::new(Role::Button).name(label).test_id(id))
         };
         let status = match (&self.busy, &self.error, &connected) {
             _ if self.pending.is_some() => {
@@ -753,10 +803,21 @@ impl Render for RemoteView {
                     } else {
                         "Remote Host"
                     }))
-                    .child(div().text_color(c(p.ui_muted)).child(match &connected {
-                        Some((host, path)) => format!("{host}:{path}"),
-                        None => "not connected".into(),
-                    }))
+                    // A long folder is shortened, never the buttons: they stay in view however
+                    // narrow the window is (SPEC-0158 v4 behaviour 4).
+                    .child(
+                        div()
+                            .min_w_0()
+                            .flex_shrink()
+                            .overflow_hidden()
+                            .whitespace_nowrap()
+                            .text_ellipsis()
+                            .text_color(c(p.ui_muted))
+                            .child(match &connected {
+                                Some((host, path)) => format!("{host}:{path}"),
+                                None => "not connected".into(),
+                            }),
+                    )
                     .when(connected.is_some(), |d| {
                         d.child(
                             button("remote-terminal", "SSH Terminal").on_click(
@@ -783,6 +844,11 @@ impl Render for RemoteView {
                         .child(match &self.backend {
                             // IDECraft's backend on the host (SPEC-0158 behaviour 4).
                             Some((name, folder)) => div()
+                                .min_w_0()
+                                .flex_shrink()
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis()
                                 .text_color(c(p.ui_muted))
                                 .child(format!("Backend: {name} in {folder}"))
                                 .into_any_element(),
@@ -793,7 +859,17 @@ impl Render for RemoteView {
                                 .into_any_element(),
                         })
                     })
-                    .child(div().text_xs().text_color(c(p.ui_dim)).child(help)),
+                    .child(
+                        div()
+                            .min_w_0()
+                            .flex_shrink()
+                            .overflow_hidden()
+                            .whitespace_nowrap()
+                            .text_ellipsis()
+                            .text_xs()
+                            .text_color(c(p.ui_dim))
+                            .child(help),
+                    ),
             )
             .child(
                 div()
@@ -869,6 +945,7 @@ impl Render for RemoteView {
                             || matches!(&row, Row::Entry(e) if e.kind == EntryKind::Dir);
                         div()
                             .id(("remote-row", i))
+                            .relative()
                             .h(px(22.))
                             .flex()
                             .items_center()
@@ -880,10 +957,18 @@ impl Render for RemoteView {
                             .when(!on, |d| d.hover(|s| s.bg(c(p.tree_hover))))
                             .when(dir, |d| d.font_weight(gpui::FontWeight::MEDIUM))
                             .child(row_text(&row))
+                            .semantics(
+                                Semantics::new(Role::ListItem)
+                                    .name(row_text(&row))
+                                    .selected(on)
+                                    .test_id(format!("remote-row-{i}")),
+                            )
                             .on_click(cx.listener(move |this, ev: &gpui::ClickEvent, _, cx| {
                                 this.selected = i;
-                                if ev.click_count() > 1 {
-                                    // A double click acts on the row, not on the field.
+                                // A double click acts on the row, not on the field: a hit or a
+                                // configuration directly (SPEC-0158 v4 behaviour 10), anything
+                                // else as Enter on the folder shown.
+                                if ev.click_count() > 1 && !this.act_on_listed(cx) {
                                     let current = this.place.as_ref().map(|(_, p)| p.clone());
                                     this.set_field(current.as_deref().unwrap_or(""), cx);
                                     this.press("enter", cx);

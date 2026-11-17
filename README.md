@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <a href="#development-status"><img alt="Status: alpha" src="https://img.shields.io/badge/status-alpha-EBCB8B?style=flat-square"></a>
+  <a href="#development-status"><img alt="Status: beta" src="https://img.shields.io/badge/status-beta-A3BE8C?style=flat-square"></a>
   <a href="#license"><img alt="License: PolyForm Shield 1.0.0, source-available" src="https://img.shields.io/badge/license-PolyForm%20Shield%201.0.0-4C566A?style=flat-square"></a>
   <a href="#platforms-and-requirements"><img alt="Desktop window verified on macOS, Apple Silicon" src="https://img.shields.io/badge/desktop-macOS%20(Apple%20Silicon)-4C566A?style=flat-square"></a>
 </p>
@@ -179,7 +179,8 @@ What an agent does with it, in five steps. Every tool can be tried from a shell 
 <!-- CAPTURE C (console): on the same sample project, three calls: set_breakpoint (dry_run false, needs `write`), debug_start (needs `debug` and a trusted project), debug_evaluate at the stop returning one variable's value; then debug_stop. Needs debugpy. Paste real output, cuts marked. -->
 
 4. **A database.** A connection the project describes gives an agent nothing until you grant it.
-   The refusal names the entry to add:
+   In a project you have not trusted (`idecraft trust add ~/shop`) the connection is not even
+   opened. In a trusted one, the refusal names the entry to add:
 
 ```console
 $ idecraft call ~/shop run_sql '{"connection":"shop","sql":"select name, city from customer order by name"}'
@@ -419,7 +420,7 @@ count says nothing about depth.
   change data or schema runs only with `apply: true`. A file database lies inside the workspace,
   or you granted exactly that file
   ([SPEC-0012](docs/specifications/SPEC-0012-sql-over-mcp.md)).
-- **Preview first, on a part of the tools.** 90 tools have a `dry_run` parameter and act only
+- **Preview first, on a part of the tools.** 93 tools have a `dry_run` parameter and act only
   with `dry_run: false`; the database tools preview until the call says `apply: true` (counted
   from the tool schemas, 2026-11-16).
 - **Project trust.** In an untrusted project IDECraft is built to run none of the project's code,
@@ -458,7 +459,7 @@ count says nothing about depth.
 - **The log is a record, not evidence.** It is a plain local file that a program started with
   `run` could alter, and it does not hold what was written, only that a call changed something.
 - **Dry run is not universal.** Tools without one act at once when the right is granted, for
-  example `create_file`, `rename_file`, `git_create_branch` and `git_stash`. *Planned: a dry run
+  example `rename_file`, `git_create_branch` and `git_stash`. *Planned: a dry run
   for the remaining writing tools.*
 - **Secrets are recognized by file name only.** A secret in a file with an ordinary name is not
   recognized. Output of programs and HTTP responses is not filtered.
@@ -773,7 +774,7 @@ project chose a different behavior
 ([180 recorded entries](docs/specifications/IMPROVEMENTS.md), the project's own assessment).
 
 This direction is written down in
-[ADR-0023](docs/adr/0023-idecraft-as-agent-harness.md), whose status is still *proposed*. The
+[ADR-0023](docs/adr/0023-idecraft-as-agent-harness.md), accepted on 2026-11-17. The
 larger steps waited for a quality gate ([ADR-0015](docs/adr/0015-quality-gate-ai-native.md)),
 which the repository records as reached on 2026-11-16, with named limits
 ([gate report](docs/quality/QG-1-REPORT.md)). The database tools come first.
@@ -797,6 +798,7 @@ which the repository records as reached on 2026-11-16, with named limits
 | 2026-11-13 | v0.17.0 | Keymap coverage 46.5 % to 73.7 %; JavaScript and TypeScript compared against the reference |
 | 2026-11-14 | Unreleased | Changelists, file properties, TODO window, window layouts. After a security review: database permissions moved out of the project to the user, and every changing tool checks a right ([ADR-0031](docs/adr/0031-project-files-never-grant-agents.md)) |
 | 2026-11-15 to 11-16 | Unreleased | Quality gate QG-1 recorded as reached, with named limits: 20 green CI runs of `main` in a row, the window self-test passed on macOS and once on Linux ([gate report](docs/quality/QG-1-REPORT.md)) |
+| 2026-11-17 | v0.19.0, v0.20.0, beta | Beta for both priority workflows: every hand test of the project workflow and of SQL against PostgreSQL and MySQL passed in agent runs, the window self-test green on the tagged commit |
 
 Sources: [CHANGELOG.md](CHANGELOG.md), `scripts/parity.sh`. The score is the project's own
 weighted measure at each date.
@@ -911,16 +913,18 @@ comparison. IDECraft is not a substitute for the reference.
 
 ## Development Status
 
-**Stage: alpha, since v0.2.0.** The desktop window opens, edits and saves files for the priority
-languages (Python, SQL, JavaScript, TypeScript, Java). Beta is not reached: it needs every hand
-test of one priority workflow to pass. The quality gate QG-1
+**Stage: beta, since v0.20.0 (2026-11-17), for both priority workflows:** a project in a priority
+language (open, edit, navigate, run or debug, commit with Git) and SQL against PostgreSQL or MySQL.
+Every hand test of both workflows passed in an agent run, the window self-test is green on the
+tagged commit, and the rows of both workflows are at parity stage 3 or higher. 1.0 also needs a
+published release. The quality gate QG-1
 ([ADR-0015](docs/adr/0015-quality-gate-ai-native.md)) asks whether the classical IDE is complete
 enough for the AI-native phase; the repository records it as reached on 2026-11-16, with the limits
 named in the [gate report](docs/quality/QG-1-REPORT.md). The gate is not a stage.
 
 | | |
 |---|---|
-| Version and stage | v0.17.0, alpha |
+| Version and stage | v0.20.0, beta |
 | Age | first commit 2026-10-30; 17 tagged versions on 14 days |
 | Size | 29 crates, about 589,000 lines of Rust in 960 files |
 | For agents | 318 MCP tools, 14 workspace rights, 4 permissions per database connection |
@@ -1019,12 +1023,20 @@ is missing.
 Requirements: `git`, and the stable Rust toolchain with `rustfmt` and `clippy`, Rust 1.89 or newer,
 installed with [rustup](https://rustup.rs). The checkout's `rust-toolchain.toml` names that
 toolchain; `rustup toolchain install` in the checkout installs or updates it. On macOS, the Xcode
-command line tools (`xcode-select --install`). On Linux, the libraries the window toolkit needs:
+command line tools (`xcode-select --install`). On Linux (Debian and Ubuntu package names): a C and
+C++ compiler and `pkg-config`, because SQLite and DuckDB are compiled from their bundled sources;
+the OpenSSL headers; and the libraries the window toolkit needs:
 
 ```sh
-sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libfontconfig-dev \
+sudo apt-get install -y build-essential pkg-config libssl-dev \
+  libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libfontconfig-dev \
   libfreetype-dev libx11-xcb-dev libxcb1-dev libvulkan-dev
 ```
+
+On 64-bit ARM Linux also `lld`: the checkout's `.cargo/config.toml` links with it there, because
+GNU ld cannot link the debug build on that architecture. To open the window, Linux needs a Vulkan
+driver; without a graphics driver that brings one, Mesa's software driver works
+(`mesa-vulkan-drivers`).
 
 Clone the repository with `git clone` and the URL GitHub shows under **Code**, then `cd` into the
 new folder. In that checkout:
@@ -1050,8 +1062,12 @@ Notes:
 
 Verified for this page on 2026-11-16, in a fresh clone on macOS 27 (Apple Silicon): `cargo build
 -p idecraft`, `idecraft --version`, `idecraft ui`, `idecraft mcp`, `idecraft call` and
-`scripts/bundle-macos.sh`; the window self-test of the bundle passed 1063 of 1063 checks. The Linux package list is the one the CI workflow installs; the Linux build and
-`idecraft ui` were not re-run for this page.
+`scripts/bundle-macos.sh`; the window self-test of the bundle passed 1063 of 1063 checks. The
+Linux packages are the ones the build scripts of the bundled C libraries and the window toolkit
+need, as the Linux self-test machine installs them (`scripts/linux-ui-selftest-lima.sh`). On
+Ubuntu 24.04 (x86_64, gcc 13) on the same day: `cargo build -p idecraft`, `idecraft --version`, `idecraft call`, `idecraft mcp` and the database steps of Try It
+in Five Minutes; `idecraft ui` and its self-test were not re-run there, because that machine has
+no display.
 
 ## Configuration and Files
 
@@ -1110,7 +1126,7 @@ There is no chat and no support promise.
 **Versioning.** [Semantic Versioning](https://semver.org/) with `0.x` versions until 1.0. A
 working day with user-visible changes gets a minor version and an annotated tag; there are no
 GitHub releases. File formats carry a version and older ones are migrated on read. No
-compatibility promise is recorded for tool names and schemas during alpha.
+compatibility promise is recorded for tool names and schemas before 1.0.
 
 ## FAQ
 
@@ -1181,7 +1197,7 @@ free.
 <details>
 <summary><b>Is it a replacement for the reference IDE?</b></summary>
 
-No. The reference defines the functional target. IDECraft is alpha.
+No. The reference defines the functional target. IDECraft is beta: usable day to day for its two priority workflows, not yet 1.0.
 
 </details>
 
@@ -1226,7 +1242,7 @@ licensor's written consent. The licensor is Damien Frigewski; ask by e-mail to
 [LICENSING.md](LICENSING.md) answers common questions.
 
 IDECraft comes as is, without warranty, as far as the law allows (license, "No Liability"). It is
-alpha software: keep backups of what you open with it.
+beta software: keep backups of what you open with it.
 
 The name and logo are not covered by the license: [TRADEMARKS.md](TRADEMARKS.md) says how the
 project wants them used. "IDECraft" is not a registered trademark. Third-party parts keep their own licenses: [NOTICE](NOTICE),

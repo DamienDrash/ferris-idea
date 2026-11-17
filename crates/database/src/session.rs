@@ -20,6 +20,91 @@ pub(crate) fn mode_name(mode: SslMode) -> &'static str {
     }
 }
 
+/// Whether `host` reaches its server through this machine's loopback (`SPEC-0016` v3 behaviour 3):
+/// `localhost` in any case, an address in 127.0.0.0/8, `::1` (also `[::1]`), or a PostgreSQL
+/// socket folder. No host means the drivers' default, `localhost`. Anything else — also
+/// `0.0.0.0`, a name that merely starts with `localhost` or an IPv4 address written as IPv6 —
+/// counts as another machine.
+pub fn is_loopback(host: Option<&str>) -> bool {
+    let Some(host) = host else {
+        return true;
+    };
+    if host.starts_with('/') || host.eq_ignore_ascii_case("localhost") {
+        return true;
+    }
+    let bare = host
+        .strip_prefix('[')
+        .and_then(|h| h.strip_suffix(']'))
+        .unwrap_or(host);
+    bare.parse::<std::net::IpAddr>()
+        .is_ok_and(|ip| ip.is_loopback())
+}
+
+/// What a profile's SSL mode asks of the connection on its host (`SPEC-0016` v3 behaviour 3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TlsPlan {
+    /// No TLS (`disable`).
+    Off,
+    /// TLS when the server offers it, and one retry without it after TLS itself failed: `prefer`
+    /// for a server on the loopback.
+    Optional,
+    /// TLS or no connection: `require`, `verify-ca`, `verify-full`, and `prefer` for a server off
+    /// the loopback.
+    Required,
+}
+
+/// The [`TlsPlan`] of `profile`: its mode on its host. Through an SSH tunnel the profile's host is
+/// where the database is as the SSH server sees it, so that host decides, not the tunnel's end.
+pub fn tls_plan(profile: &ConnectionProfile) -> TlsPlan {
+    match profile.ssl {
+        SslMode::Disable => TlsPlan::Off,
+        SslMode::Prefer if is_loopback(profile.host.as_deref()) => TlsPlan::Optional,
+        _ => TlsPlan::Required,
+    }
+}
+
+/// How to give a server of `dialect` TLS (`SPEC-0016` v3 behaviour 13).
+fn server_tls_hint(dialect: Dialect) -> &'static str {
+    match dialect {
+        Dialect::PostgreSql => {
+            "set `ssl = on` with a certificate and its key (`ssl_cert_file`, `ssl_key_file`) in \
+             postgresql.conf"
+        }
+        Dialect::MySql | Dialect::MariaDb => {
+            "give the server a certificate and its key (`ssl_cert`, `ssl_key` in its option file; \
+             MySQL 8 and MariaDB 11.4 or newer make their own at the first start)"
+        }
+        Dialect::SqlServer => {
+            "install a certificate for the instance (`mssql-conf set network.tlscert` and \
+             `network.tlskey` on Linux, the SQL Server Configuration Manager on Windows)"
+        }
+        Dialect::Oracle => {
+            "set up a TCPS listener with a wallet and put its port in the profile, if the server \
+             has none"
+        }
+        Dialect::Sqlite | Dialect::DuckDb => "",
+    }
+}
+
+/// The error of a `prefer` connection to a server off the loopback that got no TLS (`SPEC-0016` v3
+/// behaviour 13): the address, the reason, that the server needs TLS and how to give it TLS —
+/// never a weaker mode.
+pub(crate) fn prefer_needs_tls(
+    profile: &ConnectionProfile,
+    address: &str,
+    reason: &str,
+) -> SessionError {
+    SessionError::Tls {
+        profile: profile.name.clone(),
+        mode: mode_name(SslMode::Prefer),
+        message: format!(
+            "{address}: {reason}. The server is not on this machine, so `prefer` connects only \
+             with TLS, as `require` does. To give the server TLS: {}",
+            server_tls_hint(profile.dialect)
+        ),
+    }
+}
+
 /// The certificate checks of `mode`, and never below TLS 1.2 (SPEC-0016 v2 behaviour 9).
 fn checks(builder: &mut native_tls::TlsConnectorBuilder, mode: SslMode) {
     builder.min_protocol_version(Some(native_tls::Protocol::Tlsv12));
@@ -488,8 +573,19 @@ impl Driver {
     }
 
     /// Whether the connection is encrypted, as the server reports it; `None`
-    /// for SQLite (no network) or when the server does not tell.
+    /// for SQLite (no network) or when the server does not tell. SQL Server tells only a login
+    /// that may see the server's connections; for any other the driver's agreement with the server
+    /// answers (`SPEC-0116` v5 behaviour 13).
     pub async fn encrypted(&self) -> Option<bool> {
+        let reported = self.reported_encryption().await;
+        match self {
+            Self::SqlServer(s) => reported.or(Some(s.encrypted())),
+            _ => reported,
+        }
+    }
+
+    /// What the server says about the encryption of this connection, if it says anything.
+    async fn reported_encryption(&self) -> Option<bool> {
         let probe = match self {
             Self::Postgres(_) => "select ssl from pg_stat_ssl where pid = pg_backend_pid()",
             Self::MySql(_) => "show session status like 'Ssl_cipher'",
@@ -669,6 +765,82 @@ mod tests {
                 .contains("no PEM certificate")
         );
         let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// SPEC-0016 v3 AK-10: `prefer` may end without TLS only on the loopback; every other mode
+    /// means the same on every host.
+    #[test]
+    fn prefer_needs_tls_off_the_loopback() {
+        let plan = |host: Option<&str>, mode: SslMode| {
+            let mut p = ConnectionProfile::from_url("p", "postgresql://u@h/db").unwrap();
+            p.host = host.map(str::to_owned);
+            p.ssl = mode;
+            tls_plan(&p)
+        };
+        let loopback = [
+            Some("localhost"),
+            Some("LocalHost"),
+            Some("127.0.0.1"),
+            Some("127.1.2.3"),
+            Some("::1"),
+            Some("[::1]"),
+            Some("/var/run/postgresql"),
+            None,
+        ];
+        let elsewhere = [
+            "db.example",
+            "10.0.0.5",
+            "192.168.1.20",
+            "localhost.example",
+            "::ffff:10.0.0.5",
+            "0.0.0.0",
+            "",
+        ];
+        for host in loopback {
+            assert!(is_loopback(host), "{host:?}");
+            assert_eq!(plan(host, SslMode::Prefer), TlsPlan::Optional, "{host:?}");
+        }
+        for host in elsewhere {
+            assert!(!is_loopback(Some(host)), "{host}");
+            assert_eq!(
+                plan(Some(host), SslMode::Prefer),
+                TlsPlan::Required,
+                "{host}"
+            );
+        }
+        for host in loopback.into_iter().chain(elsewhere.map(Some)) {
+            assert_eq!(plan(host, SslMode::Disable), TlsPlan::Off);
+            for mode in [SslMode::Require, SslMode::VerifyCa, SslMode::VerifyFull] {
+                assert_eq!(plan(host, mode), TlsPlan::Required, "{host:?} {mode:?}");
+            }
+        }
+    }
+
+    /// SPEC-0016 v3 AK-11: the error names `prefer`, the reason and the server's TLS setting of
+    /// each system, and proposes no weaker mode.
+    #[test]
+    fn the_hint_says_how_to_give_the_server_tls() {
+        for (url, setting) in [
+            ("postgresql://u@db.example/d", "ssl = on"),
+            ("mysql://u@db.example/d", "ssl_cert"),
+            ("mariadb://u@db.example/d", "ssl_key"),
+            ("sqlserver://u@db.example/d", "network.tlscert"),
+            ("oracle://u@db.example:1521/FREEPDB1", "TCPS listener"),
+        ] {
+            let p = ConnectionProfile::from_url("remote", url).unwrap();
+            let e =
+                prefer_needs_tls(&p, "db.example:1", "the server does not offer TLS").to_string();
+            assert!(e.contains("SSL mode `prefer`"), "{e}");
+            assert!(
+                e.contains("db.example:1: the server does not offer TLS"),
+                "{e}"
+            );
+            assert!(
+                e.contains("not on this machine") && e.contains(setting),
+                "{e}"
+            );
+            assert!(!e.contains("disable"), "{e}");
+        }
     }
 
     /// SPEC-0016 v2 AK-6: a CA file replaces the system's roots and is parsed.

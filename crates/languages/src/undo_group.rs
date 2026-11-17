@@ -211,6 +211,13 @@ impl UndoGroups {
         self.groups.iter().rposition(|g| !g.undone)
     }
 
+    /// The group a redo takes next (MCP `redo_refactoring`): the undone group that was undone
+    /// last. Undo goes from the newest group backwards, so the undone groups are the newest ones
+    /// and the oldest of them was undone last.
+    pub fn next_redo(&self) -> Option<usize> {
+        self.groups.iter().position(|g| g.undone)
+    }
+
     /// Group `i`.
     pub fn get(&self, i: usize) -> Option<&Group> {
         self.groups.get(i)
@@ -248,7 +255,7 @@ pub fn undo_on_disk(
     redo: bool,
 ) -> Result<(String, Vec<PathBuf>), String> {
     let i = if redo {
-        groups.groups.iter().rposition(|g| g.undone)
+        groups.next_redo()
     } else {
         groups.newest()
     }
@@ -259,7 +266,8 @@ pub fn undo_on_disk(
     }) {
         groups.forget(i);
         return Err(format!(
-            "cannot undo {}: {} changed since",
+            "cannot {} {}: {} changed since",
+            if redo { "redo" } else { "undo" },
             group.name,
             path.display()
         ));
@@ -583,6 +591,68 @@ mod tests {
         assert!(err.contains("b.c changed since"), "{err}");
         assert_eq!(std::fs::read_to_string(&a).unwrap(), "int calc();\n");
         assert!(groups.is_empty(), "the group is forgotten");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// SPEC-0193 v6 behaviour 11: two refactorings of one file, both undone, are redone in the
+    /// order they were made — the one undone last first. Before v6 redo took the newest undone
+    /// group, whose check failed, and that group was forgotten.
+    #[test]
+    fn redo_takes_the_group_undone_last() {
+        let one = |before: &str, after: &str| {
+            Group::new(
+                format!("{before} to {after}"),
+                vec![Part {
+                    path: PathBuf::from("/p/a.c"),
+                    before: before.into(),
+                    after: after.into(),
+                    step: None,
+                }],
+            )
+        };
+        let mut groups = UndoGroups::default();
+        groups.push(one("a", "b"));
+        groups.push(one("b", "c"));
+        assert_eq!(groups.next_redo(), None, "nothing undone");
+        groups.set_undone(groups.newest().unwrap(), true);
+        assert_eq!(groups.newest(), Some(0));
+        groups.set_undone(0, true);
+        assert_eq!(groups.next_redo(), Some(0), "a to b was undone last");
+        groups.set_undone(0, false);
+        assert_eq!(groups.next_redo(), Some(1));
+
+        let root = std::env::temp_dir().join(format!("idecraft-redo-order-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let root = root.canonicalize().unwrap();
+        let a = root.join("a.c");
+        let on_disk = |before: &str, after: &str| {
+            Group::new(
+                format!("{before} to {after}"),
+                vec![Part {
+                    path: a.clone(),
+                    before: before.into(),
+                    after: after.into(),
+                    step: None,
+                }],
+            )
+        };
+        std::fs::write(&a, "c").unwrap();
+        let mut groups = UndoGroups::default();
+        groups.push(on_disk("a", "b"));
+        groups.push(on_disk("b", "c"));
+        undo_on_disk(&mut groups, &root, false).unwrap();
+        undo_on_disk(&mut groups, &root, false).unwrap();
+        assert_eq!(std::fs::read_to_string(&a).unwrap(), "a");
+        let (name, _) = undo_on_disk(&mut groups, &root, true).unwrap();
+        assert_eq!(name, "a to b");
+        assert_eq!(std::fs::read_to_string(&a).unwrap(), "b");
+        let (name, _) = undo_on_disk(&mut groups, &root, true).unwrap();
+        assert_eq!(name, "b to c");
+        assert_eq!(std::fs::read_to_string(&a).unwrap(), "c");
+        assert_eq!(groups.len(), 2, "both kept");
+        let err = undo_on_disk(&mut groups, &root, true).unwrap_err();
+        assert_eq!(err, "nothing to redo");
         let _ = std::fs::remove_dir_all(&root);
     }
 }

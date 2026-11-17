@@ -779,9 +779,10 @@ impl ConnectionDialog {
                 shown.extend([7, URL_FIELD]);
                 shown
             }
-            // Tunnels and certificate files exist for the PostgreSQL and MySQL families.
-            DialogPage::SshSsl if self.has_ssh_ssl() => vec![9, 10, 11, 12, 13, 14],
-            DialogPage::SshSsl => Vec::new(),
+            DialogPage::SshSsl => ssh_ssl_fields(
+                self.dialect,
+                self.connector().is_none_or(|c| c.has_field(Field::Host)),
+            ),
             DialogPage::Options => vec![15, 16, 17, 18, 19],
         }
     }
@@ -1190,7 +1191,11 @@ impl Render for ConnectionDialog {
                     div()
                         .text_xs()
                         .text_color(c(p.ui_muted))
-                        .child("SSH tunnels and certificate files are available for PostgreSQL, MySQL and MariaDB."),
+                        .child(if self.dialect == Dialect::SqlServer {
+                            "SQL Server takes a CA file; SSH tunnels and client certificates are available for PostgreSQL, MySQL and MariaDB."
+                        } else {
+                            "SSH tunnels and certificate files are available for PostgreSQL, MySQL and MariaDB."
+                        }),
                 )
             })
             .when(self.page == DialogPage::Options, |d| {
@@ -1431,9 +1436,34 @@ pub fn system_line(connector: &Connector) -> String {
     }
 }
 
+/// The fields of the SSH/SSL page for `dialect` (v4 behaviour 8): tunnel and certificate files
+/// for the PostgreSQL and MySQL families, only the CA file for SQL Server (`SPEC-0116` v6
+/// behaviour 15), none for the others or for a system without a server address.
+fn ssh_ssl_fields(dialect: Dialect, has_host: bool) -> Vec<usize> {
+    match dialect {
+        _ if !has_host => Vec::new(),
+        Dialect::PostgreSql | Dialect::MySql | Dialect::MariaDb => vec![9, 10, 11, 12, 13, 14],
+        Dialect::SqlServer => vec![12],
+        _ => Vec::new(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// SPEC-0116 v6 AK-10: SQL Server's SSH/SSL page has the CA file only.
+    #[test]
+    fn sql_server_shows_only_the_ca_file() {
+        assert_eq!(ssh_ssl_fields(Dialect::SqlServer, true), [12]);
+        assert_eq!(FIELDS[12], "CA file");
+        assert_eq!(
+            ssh_ssl_fields(Dialect::PostgreSql, true),
+            [9, 10, 11, 12, 13, 14]
+        );
+        assert!(ssh_ssl_fields(Dialect::Oracle, true).is_empty());
+        assert!(ssh_ssl_fields(Dialect::SqlServer, false).is_empty());
+    }
 
     /// SPEC-0116 v3 AK-6: the line names the tested version and the note.
     #[test]

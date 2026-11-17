@@ -14,6 +14,7 @@ mod kinds;
 mod kotlin_classes;
 mod kotlin_gate;
 pub mod lifetime;
+pub mod native;
 mod paths;
 mod protocol;
 pub mod saved;

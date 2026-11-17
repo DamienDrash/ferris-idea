@@ -121,6 +121,10 @@ impl RenameTarget {
     }
 }
 
+/// The selected row's node and the nodes of the rows it hangs under, nearest first: what the
+/// selection follows while rows come and go (`SPEC-0089` v14 behaviour 26).
+type Selected = (Node, Vec<Node>);
+
 /// Connections and the state of the tree.
 pub struct DatabaseView {
     root: PathBuf,
@@ -130,8 +134,10 @@ pub struct DatabaseView {
     /// Why `connections.toml` could not be read, if so.
     problem: Option<String>,
     expanded: HashSet<Node>,
-    /// The node to select again once its row is back after [`Self::reload_keeping`].
-    keep_selection: Option<Node>,
+    /// The node to select again once its row is back (after [`Self::reload_keeping`] or while its
+    /// connection is read again), with the nodes it hangs under, nearest first (`SPEC-0089` v14
+    /// behaviour 26).
+    keep_selection: Option<Selected>,
     /// The row the user selected (a click, the keys, an action that selects a node); none until
     /// then, so an untouched tree names no connection (`SPEC-0192` v7 behaviour 3b, OBS-0070 G1).
     selected: Option<usize>,
@@ -148,14 +154,20 @@ pub struct DatabaseView {
 
 impl EventEmitter<DatabaseEvent> for DatabaseView {}
 
-/// What reading a schema gives: tables and views, the names of the other schemas, the sequences,
-/// the routines, triggers and types.
-type ReadSchema = (
-    Vec<Table>,
-    Vec<String>,
-    Vec<String>,
-    Vec<idecraft_database::SchemaObject>,
-);
+/// What reading a schema gives.
+struct ReadSchema {
+    /// The tables and views.
+    tables: Vec<Table>,
+    /// The names of the other schemas.
+    others: Vec<String>,
+    /// The sequences.
+    sequences: Vec<String>,
+    /// The routines, triggers and types (`SPEC-0089` v13 behaviour 25).
+    objects: Vec<idecraft_database::SchemaObject>,
+    /// Whether the session was encrypted (`SPEC-0089` v12 behaviour 24); `None` when the server
+    /// does not say.
+    tls: Option<bool>,
+}
 
 /// Reads the tables and views of `profile`'s current schema, the names of its other schemas and
 /// its sequences (behaviours 3, 8 and v5 behaviour 12; a failed listing leaves the names out), or
@@ -175,7 +187,13 @@ fn read_schema(profile: &ConnectionProfile, other: Option<&str>) -> Result<ReadS
             let tables = idecraft_database::introspect_schema(&session, other)
                 .await
                 .map_err(|e| e.to_string())?;
-            return Ok((tables, Vec::new(), Vec::new(), Vec::new()));
+            return Ok(ReadSchema {
+                tables,
+                others: Vec::new(),
+                sequences: Vec::new(),
+                objects: Vec::new(),
+                tls: None,
+            });
         }
         let tables = introspect(&session).await.map_err(|e| e.to_string())?;
         let others = idecraft_database::list_schemas(&session)
@@ -195,7 +213,13 @@ fn read_schema(profile: &ConnectionProfile, other: Option<&str>) -> Result<ReadS
             .into_iter()
             .filter(|o| o.kind != "sequence")
             .collect();
-        Ok((tables, others, sequences, objects))
+        Ok(ReadSchema {
+            tables,
+            others,
+            sequences,
+            objects,
+            tls: session.encrypted().await,
+        })
     })
 }
 
@@ -356,6 +380,7 @@ impl DatabaseView {
                         load: Load::NotLoaded,
                         schemas: Vec::new(),
                         sequences: Vec::new(),
+                        tls: None,
                         objects: Vec::new(),
                     })
                     .collect();
@@ -386,6 +411,7 @@ impl DatabaseView {
         }
         self.expanded.clear();
         self.selected = None;
+        self.keep_selection = None;
         self.search = None;
     }
 
@@ -396,7 +422,7 @@ impl DatabaseView {
         let old_conns: Vec<String> = self.conns.iter().map(|c| c.profile.id.clone()).collect();
         let old_stores: Vec<String> = self.stores.iter().map(|s| s.profile.id.clone()).collect();
         let open: Vec<Node> = self.expanded.iter().cloned().collect();
-        let selected = self.selected_node();
+        let selected = self.selection_path();
         let search = self.search.take();
         self.reload();
         self.search = search;
@@ -416,8 +442,11 @@ impl DatabaseView {
                 }
             }
         }
-        self.keep_selection = selected.as_ref().and_then(carry);
-        self.select_kept();
+        // A parent of a connection that is gone is dropped with it; the connection row stays.
+        let selected = selected.and_then(|(node, parents)| {
+            Some((carry(&node)?, parents.iter().filter_map(carry).collect()))
+        });
+        self.reselect(selected, true);
         // Every refresh of the tree tells the SQL editors (SPEC-0089 v11 behaviour 23): until v11
         // the toolbar button refreshed the tree alone and the editors kept the old schema.
         cx.emit(DatabaseEvent::Refreshed(None));
@@ -432,17 +461,57 @@ impl DatabaseView {
 
     /// Selects the node kept by [`Self::reload_keeping`] once its row is there again.
     fn select_kept(&mut self) {
-        let Some(node) = self.keep_selection.clone() else {
+        let kept = self.keep_selection.take();
+        self.reselect(kept, true);
+    }
+
+    /// The selected row's node with the nodes of the rows it hangs under, nearest first; `None`
+    /// without a selection or on a message row.
+    fn selection_path(&self) -> Option<Selected> {
+        let rows = self.rows();
+        let at = self.selected?;
+        let row = rows.get(at)?;
+        let node = row.node.clone()?;
+        let mut depth = row.depth;
+        let mut parents = Vec::new();
+        for r in rows[..at].iter().rev() {
+            if r.depth < depth {
+                depth = r.depth;
+                parents.extend(r.node.clone());
+            }
+        }
+        Some((node, parents))
+    }
+
+    /// Selects `path`'s node again after the rows changed (`SPEC-0089` v14 behaviour 26): the
+    /// selection is the node, not the row number it had. While the node has no row, its nearest
+    /// parent that has one is selected; with `keep` the node is selected again once its row is back
+    /// (a connection being read again), unless the user selects another row first.
+    fn reselect(&mut self, path: Option<Selected>, keep: bool) {
+        let Some((node, parents)) = path else {
             return;
         };
-        if let Some(i) = self
-            .rows()
-            .iter()
-            .position(|r| r.node.as_ref() == Some(&node))
-        {
+        let rows = self.rows();
+        let at = |n: &Node| rows.iter().position(|r| r.node.as_ref() == Some(n));
+        if let Some(i) = at(&node) {
             self.selected = Some(i);
             self.keep_selection = None;
+            return;
         }
+        self.selected = parents.iter().find_map(at);
+        self.keep_selection = keep.then_some((node, parents));
+    }
+
+    /// Runs `change`, which adds or removes rows, keeping the selection on its node.
+    fn keeping_selection<R>(&mut self, keep: bool, change: impl FnOnce(&mut Self) -> R) -> R {
+        let path = self.selection_path();
+        let out = change(self);
+        if self.keep_selection.is_some() {
+            self.select_kept();
+        } else {
+            self.reselect(path, keep);
+        }
+        out
     }
 
     /// The node of the selected row, if the user selected one.
@@ -522,10 +591,14 @@ impl DatabaseView {
     }
 
     /// Reads the schema of the connection with `id` again, keeping the tree open (after a rename).
+    /// The selection stays on its node: on the connection while it is read, back on the node once
+    /// its row is there again, on its nearest parent if it is gone (`SPEC-0089` v14 behaviour 26).
     pub fn refresh_connection(&mut self, id: &str, cx: &mut Context<Self>) {
         if let Some(i) = self.conns.iter().position(|c| c.profile.id == id) {
-            self.conns[i].load = Load::NotLoaded;
-            self.expand(Node::Conn(i), cx);
+            self.keeping_selection(true, |this| {
+                this.conns[i].load = Load::NotLoaded;
+                this.expand_rows(Node::Conn(i), cx);
+            });
         }
     }
 
@@ -580,15 +653,17 @@ impl DatabaseView {
                     })
                     .await;
                 let _ = this.update(cx, |this, cx| {
-                    if let Some(store) = this.stores.get_mut(i) {
-                        store.levels.insert(
-                            path,
-                            match read {
-                                Ok(items) => StoreLoad::Loaded(items),
-                                Err(e) => StoreLoad::Failed(e),
-                            },
-                        );
-                    }
+                    this.keeping_selection(true, |this| {
+                        if let Some(store) = this.stores.get_mut(i) {
+                            store.levels.insert(
+                                path,
+                                match read {
+                                    Ok(items) => StoreLoad::Loaded(items),
+                                    Err(e) => StoreLoad::Failed(e),
+                                },
+                            );
+                        }
+                    });
                     cx.notify();
                 });
             })
@@ -597,8 +672,14 @@ impl DatabaseView {
     }
 
     /// Expands `node`; a connection or another schema is read in the background the first time
-    /// (behaviours 3 and 8); a retry row reads it again (v3 behaviour 9).
+    /// (behaviours 3 and 8); a retry row reads it again (v3 behaviour 9). The selection stays on
+    /// its node (v14 behaviour 26).
     pub fn expand(&mut self, node: Node, cx: &mut Context<Self>) {
+        self.keeping_selection(true, |this| this.expand_rows(node, cx));
+    }
+
+    /// [`Self::expand`] without keeping the selection.
+    fn expand_rows(&mut self, node: Node, cx: &mut Context<Self>) {
         if let Node::Store(i, path) = &node {
             self.expand_store(*i, path.clone(), cx);
             self.expanded.insert(node);
@@ -610,7 +691,7 @@ impl DatabaseView {
                 if let Some(conn) = self.conns.get_mut(i) {
                     conn.load = Load::NotLoaded;
                 }
-                return self.expand(Node::Conn(i), cx);
+                return self.expand_rows(Node::Conn(i), cx);
             }
             Node::SchemaRetry(i, name) => {
                 if let Some(entry) = self
@@ -620,7 +701,7 @@ impl DatabaseView {
                 {
                     entry.1 = Load::NotLoaded;
                 }
-                return self.expand(Node::Schema(i, name), cx);
+                return self.expand_rows(Node::Schema(i, name), cx);
             }
             _ => {}
         }
@@ -652,8 +733,9 @@ impl DatabaseView {
                     .await;
                 let _ = this.update(cx, |this, cx| {
                     // The rows the read adds come before the rows of later connections: the
-                    // selected row stays selected, not the row that takes its place.
-                    let chosen = this.selected_node();
+                    // selected node stays selected, not the row that takes its place (v14
+                    // behaviour 26).
+                    let chosen = this.selection_path();
                     let Some(conn) = this.conns.get_mut(i) else {
                         return;
                     };
@@ -661,10 +743,17 @@ impl DatabaseView {
                     let failed = read.is_err();
                     match other {
                         None => match read {
-                            Ok((tables, others, sequences, objects)) => {
+                            Ok(ReadSchema {
+                                tables,
+                                others,
+                                sequences,
+                                objects,
+                                tls,
+                            }) => {
                                 conn.load = Load::Loaded(tables);
                                 conn.sequences = sequences;
                                 conn.objects = objects;
+                                conn.tls = tls;
                                 // SPEC-0089 v6 behaviour 16: the connection's schema filter.
                                 let filter = this.filter_schemas;
                                 let options = conn.profile.options.clone();
@@ -679,7 +768,7 @@ impl DatabaseView {
                         Some(name) => {
                             if let Some(entry) = conn.schemas.iter_mut().find(|(n, _)| *n == name) {
                                 entry.1 = match read {
-                                    Ok((tables, ..)) => Load::Loaded(tables),
+                                    Ok(ReadSchema { tables, .. }) => Load::Loaded(tables),
                                     Err(e) => Load::Failed(e),
                                 };
                             }
@@ -690,10 +779,8 @@ impl DatabaseView {
                     }
                     if this.keep_selection.is_some() {
                         this.select_kept();
-                    } else if let Some(at) = chosen
-                        .and_then(|n| this.rows().iter().position(|r| r.node.as_ref() == Some(&n)))
-                    {
-                        this.selected = Some(at);
+                    } else {
+                        this.reselect(chosen, true);
                     }
                     cx.notify();
                 });
@@ -723,7 +810,7 @@ impl DatabaseView {
                 }
             }
         }
-        self.expanded.extend(nodes);
+        self.keeping_selection(true, |this| this.expanded.extend(nodes));
         cx.notify();
     }
 
@@ -770,9 +857,11 @@ impl DatabaseView {
                     },
                 );
             }
+            // A selected row inside the collapsed node gives the selection to its nearest
+            // shown parent (v14 behaviour 26).
             C::Collapse(i) => {
                 if let Some(n) = node(i) {
-                    self.expanded.remove(&n);
+                    self.keeping_selection(false, |this| this.expanded.remove(&n));
                 }
             }
             C::Open(i) => {

@@ -65,6 +65,8 @@ pub fn tree_only(report: &TestReport) -> TestReport {
             suites: s.suites.iter().map(strip).collect(),
             output: None,
             totals: s.totals,
+            // The tree only: no paths (SPEC-0088 v3 behaviour 9).
+            file: None,
         }
     }
     TestReport {
@@ -151,6 +153,7 @@ mod tests {
                 suites: Vec::new(),
                 output: Some("env".into()),
                 totals: Totals::default(),
+                file: Some("/work/test_prices.py".into()),
             }],
             totals: Totals::default(),
         }
@@ -173,7 +176,7 @@ mod tests {
         assert_eq!(all[9].time, 1002);
         let file = history_file(&dir, &root, "test_prices.py");
         let text = std::fs::read_to_string(&file).unwrap();
-        for secret in ["s3cr3t", "hunter2", "Traceback", "env\""] {
+        for secret in ["s3cr3t", "hunter2", "Traceback", "env\"", "/work/"] {
             assert!(!text.contains(secret), "{secret} in {text}");
         }
         assert!(text.contains("test_total"));

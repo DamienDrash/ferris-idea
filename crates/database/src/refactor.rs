@@ -2876,6 +2876,9 @@ mod tests {
                     nullable: true,
                     default: None,
                     generated: None,
+                    expression: None,
+                    identity: None,
+                    comment: None,
                 })
                 .collect(),
             primary_key: vec![],
@@ -2883,6 +2886,7 @@ mod tests {
             indexes: vec![],
             unreadable: None,
             constraints: Vec::new(),
+            comment: None,
         }
     }
 
@@ -2902,6 +2906,9 @@ mod tests {
             columns: vec!["sku".into()],
             condition: None,
             collations: Vec::new(),
+            method: None,
+            orders: Vec::new(),
+            prefixes: Vec::new(),
         });
         s[1].columns[2].nullable = false;
         s[1].columns[2].default = Some("0".into());
@@ -3294,6 +3301,9 @@ mod tests {
                     columns: vec!["sku".into()],
                     condition: None,
                     collations: Vec::new(),
+                    method: None,
+                    orders: Vec::new(),
+                    prefixes: Vec::new(),
                 },
                 crate::Index {
                     name: "idx_item_unit_price_cents".into(),
@@ -3301,10 +3311,14 @@ mod tests {
                     columns: vec!["unit_price_cents".into()],
                     condition: None,
                     collations: Vec::new(),
+                    method: None,
+                    orders: Vec::new(),
+                    prefixes: Vec::new(),
                 },
             ],
             unreadable: None,
             constraints: Vec::new(),
+            comment: None,
         };
         let c = |name: &str, kind: &str| ConstraintName {
             table: "item".into(),
@@ -3414,6 +3428,9 @@ mod tests {
             columns: vec![],
             condition: None,
             collations: Vec::new(),
+            method: None,
+            orders: Vec::new(),
+            prefixes: Vec::new(),
         });
         let taken = derived_renames(
             Dialect::PostgreSql,

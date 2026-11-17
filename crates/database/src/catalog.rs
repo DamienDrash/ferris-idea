@@ -20,10 +20,42 @@ pub struct SchemaInfo {
 /// The non-system schemas of the session's database, current one marked, sorted by name.
 pub async fn list_schemas(session: &Session) -> Result<Vec<SchemaInfo>, DbError> {
     let dialect = session.dialect();
+    let rows = query(session, schemas_query(session)).await?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|row| {
+            let name = row.first().cloned().flatten()?;
+            let current = matches!(
+                row.get(1).cloned().flatten().as_deref(),
+                Some("1" | "t" | "true" | "TRUE")
+            );
+            (current || !is_system_schema(dialect, &name)).then_some(SchemaInfo { name, current })
+        })
+        .collect())
+}
+
+/// Whether the session's database has schema `name`, a system schema too (`SPEC-0013` v9
+/// behaviour 28). PostgreSQL and DuckDB compare names exactly, the others ignoring case.
+pub(crate) async fn schema_exists(session: &Session, name: &str) -> Result<bool, DbError> {
+    let exact = matches!(session.dialect(), Dialect::PostgreSql | Dialect::DuckDb);
+    let rows = query(session, schemas_query(session)).await?;
+    Ok(rows.iter().any(|row| {
+        row.first().cloned().flatten().is_some_and(|found| {
+            if exact {
+                found == name
+            } else {
+                found.eq_ignore_ascii_case(name)
+            }
+        })
+    }))
+}
+
+/// The catalogue query of the schemas: name, `1` for the current one.
+fn schemas_query(session: &Session) -> &str {
     let custom = session
         .system()
         .and_then(|c| c.introspection.schemas.as_deref());
-    let sql = custom.unwrap_or(match dialect {
+    custom.unwrap_or(match session.dialect() {
         Dialect::PostgreSql => {
             "select nspname, case when nspname = current_schema() then '1' else '0' end \
              from pg_namespace order by 1"
@@ -45,19 +77,7 @@ pub async fn list_schemas(session: &Session) -> Result<Vec<SchemaInfo>, DbError>
             "select schema_name, case when schema_name = current_schema() then '1' else '0' end \
              from information_schema.schemata where catalog_name = current_database() order by 1"
         }
-    });
-    let rows = query(session, sql).await?;
-    Ok(rows
-        .into_iter()
-        .filter_map(|row| {
-            let name = row.first().cloned().flatten()?;
-            let current = matches!(
-                row.get(1).cloned().flatten().as_deref(),
-                Some("1" | "t" | "true" | "TRUE")
-            );
-            (current || !is_system_schema(dialect, &name)).then_some(SchemaInfo { name, current })
-        })
-        .collect())
+    })
 }
 
 /// The schema a new session lands in: the default schema of the data source.

@@ -548,3 +548,66 @@ fn npm_and_python_lock_files() {
     assert_eq!(model.problems.len(), 1, "{:?}", model.problems);
     assert!(model.problems[0].starts_with("lock file of bad:"));
 }
+
+/// SPEC-0048 v8 behaviour 6a (AK-16): a module of a Spring Boot, Quarkus or Micronaut
+/// application gets a configuration that starts it, from its dependencies or Maven plugins, with
+/// the timeout of a server; a plain Java module gets none.
+#[test]
+fn framework_applications_get_a_start_configuration() {
+    let fixtures = repo_root().join("crates/languages/tests/fixtures/frameworks");
+    let started = |root: &Path, build: &str| -> Vec<(String, Vec<String>, Option<u64>)> {
+        suggest_run_configs(&read_project(root, &[root.join(build)]))
+            .into_iter()
+            .filter(|c| c.timeout.is_some())
+            .map(|c| (c.name, c.command, c.timeout))
+            .collect()
+    };
+    let day = Some(idecraft_core::SERVER_TIMEOUT_SECS);
+    let cmd = |s: &[&str]| s.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+    assert_eq!(
+        started(&fixtures.join("spring-shop"), "pom.xml"),
+        [("Spring Boot".into(), cmd(&["mvn", "spring-boot:run"]), day)]
+    );
+    assert_eq!(
+        started(&fixtures.join("quarkus-greeting"), "pom.xml"),
+        [("Quarkus dev".into(), cmd(&["mvn", "quarkus:dev"]), day)]
+    );
+    assert_eq!(
+        started(&fixtures.join("micronaut-notes"), "build.gradle"),
+        [("Micronaut run".into(), cmd(&["gradle", "run"]), day)]
+    );
+    assert!(started(&fixtures.join("jakarta-library"), "pom.xml").is_empty());
+
+    let d = Dir::new("frameworks");
+    d.write(
+        "boot/build.gradle.kts",
+        "plugins {\n    id(\"org.springframework.boot\") version \"3.3.4\"\n}\n\
+         dependencies {\n    implementation(\"org.springframework.boot:spring-boot-starter-web\")\n}\n",
+    );
+    d.write(
+        "mn/pom.xml",
+        "<project><groupId>a</groupId><artifactId>mn</artifactId><version>1</version>\
+         <build><plugins><plugin><groupId>io.micronaut.maven</groupId>\
+         <artifactId>micronaut-maven-plugin</artifactId></plugin></plugins></build></project>",
+    );
+    d.write(
+        "plain/pom.xml",
+        "<project><groupId>a</groupId><artifactId>plain</artifactId><version>1</version></project>",
+    );
+    assert_eq!(
+        started(&d.0.join("boot"), "build.gradle.kts"),
+        [("Spring Boot".into(), cmd(&["gradle", "bootRun"]), day)]
+    );
+    assert_eq!(
+        started(&d.0.join("mn"), "pom.xml"),
+        [("Micronaut run".into(), cmd(&["mvn", "mn:run"]), day)]
+    );
+    assert!(started(&d.0.join("plain"), "pom.xml").is_empty());
+    // The others keep the default timeout.
+    let all = suggest_run_configs(&read_project(
+        &fixtures.join("spring-shop"),
+        &[fixtures.join("spring-shop/pom.xml")],
+    ));
+    let names: Vec<&str> = all.iter().map(|c| c.name.as_str()).collect();
+    assert_eq!(names, ["mvn compile", "mvn test", "Spring Boot"]);
+}

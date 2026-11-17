@@ -443,6 +443,14 @@ async fn test_session(
     {
         product = Dialect::MariaDb.label().into();
     }
+    // MariaDB's version ends in the product's name and the build's suffix
+    // (`12.3.3-MariaDB`, `10.11.6-MariaDB-0+deb12u1-log`); the product line names it already
+    // (SPEC-0108 v12 behaviour 22).
+    let server_version = if product == Dialect::MariaDb.label() {
+        server_version.map(|v| mariadb_version(&v))
+    } else {
+        server_version
+    };
     Ok(ConnectionTest {
         name: profile.name.clone(),
         product,
@@ -460,6 +468,13 @@ async fn test_session(
     })
 }
 
+/// The version number of a MariaDB server's version text: the part before `-MariaDB`.
+fn mariadb_version(text: &str) -> String {
+    text.split_once("-MariaDB")
+        .map_or(text, |(number, _)| number)
+        .to_owned()
+}
+
 /// The client library IDECraft uses for `dialect` (`SPEC-0108` v4 behaviour 9: the dialog's
 /// Driver line). Each family has one built-in driver; none is downloaded (IMP-0371).
 pub fn driver_label(dialect: Dialect) -> &'static str {
@@ -475,18 +490,26 @@ pub fn driver_label(dialect: Dialect) -> &'static str {
 
 /// `error` of connecting with `profile`, with what to do when a server on this machine has no
 /// TLS while the profile checks certificates (SPEC-0016 v2 behaviour 8): the secure default is
-/// kept, the user decides.
+/// kept, the user decides. A server whose certificate the check refused does have TLS: then the
+/// hint is about the certificate and never proposes a weaker mode (SPEC-0016 v5 behaviour 15).
 pub fn with_tls_hint(profile: &ConnectionProfile, error: String) -> String {
-    let local = profile.ssh.is_none()
-        && profile
-            .host
-            .as_deref()
-            .is_some_and(|h| matches!(h, "localhost" | "127.0.0.1" | "::1" | "[::1]"));
-    let no_tls = {
-        let e = error.to_lowercase();
-        e.contains("ssl mode") && (e.contains("tls") || e.contains("ssl"))
-    };
-    if local && no_tls && profile.ssl.verifies() {
+    let local = profile.ssh.is_none() && crate::is_loopback(profile.host.as_deref());
+    let e = error.to_lowercase();
+    let tls_failed = e.contains("ssl mode") && (e.contains("tls") || e.contains("ssl"));
+    let certificate = ["certificate", "validity", "trust"]
+        .iter()
+        .any(|word| e.contains(word));
+    if tls_failed && certificate && profile.ssl.verifies() {
+        let trimmed = error.trim_end_matches('.');
+        return format!(
+            "{trimmed}. The server has TLS, but this system does not accept its certificate: name \
+             the certificate of the authority that signed it as CA file on the SSH/SSL page \
+             (with `verify-ca` when it was made for another host name). This system refuses \
+             certificates valid for many years, such as the one a MySQL server makes for itself: \
+             such a server needs a certificate valid for a shorter time"
+        );
+    }
+    if local && tls_failed && profile.ssl.verifies() {
         format!(
             "{error}. The server on this machine may have no TLS certificate: choose SSL mode \
              `disable` only if it really has none (traffic stays on this machine)"
@@ -809,6 +832,36 @@ mod tests {
         let mut remote = local.clone();
         remote.host = Some("db.example".into());
         assert!(!with_tls_hint(&remote, "SSL mode `verify-full`: x TLS".into()).contains("choose"));
+    }
+
+    /// SPEC-0016 v5 AK-16: a certificate the check refused gets the CA-file hint, on this machine
+    /// and elsewhere, and never a weaker mode; SPEC-0108 v12 AK-23: MariaDB's version number.
+    #[test]
+    fn a_refused_certificate_points_to_the_ca_file() {
+        let local = form().to_profile("x", None, None).unwrap();
+        let refused = "connection `x`: SSL mode `verify-full`: 127.0.0.1:33069: Input/output \
+            error: TLS error: `The validity period in the certificate exceeds the maximum allowed.'";
+        let mut remote = local.clone();
+        remote.host = Some("db.example".into());
+        for profile in [&local, &remote] {
+            let hinted = with_tls_hint(profile, refused.into());
+            assert!(
+                hinted.starts_with(refused.trim_end_matches('.')),
+                "{hinted}"
+            );
+            assert!(hinted.contains("CA file"), "{hinted}");
+            assert!(hinted.contains("`verify-ca`"), "{hinted}");
+            for weaker in ["`disable`", "`require`", "`prefer`"] {
+                assert!(!hinted.contains(weaker), "{hinted}");
+            }
+        }
+        // Without a check of the certificate there is nothing to hint.
+        let mut require = local.clone();
+        require.ssl = SslMode::Require;
+        assert_eq!(with_tls_hint(&require, refused.into()), refused);
+        assert_eq!(mariadb_version("12.3.3-MariaDB"), "12.3.3");
+        assert_eq!(mariadb_version("10.11.6-MariaDB-0+deb12u1-log"), "10.11.6");
+        assert_eq!(mariadb_version("8.4.13"), "8.4.13");
     }
 
     /// SPEC-0108 v4 AK-10: tunnel, TLS files, options, colour and comment go from the form into

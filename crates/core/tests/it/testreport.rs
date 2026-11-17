@@ -319,7 +319,8 @@ fn vitest_report() {
     );
 }
 
-/// SPEC-0045 v3 AK-6: a real Jest JSON report (`jest --json`), with a file that does not parse.
+/// SPEC-0045 v3 AK-6: a real Jest JSON report (`jest --json`), with a file that does not parse;
+/// v6 AK-16: the suites keep their files.
 #[test]
 fn jest_report() {
     let text = include_str!("../reports/jest.json");
@@ -343,6 +344,13 @@ fn jest_report() {
             .unwrap()
             .starts_with("Jest encountered")
     );
+    // v6 behaviour 8: each file's suite keeps the file the runner named, for the jump to a test
+    // (SPEC-0088 v5 behaviour 12); the inner suites name none.
+    for suite in &r.suites {
+        let file = suite.file.as_deref().expect("the suite names its file");
+        assert!(file.ends_with(&format!("/{}", suite.name)), "{file}");
+        assert!(suite.suites.iter().all(|s| s.file.is_none()));
+    }
 }
 
 /// SPEC-0045 v3 AK-7: a real `go test -json` stream with a subtest table.

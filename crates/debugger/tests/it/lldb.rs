@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
+use idecraft_debugger::native::{MAX_INSTRUCTIONS, hex_address, parse_address};
 use idecraft_debugger::{
     DapError, DebugSession, Event, SourceBreakpoint, can_debug_unattended, lldb_dap,
 };
@@ -481,4 +482,108 @@ int main(void) {
     }
     session.disconnect().unwrap();
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+const BUFFER: &str = r#"#include <stdio.h>
+
+static char marker[32] = "IDECRAFT-MEMORY-0123456789";
+
+int main(void) {
+    marker[0] = 'I';
+    printf("%s\n", marker);
+    return 0;
+}
+"#;
+
+/// Line of `printf("%s\n", marker);`.
+const BUFFER_LINE: u64 = 7;
+
+/// SPEC-0054 v6 AK-8 (live, skipped without lldb-dap, a C compiler or unattended debugging): the
+/// registers of the top frame hold the program counter the stack gives, `readMemory` of a known
+/// buffer returns its bytes, and the disassembly around the program counter contains it.
+#[test]
+fn registers_memory_and_disassembly_with_lldb_dap() {
+    let Some(adapter) = lldb_dap() else {
+        skip("lldb-dap not installed");
+        return;
+    };
+    if !can_debug_unattended() {
+        skip("debugging needs Developer Mode on this Mac");
+        return;
+    }
+    let dir = std::env::temp_dir().join(format!("idecraft-dap-native-{}", std::process::id()));
+    let Some(binary) = build_program(&dir, BUFFER) else {
+        skip("no C compiler");
+        return;
+    };
+    let source = std::fs::canonicalize(dir.join("prog.c")).unwrap();
+    let breakpoints = BTreeMap::from([(source.clone(), vec![BUFFER_LINE.into()])]);
+    let launch = json!({"program": binary, "cwd": dir, "stopOnEntry": false});
+    let (mut session, _) = DebugSession::launch(
+        &adapter,
+        "lldb-dap",
+        launch,
+        &breakpoints,
+        &Default::default(),
+    )
+    .unwrap();
+    let thread = stopped(session.wait(WAIT).unwrap());
+
+    // Registers of the top frame: some group holds the program counter, equal to the frame's
+    // instruction pointer.
+    let ip = session.instruction_pointer(thread).unwrap();
+    let groups = session.registers(thread).unwrap();
+    assert!(!groups.is_empty());
+    let pc = groups
+        .iter()
+        .flat_map(|g| &g.registers)
+        .find(|r| matches!(r.name.as_str(), "pc" | "rip"))
+        .unwrap_or_else(|| panic!("no program counter in {groups:?}"));
+    let pc_value = parse_address(pc.value.split_whitespace().next().unwrap_or_default())
+        .unwrap_or_else(|e| panic!("{pc:?}: {e}"));
+    assert_eq!(pc_value, ip, "{pc:?}");
+
+    // Memory of the known buffer, by the address the program itself evaluates.
+    let frame = session.stack_trace(thread).unwrap()[0].id;
+    let address: u64 = session
+        .evaluate("(unsigned long long)&marker[0]", frame)
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap();
+    let block = session.read_memory(address, Some(32)).unwrap();
+    assert_eq!(block.address, hex_address(address));
+    assert_eq!((block.requested, block.read), (32, 32), "{block:?}");
+    assert_eq!(block.rows.len(), 2);
+    assert_eq!(block.rows[0].ascii, "IDECRAFT-MEMORY-");
+    assert!(block.rows[0].hex.starts_with("49 44 45 43"), "{block:?}");
+    assert!(block.rows[1].ascii.starts_with("0123456789"), "{block:?}");
+
+    // Disassembly around the program counter: instructions before it, it, and after it.
+    let code = session.disassemble(ip, 4, Some(12)).unwrap();
+    assert_eq!(code.len(), 12, "{code:?}");
+    let at = code
+        .iter()
+        .position(|i| i.address == hex_address(ip))
+        .unwrap_or_else(|| panic!("{ip:#x} not in {code:?}"));
+    assert!(at > 0 && at < code.len() - 1, "{at} in {code:?}");
+    assert!(
+        code.iter()
+            .all(|i| !i.instruction.is_empty() && i.instruction.trim_end() == i.instruction),
+        "{code:?}"
+    );
+    assert!(code.iter().any(|i| i.line.is_some()), "{code:?}");
+    // lldb-dap names the symbol on the first instruction of a function only: from main's start.
+    let entry = session
+        .disassemble(ip, MAX_INSTRUCTIONS, Some(MAX_INSTRUCTIONS))
+        .unwrap();
+    assert!(
+        entry
+            .iter()
+            .any(|i| i.symbol.as_deref().is_some_and(|s| s.contains("main"))),
+        "{entry:?}"
+    );
+
+    session.disconnect().ok();
+    std::fs::remove_dir_all(&dir).ok();
 }

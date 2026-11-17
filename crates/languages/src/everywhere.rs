@@ -366,6 +366,9 @@ pub const UNBOUND_ACTIONS: &[&str] = &[
     "IDECraft.KeyboardDiagnostics",
     // File › Plugins… (SPEC-0124 v8 behaviour 11).
     "IDECraft.SettingsPlugins",
+    // File › Manage IDE Settings (SPEC-0105 v9 behaviour 14).
+    "ImportSettings",
+    "ExportSettings",
     // The emergency stop of UI automation (SPEC-0319 behaviour 37).
     "IDECraft.StopUiAutomation",
     // Every request of a `.http` file (SPEC-0096 v5 behaviour 8).
@@ -1827,6 +1830,9 @@ mod tests {
     fn reference_comparison_items_have_titles_and_groups() {
         for (id, title, group) in [
             ("IDECraft.SettingsPlugins", "Plugins…", "File"),
+            // SPEC-0105 AK-15 (v9).
+            ("ImportSettings", "Import Settings…", "Manage IDE Settings"),
+            ("ExportSettings", "Export Settings…", "Manage IDE Settings"),
             ("LocalHistory.ShowHistory", "Show History", "Local History"),
             ("ToggleInSelection", "Search in Selection Only", "Edit"),
             ("FindUsages", "Find Usages", "Find Usages"),

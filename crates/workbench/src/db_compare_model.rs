@@ -913,6 +913,9 @@ mod tests {
             nullable,
             default: None,
             generated: None,
+            expression: None,
+            identity: None,
+            comment: None,
         }
     }
 
@@ -941,6 +944,9 @@ mod tests {
                     columns: vec!["sku".into()],
                     condition: None,
                     collations: Vec::new(),
+                    method: None,
+                    orders: Vec::new(),
+                    prefixes: Vec::new(),
                 }],
                 indexes_removed: vec![],
                 foreign_keys_added: vec![ForeignKey {
@@ -948,6 +954,8 @@ mod tests {
                     columns: vec!["warehouse_id".into()],
                     referenced_table: "warehouse".into(),
                     referenced_columns: vec!["id".into()],
+                    on_delete: None,
+                    on_update: None,
                 }],
                 foreign_keys_removed: vec![],
                 constraints_added: vec![TableConstraint {
@@ -1103,6 +1111,8 @@ mod tests {
                     columns: vec!["ref_id".into()],
                     referenced_table: t.into(),
                     referenced_columns: vec!["id".into()],
+                    on_delete: None,
+                    on_update: None,
                 })
                 .into_iter()
                 .collect(),

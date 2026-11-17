@@ -295,6 +295,7 @@ async fn lists_all_tools_with_schemas() {
             "bookmarks",
             "browse_store",
             "build_command_suggestions",
+            "build_project",
             "build_task",
             "build_tool_links",
             "build_tool_options",
@@ -322,12 +323,15 @@ async fn lists_all_tools_with_schemas() {
             "debug_attach",
             "debug_breakpoints",
             "debug_completions",
+            "debug_disassemble",
             "debug_evaluate",
             "debug_field_watch",
             "debug_hot_swap",
             "debug_inspect",
+            "debug_memory",
             "debug_pause",
             "debug_processes",
+            "debug_registers",
             "debug_renderers",
             "debug_reset_frame",
             "debug_resume",
@@ -360,6 +364,7 @@ async fn lists_all_tools_with_schemas() {
             "edit_table_data",
             "editor_action",
             "editor_keystrokes",
+            "editor_selection",
             "editor_tabs",
             "editorconfig",
             "endpoints",
@@ -491,6 +496,7 @@ async fn lists_all_tools_with_schemas() {
             "read_file",
             "read_table_data",
             "recent_projects",
+            "redo_refactoring",
             "reference_index",
             "related_files",
             "remote_access_off",
@@ -527,6 +533,7 @@ async fn lists_all_tools_with_schemas() {
             "rename_sql_object",
             "rename_symbol",
             "replace_in_files_preview",
+            "replace_text_in_file",
             "resource_bundle",
             "restore_local_revision",
             "revoke_plugin_network",
@@ -2957,6 +2964,37 @@ async fn code_insight_tools() {
         "{refused:?}"
     );
     assert!(is_error(&client.call("undo_refactoring", json!({})).await));
+    // SPEC-0193 v6 AK-10: redo applies the undone code action again, labelled in the local
+    // history; a file changed after the undo refuses a redo and changes nothing.
+    let redone = json_text(&client.call("redo_refactoring", json!({})).await);
+    assert_eq!(redone["files"], json!(["src/fix.c"]), "{redone}");
+    assert!(
+        std::fs::read_to_string(root.join("src/fix.c"))
+            .unwrap()
+            .contains("int x = 1;")
+    );
+    let history = json_text(
+        &client
+            .call("local_history", json!({"path": "src/fix.c"}))
+            .await,
+    );
+    assert!(
+        history.to_string().contains("Redo "),
+        "labelled Redo: {history}"
+    );
+    assert!(is_error(&client.call("redo_refactoring", json!({})).await));
+    let undone = json_text(&client.call("undo_refactoring", json!({})).await);
+    assert_eq!(undone["files"], json!(["src/fix.c"]), "{undone}");
+    std::fs::write(root.join("src/fix.c"), "int main(void) { return 0; }\n").unwrap();
+    let refused = client.call("redo_refactoring", json!({})).await;
+    assert!(
+        error_message(&refused).contains("cannot redo"),
+        "{refused:?}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(root.join("src/fix.c")).unwrap(),
+        "int main(void) { return 0; }\n"
+    );
 
     // SPEC-0095 v2 AK-6: a refactoring as its shortcut finds it; a bare caret is widened, a
     // refused selection comes with the editor's message.
@@ -4753,6 +4791,33 @@ async fn terminal_render_tool() {
         .call("terminal_render", json!({"output": "x", "rows": 100000}))
         .await;
     assert!(is_error(&big));
+    // SPEC-0206 v2 AK-6: the find field's matches over scrollback and screen.
+    let found = json_text(
+        &client
+            .call(
+                "terminal_render",
+                json!({"output": "Error one\r\nok\r\nerror two\r\nlast", "rows": 2, "cols": 20, "find": "error"}),
+            )
+            .await,
+    );
+    assert_eq!(
+        found["matches"],
+        json!([
+            {"line": 0, "start": 0, "end": 5},
+            {"line": 2, "start": 0, "end": 5}
+        ]),
+        "the first match is in the scrollback"
+    );
+    let cased = json_text(
+        &client
+            .call(
+                "terminal_render",
+                json!({"output": "Error one\r\nerror two", "find": "Error", "match_case": true}),
+            )
+            .await,
+    );
+    assert_eq!(cased["matches"], json!([{"line": 0, "start": 0, "end": 5}]));
+    assert_eq!(out["matches"], json!(null), "no find, no matches");
 }
 
 /// SPEC-0206 AK-4, SPEC-0205 AK-4, SPEC-0207 AK-2.
@@ -4787,13 +4852,59 @@ async fn terminal_prompts_sessions_and_commands() {
     }
     .save(&root)
     .unwrap();
-    let saved = json_text(&client.call("terminal_sessions", json!({"lines": 2})).await);
-    assert_eq!(saved["tabs"][0]["name"], "build");
-    assert_eq!(saved["tabs"][0]["shells"][0]["line_count"], 3);
-    assert_eq!(
-        saved["tabs"][0]["shells"][0]["last_lines"],
-        json!(["two", "three"])
+    // SPEC-0205 v4: without the `terminal-read` right only the layout; the lines need it.
+    let layout = json_text(&client.call("terminal_sessions", json!({"lines": 0})).await);
+    assert_eq!(layout["tabs"][0]["name"], "build");
+    assert_eq!(layout["tabs"][0]["shells"][0]["line_count"], 3);
+    assert_eq!(layout["tabs"][0]["shells"][0]["cell"], 0);
+    assert_eq!(layout["tabs"][0]["shells"][0]["last_lines"], json!([]));
+    let refused = client.call("terminal_sessions", json!({"lines": 2})).await;
+    assert!(
+        error_message(&refused).contains("terminal-read"),
+        "{refused:?}"
     );
+    {
+        let (mut reader, root) = connect_with(&[idecraft_core::Grant::TerminalRead]).await;
+        let mut stacked = idecraft_terminal::SavedShell::new(
+            root.clone(),
+            vec!["export API_KEY=notreal".into(), "done".into()],
+        );
+        stacked.group = Some(1);
+        let mut below = idecraft_terminal::SavedShell::new(root.join("src"), Vec::new());
+        below.group = Some(1);
+        idecraft_terminal::SavedTerminals {
+            tabs: vec![idecraft_terminal::SavedTab {
+                name: "build".into(),
+                side_by_side: true,
+                shells: vec![
+                    idecraft_terminal::SavedShell::new(
+                        root.join("src"),
+                        vec!["one".into(), "two".into(), "three".into()],
+                    ),
+                    stacked,
+                    below,
+                ],
+            }],
+        }
+        .save(&root)
+        .unwrap();
+        let saved = json_text(&reader.call("terminal_sessions", json!({"lines": 2})).await);
+        let shells = &saved["tabs"][0]["shells"];
+        assert_eq!(shells[0]["last_lines"], json!(["two", "three"]));
+        assert_eq!(
+            shells[1]["last_lines"],
+            json!(["export API_KEY=‹masked›", "done"]),
+            "{saved}"
+        );
+        assert_eq!(saved["masked"], 1);
+        assert_eq!(
+            [&shells[0]["cell"], &shells[1]["cell"], &shells[2]["cell"]],
+            [&json!(0), &json!(1), &json!(1)],
+            "the third shell is stacked in the second cell"
+        );
+        let log = std::fs::read_to_string(root.join(".idecraft/agent-log.jsonl")).unwrap();
+        assert!(log.contains("\"terminal_sessions\""), "{log}");
+    }
     // A command line: previewed by default, refused without `run`.
     let preview = json_text(
         &client
@@ -6356,6 +6467,70 @@ async fn spring_beans_tool_reads_quarkus_from_the_pom() {
     let out = json_text(&client.call("spring_beans", json!({})).await);
     assert_eq!(out["framework"], "Quarkus");
     assert_eq!(out["model"]["frameworks"], json!(["Quarkus", "Jakarta EE"]));
+}
+
+/// SPEC-0115/AK-21 (v7), SPEC-0134/AK-14 (v6), SPEC-0048/AK-16 (v8): `complete_code` gives the
+/// configuration keys in a `@ConfigProperty` name and in a `.properties` file without a language
+/// server, the secret masked; `project_model` suggests Quarkus dev mode.
+#[tokio::test]
+async fn configuration_keys_complete_and_quarkus_starts_in_dev_mode() {
+    let (mut client, root) = connect().await;
+    std::fs::create_dir_all(root.join("src/main/java/demo")).unwrap();
+    std::fs::create_dir_all(root.join("src/main/resources")).unwrap();
+    std::fs::write(
+        root.join("pom.xml"),
+        "<project><groupId>d</groupId><artifactId>d</artifactId><version>1</version><dependencies><dependency><groupId>io.quarkus</groupId><artifactId>quarkus-rest</artifactId></dependency></dependencies></project>\n",
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("src/main/java/demo/Hello.java"),
+        "import jakarta.enterprise.context.ApplicationScoped;\nimport org.eclipse.microprofile.config.inject.ConfigProperty;\n@ApplicationScoped\nclass Hello {\n  @ConfigProperty(name = \"greeting.m\") String m;\n  @ConfigProperty(name = \"greeting.unset\") String u;\n}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("src/main/resources/application.properties"),
+        "greeting.message=hello\ngreeting.token=abc123\ngre\n",
+    )
+    .unwrap();
+    let java = json_text(
+        &client
+            .call(
+                "complete_code",
+                json!({"path": "src/main/java/demo/Hello.java", "line": 4, "character": 36}),
+            )
+            .await,
+    );
+    let labels: Vec<&str> = java
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i["label"].as_str().unwrap())
+        .collect();
+    assert_eq!(labels, ["greeting.message"]);
+    assert_eq!(java[0]["detail"], "= hello · application.properties");
+    let props = json_text(
+        &client
+            .call(
+                "complete_code",
+                json!({"path": "src/main/resources/application.properties", "line": 2, "character": 3}),
+            )
+            .await,
+    );
+    // Read in the code and defined nowhere: the half-typed `greeting.m` of the Java file too.
+    let items = props.as_array().unwrap();
+    let labels: Vec<&str> = items.iter().map(|i| i["label"].as_str().unwrap()).collect();
+    assert_eq!(labels, ["greeting.m", "greeting.unset"]);
+    assert_eq!(items[1]["insert"], "greeting.unset=");
+    assert_eq!(items[1]["detail"], "read in Hello.java:6, defined nowhere");
+    assert!(!props.to_string().contains("abc123"), "{props}");
+    let model = json_text(&client.call("project_model", json!({})).await);
+    let suggested: Vec<&str> = model["suggested_run_configs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["name"].as_str().unwrap())
+        .collect();
+    assert!(suggested.contains(&"Quarkus dev"), "{suggested:?}");
 }
 
 /// SPEC-0103/AK-7 and SPEC-0115/AK-9 (v3): the Spring Boot sample project of F-040 through the
@@ -10258,6 +10433,10 @@ async fn debugging_needs_the_debug_right() {
         // SPEC-0127 v6, SPEC-0054 v3.
         ("debug_breakpoints", json!({"session": 1})),
         ("debug_resume", json!({"session": 1, "action": "wait"})),
+        // SPEC-0054 v6.
+        ("debug_registers", json!({"session": 1})),
+        ("debug_memory", json!({"session": 1, "address": "0x1000"})),
+        ("debug_disassemble", json!({"session": 1})),
     ] {
         assert!(
             error_message(&client.call(tool, args).await).contains("`debug` right"),
@@ -11023,6 +11202,66 @@ async fn debug_a_program_through_mcp() {
             .await,
     );
     assert_eq!(value["value"], "84");
+    // SPEC-0054 v6 AK-8: registers, memory and disassembly of the stopped session through the
+    // three tools against lldb-dap.
+    let registers = json_text(
+        &client
+            .call("debug_registers", json!({"session": session}))
+            .await,
+    );
+    let pc = registers["groups"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|g| g["registers"].as_array().unwrap())
+        .find(|r| r["name"] == "pc" || r["name"] == "rip")
+        .unwrap_or_else(|| panic!("no program counter in {registers}"))["value"]
+        .as_str()
+        .unwrap()
+        .split_whitespace()
+        .next()
+        .unwrap()
+        .to_owned();
+    let pc = idecraft_debugger::native::parse_address(&pc).unwrap();
+    let address: u64 = json_text(
+        &client
+            .call(
+                "debug_evaluate",
+                json!({"session": session, "expression": "(unsigned long long)&x"}),
+            )
+            .await,
+    )["value"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    let memory = json_text(
+        &client
+            .call(
+                "debug_memory",
+                json!({"session": session, "address": format!("{address:#x}"), "count": 4}),
+            )
+            .await,
+    );
+    assert_eq!(memory["read"], 4, "{memory}");
+    assert_eq!(
+        memory["address"],
+        idecraft_debugger::native::hex_address(address)
+    );
+    assert_eq!(memory["rows"][0]["hex"], "2a 00 00 00", "{memory}");
+    let code = json_text(
+        &client
+            .call(
+                "debug_disassemble",
+                json!({"session": session, "before": 2, "count": 6}),
+            )
+            .await,
+    );
+    let here = idecraft_debugger::native::hex_address(pc);
+    assert_eq!(code["address"], here, "{code}");
+    let listed = code["instructions"].as_array().unwrap();
+    assert_eq!(listed.len(), 6, "{code}");
+    assert!(listed.iter().any(|i| i["address"] == here), "{code}");
     let step = json_text(
         &client
             .call(
@@ -13588,6 +13827,59 @@ async fn themes_tool() {
     );
     assert_eq!(brand["chosen"], "IDECraft Light");
     assert_eq!(brand["metrics"]["tab_style"], "pill");
+}
+
+/// SPEC-0060 v12 AK-18: `themes` names Sync with OS and the preferred themes; while it is on, a
+/// chosen theme becomes the preferred theme of its kind and `chosen` stays; off again shows the
+/// chosen theme.
+#[tokio::test]
+async fn themes_follow_sync_with_os() {
+    let (mut client, root) = connect().await;
+    let listed = json_text(&client.call("themes", json!({})).await);
+    assert_eq!(listed["sync_with_os"], false);
+    assert_eq!(listed["dark_theme"], "IDECraft Dark");
+    assert_eq!(listed["light_theme"], "IDECraft Light");
+    assert_eq!(listed["shown"], "IDECraft Dark");
+    assert_eq!(listed["saved_as"], json!(null));
+    let set = json_text(&client.call("themes", json!({"set": "Light"})).await);
+    assert_eq!(set["saved_as"], "theme");
+    assert_eq!(set["shown"], "Light");
+
+    let on = json_text(
+        &client
+            .call(
+                "themes",
+                json!({"sync_with_os": true, "set": "islands dark"}),
+            )
+            .await,
+    );
+    assert_eq!(on["sync_with_os"], true);
+    assert_eq!(on["saved_as"], "dark_theme");
+    assert_eq!(on["dark_theme"], "Islands Dark");
+    assert_eq!(
+        on["chosen"], "Light",
+        "the theme chosen without syncing stays"
+    );
+    assert_eq!(on["shown"], json!(null), "the system decides");
+    let light = json_text(&client.call("themes", json!({"set": "islands light"})).await);
+    assert_eq!(light["saved_as"], "light_theme");
+    assert_eq!(light["light_theme"], "Islands Light");
+    let text = std::fs::read_to_string(root.join(".test-settings.toml")).unwrap();
+    assert!(text.contains("sync_with_os = true"), "{text}");
+    assert!(text.contains("dark_theme = \"Islands Dark\""), "{text}");
+    // A preferred name that is no theme gives the default of its kind.
+    std::fs::write(
+        root.join(".test-settings.toml"),
+        text.replace("\"Islands Light\"", "\"Solarized\""),
+    )
+    .unwrap();
+    let fallback = json_text(&client.call("themes", json!({})).await);
+    assert_eq!(fallback["light_theme"], "IDECraft Light");
+
+    let off = json_text(&client.call("themes", json!({"sync_with_os": false})).await);
+    assert_eq!(off["sync_with_os"], false);
+    assert_eq!(off["shown"], "Light");
+    assert_eq!(off["dark_theme"], "Islands Dark", "kept for the next time");
 }
 
 #[tokio::test]
@@ -16531,7 +16823,7 @@ async fn creates_renames_and_deletes_files() {
         &client
             .call(
                 "create_file",
-                json!({"dir": "src", "name": "query", "kind": "sql"}),
+                json!({"dir": "src", "name": "query", "kind": "sql", "dry_run": false}),
             )
             .await,
     );
@@ -16549,7 +16841,7 @@ async fn creates_renames_and_deletes_files() {
         &client
             .call(
                 "create_file",
-                json!({"dir": "", "name": "src/main/java/com/acme/Shop", "kind": "java"}),
+                json!({"dir": "", "name": "src/main/java/com/acme/Shop", "kind": "java", "dry_run": false}),
             )
             .await,
     );
@@ -17867,7 +18159,10 @@ async fn close_project_is_a_dry_run_first_and_needs_the_quit_right() {
 async fn writing_needs_the_write_and_vcs_write_rights() {
     let (mut client, root) = connect_exact(&[], |s, _| s).await;
     let refused = client
-        .call("create_file", json!({"dir": "src", "name": "new.txt"}))
+        .call(
+            "create_file",
+            json!({"dir": "src", "name": "new.txt", "dry_run": false}),
+        )
         .await;
     let message = error_message(&refused);
     assert!(message.starts_with("not granted:"), "{message}");
@@ -17968,7 +18263,10 @@ async fn writing_needs_the_write_and_vcs_write_rights() {
     )
     .await;
     let created = client
-        .call("create_file", json!({"dir": "src", "name": "new.txt"}))
+        .call(
+            "create_file",
+            json!({"dir": "src", "name": "new.txt", "dry_run": false}),
+        )
         .await;
     assert!(!is_error(&created), "{created}");
     assert!(root.join("src/new.txt").exists());
@@ -17991,7 +18289,10 @@ async fn the_window_asks_for_a_missing_right() {
 
     window.answer(PermissionAnswer::AllowOnce);
     let created = client
-        .call("create_file", json!({"dir": "src", "name": "a.txt"}))
+        .call(
+            "create_file",
+            json!({"dir": "src", "name": "a.txt", "dry_run": false}),
+        )
         .await;
     assert!(!is_error(&created), "{created}");
     assert!(root.join("src/a.txt").exists());
@@ -18005,14 +18306,20 @@ async fn the_window_asks_for_a_missing_right() {
             "{}",
             q.meaning
         );
-        assert_eq!(q.action, "create_file {\"dir\":\"src\",\"name\":\"a.txt\"}");
+        assert_eq!(
+            q.action,
+            "create_file {\"dir\":\"src\",\"name\":\"a.txt\",\"dry_run\":false}"
+        );
         assert_eq!(q.workspace, root.canonicalize().unwrap());
         assert_eq!(q.scope, Scope::Workspace);
     }
     // Allowed once: the next call asks again.
     window.answer(PermissionAnswer::Always);
     let created = client
-        .call("create_file", json!({"dir": "src", "name": "b.txt"}))
+        .call(
+            "create_file",
+            json!({"dir": "src", "name": "b.txt", "dry_run": false}),
+        )
         .await;
     assert!(!is_error(&created), "{created}");
     assert_eq!(window.asked(), 2);
@@ -18020,7 +18327,10 @@ async fn the_window_asks_for_a_missing_right() {
     let grants = std::fs::read_to_string(root.with_extension("agent-permissions.toml")).unwrap();
     assert!(grants.contains("allow = [\"write\"]"), "{grants}");
     let created = client
-        .call("create_file", json!({"dir": "src", "name": "c.txt"}))
+        .call(
+            "create_file",
+            json!({"dir": "src", "name": "c.txt", "dry_run": false}),
+        )
         .await;
     assert!(!is_error(&created), "{created}");
     assert_eq!(window.asked(), 3 - 1);
@@ -19682,6 +19992,39 @@ async fn table_ddl_of_a_table_and_a_view() {
 /// gives the condition of a partial index and the collations of its terms, a view over a dropped
 /// table says why it cannot be read in `list_tables`, `describe_table` and `object_doc`, and the
 /// rest of the schema is still listed.
+/// SPEC-0013 v9 AK-27 (OBS-0076 D8): `describe_table` and `table_ddl` with a schema that does not
+/// exist say so instead of reporting a missing table or a failing query.
+#[tokio::test]
+async fn an_unknown_schema_is_named_over_mcp() {
+    let (mut client, root) = connect().await;
+    write_sqlite_profile(&root, "ai = [\"read-schema\", \"read-data\"]");
+    for tool in ["describe_table", "table_ddl"] {
+        let refused = client
+            .call(
+                tool,
+                json!({"connection": "lite", "schema": "nope", "table": "nope"}),
+            )
+            .await;
+        assert!(is_error(&refused), "{tool}: {refused}");
+        assert_eq!(
+            error_message(&refused),
+            "connection `lite`: schema `nope` does not exist",
+            "{tool}"
+        );
+    }
+    // The main schema is there: a missing table is still named as such.
+    let missing = client
+        .call(
+            "describe_table",
+            json!({"connection": "lite", "schema": "main", "table": "nope"}),
+        )
+        .await;
+    assert!(
+        error_message(&missing).contains("has no table `nope` in schema `main`"),
+        "{missing}"
+    );
+}
+
 #[tokio::test]
 async fn partial_indexes_collations_and_a_view_that_cannot_be_read() {
     let (mut client, root) = connect().await;
@@ -21008,6 +21351,54 @@ async fn python_quick_fix_tools() {
     );
 }
 
+// SPEC-0098/AK-18 (v14, behaviour 19a): a name that is not defined is imported from a module of
+// the project, through `inspect_code` and `fix_inspection` with the fix's title.
+#[tokio::test]
+async fn python_import_quick_fix_tool() {
+    let (mut client, root) = connect().await;
+    std::fs::create_dir_all(root.join("src/shop")).unwrap();
+    std::fs::write(root.join("pyproject.toml"), "[project]\nname = \"shop\"\n").unwrap();
+    std::fs::write(
+        root.join("src/shop/pricing.py"),
+        "def gross(net):\n    return net * 1.2\n",
+    )
+    .unwrap();
+    let probe = "def report(net):\n    return gross(net)\n";
+    std::fs::write(root.join("src/report.py"), probe).unwrap();
+    let found = inspect_findings(
+        &client
+            .call("inspect_code", json!({"path": "src/report.py"}))
+            .await,
+    );
+    let fixes: Vec<String> = found
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|f| f["id"] == "python.unresolved-name")
+        .map(|f| f["fix"].as_str().unwrap_or_default().to_owned())
+        .collect();
+    assert_eq!(fixes[0], "Import 'gross' from 'shop.pricing'", "{found}");
+    assert!(
+        fixes.contains(&"Create parameter 'gross'".to_owned()),
+        "{found}"
+    );
+    let done = json_text(
+        &client
+            .call(
+                "fix_inspection",
+                json!({"path": "src/report.py", "line": 1, "column": 11,
+                    "id": "python.unresolved-name",
+                    "title": "Import 'gross' from 'shop.pricing'", "dry_run": false}),
+            )
+            .await,
+    );
+    assert_eq!(done["applied"], true, "{done}");
+    assert_eq!(
+        std::fs::read_to_string(root.join("src/report.py")).unwrap(),
+        "from shop.pricing import gross\n\ndef report(net):\n    return gross(net)\n"
+    );
+}
+
 #[tokio::test]
 async fn python_extract_tools() {
     let (mut client, root) = connect().await;
@@ -22143,7 +22534,10 @@ async fn every_changing_call_leaves_one_line_in_the_agent_log() {
     assert!(!is_error(&copied), "{copied:?}");
     assert!(root.join("dest/a.txt").exists());
     let created = client
-        .call("create_file", json!({"dir": "", "name": "b.txt"}))
+        .call(
+            "create_file",
+            json!({"dir": "", "name": "b.txt", "dry_run": false}),
+        )
         .await;
     assert!(!is_error(&created), "{created:?}");
     let lines = call_log(&root);
@@ -23714,6 +24108,10 @@ async fn file_type_tool() {
     assert_eq!(got["title"], "Python");
     let got = file_type_of(&mut client, "src/deploy").await;
     assert_eq!(pair(&got), (json!("python"), json!("hashbang")));
+    // An editor modeline (SPEC-0004 v9 behaviour 18).
+    std::fs::write(root.join("src/env.conf"), "a: 1\n# vim: set ft=yaml :\n").unwrap();
+    let got = file_type_of(&mut client, "src/env.conf").await;
+    assert_eq!(pair(&got), (json!("yaml"), json!("modeline")));
     let got = file_type_of(&mut client, "src/app.cfg").await;
     assert_eq!(pair(&got), (Value::Null, json!("none")));
     assert_eq!(got["title"], "Plain Text");
@@ -23814,6 +24212,325 @@ async fn file_type_changes_need_the_write_right() {
     assert!(is_error(&refused), "{real}: {refused}");
     assert!(!root.join(".idecraft/file-types.toml").exists());
     assert!(tool_log(&root).is_empty(), "{}", tool_log(&root));
+}
+
+/// SPEC-0006 v56 AK-7: `replace_text_in_file` — a dry run names the place and changes nothing;
+/// without the `write` right nothing is written; a missing and an ambiguous text are errors with
+/// the count and lines; `replace_all` and case-insensitive matching.
+#[tokio::test]
+async fn replace_text_in_file_is_exact_by_default() {
+    // No right at all, not even the `write` the other tests get.
+    let (mut client, root) = connect_exact(&[], |s, _| s).await;
+    let file = root.join("src/app.py");
+    std::fs::write(&file, "a = 1\nb = 2\nA = 1\n").unwrap();
+    let dry = json_text(
+        &client
+            .call(
+                "replace_text_in_file",
+                json!({"path": "src/app.py", "old_text": "b = 2", "new_text": "b = 20"}),
+            )
+            .await,
+    );
+    assert_eq!(dry["replacements"], 1);
+    assert_eq!(dry["lines"], json!([2]));
+    assert_eq!(dry["applied"], false);
+    assert_eq!(
+        std::fs::read_to_string(&file).unwrap(),
+        "a = 1\nb = 2\nA = 1\n"
+    );
+    // Without the user's `write` right nothing is written.
+    let refused = client
+        .call(
+            "replace_text_in_file",
+            json!({"path": "src/app.py", "old_text": "b = 2", "new_text": "b = 20", "dry_run": false}),
+        )
+        .await;
+    assert!(is_error(&refused), "{refused}");
+    assert!(error_message(&refused).contains("not granted"), "{refused}");
+    assert_eq!(
+        std::fs::read_to_string(&file).unwrap(),
+        "a = 1\nb = 2\nA = 1\n"
+    );
+    // Missing, empty and ambiguous texts.
+    let missing = client
+        .call(
+            "replace_text_in_file",
+            json!({"path": "src/app.py", "old_text": "z = 9", "new_text": "x"}),
+        )
+        .await;
+    assert!(
+        error_message(&missing).contains("does not occur"),
+        "{missing}"
+    );
+    let empty = client
+        .call(
+            "replace_text_in_file",
+            json!({"path": "src/app.py", "old_text": "", "new_text": "x"}),
+        )
+        .await;
+    assert!(
+        error_message(&empty).contains("old_text is empty"),
+        "{empty}"
+    );
+    let twice = client
+        .call(
+            "replace_text_in_file",
+            json!({"path": "src/app.py", "old_text": "a = 1", "new_text": "x", "case_sensitive": false}),
+        )
+        .await;
+    let message = error_message(&twice);
+    assert!(message.contains("occurs 2 times (lines 1, 3)"), "{message}");
+
+    // With the right: every place, case-insensitive.
+    let (mut writer, root) = connect_with(&[idecraft_core::Grant::Write]).await;
+    let file = root.join("src/app.py");
+    std::fs::write(&file, "a = 1\nb = 2\nA = 1\n").unwrap();
+    let done = json_text(
+        &writer
+            .call(
+                "replace_text_in_file",
+                json!({"path": "src/app.py", "old_text": "a = 1", "new_text": "a = 10",
+                       "replace_all": true, "case_sensitive": false, "dry_run": false}),
+            )
+            .await,
+    );
+    assert_eq!(done["replacements"], 2, "{done}");
+    assert_eq!(done["applied"], true);
+    assert_eq!(
+        std::fs::read_to_string(&file).unwrap(),
+        "a = 10\nb = 2\na = 10\n"
+    );
+    // Paths outside the workspace are refused as everywhere.
+    let outside = writer
+        .call(
+            "replace_text_in_file",
+            json!({"path": "../x.txt", "old_text": "a", "new_text": "b"}),
+        )
+        .await;
+    assert!(is_error(&outside), "{outside}");
+}
+
+/// SPEC-0006 v56 AK-8: `list_files` by `glob`, by name and by path, with `language`.
+#[tokio::test]
+async fn list_files_by_glob() {
+    let (mut client, root) = connect().await;
+    std::fs::create_dir_all(root.join("src/deep")).unwrap();
+    std::fs::write(root.join("src/deep/more.py"), "x = 1\n").unwrap();
+    std::fs::write(root.join("notes.txt"), "n\n").unwrap();
+    let list = |v: Value| -> Vec<String> { serde_json::from_value(v).unwrap() };
+    let by_name = list(json_text(
+        &client.call("list_files", json!({"glob": "*.py"})).await,
+    ));
+    assert_eq!(by_name, ["src/app.py", "src/deep/more.py"]);
+    let by_path = list(json_text(
+        &client
+            .call("list_files", json!({"glob": "src/deep/*"}))
+            .await,
+    ));
+    assert_eq!(by_path, ["src/deep/more.py"]);
+    let several = list(json_text(
+        &client
+            .call("list_files", json!({"glob": "*.md, *.txt"}))
+            .await,
+    ));
+    assert_eq!(several, ["README.md", "notes.txt"]);
+    let with_language = list(json_text(
+        &client
+            .call("list_files", json!({"glob": "*", "language": "sql"}))
+            .await,
+    ));
+    assert_eq!(with_language, ["schema.sql"]);
+}
+
+/// SPEC-0006 v56 AK-9: `create_file` with text — a dry run names the path and the content and
+/// creates nothing; without `write` nothing is created; with it the file holds the text; an
+/// existing name and text for a directory are refused.
+#[tokio::test]
+async fn create_file_with_text_is_a_dry_run_first() {
+    let (mut client, root) = connect_exact(&[], |s, _| s).await;
+    let dry = json_text(
+        &client
+            .call(
+                "create_file",
+                json!({"dir": "src", "name": "notes/todo.md", "text": "# Todo\n"}),
+            )
+            .await,
+    );
+    assert_eq!(dry["path"], "src/notes/todo.md");
+    assert_eq!(dry["dry_run"], true);
+    assert_eq!(dry["text"], "# Todo\n");
+    assert!(!root.join("src/notes").exists(), "nothing created");
+    // A typed kind's template is shown when no text is given.
+    let java = json_text(
+        &client
+            .call(
+                "create_file",
+                json!({"dir": "src", "name": "Shop", "kind": "java"}),
+            )
+            .await,
+    );
+    assert_eq!(java["path"], "src/Shop.java");
+    assert!(
+        java["text"].as_str().unwrap().contains("class Shop"),
+        "{java}"
+    );
+    let refused = client
+        .call(
+            "create_file",
+            json!({"dir": "src", "name": "todo.md", "text": "x", "dry_run": false}),
+        )
+        .await;
+    assert!(error_message(&refused).contains("not granted"), "{refused}");
+    assert!(!root.join("src/todo.md").exists());
+    let exists = client
+        .call("create_file", json!({"dir": "src", "name": "app.py"}))
+        .await;
+    assert!(error_message(&exists).contains("exists"), "{exists}");
+    let folder = client
+        .call(
+            "create_file",
+            json!({"dir": "src", "name": "x", "kind": "directory", "text": "a"}),
+        )
+        .await;
+    assert!(error_message(&folder).contains("no text"), "{folder}");
+
+    let (mut writer, root) = connect_with(&[]).await;
+    let made = json_text(
+        &writer
+            .call(
+                "create_file",
+                json!({"dir": "src", "name": "notes/todo.md", "text": "# Todo\n", "dry_run": false}),
+            )
+            .await,
+    );
+    assert_eq!(made["path"], "src/notes/todo.md");
+    assert_eq!(
+        std::fs::read_to_string(root.join("src/notes/todo.md")).unwrap(),
+        "# Todo\n"
+    );
+}
+
+/// SPEC-0006 v56 AK-10: `build_project` — the dry run names the steps; with `run` the build runs
+/// and its errors come back with workspace-relative file, line and column.
+#[tokio::test]
+async fn build_project_runs_the_build_and_lists_its_errors() {
+    let cargo = std::process::Command::new("cargo")
+        .arg("--version")
+        .output()
+        .is_ok_and(|o| o.status.success());
+    if !cargo {
+        eprintln!("skipped: cargo is not installed");
+        return;
+    }
+    let (mut client, root) = connect_with(&[idecraft_core::Grant::Run]).await;
+    std::fs::write(
+        root.join("Cargo.toml"),
+        "[package]\nname = \"shop\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[workspace]\n",
+    )
+    .unwrap();
+    std::fs::write(root.join("src/main.rs"), "fn main() {\n    let x = y;\n}\n").unwrap();
+    let dry = json_text(&client.call("build_project", json!({})).await);
+    assert_eq!(dry["dry_run"], true);
+    assert!(dry["would_run"].to_string().contains("cargo"), "{dry}");
+    assert!(!root.join("target").exists(), "nothing ran");
+    let built = json_text(
+        &client
+            .call("build_project", json!({"dry_run": false}))
+            .await,
+    );
+    assert_eq!(built["success"], false, "{built}");
+    let problems = built["problems"].as_array().unwrap();
+    let error = problems
+        .iter()
+        .find(|p| p["severity"] == "error")
+        .unwrap_or_else(|| panic!("an error is listed: {built}"));
+    assert_eq!(error["file"], "src/main.rs", "{error}");
+    assert_eq!(error["line"], 2);
+    assert_eq!(error["column"], 13);
+    assert!(
+        error["message"].as_str().unwrap().contains("`y`"),
+        "{error}"
+    );
+    // Without the right nothing runs.
+    let (mut plain, _root) = connect_exact(&[], |s, _| s).await;
+    let refused = plain.call("build_project", json!({"dry_run": false})).await;
+    assert!(is_error(&refused), "{refused}");
+}
+
+/// A window whose focused editor has a selection with a secret in it.
+struct SelectionWindow(std::path::PathBuf);
+
+impl idecraft_mcp::window::Window for SelectionWindow {
+    fn ask(
+        &self,
+        _request: idecraft_mcp::window::PermissionRequest,
+        reply: tokio::sync::oneshot::Sender<idecraft_mcp::window::PermissionAnswer>,
+    ) {
+        let _ = reply.send(idecraft_mcp::window::PermissionAnswer::Deny);
+    }
+    fn pending_work(&self, reply: tokio::sync::oneshot::Sender<idecraft_mcp::window::PendingWork>) {
+        let _ = reply.send(Default::default());
+    }
+    fn quit(
+        &self,
+        _mode: idecraft_mcp::window::QuitMode,
+        reply: tokio::sync::oneshot::Sender<Result<(), String>>,
+    ) {
+        let _ = reply.send(Err("no".into()));
+    }
+    fn editor_selection(
+        &self,
+        _workspace: std::path::PathBuf,
+        reply: tokio::sync::oneshot::Sender<
+            Result<Option<idecraft_mcp::window::EditorSelection>, String>,
+        >,
+    ) {
+        let _ = reply.send(Ok(Some(idecraft_mcp::window::EditorSelection {
+            path: self.0.clone(),
+            start_line: 0,
+            start_character: 0,
+            end_line: 1,
+            end_character: 5,
+            text: "a = 1\nAPI_KEY = \"sk-live-0123456789abcdef\"".into(),
+            carets: 1,
+        })));
+    }
+}
+
+/// SPEC-0006 v56 AK-11: `editor_selection` — the window's selection with workspace-relative
+/// path, range and text, secrets masked; without a window a clear error; a file outside the
+/// workspace is not reported.
+#[tokio::test]
+async fn editor_selection_reads_the_windows_selection_masked() {
+    let (mut stdio, _root) = connect().await;
+    let none = stdio.call("editor_selection", json!({})).await;
+    assert!(error_message(&none).contains("no window"), "{none}");
+
+    let (mut client, root) = connect_custom(&[], |server, root| {
+        let window: std::sync::Arc<dyn idecraft_mcp::window::Window> =
+            std::sync::Arc::new(SelectionWindow(root.join("src/app.py")));
+        server.with_window(window)
+    })
+    .await;
+    let shown = json_text(&client.call("editor_selection", json!({})).await);
+    let s = &shown["selection"];
+    assert_eq!(s["path"], "src/app.py", "{shown}");
+    assert_eq!(s["start"], json!({"line": 0, "character": 0}));
+    assert_eq!(s["end"], json!({"line": 1, "character": 5}));
+    let text = s["text"].as_str().unwrap();
+    assert!(text.starts_with("a = 1\n"), "{text}");
+    assert!(!text.contains("sk-live"), "the secret is masked: {text}");
+    assert_eq!(shown["masked"], 1);
+    drop(root);
+
+    let (mut outside, _root) = connect_custom(&[], |server, _| {
+        let window: std::sync::Arc<dyn idecraft_mcp::window::Window> =
+            std::sync::Arc::new(SelectionWindow(std::env::temp_dir().join("elsewhere.py")));
+        server.with_window(window)
+    })
+    .await;
+    let other = json_text(&outside.call("editor_selection", json!({})).await);
+    assert_eq!(other["selection"], Value::Null, "{other}");
 }
 
 /// SPEC-0023/AK-9 (v5, OBS-0071 O1): `file_diagnostics` with `paths` answers every file on its

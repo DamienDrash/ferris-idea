@@ -473,7 +473,8 @@ impl WorkbenchView {
                 insert_spaces: indent != "\t",
                 trim_trailing_whitespace: true,
                 insert_final_newline: true,
-            };
+            }
+            .with_editorconfig(&idecraft_core::editorconfig::editorconfig_for(&path));
             (buffer.text(), ranges, options)
         };
         let prettier = (ranges.is_none()

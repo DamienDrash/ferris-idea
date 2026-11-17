@@ -1,6 +1,6 @@
 # SPEC-0098: Own inspections and Inspect Code
 
-- **Version:** 13 · **Date:** 2026-11-15 (v13: unused declarations of Kotlin files in the editor, `@Suppress` for IDECraft's Kotlin findings, behaviours 27 and 28, AK-17; decision of the coordinator under the Project Owner's general authority of 2026-11-13, no observation of the reference); 2026-11-14 (v12: unused declarations in the editor from the project reference index, behaviour 26, AK-16, OBS-0050 W1, W2, W6, W7; v11: Java lambda simplifications, behaviours 22–25, AK-14 and AK-15, OBS-0050; v10: Inspect Current File and Run Inspection by Name from the keymap, behaviours 20 and 21, AK-13; eighth package of docs/research/KEYMAP_COVERAGE.md; v9: IDECraft's own Python quick fixes at an unused import, an unused local and a name not defined, behaviours 17–19, AK-12, OBS-0034 part 14 Q1–Q3; decisions of the agent while the Project Owner was not reachable); 2026-11-12 (v3: descriptions, scope dialog, results by inspection with a
+- **Version:** 14 · **Date:** 2026-11-16 (v14: a name not defined in a function can be imported from a module of the project or of the standard library, behaviour 19a, AK-18; headless check of F-033 on 2026-11-16, OBS-0072; no observation of the reference yet); 2026-11-15 (v13: unused declarations of Kotlin files in the editor, `@Suppress` for IDECraft's Kotlin findings, behaviours 27 and 28, AK-17; decision of the coordinator under the Project Owner's general authority of 2026-11-13, no observation of the reference); 2026-11-14 (v12: unused declarations in the editor from the project reference index, behaviour 26, AK-16, OBS-0050 W1, W2, W6, W7; v11: Java lambda simplifications, behaviours 22–25, AK-14 and AK-15, OBS-0050; v10: Inspect Current File and Run Inspection by Name from the keymap, behaviours 20 and 21, AK-13; eighth package of docs/research/KEYMAP_COVERAGE.md; v9: IDECraft's own Python quick fixes at an unused import, an unused local and a name not defined, behaviours 17–19, AK-12, OBS-0034 part 14 Q1–Q3; decisions of the agent while the Project Owner was not reachable); 2026-11-12 (v3: descriptions, scope dialog, results by inspection with a
   description pane and fixes, the project's profile — OBS-0019 items 3, 6, 7; v4: one inspection on a
   scope, global inspections — defects F032-2, F032-4; v5: Python names that shadow a name of an outer
   scope, own findings in `file_diagnostics` — OBS-0034 L6; v6: Python methods that do not use
@@ -287,6 +287,27 @@ people and agents alike.
     `TypeError` until it does. **Not offered:** "Create variable" — `name = None` before the
     line would turn the `NameError` into a program that runs with a value nobody chose; "Rename
     reference" and the reference's "Ignore …" entries. [OBS-0034 item 58, GEN]
+    19a. **Import the name (v14):** before "Create parameter", one fix per place the name can come
+    from: "Import 'NAME' from 'MODULE'" for each module of the project that defines `NAME` at its
+    top level (a class, a function or an assigned name, not starting with `_`), then
+    "Import 'NAME'" when `NAME` is itself a standard library module, then "Import 'NAME' from
+    'MODULE'" for each standard library module that offers it (the index of SPEC-0072 v9
+    behaviour 40); shallower modules first, at most five. "Create parameter" stays last, and a
+    place with an import but no parameter to create offers only the imports. The project is the
+    nearest folder above the file with `pyproject.toml`, `setup.py`, `setup.cfg`, `.git` or
+    `.idecraft`, else the file's folder; its modules are named by their path below it (`pkg/
+    util.py` → `pkg.util`, `pkg/__init__.py` → `pkg`, a leading `src/` left out), the file itself
+    is left out, and hidden folders, virtual environments (`venv`, `env`), `node_modules`,
+    `__pycache__`, `build`, `dist`, `site-packages` and `target` are not searched; at most 2000
+    files, read again after ten seconds. The fix adds `from MODULE import NAME` to an existing
+    `from MODULE import …` line, else as a new line: a standard library import as in SPEC-0072 v9
+    behaviour 41, a project import after the last import at the top (after an empty line when
+    that one is from the standard library), without imports at the top of the file after its
+    docstring. Limits: only names a function reads (behaviour 19); a module the project reaches
+    through another source root than its folder or `src/` gets a name Python may not find, which
+    the type checker then marks; installed third-party packages are not searched. [GEN, STD (The
+    Python Language Reference "The import statement"; PEP 8 "Imports"), SPEC-0072 v9 behaviours
+    40 and 41]
 20. **Inspect the current file (v10):** `CodeInspection.OnEditor` (⌥⇧I in both bundled keymaps;
     Code › Inspect Current File) runs Inspect Code over the active file at once, without the
     scope dialog, as the scope "Current file" of behaviour 7 does; the results replace the
@@ -557,6 +578,16 @@ people and agents alike.
   declaration" writes `@Suppress("unused")` and the warning goes. Benchmark
   `editor_unused_kotlin_ms_p95` within SPEC-0260 v5, `editor_unused_ms_p95` still within its
   budget.
+- **AK-18 (v14, behaviour 19a)** Unit tests
+  `python_quick_fixes::tests::{names_not_defined_can_be_imported, project_modules_and_names}`:
+  `defaultdict`, `Path` (two modules, shallower first), a project function in two modules and a
+  standard library module read by its name get their import fixes before "Create parameter",
+  each placed as described; a function with `*args` offers the import alone; a project's modules
+  from `src/` and packages, `.venv` and a folder that is no identifier left out, the file's own
+  names not offered to itself; `python_completion::tests::project_and_module_import_placement`.
+  MCP (`crates/mcp/tests/it/protocol.rs::python_import_quick_fix_tool`): `inspect_code` names
+  "Import 'gross' from 'shop.pricing'" first at a project function, `fix_inspection` with that
+  title writes the import.
 
 ## Out of scope
 v11: unused declarations that are not private (OBS-0050 W1, W2, W6, W7) stay a global inspection
@@ -589,5 +620,8 @@ v12: the reference marks unused non-private declarations in the editor of a one-
 (OBS-0050); whether it does so in a project of many files was not seen. IDECraft shows them in
 every project from the reference index, with uses counted by name (SPEC-0316 known deviations),
 so a name used anywhere keeps its declarations quiet.
+v14: the reference was not observed for an import fix in Python (OBS-0034 item 58 had a name no
+module defines); OBS-0072 plans the comparison. IDECraft offers one fix per module instead of one
+entry that asks for the module afterwards, and does not search installed third-party packages.
 Improvement: every inspection is also available to agents with machine-readable ids and positions, and
 runs headless (IMP-0035).

@@ -755,6 +755,9 @@ mod tests {
             nullable: true,
             default: None,
             generated: None,
+            expression: None,
+            identity: None,
+            comment: None,
         };
         RenameTarget {
             profile,
@@ -772,9 +775,13 @@ mod tests {
                     columns: vec!["menge".into()],
                     condition: None,
                     collations: Vec::new(),
+                    method: None,
+                    orders: Vec::new(),
+                    prefixes: Vec::new(),
                 }],
                 unreadable: None,
                 constraints: Vec::new(),
+                comment: None,
             }],
             table: "ht_b".into(),
             column: Some("menge".into()),

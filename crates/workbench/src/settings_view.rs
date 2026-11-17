@@ -1138,13 +1138,13 @@ impl SettingsView {
 
     /// Enter on a review: installs the reviewed file (SPEC-0211 behaviour 2).
     pub fn confirm_plugin_install(&mut self, cx: &mut Context<Self>) {
-        let (Some(dir), Some((path, review))) =
-            (self.plugins_dir.clone(), self.plugin_review.take())
+        let (Some(dir), Some((_, review))) = (self.plugins_dir.clone(), self.plugin_review.take())
         else {
             return;
         };
         let ticked = std::mem::take(&mut self.review_grants);
-        self.note = Some(match idecraft_plugins::install(&dir, &path) {
+        // Exactly the module the user reviewed, not the file again (SPEC-0211 v3 behaviour 7).
+        self.note = Some(match idecraft_plugins::install_reviewed(&dir, &review) {
             Ok(m) => {
                 // Granted at install: what the user ticked in the review (SPEC-0276 behaviour 1).
                 for p in &m.permissions {
@@ -1160,7 +1160,8 @@ impl SettingsView {
                     .replacen("Install ", "Installed ", 1)
                     .replacen("Update ", "Updated ", 1)
                     .replacen("Reinstall ", "Reinstalled ", 1)
-                    .replacen("Downgrade ", "Downgraded ", 1);
+                    .replacen("Downgrade ", "Downgraded ", 1)
+                    .replacen("Replace ", "Replaced ", 1);
                 let what = idecraft_plugins::contributions(&m);
                 if what.is_empty() {
                     done
@@ -1237,7 +1238,13 @@ impl SettingsView {
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let p = Palette::current();
-        let downgrade = matches!(review.kind, idecraft_plugins::ReviewKind::Downgrade { .. });
+        // An older version, or another plugin under the same file name, is a warning (SPEC-0211
+        // v3 behaviour 8).
+        let downgrade = matches!(
+            review.kind,
+            idecraft_plugins::ReviewKind::Downgrade { .. }
+                | idecraft_plugins::ReviewKind::Replace { .. }
+        );
         let warning = c(p.status_text(crate::palette::Status::Warning));
         // Each permission with a tick: Install grants what is ticked (SPEC-0276 behaviour 1).
         let asks: Vec<(idecraft_plugins::Permission, bool)> = review
@@ -2244,6 +2251,21 @@ impl Render for SettingsView {
                     .when(pg == page, |d| d.bg(c(list_selection)))
                     .when(pg != page, |d| d.hover(|s| s.bg(c(p.tree_hover))))
                     .child(pg.title())
+                    // A page whose settings go with the project (`SPEC-0105` v9 behaviour 13).
+                    .when(pg.scope().0 == crate::settings_model::Scope::Project, |d| {
+                        d.child(
+                            div()
+                                .pl_2()
+                                .text_xs()
+                                .text_color(c(p.ui_muted))
+                                .child("project")
+                                .semantics(
+                                    Semantics::new(Role::Label)
+                                        .name("Settings of this project")
+                                        .test_id(format!("settings-page-project-{}", pg.title())),
+                                ),
+                        )
+                    })
                     // A dot after a page with a setting changed from its default (`SPEC-0105` v7
                     // behaviour 9).
                     .when(crate::settings_model::page_modified(pg, &self.ide), |d| {

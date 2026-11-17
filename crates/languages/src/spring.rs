@@ -1333,7 +1333,7 @@ pub(crate) fn defines(defined: &str, wanted: &ValueRef) -> bool {
 
 /// Keys the environment gives every application, so no configuration file needs them: JVM system
 /// properties, Spring Boot's random values, and names in the form of environment variables.
-fn is_external_key(key: &str) -> bool {
+pub(crate) fn is_external_key(key: &str) -> bool {
     SYSTEM_KEYS.contains(&key)
         || key.starts_with("random.")
         || (key.chars().any(|c| c.is_ascii_uppercase())
@@ -1349,7 +1349,7 @@ pub(crate) fn is_test_source(rel: &Path) -> bool {
         .contains("src/test/")
 }
 
-fn is_config_file(rel: &Path) -> Option<bool> {
+pub(crate) fn is_config_file(rel: &Path) -> Option<bool> {
     let name = rel.file_name()?.to_str()?;
     if !name.starts_with("application") && !name.starts_with("bootstrap") {
         return None;

@@ -8,7 +8,10 @@ use mysql_async::{ClientIdentity, Conn, OptsBuilder, SslOpts, Value};
 use tokio::sync::Mutex;
 
 use crate::profile::expand_home;
-use crate::session::{SessionError, Via, mode_name, pem_certificates, prepare, read_private};
+use crate::session::{
+    SessionError, TlsPlan, Via, mode_name, pem_certificates, prefer_needs_tls, prepare,
+    read_private, tls_plan,
+};
 use crate::{
     ConnectionProfile, Credentials, DbError, Dialect, OnError, Outcome, ScriptRun, SslMode,
     split_statements,
@@ -121,14 +124,27 @@ impl MySqlSession {
             message,
         };
         let mode = profile.ssl;
+        // `prefer` off the loopback needs TLS like `require` (`SPEC-0016` v3 behaviour 3).
+        let plan = tls_plan(profile);
+        // The message, and whether TLS itself failed (the server offers none, or the handshake
+        // broke): only then may `prefer` on the loopback try once without it.
         let open = |opts: OptsBuilder| async move {
             match tokio::time::timeout(limit, Conn::new(opts)).await {
-                Ok(result) => result.map_err(|e| e.to_string()),
-                Err(_) => Err(format!("no answer within {} s", limit.as_secs())),
+                Ok(result) => result.map_err(|e| {
+                    let tls = matches!(
+                        e,
+                        mysql_async::Error::Driver(
+                            mysql_async::DriverError::NoClientSslFlagFromServer
+                        ) | mysql_async::Error::Io(mysql_async::IoError::Tls(_))
+                    );
+                    (e.to_string(), tls)
+                }),
+                Err(_) => Err((format!("no answer within {} s", limit.as_secs()), false)),
             }
         };
-        let conn = if mode == SslMode::Disable {
-            open(base).await.map_err(connect_error)?
+        let plain = |(message, _): (String, bool)| connect_error(message);
+        let conn = if plan == TlsPlan::Off {
+            open(base).await.map_err(plain)?
         } else {
             let ssl =
                 ssl_opts(profile, &host, via.is_some()).map_err(|message| SessionError::Tls {
@@ -138,9 +154,16 @@ impl MySqlSession {
                 })?;
             match open(base.clone().ssl_opts(Some(ssl))).await {
                 Ok(conn) => conn,
-                // `prefer` tolerates a server without TLS: try once without it.
-                Err(_) if mode == SslMode::Prefer => open(base).await.map_err(connect_error)?,
-                Err(message) => {
+                // `prefer` on the loopback: once without TLS, after TLS itself failed.
+                Err((_, true)) if plan == TlsPlan::Optional => open(base).await.map_err(plain)?,
+                // `prefer` off the loopback without TLS: what to do (`SPEC-0016` v3 behaviour 13).
+                Err((message, true)) if mode == SslMode::Prefer => {
+                    return Err(prefer_needs_tls(profile, &address, &message));
+                }
+                Err((message, false)) if mode == SslMode::Prefer => {
+                    return Err(connect_error(message));
+                }
+                Err((message, _)) => {
                     return Err(SessionError::Tls {
                         profile: profile.name.clone(),
                         mode: mode_name(mode),

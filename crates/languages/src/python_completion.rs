@@ -621,24 +621,21 @@ pub fn import_edit(
     name: &str,
     roots: &dyn Fn(&str) -> bool,
 ) -> CompletionEdit {
+    from_import_edit(text, module, name, true, roots)
+}
+
+/// [`import_edit`] for a standard library (`std`) or a project module (`SPEC-0098` v14
+/// behaviour 19a): a project module's new line goes after the last import at the top, after an
+/// empty line when that one is from the standard library.
+pub fn from_import_edit(
+    text: &str,
+    module: &str,
+    name: &str,
+    std: bool,
+    roots: &dyn Fn(&str) -> bool,
+) -> CompletionEdit {
     let lines: Vec<&str> = text.split('\n').collect();
-    let len = |n: usize| {
-        lines
-            .get(n)
-            .map(|l| l.trim_end_matches('\r').chars().count())
-            .unwrap_or(0) as u64
-    };
-    let at = |line: usize, ch: u64, text: String| CompletionEdit {
-        range: Range {
-            start_line: line as u64,
-            start_character: ch,
-            end_line: line as u64,
-            end_character: ch,
-        },
-        text,
-    };
-    let (imports, first_code) = top_imports(text);
-    let statement = format!("from {module} import {name}");
+    let (imports, _) = top_imports(text);
     if let Some(i) = imports
         .iter()
         .find(|i| i.from && i.simple && i.module == module)
@@ -646,17 +643,81 @@ pub fn import_edit(
         let line = lines[i.line].trim_end_matches('\r');
         let end = line.find('#').unwrap_or(line.len());
         let end_chars = line[..end].trim_end().chars().count() as u64;
-        return at(i.line, end_chars, format!(", {name}"));
+        return edit_at(i.line, end_chars, format!(", {name}"));
     }
+    statement_edit(text, &format!("from {module} import {name}"), std, roots)
+}
+
+/// The edit that adds `import module` for a standard library module to `text` (`SPEC-0098` v14
+/// behaviour 19a), placed as [`import_edit`] places a new line; `None` when the file already has
+/// a top-level `import module`.
+pub fn module_import_edit(
+    text: &str,
+    module: &str,
+    roots: &dyn Fn(&str) -> bool,
+) -> Option<CompletionEdit> {
+    let (imports, _) = top_imports(text);
+    if imports.iter().any(|i| !i.from && i.module == module) {
+        return None;
+    }
+    Some(statement_edit(
+        text,
+        &format!("import {module}"),
+        true,
+        roots,
+    ))
+}
+
+fn edit_at(line: usize, ch: u64, text: String) -> CompletionEdit {
+    CompletionEdit {
+        range: Range {
+            start_line: line as u64,
+            start_character: ch,
+            end_line: line as u64,
+            end_character: ch,
+        },
+        text,
+    }
+}
+
+/// Where a new import `statement` goes: see [`import_edit`] (`std`) and [`from_import_edit`].
+fn statement_edit(
+    text: &str,
+    statement: &str,
+    std: bool,
+    roots: &dyn Fn(&str) -> bool,
+) -> CompletionEdit {
+    let lines: Vec<&str> = text.split('\n').collect();
+    let len = |n: usize| {
+        lines
+            .get(n)
+            .map(|l| l.trim_end_matches('\r').chars().count())
+            .unwrap_or(0) as u64
+    };
+    let (imports, first_code) = top_imports(text);
     let std_root = |m: &str| roots(m.split('.').next().unwrap_or_default());
+    if !std {
+        return match imports.last() {
+            Some(last) => {
+                let gap = if std_root(&last.module) { "\n" } else { "" };
+                edit_at(last.line, len(last.line), format!("\n{gap}{statement}"))
+            }
+            None => edit_at(first_code, 0, format!("{statement}\n\n")),
+        };
+    }
     if let Some(last) = imports.iter().rev().find(|i| std_root(&i.module)) {
-        return at(last.line, len(last.line), format!("\n{statement}"));
+        return edit_at(last.line, len(last.line), format!("\n{statement}"));
     }
     if let Some(first) = imports.first() {
         let gap = if std_root(&first.module) { "" } else { "\n" };
-        return at(first.line, 0, format!("{statement}\n{gap}"));
+        return edit_at(first.line, 0, format!("{statement}\n{gap}"));
     }
-    at(first_code, 0, format!("{statement}\n\n"))
+    edit_at(first_code, 0, format!("{statement}\n\n"))
+}
+
+/// The root modules of the standard library in `index`, for [`import_edit`].
+pub fn roots_of(index: &[StdlibName]) -> HashSet<String> {
+    stdlib_roots(index).into_iter().map(str::to_owned).collect()
 }
 
 /// Standard library names for the identifier typed at char `character` of line `line` in `text`
@@ -981,6 +1042,40 @@ mod tests {
             (e.range.start_line, e.text.as_str()),
             (4, "from pathlib import Path\n\n")
         );
+    }
+
+    /// SPEC-0098 v14 AK-18: where a project module's and a whole module's import go.
+    #[test]
+    fn project_and_module_import_placement() {
+        let std = |m: &str| matches!(m, "os" | "collections" | "json" | "typing");
+        let text = "import os\nfrom typing import List\n\n\ndef f():\n    pass\n";
+        let e = from_import_edit(text, "util", "helper", false, &std);
+        assert_eq!((e.range.start_line, e.range.start_character), (1, 23));
+        assert_eq!(e.text, "\n\nfrom util import helper");
+        let e = from_import_edit(
+            "import os\n\nfrom app import a\n\nx = 1\n",
+            "util",
+            "h",
+            false,
+            &std,
+        );
+        assert_eq!(
+            (e.range.start_line, e.text.as_str()),
+            (2, "\nfrom util import h")
+        );
+        let e = from_import_edit("from util import a\nx = 1\n", "util", "h", false, &std);
+        assert_eq!(
+            (e.range.start_line, e.range.start_character, e.text.as_str()),
+            (0, 18, ", h")
+        );
+        let e = from_import_edit("x = 1\n", "util", "h", false, &std);
+        assert_eq!(
+            (e.range.start_line, e.text.as_str()),
+            (0, "from util import h\n\n")
+        );
+        let e = module_import_edit(text, "json", &std).unwrap();
+        assert_eq!((e.range.start_line, e.text.as_str()), (1, "\nimport json"));
+        assert!(module_import_edit("import json\n", "json", &std).is_none());
     }
 
     /// SPEC-0072 v9 AK-24: standard library names the server did not offer.

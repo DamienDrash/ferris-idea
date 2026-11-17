@@ -1,6 +1,6 @@
 # SPEC-0088: Test results tree in the Run tool window
 
-- **Version:** 4 · **Date:** 2026-11-13 (v4: Rerun Tests, the keymap's `RerunTests`, behaviour 11, AK-8; v3: Rerun Failed Tests, sorting, Expand and Collapse All, the history of the last 10 runs and the top node named after what ran, behaviours 7–10, AK-4–AK-7, OBS-0034 part 15 R2 and R3); 2026-11-01 (v2: summary above the console, toolbar above the tree; from hand test 15)
+- **Version:** 5 · **Date:** 2026-11-17 (v5: the jump from a test to its source and the details from their first line, behaviours 12–13, AK-9–AK-10, beta screen run of workflow (a), hand test 19); 2026-11-13 (v4: Rerun Tests, the keymap's `RerunTests`, behaviour 11, AK-8; v3: Rerun Failed Tests, sorting, Expand and Collapse All, the history of the last 10 runs and the top node named after what ran, behaviours 7–10, AK-4–AK-7, OBS-0034 part 15 R2 and R3); 2026-11-01 (v2: summary above the console, toolbar above the tree; from hand test 15)
 - **Sources:** GEN (after a test run the IDE shows a tree of suites and tests with their outcome and
   duration, a summary line, a filter for passed tests, and the failure message and output of the selected
   test; F-078), OSS (status icons `expui/run/testPassed|testFailed|testError|testIgnored` from
@@ -68,6 +68,29 @@ See at a glance which tests failed and why, without reading the whole output.
    intellij-community restarts every registered run of the project, whether or not its tab is the
    selected one, which its documentation gives as the reason for the action beside Rerun; the
    action id and its shortcuts in the bundled keymaps. GEN]
+12. **Jump to the test (v5):** a double click on a test, or Enter with a test selected, opens the
+   file that declares it in the editor, whether it was open or not, with the caret at the start of
+   the test's line, and gives the editor the focus; the tree keeps its selection. A single click
+   still only selects and shows the details (behaviour 4); on a suite a double click still opens
+   or closes it. The file and line come from the report and the ▶ markers of SPEC-0045:
+   - Jest and Vitest: the test file the report names for the test's suite (SPEC-0045 v6
+     behaviour 8); the line of the marker whose full name is the suites' names below the file and
+     the test's own, joined by spaces (behaviour 12 there).
+   - pytest: the module part of the test's class (`tests.test_prices.TestCart` →
+     `tests/test_prices.py`; the classes are the names with a capital), in the project folder or,
+     when pytest ran from a folder below it, the shortest path of the project that ends with it
+     (hidden folders and those of packages and builds not looked in); the line of the marker of
+     the test's name in its class, parameters (`[…]`) left out (behaviour 13 there).
+   - Without a marker for the name (a name made at run time) the file opens at its first line.
+     When no file is found — another runner, a module that no longer exists, a remembered run of
+     Jest or Vitest (the history keeps no paths, behaviour 9) — the status bar says that the
+     source of the test was not found and nothing opens. [GEN; beta screen run of workflow (a),
+     hand test 19]
+13. **Details from their first line (v5):** when the console shows a test's details (behaviour
+   4) — after the run, at a click, at a key — it starts at their first line, where the message and
+   the expected and received values are, whatever Scroll to End says; Scroll to End applies to the
+   run's output. Before v5 a failed Jest test's details opened scrolled to the end of the stack
+   trace. [GEN; beta screen run, hand test 19]
 
 ## Acceptance criteria
 - **AK-1** Rows, subtree status, the passed filter, collapsing, the summary line, durations, the test of a
@@ -100,9 +123,18 @@ See at a glance which tests failed and why, without reading the whole output.
   (`everywhere::tests::run_debug_and_window_actions_from_the_keymap`,
   `menus::tests::run_debug_and_window_actions_are_in_their_menus`). In a window, with test runs
   that start again: not checked.
+- **AK-9 (v5, behaviour 12)** The file and line of a pytest test (module, class, parametrized,
+  module below the folder pytest ran from), of a Jest test inside a `describe` and at the top;
+  nothing for a suite, a missing module or a remembered Jest run
+  (`test_tree_model::tests::the_source_of_a_test`); in the harness window with pytest and Jest
+  installed: a double click with real mouse events and Enter open the file at the test's line,
+  the pytest file open, the Jest file closed before
+  (`workflow_a_beta_handtests.rs`: `hand_test_19_pytest_tree`, `hand_test_19_jest_tree`).
+- **AK-10 (v5, behaviour 13)** After a failing Jest run and after a click on another test the
+  console's first line is the details' first line (`hand_test_19_jest_tree`).
 ## Out of scope
-Rerunning failed tests, jumping to a test's source, live updates while the tests run (the tree appears at
-the end), sorting, history of test runs, exporting results.
+Live updates while the tests run (the tree appears at the end), exporting results. The jump to the
+source of a test of other runners (JUnit of Maven and Gradle, Go, libtest, TAP) — later.
 
 ## Known deviations from the reference
 The reference fills the tree while tests run through its own runner integrations; IDECraft reads the

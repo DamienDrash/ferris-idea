@@ -1,6 +1,7 @@
 # SPEC-0048: Project model from build files
 
-- **Version:** 7 · **Date:** 2026-11-13 (v7: the folder roles of Maven and Gradle modules whose build file lies in a
+- **Version:** 8 · **Date:** 2026-11-16 (v8: a configuration that starts a Spring Boot, Quarkus or
+Micronaut application, behaviour 6a, headless pre-check of F-040, OBS-0073; v7 2026-11-13: the folder roles of Maven and Gradle modules whose build file lies in a
 sub-folder of a project without one, behaviour 10a new; v6 after OBS-0031 finding T1: source and test folders
 recognised from the files where no build file declares them, behaviour 14 new; v5 2026-11-06; v2: Gradle dependencies and version catalog, Maven parent chain, properties and dependency management, lock files; v3 after OBS-0024: Maven profiles, plugins, repositories and source folders, the roles of module folders in the project tree, External Libraries from the resolved trees with the JDK's folder, POM errors with line and column; behaviours 5 changed, 9–11 new; v4 for OBS-0024 L7: build files linked and unlinked by hand, behaviour 12 new; v5 after the window check: the project tree follows a
 link or unlink at once, the Java language server writes no Eclipse files into the project; behaviour 12
@@ -52,6 +53,26 @@ straight from the files the build tools use, and offer matching run configuratio
    libtest report), npm `npm run <script>` per script, Go `go test ./...`, Maven `mvn test`, Python
    `python -m pytest` when pytest is a dependency. They use the SPEC-0047 format and are not written
    automatically. [GEN]
+6a. **Framework applications (v8):** the pre-check of F-040 found no way to start a Spring Boot,
+   Quarkus or Micronaut application other than the `main` marker's `exec:java`; IDEs with
+   framework support offer one, and Quarkus's dev mode is the framework's own way to run while
+   developing. A Maven or Gradle module whose dependencies or Maven plugins name a framework gets
+   one more suggestion after `mvn test`/`gradle test`: [GEN; DOC (the frameworks' Maven and Gradle
+   plugin guides, read for the goal and task names); OBS-0073 part 1]
+   - **Quarkus** (group `io.quarkus` or `io.quarkus.platform`, or the `quarkus-maven-plugin`):
+     "Quarkus dev", `mvn quarkus:dev` or `<gradle> quarkusDev`;
+   - else **Micronaut** (group `io.micronaut`, or the `micronaut-maven-plugin`): "Micronaut run",
+     `mvn mn:run` or `<gradle> run`;
+   - else **Spring Boot** (group `org.springframework.boot`, or the `spring-boot-maven-plugin`):
+     "Spring Boot", `mvn spring-boot:run` or `<gradle> bootRun`.
+   Quarkus is checked first because a Quarkus application may use Spring's compatibility
+   libraries. `<gradle>` is the runner of the module's other Gradle suggestions (the wrapper when
+   there is one). The application runs until stopped: its timeout is a day (`SERVER_TIMEOUT_SECS`,
+   86 400 s) instead of the ten minutes of SPEC-0047. Like the others it is listed in the run
+   widget and returned by `project_model`; nothing is written to `run.toml`. A module of only
+   Jakarta EE gets none: an application server is not started by its build. Nothing checks that
+   the build file declares the plugin the goal needs; a Maven project that inherits it from
+   `spring-boot-starter-parent` finds it, one with a Quarkus BOM but without the plugin does not.
 7. MCP tool `project_model` returning modules, problems and suggested run configurations. [ADR-0008]
 8. Lock files give each dependency its locked version (`resolved`): `Cargo.lock` (nearest up to the
    workspace root), `package-lock.json` (top-level installs; v1 `dependencies` too), `poetry.lock` or
@@ -190,8 +211,19 @@ straight from the files the build tools use, and offer matching run configuratio
   excluded roles, a Kotlin source folder outside them is still derived, and a POM below
   `node_modules` gives nothing (`source_roots::tests::modules_in_sub_folders_get_their_roles`;
   `a_build_file_speaks_for_its_folder` with the module roles). In the tree: SPEC-0275 AK-29.
+- **AK-16** (v8) Behaviour 6a: the sample projects of F-040 — `spring-shop` (Spring Boot parent,
+  no plugin declared) "Spring Boot" `mvn spring-boot:run`, `quarkus-greeting` "Quarkus dev"
+  `mvn quarkus:dev`, `micronaut-notes` "Micronaut run" `gradle run`, `jakarta-library` none — and
+  a Gradle Spring Boot module (`bootRun`), a Maven module with only the Micronaut plugin
+  (`mn:run`) and a plain one (none), each with the timeout of a day
+  (`crates/core/tests/it/project.rs`: `framework_applications_get_a_start_configuration`); MCP
+  `project_model` lists "Quarkus dev" (`crates/mcp/tests/it/protocol.rs`:
+  `configuration_keys_complete_and_quarkus_starts_in_dev_mode`).
 
 ## Out of scope
+(v8) Debugging the application started by behaviour 6a (the `main` marker's configuration debugs),
+the active profile given to it, an application server for Jakarta EE.
+
 Resolving transitive dependencies, downloading dependencies or parents from repositories, evaluating Gradle
 scripts or Maven profiles, `go.sum`, SDK management, writing build files.
 

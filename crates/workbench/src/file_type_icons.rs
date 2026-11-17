@@ -60,7 +60,7 @@ pub fn choice_icon(choice: Choice) -> &'static str {
 /// the icon.
 pub fn decided_icon(detected: &Detected) -> Option<&'static str> {
     match detected.source {
-        Source::Override | Source::Pattern | Source::Hashbang => {
+        Source::Override | Source::Pattern | Source::Hashbang | Source::Modeline => {
             Some(detected.language.map_or(TEXT, language_icon))
         }
         Source::Name | Source::None => None,

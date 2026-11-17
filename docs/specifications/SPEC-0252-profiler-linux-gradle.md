@@ -1,6 +1,6 @@
 # SPEC-0252: Profiling on Linux and Gradle `run`
 
-- **Version:** 1 · **Date:** 2026-11-03
+- **Version:** 2 · **Date:** 2026-11-16 (v2: AK-6, hand test 182's Gradle part with real keys)
 - **Sources:** GEN (IDE profilers work on every desktop system and for build-tool launches;
   F-083), STD (Linux `perf record -F 1000 -g -e cpu-clock:u -o <file> -- <command>`,
   `perf script -F comm,tid,ip,sym,dso -i <file>` and its output: a header line per sample, then
@@ -39,12 +39,19 @@ Profile the same programs on Linux as on macOS, and Java programs started by Gra
   text with the path escaped; the Linux and Windows refusals (unit tests in `crates/profiler`).
 - **AK-2** Real runs: `gradle run` of a small application has `Busy.inner` as the hottest method
   (skips without Gradle or JDK 17); a C program under `perf` on Linux (skips without `perf`)
-  (`crates/profiler/tests/real.rs`).
+  (`crates/profiler/tests/memory.rs`).
 - **AK-3** MCP: `profile_run` dry run of a Gradle configuration names JFR and `--init-script`
   (`profiles_memory_and_attaches`).
 - **AK-4** — (covered by the self-tests of SPEC-0120/0136; Linux has no window self-test machine).
 - **AK-5** Hand test (round 4, no. 182): a Gradle application and, on a Linux machine with
   `perf`, a C program; compare with the reference's profiler on Linux.
+- **AK-6 (v2)** Hand test 182's Gradle part in a window of the test harness with real keys
+  (`crates/workbench/tests/it/f083_handtests.rs`: `hand_test_182_gradle_run_profiles_the_application`;
+  skipped without Gradle or `java`, or when the wrapper's distribution is not in the Gradle cache):
+  a Gradle application (`application` plugin) with the run configuration `./gradlew run`, Find
+  Action › Profile Selected and Enter record it with JFR; the application ran, Hot Spots shows
+  `Busy.inner` first with `Busy.java:6` and no Gradle frame, and Enter opens that line. The Linux
+  part needs IDECraft running on Linux and stays with the hand test.
 
 ## Out of scope
 Kernel stacks, `perf` source lines, hardware counters, other Gradle tasks than `run` (tests,

@@ -487,7 +487,7 @@ impl Render for BreakpointPopup {
                 .child(
                     div()
                         .text_color(c(p.ui_dim))
-                        .child(format!("⌥{}", key.to_uppercase())),
+                        .child(keys(&format!("⌥{}", key.to_uppercase()))),
                 )
                 .on_click(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| this.press(key, cx)))
                 // Role, name and state in the semantic tree, as the dialog's switches have them
@@ -547,13 +547,13 @@ impl Render for BreakpointPopup {
                             .text_color(c(p.ui_muted))
                             .child("Condition")
                             .child(div().flex_1())
-                            .child(div().text_xs().text_color(c(p.ui_dim)).child(
+                            .child(div().text_xs().text_color(c(p.ui_dim)).child(keys(
                                 if self.expanded {
                                     "⇧↩ collapse · ⌘↩ done"
                                 } else {
                                     "⇧↩ expand · ↑↓ recent"
                                 },
-                            )),
+                            ))),
                     )
                     .child(
                         crate::metrics::field_frame()
@@ -572,7 +572,10 @@ impl Render for BreakpointPopup {
                             .id("breakpoint-popup-more")
                             .cursor_pointer()
                             .text_color(c(p.link))
-                            .child("More (⇧⌘F8)")
+                            .child(more_label(
+                                &crate::keymaps::current(),
+                                cfg!(target_os = "macos"),
+                            ))
                             .on_click(
                                 cx.listener(|this, _: &gpui::ClickEvent, _, cx| this.more(cx)),
                             ),
@@ -587,9 +590,44 @@ impl Render for BreakpointPopup {
     }
 }
 
+/// The popup's own keys in the notation of the system the window runs on (`SPEC-0127` v14
+/// behaviour 30).
+fn keys(text: &str) -> String {
+    idecraft_ui::keymap::local_keys(text, cfg!(target_os = "macos"))
+}
+
+/// The button that opens the dialog, with the first shortcut of View Breakpoints in `keymap`
+/// written for macOS when `macos` (`SPEC-0127` v14 behaviour 30): "More (⇧⌘F8)",
+/// "More (Ctrl+Shift+F8)", or "More" without a shortcut.
+pub fn more_label(keymap: &idecraft_ui::keymap::Keymap, macos: bool) -> String {
+    match keymap.shortcut_label("ViewBreakpoints", macos) {
+        k if k.is_empty() => "More".to_owned(),
+        k => format!("More ({k})"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// SPEC-0127 v14 AK-19 (PR #866): the keys per platform.
+    #[test]
+    fn keys_follow_the_platform() {
+        let mac = idecraft_ui::keymap::Keymap::bundled_macos();
+        let default = idecraft_ui::keymap::Keymap::bundled_default();
+        assert_eq!(more_label(&mac, true), "More (⇧⌘F8)");
+        assert_eq!(more_label(&default, false), "More (Ctrl+Shift+F8)");
+        let empty = idecraft_ui::keymap::KeymapFile::user("empty", "none");
+        let none = idecraft_ui::keymap::Keymap::resolve(&empty, None, false);
+        assert_eq!(more_label(&none, false), "More");
+        let hint = "⇧↩ collapse · ⌘↩ done";
+        assert_eq!(idecraft_ui::keymap::local_keys(hint, true), hint);
+        assert_eq!(
+            idecraft_ui::keymap::local_keys(hint, false),
+            "Shift+Enter collapse · Ctrl+Enter done"
+        );
+        assert_eq!(idecraft_ui::keymap::local_keys("⌥S", false), "Alt+S");
+    }
 
     /// SPEC-0127 v10 behaviours 19 and 20: Enabled, Suspend with All or Thread.
     #[test]

@@ -1,4 +1,4 @@
-//! SPEC-0020 against the reference databases: SQLite always, PostgreSQL/MySQL when
+//! SPEC-0020 (v2: every measured statement rolled back) against the reference databases: SQLite always, PostgreSQL/MySQL when
 //! `IDECRAFT_TEST_PG` / `IDECRAFT_TEST_MYSQL` / `IDECRAFT_TEST_MARIADB` are set.
 
 use crate::common;
@@ -94,10 +94,12 @@ async fn server_plans_with(s: &Session, query: &str) {
         plan.hints.iter().any(|h| h.contains("full scan")),
         "{plan:#?}"
     );
+    // SPEC-0020 v2 behaviour 4: every measured statement runs in a transaction that is rolled
+    // back, a read too, and the plan says so.
     let measured = explain(s, "select count(*) from movement where delta > 5", true)
         .await
         .unwrap();
-    assert!(measured.analyzed && !measured.rolled_back);
+    assert!(measured.analyzed && measured.rolled_back, "{measured:#?}");
     let scan = all(&measured.nodes)
         .into_iter()
         .find(|n| n.full_scan)
@@ -113,7 +115,7 @@ async fn server_plans_with(s: &Session, query: &str) {
     )
     .await
     .unwrap();
-    assert!(update.rolled_back);
+    assert!(update.analyzed && update.rolled_back, "{update:#?}");
     assert_eq!(delta_of_first(s).await, before);
     assert_eq!(
         explain(s, "drop table movement", true).await.unwrap_err(),

@@ -13,7 +13,8 @@ pub enum Kind {
     /// A Node.js script through js-debug (`SPEC-0091` v4 behaviour 10).
     Node,
     /// A `package.json` script through its package manager and js-debug (`SPEC-0168` behaviour 1);
-    /// the launch's `program` is the package manager, `args` start with `run`.
+    /// the launch's `program` is the package manager, `args` start with `run`. Also Jest through
+    /// `npx` (`SPEC-0045` v6 behaviour 12): `program` is npx, `args` start with `jest`.
     PackageScript,
     /// A page in Chrome through js-debug (`SPEC-0133` behaviour 2); the launch's `program` holds
     /// the URL, `cwd` the folder its sources map to.

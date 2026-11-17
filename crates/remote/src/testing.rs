@@ -63,6 +63,37 @@ impl TestHost {
         )
     }
 
+    /// Starts a server whose sessions get the variables `env` (`SetEnv` of `sshd_config`), such as
+    /// a `HOME` of the test's own, so that nothing the test brings to the host lands in the user's
+    /// home folder, or a `PATH` with a folder the test installs a program into.
+    pub fn start_with_env(dir: &Path, env: &[(&str, &str)]) -> Option<Self> {
+        if env.is_empty() {
+            return Self::start(dir);
+        }
+        let words: Vec<String> = env.iter().map(|(k, v)| format!("\"{k}={v}\"")).collect();
+        Self::start_with(dir, &format!("SetEnv {}\n", words.join(" ")))
+    }
+
+    /// Waits until a whole session through IDECraft's own `ssh` succeeds on the server (`true`
+    /// there): the ready signal of a server that accepts connections but, under load, takes long
+    /// to log a user in. A test that waits for it measures its own steps, not the server's start.
+    /// Returns the last failure when `limit` passes first.
+    pub fn wait_ready(&self, limit: Duration) -> Result<(), String> {
+        let remote = crate::Remote::new(self.target.clone());
+        let start = Instant::now();
+        loop {
+            let failure = match remote.sh("true", &[], None, crate::ssh::TIMEOUT) {
+                Ok(out) if out.success() => return Ok(()),
+                Ok(out) => format!("exit code {:?}: {}", out.exit_code, out.stderr.trim()),
+                Err(e) => e.to_string(),
+            };
+            if start.elapsed() > limit {
+                return Err(failure);
+            }
+            std::thread::sleep(Duration::from_millis(250));
+        }
+    }
+
     /// Starts a server with `extra` lines appended to its `sshd_config`.
     fn start_with(dir: &Path, extra: &str) -> Option<Self> {
         let sshd = sshd()?;

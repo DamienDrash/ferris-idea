@@ -1383,6 +1383,50 @@ fn config(
     }
 }
 
+/// Name of the suggested configuration that starts a Spring Boot application.
+const SPRING_BOOT: &str = "Spring Boot";
+/// Name of the suggested configuration that starts Quarkus in dev mode.
+const QUARKUS_DEV: &str = "Quarkus dev";
+/// Name of the suggested configuration that starts a Micronaut application.
+const MICRONAUT_RUN: &str = "Micronaut run";
+/// How long a suggested application server may run before the timeout ends it: a day
+/// (`SPEC-0048` v8 behaviour 6a; the default of `SPEC-0047` is ten minutes).
+pub const SERVER_TIMEOUT_SECS: u64 = 86_400;
+
+/// The framework whose application a Maven or Gradle module starts, from its dependencies and
+/// Maven plugins (`SPEC-0048` v8 behaviour 6a): the configuration's name and the Maven goal.
+/// Quarkus before Micronaut before Spring Boot, as a Quarkus application may use Spring's
+/// compatibility libraries.
+fn framework_server(m: &Module) -> Option<(&'static str, &'static str)> {
+    let group = |g: &str| {
+        m.dependencies
+            .iter()
+            .any(|d| d.name.split(':').next() == Some(g))
+            || m.plugins.iter().any(|p| p.split(':').next() == Some(g))
+    };
+    let plugin = |artifact: &str| {
+        m.plugins
+            .iter()
+            .any(|p| p.split(':').nth(1) == Some(artifact))
+    };
+    if group("io.quarkus") || group("io.quarkus.platform") || plugin("quarkus-maven-plugin") {
+        Some((QUARKUS_DEV, "quarkus:dev"))
+    } else if group("io.micronaut") || plugin("micronaut-maven-plugin") {
+        Some((MICRONAUT_RUN, "mn:run"))
+    } else if group("org.springframework.boot") || plugin("spring-boot-maven-plugin") {
+        Some((SPRING_BOOT, "spring-boot:run"))
+    } else {
+        None
+    }
+}
+
+/// A suggested configuration that starts an application server: it runs until stopped.
+fn server_config(name: String, command: &[&str], dir: &str) -> RunConfig {
+    let mut c = config(name, command, dir, RunKind::Run, None);
+    c.timeout = Some(SERVER_TIMEOUT_SECS);
+    c
+}
+
 /// Run configurations that fit the modules (behaviour 6).
 pub fn suggest_run_configs(model: &ProjectModel) -> Vec<RunConfig> {
     let mut out = Vec::new();
@@ -1480,6 +1524,9 @@ pub fn suggest_run_configs(model: &ProjectModel) -> Vec<RunConfig> {
                 );
                 test.report_file = Some(in_dir(&m.dir, "target/surefire-reports"));
                 out.push(test);
+                if let Some((what, goal)) = framework_server(m) {
+                    out.push(server_config(label(m, what), &["mvn", goal], &m.dir));
+                }
             }
             ModuleKind::Gradle if model.modules.iter().all(|o| !o.members.contains(&m.dir)) => {
                 let runner = m
@@ -1504,6 +1551,14 @@ pub fn suggest_run_configs(model: &ProjectModel) -> Vec<RunConfig> {
                 );
                 test.report_file = Some(in_dir(&m.dir, "build/test-results/test"));
                 out.push(test);
+                if let Some((what, _)) = framework_server(m) {
+                    let task = match what {
+                        SPRING_BOOT => "bootRun",
+                        QUARKUS_DEV => "quarkusDev",
+                        _ => "run",
+                    };
+                    out.push(server_config(label(m, what), &[&runner, task], &m.dir));
+                }
             }
             ModuleKind::Python
                 if m.dependencies

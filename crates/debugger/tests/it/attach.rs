@@ -134,7 +134,10 @@ fn attach_to_a_native_process_by_id() {
     std::thread::sleep(Duration::from_millis(300));
     let target = Target::Pid(program.0.id());
     let arguments = attach_arguments(Runtime::Native, &target, &dir).unwrap();
-    let breakpoints = BTreeMap::from([(source.clone(), vec![SourceBreakpoint::from(6)])]);
+    let breakpoints = BTreeMap::from([(
+        source.clone(),
+        vec![SourceBreakpoint::from(line_of(LOOP_C, "ticks++"))],
+    )]);
     let (session, placed) = DebugSession::attach(
         &command,
         "lldb-dap",
@@ -235,4 +238,13 @@ fn yama_forbids_attach() -> bool {
         .ok()
         .and_then(|s| s.trim().parse::<u8>().ok())
         .is_some_and(|scope| scope >= 2)
+}
+
+/// The 1-based line of the first line of `source` that contains `text`.
+fn line_of(source: &str, text: &str) -> u64 {
+    source
+        .lines()
+        .position(|l| l.contains(text))
+        .expect("the text is in the source") as u64
+        + 1
 }

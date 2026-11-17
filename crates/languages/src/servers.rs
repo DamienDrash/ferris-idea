@@ -61,7 +61,16 @@ pub struct Candidate {
     /// question for diagnostics takes the second, or the first when no second comes within
     /// [`crate::insight::REFINE_WAIT`] (`SPEC-0042` v20 behaviour 36).
     pub publishes_twice: bool,
+    /// Whether it publishes an opened file's diagnostics in up to [`STEPS`] lists, one per kind
+    /// of check, each with all found so far (typescript-language-server: syntax, then semantic,
+    /// then suggestions, close ones merged): a question for diagnostics takes the last list,
+    /// waiting after each for the next as long as [`crate::insight::STEP_QUIET`] (`SPEC-0042`
+    /// v23 behaviour 41).
+    pub publishes_in_steps: bool,
 }
+
+/// How many lists a server that publishes in steps sends at most for an opened file.
+pub const STEPS: u32 = 3;
 
 const fn c(
     program: &'static str,
@@ -82,6 +91,7 @@ const fn c(
         rereads_saved_files: false,
         skips_indexing_when_cached: false,
         publishes_twice: false,
+        publishes_in_steps: false,
     }
 }
 
@@ -120,11 +130,16 @@ const JSON: &[Candidate] = &[c(
     "npm install -g vscode-langservers-extracted",
 )];
 const TS: &[Candidate] = &[
-    c(
-        "typescript-language-server",
-        STDIO,
-        "npm install -g typescript-language-server typescript@5",
-    ),
+    // Syntax, semantic and suggestion diagnostics in separate lists (`SPEC-0042` v23 behaviour
+    // 41).
+    Candidate {
+        publishes_in_steps: true,
+        ..c(
+            "typescript-language-server",
+            STDIO,
+            "npm install -g typescript-language-server typescript@5",
+        )
+    },
     c("vtsls", STDIO, "npm install -g @vtsls/language-server"),
     // TypeScript 7's own language server (`SPEC-0042` v12 behaviour 21). It hands out a file's
     // diagnostics when asked (`textDocument/diagnostic`) instead of publishing them (v13).

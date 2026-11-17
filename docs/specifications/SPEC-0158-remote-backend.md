@@ -1,8 +1,9 @@
 # SPEC-0158: IDECraft's backend on a remote host
 
-- **Version:** 3 · **Date:** 2026-11-07 (v2 2026-11-03: symbols, problems and run configurations
-  through the backend, behaviours 7–9; v3: post-quantum key exchange required on the SSH channel,
-  ADR-0025 v3)
+- **Version:** 4 · **Date:** 2026-11-16 (v2 2026-11-03: symbols, problems and run configurations
+  through the backend, behaviours 7–9; v3 2026-11-07: post-quantum key exchange required on the SSH
+  channel, ADR-0025 v3; v4: behaviour 10, Enter on the listed results; behaviour 4, the header keeps
+  its buttons in view; AK-6, hand tests 84 and 184 with real keys)
 - **Sources:** GEN (remote development: the IDE's backend runs on the machine that holds the
   code — a server, a VM, a build box — while the window runs locally, so indexing, search,
   inspections and builds happen where the files are; F-083 "Remote"), STD (OpenSSH client as in
@@ -29,8 +30,12 @@ copying the project or browsing file by file.
 3. **The backend's rights** on the host are those of the host's project (its own agent permissions,
    SPEC-0053); it reads and runs nothing more than the local backend would. [SPEC-0053]
 4. **Window:** in the Remote Host window (SPEC-0121) "Start Backend" starts it for the folder shown;
-   the header then shows "Backend: idecraft <version> in <folder> · ?text searches" and the status
-   bar how it was installed and how many tools it has. Leaving the host stops it. [GEN]
+   the header then shows "Backend: idecraft <version> in <folder>", its help line names `?text`,
+   `@symbol`, `!` and `>`, and the status bar says how it was installed ("uploaded" or "found on
+   the host") and how many tools it has. Leaving the host stops it. **v4:** when the header is too
+   narrow, the host's folder, the backend line and the help line are shortened, never the
+   buttons: they stay in view. Before, a long folder pushed Start Backend and Delete out of the
+   window (found by the re-check of hand test 184 on 2026-11-16). [GEN]
 5. **Search on the host:** `?text` and Enter in the field searches the host's project through the
    backend (`search_in_files` there); the hits are listed as `file:line  text`; Enter opens the
    hit's file (SPEC-0121 behaviour 4) on its line; Escape returns to the folder. [GEN]
@@ -56,6 +61,13 @@ copying the project or browsing file by file.
    `cd`s into its folder, sets its environment and runs; a failing step stops the chain. The tab
    is named after the configuration. Running there is the user's own action, as with a local
    run. [GEN]
+10. **v4 – Enter on the listed results:** while the field still holds the query that listed the
+   rows shown (`?text`, `@name`, `!`, `>`), or is empty, Enter acts on the selected row: it opens a
+   hit or a problem at its line, or runs a configuration (behaviour 9). ↑ and ↓ choose the row from
+   the field, and a double click on a row does the same as Enter. Any other text in the field is a
+   new query, a path or a host. Before, Enter with the query still in the field asked the backend
+   again and selected the first row, so no hit could be opened and no configuration started with
+   the keyboard (found by the re-check of hand tests 84 and 184 on 2026-11-16). [GEN]
 
 ## Acceptance criteria
 - **AK-1** Platform names (`arm64` = `aarch64`), paths, build fingerprint (`backend::tests`).
@@ -73,6 +85,24 @@ copying the project or browsing file by file.
   host-side check of an opened file.
 - **AK-5** Hand test (round 4, no. 84): a Linux VM or server with IDECraft installed, and a Mac
   over SSH with upload; search and agent calls next to the reference's remote development.
+- **AK-6 (v4)** Hand tests 84 and 184 in a window of the test harness with real keys and mouse
+  clicks, against the system `sshd` started as the current user with a home folder of the test's
+  own, and this build's `idecraft` as the backend (`crates/app/tests/it/f083_handtests.rs`;
+  skipped without `sshd`). `hand_test_84_backend_on_a_host_with_keys`: a folder typed into the
+  field with Enter, Start Backend clicked uploads this build ("uploaded" in the status bar);
+  `?text` and Enter list the hits as `file:line  text`, ↓ and Enter open the second hit at its
+  line, a double click the first; Hosts ends the backend on the host; an `idecraft` on the host's
+  `PATH` is used ("found on the host") and nothing is uploaded; on a Linux host without IDECraft
+  (the Docker VM of the reference environment, when `IDECRAFT_TEST_DOCKER_SSH` is set) the error
+  names both platforms and what to install. `hand_test_84_an_agent_inspects_the_host_project`: `idecraft mcp` plans
+  with `remote_backend_start`, starts it with the `ssh` and `run` rights, `remote_backend_call`
+  runs `inspect_code` there, `remote_backend_stop` ends it; start and call are logged, the call
+  without its arguments. `hand_test_184_symbols_problems_and_runs_on_the_host_with_keys`: `@name`
+  and Enter list the function with kind and line, Enter opens it there; the status bar reports
+  the host's `clangd` problems in the file (or why no server ran); `!` and Enter list them, Enter
+  opens one at its line; `>` and Enter list the configurations, ↓ and Enter run one with its
+  before-launch step in an SSH terminal tab named after it, ending with "Process finished with
+  exit code 0".
 
 ## Out of scope
 Completion, navigation and refactoring in the local editor through the backend (the editor works

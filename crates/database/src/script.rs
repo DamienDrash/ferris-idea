@@ -514,8 +514,9 @@ enum Body {
     /// functions and events; PostgreSQL and DuckDB `BEGIN ATOMIC`): a `;` inside a block does not
     /// end it.
     Blocks,
-    /// A T-SQL `CREATE`/`ALTER` of a procedure, function, trigger or view: it runs to the end of
-    /// its batch (`GO` or the end of the script).
+    /// A T-SQL `CREATE`/`ALTER` of a procedure, function, trigger or view, or a statement that
+    /// declares a variable or begins control of flow (`DECLARE`, `IF`, `WHILE`, a `BEGIN` block):
+    /// it runs to the end of its batch (`GO` or the end of the script).
     Batch,
 }
 
@@ -524,8 +525,18 @@ fn body_of(words: &[String], dialect: Dialect) -> Body {
     let mut words = words.iter().map(String::as_str);
     let first = words.next();
     if dialect == Dialect::SqlServer {
-        if !matches!(first, Some("create" | "alter")) {
-            return Body::None;
+        match first {
+            // A variable lives for its batch, and control of flow takes the statements after it as
+            // its body: the rest of the batch is one statement (v6 behaviour 11a).
+            Some("declare" | "if" | "while") => return Body::Batch,
+            Some("begin") => {
+                return match words.next() {
+                    Some("tran" | "transaction" | "distributed") => Body::None,
+                    _ => Body::Batch,
+                };
+            }
+            Some("create" | "alter") => {}
+            _ => return Body::None,
         }
         for w in words.take(3) {
             match w {
@@ -867,6 +878,14 @@ mod tests {
             ),
             ["create table t (a int)", "select seq'x;y' from dual"]
         );
+        // A `/` after a statement that already ended at `;` runs nothing a second time.
+        assert_eq!(
+            texts_in(
+                "select 1 from dual;\n/\nselect 2 from dual",
+                Dialect::Oracle
+            ),
+            ["select 1 from dual", "select 2 from dual"]
+        );
     }
 
     /// SPEC-0005 v2 AK-9: an SQLite trigger's body stays one statement, with a CASE expression
@@ -950,6 +969,52 @@ mod tests {
         assert_eq!(
             texts_in("create table t(a int); select 1;", Dialect::SqlServer),
             ["create table t(a int)", "select 1"]
+        );
+    }
+
+    /// SPEC-0005 v6 AK-21: a T-SQL variable or control of flow keeps the rest of its batch.
+    #[test]
+    fn t_sql_variables_and_blocks_keep_their_batch() {
+        let variable = "declare @n int = 2;\nselect @n as n;";
+        let attempt = "begin try\n  select 1/0 as x;\nend try\nbegin catch\n  select error_number();\nend catch";
+        let branch = "if 1 = 1\nbegin\n  select 'a';\n  select 'b';\nend";
+        let loop_ = "while @i < 3\n  set @i += 1;\nselect @i";
+        let script = format!(
+            "create table t (a int); insert into t values (1);\n{variable}\nGO\n{attempt}\nGO\n\
+             {branch}\ngo\ndeclare @i int = 0;\n{loop_}\nGO\nbegin tran; update t set a = 2; commit;"
+        );
+        assert_eq!(
+            texts_in(&script, Dialect::SqlServer),
+            [
+                "create table t (a int)",
+                "insert into t values (1)",
+                // The batch's `;` stay in the text, the last one too (as for a procedure).
+                variable,
+                attempt,
+                branch,
+                &format!("declare @i int = 0;\n{loop_}"),
+                "begin tran",
+                "update t set a = 2",
+                "commit"
+            ]
+        );
+        // `BEGIN TRANSACTION` and `BEGIN DISTRIBUTED TRANSACTION` are no blocks.
+        assert_eq!(
+            texts_in(
+                "begin transaction x; select 1; begin distributed transaction; select 2",
+                Dialect::SqlServer
+            ),
+            [
+                "begin transaction x",
+                "select 1",
+                "begin distributed transaction",
+                "select 2"
+            ]
+        );
+        // Elsewhere `DECLARE` and `IF` change nothing.
+        assert_eq!(
+            texts_in("declare x int; select 1;", Dialect::PostgreSql),
+            ["declare x int", "select 1"]
         );
     }
 

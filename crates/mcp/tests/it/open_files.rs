@@ -1088,3 +1088,29 @@ async fn a_sql_rename_changes_the_shown_text_of_an_unsaved_sql_file() {
     assert!(editors.undo(&q));
     assert_eq!(editors.text(&q), typed);
 }
+
+/// SPEC-0006 v56 AK-7: `replace_text_in_file` on a file open with unsaved typing edits the
+/// buffer, next to the typing, and leaves the disk alone; one undo is the user's text again.
+#[tokio::test]
+async fn replace_text_in_file_goes_through_the_buffer() {
+    let (mut client, root, editor, typed) = open_with_unsaved_typing(true).await;
+    let file = root.join("src/app.py");
+    let disk = std::fs::read_to_string(&file).unwrap();
+    let done = client
+        .call(
+            "replace_text_in_file",
+            json!({"path": "src/app.py", "old_text": "d = 4", "new_text": "d = 40", "dry_run": false}),
+        )
+        .await;
+    assert!(!is_error(&done), "{done}");
+    assert_eq!(json_text(&done)["applied"], true);
+    let shown = editor.buffer.lock().unwrap().text();
+    assert_eq!(shown, typed.replace("d = 4", "d = 40"));
+    assert_eq!(
+        std::fs::read_to_string(&file).unwrap(),
+        disk,
+        "nothing behind the editor"
+    );
+    assert!(editor.buffer.lock().unwrap().undo());
+    assert_eq!(editor.buffer.lock().unwrap().text(), typed);
+}

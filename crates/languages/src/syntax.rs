@@ -84,6 +84,15 @@ const PYTHON_ROLES: &str = include_str!("../queries/python-roles.scm");
 const JAVASCRIPT_ROLES: &str = include_str!("../queries/javascript-roles.scm");
 const TYPESCRIPT_ROLES: &str = include_str!("../queries/typescript-roles.scm");
 const SQL_ROLES: &str = include_str!("../queries/sql-roles.scm");
+/// Roles of languages whose bundled query names every identifier or scalar first (`SPEC-0027`
+/// v13).
+const C_ROLES: &str = include_str!("../queries/c-roles.scm");
+const CPP_ROLES: &str = include_str!("../queries/cpp-roles.scm");
+const YAML_ROLES: &str = include_str!("../queries/yaml-roles.scm");
+const RUBY_ROLES: &str = include_str!("../queries/ruby-roles.scm");
+const LUA_ROLES: &str = include_str!("../queries/lua-roles.scm");
+const SWIFT_ROLES: &str = include_str!("../queries/swift-roles.scm");
+const R_ROLES: &str = include_str!("../queries/r-roles.scm");
 
 /// Supported languages (`SPEC-0027` behaviour 1); `tsx` selects TSX for TypeScript files.
 fn grammar(language: LanguageId, tsx: bool) -> Option<&'static Grammar> {
@@ -136,10 +145,16 @@ fn grammar(language: LanguageId, tsx: bool) -> Option<&'static Grammar> {
             tree_sitter_rust::HIGHLIGHTS_QUERY
         ),
         LanguageId::Go => cached!(tree_sitter_go::LANGUAGE, tree_sitter_go::HIGHLIGHTS_QUERY),
-        LanguageId::C => cached!(tree_sitter_c::LANGUAGE, tree_sitter_c::HIGHLIGHT_QUERY),
+        LanguageId::C => cached!(
+            tree_sitter_c::LANGUAGE,
+            C_ROLES,
+            tree_sitter_c::HIGHLIGHT_QUERY
+        ),
         // The C++ grammar extends C's; its highlight query adds to C's.
         LanguageId::Cpp => cached!(
             tree_sitter_cpp::LANGUAGE,
+            C_ROLES,
+            CPP_ROLES,
             tree_sitter_c::HIGHLIGHT_QUERY,
             tree_sitter_cpp::HIGHLIGHT_QUERY
         ),
@@ -163,6 +178,7 @@ fn grammar(language: LanguageId, tsx: bool) -> Option<&'static Grammar> {
         ),
         LanguageId::Yaml => cached!(
             tree_sitter_yaml::LANGUAGE,
+            YAML_ROLES,
             tree_sitter_yaml::HIGHLIGHTS_QUERY
         ),
         // Block structure only (headings, lists, code fences); inline emphasis needs the inline
@@ -211,13 +227,23 @@ fn grammar(language: LanguageId, tsx: bool) -> Option<&'static Grammar> {
         ),
         LanguageId::Swift => cached!(
             tree_sitter_swift::LANGUAGE,
+            SWIFT_ROLES,
             tree_sitter_swift::HIGHLIGHTS_QUERY
         ),
-        LanguageId::Lua => cached!(tree_sitter_lua::LANGUAGE, tree_sitter_lua::HIGHLIGHTS_QUERY),
-        LanguageId::R => cached!(tree_sitter_r::LANGUAGE, tree_sitter_r::HIGHLIGHTS_QUERY),
+        LanguageId::Lua => cached!(
+            tree_sitter_lua::LANGUAGE,
+            LUA_ROLES,
+            tree_sitter_lua::HIGHLIGHTS_QUERY
+        ),
+        LanguageId::R => cached!(
+            tree_sitter_r::LANGUAGE,
+            R_ROLES,
+            tree_sitter_r::HIGHLIGHTS_QUERY
+        ),
         // SPEC-0027 v5.
         LanguageId::Ruby => cached!(
             tree_sitter_ruby::LANGUAGE,
+            RUBY_ROLES,
             tree_sitter_ruby::HIGHLIGHTS_QUERY
         ),
         LanguageId::Php => cached!(
@@ -2899,6 +2925,135 @@ mod tests {
         );
         let rust = SyntaxDocument::new(LanguageId::Rust, false, "fn f() {\n    g();\n}\n").unwrap();
         assert!(rust.one_line_bodies().is_empty());
+    }
+
+    /// SPEC-0027 AK-16 (v13): in the languages whose bundled query names every identifier (or
+    /// scalar) first, declared and called functions, YAML keys, C constants and Lua and R
+    /// parameters get their roles; the rest keeps the bundled query's kinds.
+    #[test]
+    fn roles_before_the_bundled_queries() {
+        let roles = |language: LanguageId, text: &str| -> Vec<(String, String)> {
+            let doc = SyntaxDocument::new(language, false, text).unwrap();
+            let chars: Vec<char> = text.chars().collect();
+            doc.highlight()
+                .iter()
+                .filter(|s| {
+                    s.kind.starts_with("function")
+                        || s.kind.starts_with("property")
+                        || s.kind.starts_with("constant")
+                        || s.kind == "variable.parameter"
+                        || s.kind == "keyword"
+                            && chars[s.start].is_lowercase()
+                            && s.end - s.start > 6
+                })
+                .map(|s| (chars[s.start..s.end].iter().collect(), s.kind.clone()))
+                .collect()
+        };
+        let pairs = |list: &[(&str, &str)]| -> Vec<(String, String)> {
+            list.iter()
+                .map(|(t, k)| ((*t).to_owned(), (*k).to_owned()))
+                .collect()
+        };
+        assert_eq!(
+            roles(
+                LanguageId::C,
+                "#define SQ(x) ((x)*(x))\nstatic int greet(int n) { return n + MAX; }\nint main(void) { printf(\"%d\", greet(1)); ops.run(); p->stop(); }\n"
+            ),
+            pairs(&[
+                ("SQ", "function.macro"),
+                ("greet", "function"),
+                ("MAX", "constant"),
+                ("main", "function"),
+                ("printf", "function.call"),
+                ("greet", "function.call"),
+                ("run", "function.call"),
+                ("stop", "function.call"),
+            ])
+        );
+        let cpp = roles(
+            LanguageId::Cpp,
+            "class G { public: int greet(int n) { return n; } };\nint G::other() { return std::max(1, 2); }\nint main() { G g; g.greet(1); }\n",
+        );
+        assert_eq!(
+            cpp,
+            pairs(&[
+                ("greet", "function"),
+                ("other", "function"),
+                ("max", "function.call"),
+                ("main", "function"),
+                ("greet", "function.call"),
+            ]),
+            "{cpp:?}"
+        );
+        assert_eq!(
+            roles(
+                LanguageId::Yaml,
+                "name: shop\n\"quoted\": x\nitems:\n  - a\nmap: {k: v, 'q': w}\n"
+            ),
+            pairs(&[
+                ("name", "property"),
+                ("\"quoted\"", "property"),
+                ("items", "property"),
+                ("map", "property"),
+                ("k", "property"),
+                ("'q'", "property"),
+            ])
+        );
+        assert_eq!(
+            roles(
+                LanguageId::Ruby,
+                "class G\n  private\n  def greet(n)\n    n\n  end\n  def self.make; end\nend\ng.greet(1)\nputs \"a\"\n"
+            ),
+            pairs(&[
+                ("private", "keyword"),
+                ("greet", "function"),
+                ("make", "function"),
+                ("greet", "function.call"),
+                ("puts", "function.call"),
+            ])
+        );
+        assert_eq!(
+            roles(
+                LanguageId::Lua,
+                "local function greet(n) return n end\nfunction M.run(a) end\nprint(greet(1))\nobj:stop()\n"
+            ),
+            pairs(&[
+                ("greet", "function"),
+                ("n", "variable.parameter"),
+                ("run", "function"),
+                ("a", "variable.parameter"),
+                ("print", "function.call"),
+                ("greet", "function.call"),
+                ("stop", "function.call"),
+            ])
+        );
+        assert_eq!(
+            roles(
+                LanguageId::Swift,
+                "func greet(_ n: String) -> String { return n }\nprint(greet(\"a\"))\nlist.append(1)\n"
+            ),
+            pairs(&[
+                ("greet", "function"),
+                ("print", "function.call"),
+                ("greet", "function.call"),
+                ("append", "function.call"),
+            ])
+        );
+        assert_eq!(
+            roles(
+                LanguageId::R,
+                "greet <- function(n) paste(\"Hi\", n)\nshout = function(x) x\nprint(greet(\"a\"))\n"
+            ),
+            pairs(&[
+                ("greet", "function"),
+                ("n", "variable.parameter"),
+                ("paste", "function.call"),
+                ("shout", "function"),
+                ("x", "variable.parameter"),
+                ("print", "function.call"),
+                ("greet", "function.call"),
+            ])
+        );
     }
 
     /// SPEC-0027 AK-10 (v8): Kotlin names take the role of what they are — functions declared and

@@ -10,6 +10,9 @@ use gpui::{App, AppContext, Context, Window};
 use super::WorkbenchView;
 use crate::{ImportPreview, ImportPreviewEvent};
 
+/// The name Export Settings suggests (`SPEC-0105` v9 behaviour 14).
+pub const SETTINGS_EXPORT_NAME: &str = "settings.idcsettings";
+
 /// Files the system asked IDECraft to open (Finder, `open`), waiting for a project window.
 static OPENED: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
 
@@ -68,6 +71,80 @@ impl WorkbenchView {
         window.focus(&view.read(cx).focus());
         self.import_preview = Some(view);
         cx.notify();
+    }
+
+    /// File › Manage IDE Settings › Export Settings… (`SPEC-0105` v9 behaviour 14): asks for the
+    /// file in the system's save dialog, starting in the project's folder.
+    pub(crate) fn export_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let chosen = cx.prompt_for_new_path(&self.root, Some(SETTINGS_EXPORT_NAME));
+        cx.spawn_in(window, async move |this, cx| {
+            let Ok(Ok(Some(target))) = chosen.await else {
+                return;
+            };
+            let _ = this.update(cx, |this, cx| this.export_settings_to(&target, cx));
+        })
+        .detach();
+    }
+
+    /// Writes the `settings` exchange file of the IDE's shared settings and the user keymap to
+    /// `target` (`SPEC-0303` behaviour 13) and says in the status bar what was written and what
+    /// was left out; returns whether it was written.
+    pub fn export_settings_to(&mut self, target: &Path, cx: &mut Context<Self>) -> bool {
+        let targets = self.import_targets(cx);
+        let written = idecraft_formats::export(
+            "settings",
+            &idecraft_formats::Selection::default(),
+            &targets,
+        )
+        .and_then(|e| {
+            std::fs::write(target, e.text.as_bytes())
+                .map(|()| e.left_out)
+                .map_err(|err| err.to_string())
+        });
+        self.status = Some(match &written {
+            Ok(left_out) => {
+                let sections: Vec<&str> = left_out
+                    .iter()
+                    .filter_map(|l| l.strip_prefix("settings."))
+                    .filter_map(|l| l.split(':').next())
+                    .collect();
+                if sections.is_empty() {
+                    format!("Exported the settings to {}", target.display())
+                } else {
+                    format!(
+                        "Exported the settings to {}; not exported: {}",
+                        target.display(),
+                        sections.join(", ")
+                    )
+                }
+            }
+            Err(e) => format!("Settings not exported to {}: {e}", target.display()),
+        });
+        if written.is_ok() && target.starts_with(&self.root) {
+            self.tree = self.tree.reloaded();
+        }
+        cx.notify();
+        written.is_ok()
+    }
+
+    /// File › Manage IDE Settings › Import Settings… (`SPEC-0105` v9 behaviour 14): asks for a
+    /// file in the system's open dialog and shows its import preview; nothing changes before the
+    /// user confirms there.
+    pub(crate) fn import_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let chosen = cx.prompt_for_paths(gpui::PathPromptOptions {
+            files: true,
+            directories: false,
+            multiple: false,
+            prompt: Some("Import".into()),
+        });
+        cx.spawn_in(window, async move |this, cx| {
+            if let Ok(Ok(Some(paths))) = chosen.await
+                && let Some(path) = paths.into_iter().next()
+            {
+                let _ = this.update_in(cx, |this, window, cx| this.open_import(&path, window, cx));
+            }
+        })
+        .detach();
     }
 
     /// The import preview, if it is shown.

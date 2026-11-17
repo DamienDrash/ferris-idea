@@ -1039,7 +1039,7 @@ impl Render for BreakpointDialog {
                     .children(sw.key.map(|k| {
                         div()
                             .text_color(c(p.ui_dim))
-                            .child(format!("⌥{}", k.to_uppercase()))
+                            .child(keys(&format!("⌥{}", k.to_uppercase())))
                     }))
                     .on_click(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
                         this.click_switch(&id, cx)
@@ -1153,7 +1153,7 @@ impl Render for BreakpointDialog {
                                         .child(
                                             button(
                                                 "breakpoint-depends",
-                                                format!("{depends_label} (⌥D)"),
+                                                format!("{depends_label} ({})", keys("⌥D")),
                                                 false,
                                             )
                                             .on_click(cx.listener(
@@ -1174,12 +1174,13 @@ impl Render for BreakpointDialog {
                                             button(
                                                 "breakpoint-depends-keep",
                                                 format!(
-                                                    "After hit: {} (⌥K)",
+                                                    "After hit: {} ({})",
                                                     if rules.depends_keep {
                                                         "Leave enabled"
                                                     } else {
                                                         "Disable again"
-                                                    }
+                                                    },
+                                                    keys("⌥K")
                                                 ),
                                                 false,
                                             )
@@ -1207,7 +1208,7 @@ impl Render for BreakpointDialog {
                                 d.child(
                                     button(
                                         "breakpoint-caught",
-                                        format!("{} Caught exceptions (⌥C)", check(shown.caught)),
+                                        format!("{} Caught exceptions ({})", check(shown.caught), keys("⌥C")),
                                         false,
                                     )
                                     .on_click(cx.listener(
@@ -1220,8 +1221,9 @@ impl Render for BreakpointDialog {
                                     button(
                                         "breakpoint-uncaught",
                                         format!(
-                                            "{} Uncaught exceptions (⌥U)",
-                                            check(shown.uncaught)
+                                            "{} Uncaught exceptions ({})",
+                                            check(shown.uncaught),
+                                            keys("⌥U")
                                         ),
                                         false,
                                     )
@@ -1317,13 +1319,13 @@ impl Render for BreakpointDialog {
                         )
                     })
                     .child(
-                        button("breakpoint-add-method", "+ Method Breakpoint (⌘N)".into(), false)
+                        button("breakpoint-add-method", keys("+ Method Breakpoint (⌘N)"), false)
                             .on_click(cx.listener(|this, _: &gpui::ClickEvent, window, cx| {
                                 this.add_method(window, cx)
                             })),
                     )
                     .child(
-                        button("breakpoint-add-field", "+ Field Watchpoint (⇧⌘N)".into(), false)
+                        button("breakpoint-add-field", keys("+ Field Watchpoint (⇧⌘N)"), false)
                             .on_click(cx.listener(|this, _: &gpui::ClickEvent, window, cx| {
                                 this.add_field(window, cx)
                             })),
@@ -1336,6 +1338,12 @@ impl Render for BreakpointDialog {
                     ),
             )
     }
+}
+
+/// The dialog's own keys in the notation of the system the window runs on (`SPEC-0127` v14
+/// behaviour 30).
+fn keys(text: &str) -> String {
+    idecraft_ui::keymap::local_keys(text, cfg!(target_os = "macos"))
 }
 
 #[cfg(test)]

@@ -8,7 +8,7 @@ use crate::common;
 use idecraft_database::{
     ConnectionProfile, OnError, Outcome, Session, complete, count_rows, current_schema, introspect,
     introspect_schema, list_schemas, object_definition, schema_fingerprint, schema_objects,
-    sequences,
+    sequences, show_ddl_in,
 };
 
 async fn run(s: &Session, sql: &str) {
@@ -685,4 +685,486 @@ async fn server_like_mysql_definitions(var: &str) {
             "{text}"
         );
     }
+}
+
+/// The foreign keys of `table` as `(columns, on delete, on update)`, sorted by columns.
+fn actions(
+    tables: &[idecraft_database::Table],
+    table: &str,
+) -> Vec<(String, Option<String>, Option<String>)> {
+    let t = tables.iter().find(|t| t.name == table).unwrap();
+    let mut out: Vec<_> = t
+        .foreign_keys
+        .iter()
+        .map(|f| {
+            (
+                f.columns.join(","),
+                f.on_delete.clone(),
+                f.on_update.clone(),
+            )
+        })
+        .collect();
+    out.sort();
+    out
+}
+
+fn some(text: &str) -> Option<String> {
+    Some(text.to_owned())
+}
+
+/// SPEC-0013 v8 AK-18: the actions of foreign keys on SQLite, from `foreign_key_list`.
+#[tokio::test]
+async fn sqlite_foreign_key_actions() {
+    let dir = std::env::temp_dir().join(format!("idecraft-fk-actions-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("main.db");
+    rusqlite::Connection::open(&file).unwrap();
+    let s = connect(&format!("sqlite:{}", file.display())).await;
+    run(
+        &s,
+        "create table parent (id integer primary key);
+         create table child (id integer primary key,
+           a integer references parent(id) on delete cascade on update set null,
+           b integer references parent(id) on delete restrict,
+           c integer references parent(id))",
+    )
+    .await;
+    let tables = introspect(&s).await.unwrap();
+    assert_eq!(
+        actions(&tables, "child"),
+        [
+            ("a".into(), some("CASCADE"), some("SET NULL")),
+            ("b".into(), some("RESTRICT"), None),
+            ("c".into(), None, None),
+        ]
+    );
+    drop(s);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// SPEC-0013 v8 AK-18, AK-19: live on PostgreSQL in a throwaway schema, the actions of foreign
+/// keys, the condition of a partial index (no key of the table) and a GIN index's method, kept by
+/// Show DDL; skipped without `IDECRAFT_TEST_PG`.
+#[tokio::test]
+async fn postgres_foreign_key_actions_and_index_details() {
+    let Ok(url) = std::env::var("IDECRAFT_TEST_PG") else {
+        return;
+    };
+    let scratch = format!("idecraft_fk_{}", std::process::id());
+    let pg = connect(&url).await;
+    run(
+        &pg,
+        &format!(
+            "drop schema if exists {scratch} cascade; create schema {scratch};
+             create table {scratch}.parent (id int primary key);
+             create table {scratch}.child (id int primary key,
+               a int references {scratch}.parent(id) on delete cascade on update set null,
+               b int references {scratch}.parent(id) on delete restrict,
+               c int references {scratch}.parent(id) on update set default,
+               d int references {scratch}.parent(id),
+               qty int not null default 0, deleted boolean not null default false, tags jsonb,
+               note text);
+             create unique index child_live on {scratch}.child (qty) where not deleted;
+             create index child_tags on {scratch}.child using gin (tags);
+             create index child_note on {scratch}.child (note) include (qty)"
+        ),
+    )
+    .await;
+    let tables = introspect_schema(&pg, Some(&scratch)).await;
+    let ddl = show_ddl_in(&pg, Some(&scratch), "child").await;
+    run(&pg, &format!("drop schema {scratch} cascade")).await;
+    let tables = tables.unwrap();
+    assert_eq!(
+        actions(&tables, "child"),
+        [
+            ("a".into(), some("CASCADE"), some("SET NULL")),
+            ("b".into(), some("RESTRICT"), None),
+            ("c".into(), None, some("SET DEFAULT")),
+            ("d".into(), None, None),
+        ]
+    );
+    let child = tables.iter().find(|t| t.name == "child").unwrap();
+    let index = |name: &str| child.indexes.iter().find(|i| i.name == name).unwrap();
+    assert_eq!(
+        index("child_live").condition.as_deref(),
+        Some("NOT deleted")
+    );
+    assert!(!index("child_live").is_key());
+    assert_eq!(index("child_tags").method.as_deref(), Some("gin"));
+    assert_eq!(index("child_pkey").method, None);
+    assert_eq!(index("child_pkey").condition, None);
+    // Columns of an INCLUDE clause are no key terms.
+    assert_eq!(index("child_note").columns, ["note"]);
+    let ddl = ddl.unwrap().unwrap().ddl;
+    assert!(
+        ddl.contains("REFERENCES \"parent\" (\"id\") ON DELETE CASCADE ON UPDATE SET NULL"),
+        "{ddl}"
+    );
+    assert!(
+        ddl.contains(
+            "CREATE UNIQUE INDEX \"child_live\" ON \"child\" (\"qty\") WHERE NOT deleted;"
+        ),
+        "{ddl}"
+    );
+    assert!(
+        ddl.contains("CREATE INDEX \"child_tags\" ON \"child\" USING gin (\"tags\");"),
+        "{ddl}"
+    );
+}
+
+/// SPEC-0013 v8 AK-18, AK-20: live on MySQL, the actions of foreign keys and the check
+/// constraints with their definitions, kept by Show DDL; skipped without `IDECRAFT_TEST_MYSQL`.
+#[tokio::test]
+async fn mysql_foreign_key_actions_and_checks() {
+    server_like_mysql_checks("IDECRAFT_TEST_MYSQL").await;
+}
+
+/// The same on MariaDB; skipped without `IDECRAFT_TEST_MARIADB`.
+#[tokio::test]
+async fn mariadb_foreign_key_actions_and_checks() {
+    server_like_mysql_checks("IDECRAFT_TEST_MARIADB").await;
+}
+
+async fn server_like_mysql_checks(var: &str) {
+    let Ok(url) = std::env::var(var) else {
+        return;
+    };
+    let mariadb = var.contains("MARIADB");
+    let scratch = format!("idecraft_fk_{}", std::process::id());
+    let my = connect(&url).await;
+    run(
+        &my,
+        &format!(
+            "drop database if exists {scratch}; create database {scratch};
+             create table {scratch}.parent (id int primary key);
+             create table {scratch}.child (id int primary key, a int, b int, c int, qty int not null,
+               constraint child_a_fk foreign key (a) references {scratch}.parent(id)
+                 on delete cascade on update set null,
+               constraint child_b_fk foreign key (b) references {scratch}.parent(id)
+                 on delete no action on update no action,
+               constraint child_c_fk foreign key (c) references {scratch}.parent(id)
+                 on delete cascade,
+               constraint child_qty_ck check (qty >= 0),
+               constraint child_pair_ck check ((qty < 1000) or (id > 0)))"
+        ),
+    )
+    .await;
+    let tables = introspect_schema(&my, Some(&scratch)).await;
+    let ddl = show_ddl_in(&my, Some(&scratch), "child").await;
+    run(&my, &format!("drop database {scratch}")).await;
+    let tables = tables.unwrap();
+    assert_eq!(
+        actions(&tables, "child"),
+        [
+            ("a".into(), some("CASCADE"), some("SET NULL")),
+            // `NO ACTION` written out is the default on both systems.
+            ("b".into(), None, None),
+            // An action left out: MySQL states `NO ACTION`, MariaDB `RESTRICT`.
+            (
+                "c".into(),
+                some("CASCADE"),
+                mariadb.then(|| "RESTRICT".to_owned())
+            ),
+        ]
+    );
+    let child = tables.iter().find(|t| t.name == "child").unwrap();
+    let checks: Vec<(&str, &str)> = child
+        .constraints
+        .iter()
+        .map(|c| (c.name.as_str(), c.kind.as_str()))
+        .collect();
+    assert_eq!(
+        checks,
+        [("child_pair_ck", "check"), ("child_qty_ck", "check")]
+    );
+    let qty = &child.constraints[1].definition;
+    assert!(
+        qty.starts_with("CHECK (") && qty.contains("qty") && qty.contains(">= 0"),
+        "{qty}"
+    );
+    let pair = &child.constraints[0].definition;
+    assert!(pair.starts_with("CHECK (") && pair.ends_with(')'), "{pair}");
+    let ddl = ddl.unwrap().unwrap().ddl;
+    assert!(
+        ddl.contains("ON DELETE CASCADE ON UPDATE SET NULL"),
+        "{ddl}"
+    );
+    assert!(ddl.contains("CONSTRAINT `child_qty_ck` CHECK ("), "{ddl}");
+}
+
+/// Runs `sql` and gives the first error instead of failing, so a test drops its scratch schema
+/// before it checks anything.
+async fn attempt(s: &Session, sql: &str) -> Result<(), String> {
+    let run = s.run_script(sql, OnError::Stop).await;
+    for o in &run.outcomes {
+        if let Outcome::Error(e) = &o.outcome {
+            return Err(format!("{e} in\n{sql}"));
+        }
+    }
+    Ok(())
+}
+
+fn table<'a>(tables: &'a [idecraft_database::Table], name: &str) -> &'a idecraft_database::Table {
+    tables
+        .iter()
+        .find(|t| t.name == name)
+        .unwrap_or_else(|| panic!("no table {name} in {tables:#?}"))
+}
+
+/// SPEC-0013 v9 AK-23, AK-25, AK-26 (OBS-0076 D4, D6–D8): live on PostgreSQL in throwaway schemas,
+/// the sort order and collation of index terms, identity and generated columns and comments are
+/// read and kept by Show DDL: its script run in a second schema reads the same; a schema that does
+/// not exist is named as such. Skipped without `IDECRAFT_TEST_PG`.
+#[tokio::test]
+async fn postgres_index_orders_identity_generated_and_comments() {
+    let Ok(url) = std::env::var("IDECRAFT_TEST_PG") else {
+        return;
+    };
+    let scratch = format!("idecraft_d4_{}", std::process::id());
+    let again = format!("{scratch}_b");
+    let pg = connect(&url).await;
+    let made = attempt(
+        &pg,
+        &format!(
+            "drop schema if exists {scratch} cascade; drop schema if exists {again} cascade;
+             create schema {scratch}; create schema {again};
+             create table {scratch}.child (id int generated always as identity primary key,
+               seq int generated by default as identity, qty int not null default 0, body text,
+               name text, twice int generated always as (qty * 2) stored);
+             comment on table {scratch}.child is 'the child''s note';
+             comment on column {scratch}.child.qty is 'how many';
+             create index child_d on {scratch}.child
+               (qty desc, body collate \"POSIX\", name nulls first, lower(name) desc nulls last)"
+        ),
+    )
+    .await;
+    let tables = introspect_schema(&pg, Some(&scratch)).await;
+    let ddl = show_ddl_in(&pg, Some(&scratch), "child").await;
+    // The script of Show DDL, run in the second schema.
+    let replayed = match &ddl {
+        Ok(Some(object)) => {
+            attempt(&pg, &format!("set search_path to {again};\n{}", object.ddl)).await
+        }
+        other => Err(format!("{other:?}")),
+    };
+    let _ = attempt(&pg, "reset search_path").await;
+    let replayed_tables = introspect_schema(&pg, Some(&again)).await;
+    let _ = attempt(&pg, &format!("drop table {again}.child")).await;
+    let empty_schema = introspect_schema(&pg, Some(&again)).await;
+    let missing = introspect_schema(&pg, Some("idecraft_no_such_schema")).await;
+    let missing_ddl = show_ddl_in(&pg, Some("idecraft_no_such_schema"), "child").await;
+    run(
+        &pg,
+        &format!("drop schema {scratch} cascade; drop schema {again} cascade"),
+    )
+    .await;
+    made.unwrap();
+    let tables = tables.unwrap();
+    let child = table(&tables, "child");
+    let index = child.indexes.iter().find(|i| i.name == "child_d").unwrap();
+    assert_eq!(
+        index.orders,
+        [
+            some("DESC"),
+            None,
+            some("NULLS FIRST"),
+            some("DESC NULLS LAST")
+        ]
+    );
+    assert_eq!(index.collations, [None, some("POSIX"), None, None]);
+    assert!(index.prefixes.is_empty());
+    let primary = child
+        .indexes
+        .iter()
+        .find(|i| i.name == "child_pkey")
+        .unwrap();
+    assert!(primary.orders.is_empty() && primary.collations.is_empty());
+    let column = |name: &str| child.columns.iter().find(|c| c.name == name).unwrap();
+    assert_eq!(
+        column("id").identity.as_deref(),
+        Some("GENERATED ALWAYS AS IDENTITY")
+    );
+    assert_eq!(
+        column("seq").identity.as_deref(),
+        Some("GENERATED BY DEFAULT AS IDENTITY")
+    );
+    assert_eq!(column("qty").identity, None);
+    assert_eq!(column("qty").default.as_deref(), Some("0"));
+    assert_eq!(column("qty").comment.as_deref(), Some("how many"));
+    let twice = column("twice");
+    assert_eq!(twice.generated.as_deref(), Some("stored"));
+    assert_eq!(twice.expression.as_deref(), Some("(qty * 2)"));
+    assert_eq!(twice.default, None);
+    assert_eq!(child.comment.as_deref(), Some("the child's note"));
+    let ddl = ddl.unwrap().unwrap().ddl;
+    for part in [
+        "\"qty\" DESC, \"body\" COLLATE \"POSIX\", \"name\" NULLS FIRST, (lower(name)) DESC NULLS LAST",
+        "\"id\" integer NOT NULL GENERATED ALWAYS AS IDENTITY",
+        "\"seq\" integer NOT NULL GENERATED BY DEFAULT AS IDENTITY",
+        "\"twice\" integer GENERATED ALWAYS AS (qty * 2) STORED",
+        "COMMENT ON TABLE \"child\" IS 'the child''s note';",
+        "COMMENT ON COLUMN \"child\".\"qty\" IS 'how many';",
+    ] {
+        assert!(ddl.contains(part), "{part} missing in\n{ddl}");
+    }
+    replayed.unwrap();
+    let replayed_tables = replayed_tables.unwrap();
+    assert_eq!(table(&replayed_tables, "child"), child, "{ddl}");
+    // An existing schema without tables is no error, one that does not exist is named.
+    assert_eq!(empty_schema.unwrap(), []);
+    assert_eq!(
+        missing.unwrap_err().message,
+        "schema `idecraft_no_such_schema` does not exist"
+    );
+    assert_eq!(
+        missing_ddl.unwrap_err().message,
+        "schema `idecraft_no_such_schema` does not exist"
+    );
+}
+
+/// SPEC-0013 v9 AK-23, AK-25, AK-26 (OBS-0076 D4–D8): live on MySQL in throwaway databases, the
+/// sort order and prefix length of index terms, `AUTO_INCREMENT`, generated columns and comments
+/// are read and kept by Show DDL: its script run in a second database reads the same; a database
+/// that does not exist is named as such. Skipped without `IDECRAFT_TEST_MYSQL`.
+#[tokio::test]
+async fn mysql_index_details_identity_generated_and_comments() {
+    server_like_mysql_details("IDECRAFT_TEST_MYSQL").await;
+}
+
+/// The same on MariaDB; skipped without `IDECRAFT_TEST_MARIADB`.
+#[tokio::test]
+async fn mariadb_index_details_identity_generated_and_comments() {
+    server_like_mysql_details("IDECRAFT_TEST_MARIADB").await;
+}
+
+async fn server_like_mysql_details(var: &str) {
+    let Ok(url) = std::env::var(var) else {
+        return;
+    };
+    let scratch = format!("idecraft_d4_{}", std::process::id());
+    let again = format!("{scratch}_b");
+    let my = connect(&url).await;
+    let made = attempt(
+        &my,
+        &format!(
+            "drop database if exists {scratch}; drop database if exists {again};
+             create database {scratch}; create database {again};
+             create table {scratch}.child (id int not null auto_increment primary key
+                 comment 'the child''s key',
+               qty int not null default 0, body text, name varchar(40),
+               twice int as (qty * 2) stored, more int generated always as (qty + 1) virtual,
+               key child_d (qty desc, body(20), name(10)),
+               unique key child_body (body(30)))
+               comment = 'the child''s note'"
+        ),
+    )
+    .await;
+    let tables = introspect_schema(&my, Some(&scratch)).await;
+    let ddl = show_ddl_in(&my, Some(&scratch), "child").await;
+    // The script of Show DDL, run in the second database.
+    let replayed = match &ddl {
+        Ok(Some(object)) => attempt(&my, &format!("use {again};\n{}", object.ddl)).await,
+        other => Err(format!("{other:?}")),
+    };
+    let replayed_tables = introspect_schema(&my, Some(&again)).await;
+    let _ = attempt(&my, &format!("drop table {again}.child")).await;
+    let empty_schema = introspect_schema(&my, Some(&again)).await;
+    let missing = introspect_schema(&my, Some("idecraft_no_such_schema")).await;
+    let missing_ddl = show_ddl_in(&my, Some("idecraft_no_such_schema"), "child").await;
+    run(
+        &my,
+        &format!("drop database {scratch}; drop database {again}"),
+    )
+    .await;
+    made.unwrap();
+    let tables = tables.unwrap();
+    let child = table(&tables, "child");
+    let index = |name: &str| child.indexes.iter().find(|i| i.name == name).unwrap();
+    assert_eq!(index("child_d").orders, [some("DESC"), None, None]);
+    assert_eq!(index("child_d").prefixes, [None, Some(20), Some(10)]);
+    assert!(index("child_d").collations.is_empty());
+    assert_eq!(index("child_body").prefixes, [Some(30)]);
+    assert!(index("PRIMARY").orders.is_empty() && index("PRIMARY").prefixes.is_empty());
+    let column = |name: &str| child.columns.iter().find(|c| c.name == name).unwrap();
+    assert_eq!(column("id").identity.as_deref(), Some("AUTO_INCREMENT"));
+    assert_eq!(column("id").comment.as_deref(), Some("the child's key"));
+    assert_eq!(column("qty").identity, None);
+    assert_eq!(column("qty").comment, None);
+    let twice = column("twice");
+    assert_eq!(twice.generated.as_deref(), Some("stored"));
+    assert!(
+        twice
+            .expression
+            .as_deref()
+            .is_some_and(|e| e.contains("qty") && e.contains("* 2")),
+        "{twice:?}"
+    );
+    assert_eq!(column("more").generated.as_deref(), Some("virtual"));
+    assert_eq!(child.comment.as_deref(), Some("the child's note"));
+    let ddl = ddl.unwrap().unwrap().ddl;
+    for part in [
+        "(`qty` DESC, `body`(20), `name`(10));",
+        "CREATE UNIQUE INDEX `child_body` ON `child` (`body`(30));",
+        "NOT NULL AUTO_INCREMENT COMMENT 'the child''s key',",
+        "GENERATED ALWAYS AS (",
+        ") STORED,",
+        ") VIRTUAL",
+        ") COMMENT='the child''s note';",
+    ] {
+        assert!(ddl.contains(part), "{part} missing in\n{ddl}");
+    }
+    replayed.unwrap();
+    let replayed_tables = replayed_tables.unwrap();
+    assert_eq!(table(&replayed_tables, "child"), child, "{ddl}");
+    assert_eq!(empty_schema.unwrap(), []);
+    assert_eq!(
+        missing.unwrap_err().message,
+        "schema `idecraft_no_such_schema` does not exist"
+    );
+    assert_eq!(
+        missing_ddl.unwrap_err().message,
+        "schema `idecraft_no_such_schema` does not exist"
+    );
+}
+
+/// SPEC-0013 v9 AK-26 (OBS-0076 D8): against SQLite files built in the test, an attached database
+/// that does not exist is named as such, for the tables and for Show DDL; the main database and
+/// an attached one without tables are no error.
+#[tokio::test]
+async fn an_unknown_schema_is_named() {
+    let dir = std::env::temp_dir().join(format!("idecraft-no-schema-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("main.db");
+    rusqlite::Connection::open(&file).unwrap();
+    rusqlite::Connection::open(dir.join("spare.db")).unwrap();
+    let s = connect(&format!("sqlite:{}", file.display())).await;
+    run(
+        &s,
+        &format!(
+            "create table item (id integer primary key); attach database '{}' as spare",
+            dir.join("spare.db").display()
+        ),
+    )
+    .await;
+    assert_eq!(introspect_schema(&s, Some("main")).await.unwrap().len(), 1);
+    assert_eq!(introspect_schema(&s, Some("spare")).await.unwrap(), []);
+    assert_eq!(
+        introspect_schema(&s, Some("nope"))
+            .await
+            .unwrap_err()
+            .message,
+        "schema `nope` does not exist"
+    );
+    assert_eq!(
+        show_ddl_in(&s, Some("nope"), "item")
+            .await
+            .unwrap_err()
+            .message,
+        "schema `nope` does not exist"
+    );
+    assert_eq!(show_ddl_in(&s, Some("spare"), "item").await.unwrap(), None);
+    drop(s);
+    let _ = std::fs::remove_dir_all(&dir);
 }

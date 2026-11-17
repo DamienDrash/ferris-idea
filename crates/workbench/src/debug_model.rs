@@ -1598,7 +1598,9 @@ const INLINE_VALUE: usize = 40;
 
 /// Values of `locals` to show after the lines of the paused function (`SPEC-0091` v5 behaviour
 /// 13): each variable at the last of the lines `exec_line - 50 ..= exec_line` (0-based) that names it
-/// as a whole word, as `name: value`, several on a line joined with two spaces. Long values are cut.
+/// as a whole word, as `name: value`, several on a line joined with two spaces. Long values are cut;
+/// a value with line breaks (a function's source) is put on one line first, as in the Variables
+/// list (v22, behaviour 13: the line drawn after the code has no room for a break).
 pub fn inline_values(
     lines: &[&str],
     exec_line: usize,
@@ -1617,6 +1619,7 @@ pub fn inline_values(
         else {
             continue;
         };
+        let value = one_line(value);
         let mut shown: String = value.chars().take(INLINE_VALUE).collect();
         if value.chars().count() > INLINE_VALUE {
             shown.push('…');
@@ -2370,6 +2373,26 @@ mod tests {
         let lines = ["f(long, long)"];
         let v = inline_values(&lines, 0, &locals[3..4]);
         assert_eq!(v[0].1.chars().count(), "long: ".len() + INLINE_VALUE + 1);
+    }
+
+    /// SPEC-0091 AK-27 (v22): a function's source after a line is one line, cut as any value.
+    #[test]
+    fn an_inline_function_value_is_one_line() {
+        let lines = ["const result = add(2, 3);"];
+        let locals = [
+            (
+                "add".to_owned(),
+                "ƒ add(a, b) {\n  const sum = a + b;\n  return sum;\n}".to_owned(),
+            ),
+            ("result".to_owned(), "undefined".to_owned()),
+        ];
+        let shown = inline_values(&lines, 0, &locals);
+        assert_eq!(shown.len(), 1);
+        assert!(!shown[0].1.contains(['\n', '\r']), "{shown:?}");
+        assert_eq!(
+            shown[0].1, "add: ƒ add(a, b) { const sum = a + b; return …  result: undefined",
+            "the function's source on one line, cut, then the next value"
+        );
     }
 
     #[test]

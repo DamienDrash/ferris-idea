@@ -1,6 +1,8 @@
 # SPEC-0115: Spring beans and configuration
 
-- **Version:** 6 · **Date:** 2026-11-14 (v6: choosers sized to their rows and opened at the
+- **Version:** 7 · **Date:** 2026-11-16 (v7: completion of configuration keys in the code and
+  in the configuration files, behaviour 19, found by the headless pre-check of F-040, OBS-0073;
+  v6 2026-11-14: choosers sized to their rows and opened at the
   mark, the tool window's action behaves like its stripe button, behaviours 17 and 18, after the
   window check of v5; v5: configuration keys lead to their defining lines and
   back, resolved values in place of placeholders, gutter marks of beans and injection points,
@@ -275,6 +277,33 @@ own model, built from the rules above in a clean room.
      above removes the one state that explains both findings — a window marked as shown that
      nobody sees — and AK-19 keeps the two ways of opening under test.
 
+19. **Completion of configuration keys (v7):** the headless pre-check of F-040 (OBS-0073) found
+   no completion at all where a key is typed: `complete_code` inside `${` of a `@Value` returned
+   nothing, and in `application.properties` it failed for want of a language server. IDEs with
+   Spring support complete keys in both places. [GEN; OBS-0073 part 1; the reference's lists were
+   not observed]
+   - **In the code:** with the caret inside a `${…}` placeholder of a Java string, before its
+     `:` and `}`, the list holds the keys the configuration files of behaviours 3 and 10 define,
+     once each (relaxed spellings count as one; a `%profile.` key as its key), sorted, those
+     starting with the text typed after `${` (case ignored). Beside each: the value the
+     application gets (behaviour 13, masked as `•••` for a key that looks like a secret) and the
+     file, or the profiles that alone define it ("only in dev"). The item replaces the whole key
+     around the caret. SPEC-0134 behaviour 8 adds the other frameworks' forms.
+   - **In a `.properties` file:** with the caret in the key part of a line (before any `=`, `:`
+     or white space after the key; not in a comment), first the keys the code reads (behaviour
+     12's places, no prefixes, no keys of the environment) that the file does not define —
+     those no file defines first, each with "read in File.java:line" — then the keys other
+     configuration files define. The typed text narrows them; at the end of the line the item
+     inserts `key=`; a typed `%dev.` stays before the key.
+   - **In a YAML file:** at a key of a map line (not in a list or after the `:`), the same keys
+     below the maps the line stands in, written as the rest of the key (`max-items` under
+     `shop:`), followed by `: ` at the end of the line; keys the file already defines are left
+     out.
+   - **No language server** is asked at such a place; elsewhere the language server answers as
+     before. The list opens with the completion action; inside a string of the code it does
+     not open by itself (SPEC-0072 behaviour 8), in a `.properties` file it does.
+   - **MCP:** `complete_code` returns the same items (`kind` `property`). [ADR-0008]
+
 ## Acceptance criteria
 - **AK-1** Beans from stereotypes and `@Bean` methods, injection by type and supertype, library
   types unchecked, containers and `@Value` parameters left out, missing/ambiguous/qualified/`@Primary`,
@@ -367,6 +396,14 @@ own model, built from the rules above in a clean room.
   window narrows by typed text, shows the dependencies of the selected bean, and Escape clears
   the text. The click on a mark is not part of the self-test (its targets are, AK-14); it is a
   step of the window check.
+- **AK-21 (v7)** Behaviour 19: the keys in a placeholder with value, profile-only key and masked
+  secret and the range they replace, nothing after the default's colon or outside a string; in
+  a `.properties` file the keys read and not defined first, `=` and a `%dev.` prefix, nothing in
+  a value or comment; in a YAML file the rest of the key below its maps (unit tests
+  `config_completion::tests::{keys_in_a_placeholder, keys_in_a_properties_file,
+  keys_in_a_yaml_file}`); MCP `complete_code` in a `.properties` file without a language server,
+  the secret's value absent (`crates/mcp/tests/it/protocol.rs`:
+  `configuration_keys_complete_and_quarkus_starts_in_dev_mode`).
 - **AK-9 (v3)** The sample project `crates/languages/tests/fixtures/frameworks/spring-shop`: 21
   beans, the three problems it is written to have (two `PaymentGateway` beans, no `AuditLog`
   bean, the key `shop.missing-key`) and no other warning
@@ -376,19 +413,27 @@ own model, built from the rules above in a clean room.
 ## Out of scope
 Kotlin sources, XML bean definitions, component scan packages, evaluating conditions and profile
 expressions (which profile is active, whether two profiles exclude each other), generics in bean
-matching, beans from libraries and auto-configuration, completion of configuration keys,
+matching, beans from libraries and auto-configuration,
 `@ConfigurationProperties` binding (which keys a class reads), constructors generated by Lombok,
 `@Resource`, `@Autowired(required = false)`, qualifier annotations of the project's own in Spring
 (SPEC-0134 reads them), a quick fix for field injection (behaviour 11).
 Since v5 also: a diagram of the bean graph and a documentation pane in the tool window, a
-filter by module, completion and rename of configuration keys, which field of a
+filter by module, rename of configuration keys, which field of a
 `@ConfigurationProperties` class binds which key (the prefix leads to all keys below it), keys
 used elsewhere than in the forms of behaviour 12 (`@ConditionalOnProperty`, `Environment`
 lookups, placeholders inside the configuration files, Kotlin sources), profiles switched on
 outside the configuration files (run configurations, environment variables, command lines),
 `spring.config.import` and profile groups, drawing keys as links.
+Since v7 also: the keys libraries declare in their configuration metadata
+(`META-INF/spring-configuration-metadata.json`, `server.port`, `spring.datasource.url`) — neither
+completed nor checked, so a misspelt key in a configuration file is not reported; values (an
+enum's constants, `true`/`false`); keys of `@ConfigurationProperties` classes.
 
 ## Known deviations from the reference
+Since v7 the completion of keys (behaviour 19) offers only the project's own keys: the keys of the
+framework and its libraries, which the reference completes from their metadata, are missing, and
+unknown keys in a configuration file are not reported. Not compared side by side (OBS-0073 part 2
+plans it).
 The model is read from the files on disk, so problems, marks and shown values follow saving, not
 every keystroke; types are matched by simple name.
 Compared side by side on `ProductService.java` of the Spring sample project (OBS-0037, run of

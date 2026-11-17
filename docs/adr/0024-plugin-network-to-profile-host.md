@@ -65,6 +65,16 @@ answer and the agent gets nothing.
 bytes sent and received. The log stays on the machine, is never sent anywhere (ADR-0007), and is
 readable in Settings › Plugins and through MCP `plugin_network`.
 
+**7. Amendment 2026-11-16 (SPEC-0314 v2, SPEC-0016 v4, IMP-0427; the coordinator under rule 12,
+security first, within the general authority of 2026-11-13).** The connection's SSL mode reaches the
+plugin's sockets. The host cannot see whether a plugin encrypts what it sends, so `net_connect`
+(no TLS) is allowed only where the mode allows plain text — `disable` on any host, `prefer` for a
+server on the loopback — and answers `-6` elsewhere. A fifth host function, `net_connect_tls`,
+gives a connection whose TLS the host makes: TLS 1.2 or newer, the mode's certificate and host name
+checks, the profile's CA file instead of the system's roots. The plugin's input names the mode and
+whether it may go without TLS; the audit says whether a connection had TLS. A protocol that turns
+TLS on inside its own messages reaches a server off the loopback only under `disable`.
+
 ## Consequences
 - Systems without a wire protocol IDECraft speaks and without ODBC become reachable through
   community plugins, at interpreter speed.

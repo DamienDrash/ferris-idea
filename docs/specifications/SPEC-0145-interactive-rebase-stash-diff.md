@@ -65,7 +65,7 @@ operations SPEC-0106 left out.
   `git_stash_show_and_interactive_rebase`).
 - **AK-4** Window self-test: ⌘D in the stash popup shows the stash's diff; the dialog lists two
   commits oldest first; ↓ F Enter folds the second into the first.
-- **AK-6 (v2)** A squash keeps both messages (`crates/vcs/tests/it/ops.rs`:
+- **AK-8 (v2)** A squash keeps both messages (`crates/vcs/tests/it/ops.rs`:
   `interactive_squash_keeps_both_messages`); the base label (`git_ops_model::tests::rebase_base_is_named_by_the_resolved_commit`);
   window self-test: the title names HEAD~2's id, Enter and Tab end the reword field, keys work after a
   click on a row.

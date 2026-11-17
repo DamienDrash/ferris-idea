@@ -294,6 +294,39 @@ pub trait Window: Send + Sync {
         let _ = (workspace, request);
         drop(reply);
     }
+    /// The selection of the focused editor of the project window of `workspace`, if an editor of
+    /// a workspace file has the focus (`SPEC-0006` v56 behaviour 11): read only. A window that
+    /// cannot tell says so.
+    fn editor_selection(
+        &self,
+        workspace: PathBuf,
+        reply: oneshot::Sender<Result<Option<EditorSelection>, String>>,
+    ) {
+        let _ = workspace;
+        let _ = reply.send(Err(
+            "this window does not report the editor's selection".into()
+        ));
+    }
+}
+
+/// The selection of the focused editor (`SPEC-0006` v56 behaviour 11): 0-based lines and
+/// characters (Unicode scalar values), as the language-server tools count them.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct EditorSelection {
+    /// The file (absolute; the tool makes it workspace-relative).
+    pub path: PathBuf,
+    /// Where the selection starts.
+    pub start_line: usize,
+    /// See `start_line`.
+    pub start_character: usize,
+    /// Where it ends (the caret when nothing is selected).
+    pub end_line: usize,
+    /// See `end_line`.
+    pub end_character: usize,
+    /// The selected text, empty without a selection.
+    pub text: String,
+    /// How many carets the editor has; the selection is the primary caret's.
+    pub carets: usize,
 }
 
 /// The actions of the tool `file_operation_undo` (`SPEC-0275` v16 behaviour 43).

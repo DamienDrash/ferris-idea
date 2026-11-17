@@ -92,6 +92,15 @@ pub const MENUS: &[(&str, &[Entry])] = &[
                 ],
             ),
             S,
+            // SPEC-0105 v9 behaviour 14: a settings file out and in.
+            Sub(
+                "Manage IDE Settings",
+                &[
+                    A("Import Settings…", "ImportSettings"),
+                    A("Export Settings…", "ExportSettings"),
+                ],
+            ),
+            S,
             Sub(
                 "Local History",
                 &[A("Show History", "LocalHistory.ShowHistory")],
@@ -857,6 +866,24 @@ mod tests {
         assert_eq!(
             menu_title("CloseOtherProjects"),
             Some(("Close Other Projects", "File"))
+        );
+    }
+
+    /// SPEC-0105 AK-15 (v9): File › Manage IDE Settings imports and exports a settings file;
+    /// Find Action titles both under that group.
+    #[test]
+    fn manage_ide_settings_imports_and_exports() {
+        assert_eq!(
+            labels(submenu("File", "Manage IDE Settings")),
+            ["Import Settings…", "Export Settings…"]
+        );
+        assert_eq!(
+            menu_title("ImportSettings"),
+            Some(("Import Settings…", "Manage IDE Settings"))
+        );
+        assert_eq!(
+            menu_title("ExportSettings"),
+            Some(("Export Settings…", "Manage IDE Settings"))
         );
     }
 

@@ -312,8 +312,27 @@ fn the_head_stays_and_the_diagram_fits(cx: &mut TestAppContext) {
             ((w, h), zoom, fit, inside)
         })
     };
-    let (area, zoom, fit, inside) = fitted(cx);
+    // As it opens (SPEC-0110 v15 behaviour 22): fitted, but not below the readable 60 %, and the
+    // top step whole in view.
+    let (area, zoom, fit, _) = fitted(cx);
     assert!(area.0 > 0. && area.1 > 0., "the area is measured");
+    let readable = idecraft_workbench::plan_view_model::READABLE_ZOOM;
+    assert!(
+        (zoom - fit.clamp(readable, 1.)).abs() < 1e-3,
+        "zoom {zoom}, fit {fit} in {area:?}"
+    );
+    let (_, bounds, shown) = node(cx, "plan-box-0").expect("the top step is drawn");
+    assert!(
+        shown.is_some_and(|s| same(s, bounds)),
+        "the top step is whole in view: {bounds:?}, shown {shown:?}"
+    );
+    // Fit chosen: the whole diagram inside the area, below 60 % where it must be.
+    click(cx, "plan-zoom-fit");
+    assert_eq!(
+        services.read_with(cx, |v, _| v.plan_diagram_zoom_mode()),
+        idecraft_workbench::plan_view_model::DiagramZoom::Fit
+    );
+    let (area, zoom, fit, inside) = fitted(cx);
     assert!(
         zoom < 1. && (zoom - fit).abs() < 1e-3,
         "zoom {zoom}, fit {fit} in {area:?}"

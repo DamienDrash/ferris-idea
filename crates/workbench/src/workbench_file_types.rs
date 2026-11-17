@@ -26,6 +26,20 @@ fn treated_as(files: &[PathBuf], choice: Choice) -> String {
     }
 }
 
+/// The status bar's name of the file type whose LSP id is `id` (v9 behaviour 20); the React ids
+/// of `.tsx` and `.jsx` files name their language.
+fn status_label(id: Option<&str>) -> String {
+    let id = match id {
+        Some("typescriptreact") => Some("typescript"),
+        Some("javascriptreact") => Some("javascript"),
+        other => other,
+    };
+    id.and_then(Choice::from_id)
+        .unwrap_or(Choice::PlainText)
+        .title()
+        .to_owned()
+}
+
 /// Says that a remote project keeps no file types (behaviour 13).
 const REMOTE: &str = "File types are kept on the local machine only; nothing was changed";
 /// Says that no file is chosen.
@@ -274,9 +288,36 @@ impl WorkbenchView {
         cx.notify();
     }
 
+    /// What the status bar shows of the active editor's file type (SPEC-0004 v9 behaviour 20):
+    /// the language's name, Plain Text without one; nothing without an editor or in a remote
+    /// project.
+    pub fn status_file_type(&self, cx: &gpui::App) -> Option<String> {
+        if self.remote_project.is_some() {
+            return None;
+        }
+        let editor = self.active_editor()?;
+        Some(status_label(editor.read(cx).language_id()))
+    }
+
     /// Says `text` in the status bar.
     fn tell(&mut self, text: impl Into<String>, cx: &mut Context<Self>) {
         self.status = Some(text.into());
         cx.notify();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// SPEC-0004 v9 AK-15: the status bar names the language, Plain Text without one; the React
+    /// ids of `.tsx` and `.jsx` name TypeScript and JavaScript.
+    #[test]
+    fn the_status_bar_names_the_file_type() {
+        assert_eq!(status_label(Some("python")), "Python");
+        assert_eq!(status_label(Some("shellscript")), "Shell Script");
+        assert_eq!(status_label(Some("typescriptreact")), "TypeScript");
+        assert_eq!(status_label(Some("javascriptreact")), "JavaScript");
+        assert_eq!(status_label(None), "Plain Text");
     }
 }

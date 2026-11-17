@@ -12,7 +12,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use gpui::{AppContext, Context, Entity, Window};
-use idecraft_languages::find_usages::{DEADLINE, UsageSearch, UsageSource, find_usages_in};
+use idecraft_languages::find_usages::{
+    DEADLINE, UsageSearch, UsageSource, find_usages_in, text_reason,
+};
 use idecraft_languages::insight::Location;
 use idecraft_languages::lsp::LspError;
 
@@ -90,18 +92,35 @@ fn length_of(l: &Location) -> usize {
     }
 }
 
-/// The status line for a search without usages (behaviours 9, 10 and 19).
-fn nothing_found(symbol: &str, source: UsageSource, in_file: Option<&str>) -> String {
+/// The status line for a search without usages (behaviours 9, 10, 10a and 19): a text search
+/// names why it was one, from its `note`.
+fn nothing_found(symbol: &str, search: &UsageSearch, in_file: Option<&str>) -> String {
     if in_file.is_some() {
         return crate::find_usages_model::no_usages(symbol, in_file);
     }
-    match source {
+    match search.source {
         UsageSource::LanguageServer => crate::find_usages_model::no_usages(symbol, None),
-        UsageSource::Text => format!(
-            "No usages of {symbol} in project files (the language server did not answer within {} s and no text occurrence was found)",
-            DEADLINE.as_secs()
-        ),
+        UsageSource::Text => {
+            let reason = match search.note.as_deref() {
+                Some(note) => lower_first(text_reason(note)),
+                None => format!(
+                    "the language server did not answer within {} s",
+                    DEADLINE.as_secs()
+                ),
+            };
+            format!(
+                "No usages of {symbol} in project files ({reason} and no text occurrence was found)"
+            )
+        }
     }
+}
+
+/// `s` with its first letter in lower case.
+fn lower_first(s: &str) -> String {
+    let mut c = s.chars();
+    c.next()
+        .map(|f| f.to_lowercase().chain(c).collect())
+        .unwrap_or_default()
 }
 
 impl WorkbenchView {
@@ -273,7 +292,7 @@ impl WorkbenchView {
                 };
                 let message = match found {
                     Ok(search) if search.usages.is_empty() => {
-                        let m = nothing_found(&symbol, search.source, file.as_deref());
+                        let m = nothing_found(&symbol, &search, file.as_deref());
                         view.update(cx, |v, cx| v.message(m.clone(), cx));
                         m
                     }
@@ -477,7 +496,7 @@ impl WorkbenchView {
                 // The declaration is not a usage (SPEC-0073 v5 behaviour 6).
                 let places: Vec<Location> = search.usages.clone();
                 if places.is_empty() {
-                    this.status = Some(nothing_found(&symbol, search.source, None));
+                    this.status = Some(nothing_found(&symbol, &search, None));
                     cx.notify();
                     return;
                 }
@@ -515,5 +534,48 @@ impl WorkbenchView {
             });
         })
         .detach();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use idecraft_languages::find_usages::Target;
+
+    fn text_search(note: Option<&str>) -> UsageSearch {
+        UsageSearch {
+            target: Target {
+                name: "area".into(),
+                declaration: None,
+                outside: None,
+                kind: None,
+            },
+            usages: Vec::new(),
+            details: Vec::new(),
+            source: UsageSource::Text,
+            note: note.map(str::to_owned),
+        }
+    }
+
+    /// SPEC-0293 v11 AK-17: a text search without an occurrence names why it was one.
+    #[test]
+    fn nothing_found_names_the_reason() {
+        assert_eq!(
+            nothing_found(
+                "area",
+                &text_search(Some(
+                    "No usable language server for typescript: typescript-language-server not found (install: npm i -g typescript-language-server typescript); showing text occurrences."
+                )),
+                None
+            ),
+            "No usages of area in project files (no usable language server for typescript: typescript-language-server not found (install: npm i -g typescript-language-server typescript) and no text occurrence was found)"
+        );
+        let slow = "The language server did not answer within 20 s; showing text occurrences.";
+        let expected = "No usages of area in project files (the language server did not answer within 20 s and no text occurrence was found)";
+        assert_eq!(
+            nothing_found("area", &text_search(Some(slow)), None),
+            expected
+        );
+        assert_eq!(nothing_found("area", &text_search(None), None), expected);
     }
 }

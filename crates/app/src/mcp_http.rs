@@ -68,6 +68,10 @@ enum Request {
         serde_json::Value,
         oneshot::Sender<Result<serde_json::Value, String>>,
     ),
+    Selection(
+        PathBuf,
+        oneshot::Sender<Result<Option<idecraft_mcp::window::EditorSelection>, String>>,
+    ),
     EditDocument(
         idecraft_editor::documents::DocumentEdit,
         oneshot::Sender<Result<idecraft_editor::documents::DocumentEdited, String>>,
@@ -184,6 +188,14 @@ impl Window for Bridge {
         reply: oneshot::Sender<Result<serde_json::Value, String>>,
     ) {
         self.push(Request::FileUndo(workspace, request, reply));
+    }
+
+    fn editor_selection(
+        &self,
+        workspace: PathBuf,
+        reply: oneshot::Sender<Result<Option<idecraft_mcp::window::EditorSelection>, String>>,
+    ) {
+        self.push(Request::Selection(workspace, reply));
     }
 
     fn edit_document(
@@ -429,6 +441,20 @@ fn handle(request: Request, asking: Arc<std::sync::atomic::AtomicBool>, cx: &mut
         // `file_operation_undo` (SPEC-0275 v16 behaviour 43).
         Request::FileUndo(workspace, request, reply) => {
             let _ = reply.send(WorkbenchView::file_undo_in(&workspace, &request, cx));
+        }
+        // `editor_selection` (SPEC-0006 v56 behaviour 11): read only.
+        Request::Selection(workspace, reply) => {
+            let _ = reply.send(WorkbenchView::editor_selection_in(&workspace, cx).map(|s| {
+                s.map(|s| idecraft_mcp::window::EditorSelection {
+                    path: s.path,
+                    start_line: s.start_line,
+                    start_character: s.start_character,
+                    end_line: s.end_line,
+                    end_character: s.end_character,
+                    text: s.text,
+                    carets: s.carets,
+                })
+            }));
         }
         // An agent's edit of an open file (SPEC-0220 v2 behaviour 7).
         Request::EditDocument(edit, reply) => {

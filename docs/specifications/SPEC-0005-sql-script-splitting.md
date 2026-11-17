@@ -1,6 +1,6 @@
 # SPEC-0005: SQL script splitting
 
-- **Version:** 5 · **Date:** 2026-11-15 (v5: the editor colours block comments by the same rules, behaviour 19 — OBS-0051 L7); 2026-11-15 (v4: every result set of one statement, behaviour 18 — OBS-0051 L2); 2026-11-14 (v3: `DELIMITER`, escape strings, nested comments, SQLite brackets, MySQL's `--` rule and properties of every split, behaviours 12–17 — F-050); 2026-11-13 (v2: the bodies of triggers, procedures and functions stay one
+- **Version:** 6 · **Date:** 2026-11-16 (v6: a T-SQL batch that declares a variable or uses control of flow runs as one statement from there to its `GO`, behaviour 11a — F-060 run without a screen); 2026-11-15 (v5: the editor colours block comments by the same rules, behaviour 19 — OBS-0051 L7); 2026-11-15 (v4: every result set of one statement, behaviour 18 — OBS-0051 L2); 2026-11-14 (v3: `DELIMITER`, escape strings, nested comments, SQLite brackets, MySQL's `--` rule and properties of every split, behaviours 12–17 — F-050); 2026-11-13 (v2: the bodies of triggers, procedures and functions stay one
   statement — F-053, notes from the SQLite check in PR 650; v1 2026-10-30)
 - **Sources:** GEN (running "the current statement" or a whole script in SQL tools), STD (SQL lexical rules; PostgreSQL, MySQL and SQLite manuals for dialect differences; SQLite `CREATE TRIGGER`, MySQL compound statements, PostgreSQL `CREATE FUNCTION … BEGIN ATOMIC`, T-SQL batches; v3: PostgreSQL manual on `E'…'` strings and nested block comments, MySQL manual on the `mysql` client's `delimiter` command and on `--` comments, SQLite documentation on `[identifier]`, Transact-SQL reference on nested comments)
 - **Feature matrix rows:** F-050, F-053
@@ -33,6 +33,13 @@ Split an SQL script into individual statements so they can be executed one by on
 11. **v2 – T-SQL units:** in SQL Server `CREATE`, `ALTER` or `CREATE OR ALTER` of a `PROCEDURE` (`PROC`),
     `FUNCTION`, `TRIGGER` or `VIEW` must be the only statement of its batch, so it runs to the end of the
     batch (the next `GO` line or the end of the script); its `;` stay in its text. [STD]
+11a. **v6 – T-SQL batches that belong together:** a T-SQL variable lives for one batch, and the
+    control-of-flow statements take the statements after them as their body. So in SQL Server a
+    statement that begins with `DECLARE` (a variable, a table variable or a cursor), `IF`, `WHILE`
+    or `BEGIN` not followed by `TRAN`, `TRANSACTION` or `DISTRIBUTED` (a block, also `BEGIN TRY` and
+    `BEGIN CATCH`) runs to the end of its batch, as in behaviour 11: `declare @n int = 2; select @n`
+    and `begin try … end try begin catch … end catch` are one statement each. The statements before it
+    in the batch split as before. `BEGIN TRAN` and the other statements keep ending at `;`. [STD]
 12. **v3 – Escape strings:** in PostgreSQL and DuckDB a literal written `E'…'` (or `e'…'`, the `E` not
     being the end of a longer word) takes a backslash as an escape, so `\'` does not end it. Other
     literals keep behaviour 5. [STD]
@@ -56,7 +63,8 @@ Split an SQL script into individual statements so they can be executed one by on
     of its range without blanks at either end and is never empty; splitting never fails. [GEN]
 
 18. **v4 – Several result sets of one statement (OBS-0051 L2):** a statement that returns more than
-    one result set — `CALL` of a MySQL or MariaDB procedure with several `SELECT`s — gives one
+    one result set — `CALL` of a MySQL or MariaDB procedure with several `SELECT`s; v6: `EXEC` of a
+    SQL Server procedure, a T-SQL batch of behaviour 11a — gives one
     outcome per result set, in the order the server sends them, all with the statement's range. The
     status the server sends after a procedure's result sets is no outcome of its own; a statement with
     no result set gives its update count as before. When a later result set fails, the sets before it
@@ -114,6 +122,11 @@ Split an SQL script into individual statements so they can be executed one by on
   DuckDB and SQL Server, flat in MySQL, SQLite and Oracle; `/*` in a string, a dollar quote and after
   `--` opens none); `sql_editor_model::tests::nested_comments_are_coloured_per_dialect`: the spans of `/* a /* b */ c */ select 1` colour
   `c */` as comment for PostgreSQL and as code for MySQL.
+- **AK-21 (v6, behaviour 11a)** `script::tests::t_sql_variables_and_blocks_keep_their_batch`: `declare`
+  with a `select` of the variable, `begin try … end catch`, `if … begin … end` and `while` each run to
+  their `GO` as one statement, the statements before them in the batch split at `;`, `begin tran;`
+  splits as before; live on SQL Server (`crates/database/tests/it/dialect_steps_live.rs::sql_server_steps`)
+  the variable is read in the same batch and the `CATCH` part answers.
 
 ## Out of scope
 A count after `GO` (`GO 5`): the line ends the batch and the batch runs once. `psql` backslash commands,

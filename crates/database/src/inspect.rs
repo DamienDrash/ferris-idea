@@ -929,6 +929,9 @@ mod tests {
                     nullable: true,
                     default: None,
                     generated: None,
+                    expression: None,
+                    identity: None,
+                    comment: None,
                 })
                 .collect(),
             primary_key: Vec::new(),
@@ -936,6 +939,7 @@ mod tests {
             indexes: Vec::new(),
             unreadable: None,
             constraints: Vec::new(),
+            comment: None,
         }
     }
 

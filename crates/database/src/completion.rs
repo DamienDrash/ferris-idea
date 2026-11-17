@@ -874,6 +874,9 @@ mod tests {
                     nullable: false,
                     default: None,
                     generated: None,
+                    expression: None,
+                    identity: None,
+                    comment: None,
                 })
                 .collect(),
             primary_key: Vec::new(),
@@ -881,6 +884,7 @@ mod tests {
             indexes: Vec::new(),
             unreadable: None,
             constraints: Vec::new(),
+            comment: None,
         }
     }
 
@@ -1120,6 +1124,8 @@ mod tests {
             columns: columns.iter().map(|c| (*c).into()).collect(),
             referenced_table: table.into(),
             referenced_columns: referenced.iter().map(|c| (*c).into()).collect(),
+            on_delete: None,
+            on_update: None,
         }
     }
 

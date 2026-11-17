@@ -176,6 +176,12 @@ pub fn node_launch(
             launch["name"] = serde_json::json!(format!("{name} {}", args.join(" ")));
             launch["runtimeExecutable"] = serde_json::json!(runner);
             launch["runtimeArgs"] = serde_json::json!(args);
+            // Jest runs its transformed test files at once: js-debug waits for each script's
+            // source map, so a breakpoint whose line the transformation moved is set before the
+            // test runs (`SPEC-0045` v6 behaviour 12).
+            if args.first().is_some_and(|a| a == "jest") {
+                launch["pauseForSourceMap"] = serde_json::json!(true);
+            }
         }
         None => {
             launch["name"] = serde_json::json!(name);

@@ -1,6 +1,7 @@
 # SPEC-0028: Keymaps
 
-- **Version:** 6.3 · **Date:** 2026-11-14 (v6.3: the Run tool window is a part of the window with an action of its own, Send EOF on ⌘D and Ctrl+D, SPEC-0087 v10 behaviour 18; the chords of the four list actions are the focused list's own keys, SPEC-0275 v19 behaviours 47 and 48 — both in behaviour 11. v6.2: the Find tool window's ⌃-letter chords of behaviour 11 also hold ⌃R, ⌃W, ⌃I, ⌃D and ⌃O, SPEC-0293 v9 behaviours 22–26. v6.1: ⌃K in a text input cuts to the end of the
+- **Version:** 7 · **Date:** 2026-11-16 (v7: a key named in a button, a hint or a status line is
+  written in the system's notation, behaviour 12 — PR #866 Linux window self-test); 2026-11-14 (v6.3: the Run tool window is a part of the window with an action of its own, Send EOF on ⌘D and Ctrl+D, SPEC-0087 v10 behaviour 18; the chords of the four list actions are the focused list's own keys, SPEC-0275 v19 behaviours 47 and 48 — both in behaviour 11. v6.2: the Find tool window's ⌃-letter chords of behaviour 11 also hold ⌃R, ⌃W, ⌃I, ⌃D and ⌃O, SPEC-0293 v9 behaviours 22–26. v6.1: ⌃K in a text input cuts to the end of the
   line, now that `EditorCutLineEnd` is carried out, SPEC-0057 v6 behaviour 24. v6: a chord pressed in a text input, behaviour 11 — an
   action the keymap binds for the input itself goes before the input's editing action on the same
   chord; window check on macOS, where ⌃M in the commit message field did nothing. v5: which keystroke a key event stands for, behaviour 10 —
@@ -174,6 +175,19 @@ memory, and answer "which keys run this action" and "what does this key do".
    The Commit tool window has the focus, for its chords, while the focus is anywhere in it: in
    the file list (a click on a row) as well as in its fields. Until v6 only the message field
    counted, so ⌃M and ⌃P did nothing after a click into the list. [OSS, DOC, GEN]
+12. **Keys named in the window (v7):** a button, hint, mnemonic or status line that names a key
+    writes it in the notation of the system the window runs on, as menus do (SPEC-0275 v5 behaviour
+    14a): on macOS with the symbols (⇧⌘F8, ⌥K, ⌘↩), elsewhere as `Ctrl+Shift+F8`, `Alt+K`,
+    `Ctrl+Enter`. A key that runs an action of the keymap is its first shortcut in the keymap in
+    use, so it follows the user's own bindings and the platform's default keymap (on Linux and
+    Windows the bundled default keymap, not the macOS one with its symbols swapped); with no
+    shortcut the key is left out. A key a dialog or popup handles itself (a mnemonic, Enter and
+    ⌘↩ in its fields) is written for the platform from the keys the dialog takes: ⌘ and ⌃ as
+    `Ctrl`, ⌥ as `Alt`, ⇧ as `Shift`, ↩ as `Enter`, ⌫ as `Backspace`, ⌦ as `Delete`, ⎋ as `Esc`,
+    ⇥ as `Tab`; arrows keep their arrows. Until v7 such texts had the macOS symbols built in, so on
+    Linux the breakpoint popup's button said "More (⇧⌘F8)" for Ctrl+Shift+F8. v7 applies this to
+    the breakpoint popup and dialog (SPEC-0127 v14 behaviour 30); the other places with built-in
+    symbols follow one by one and are listed in the report of the branch. [GEN]
 
 ## Acceptance criteria
 - **AK-1** Keystroke parsing incl. `ctrl`/`control`, lower-case key names, `pressed`, invalid input.
@@ -232,6 +246,8 @@ memory, and answer "which keys run this action" and "what does this key do".
   the input method. (Hand test; open — the fix was made
   without a screen; the Cocoa part of the path, from the key to the toolkit's key event, was read
   in the toolkit's source and not run.)
+- **AK-14 (v7, behaviour 12)** Unit test `keymap::tests::local_keys_follow_the_platform`: the
+  conversion of every symbol and of combined keys, text around them kept, unchanged on macOS.
 
 ## Out of scope
 The other upstream keymaps (Emacs, Sublime Text, GNOME/KDE, XWin, macOS system shortcuts) — later, same

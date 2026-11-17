@@ -683,6 +683,9 @@ mod tests {
                     nullable: *nullable,
                     default: None,
                     generated: None,
+                    expression: None,
+                    identity: None,
+                    comment: None,
                 })
                 .collect(),
             primary_key: pk.iter().map(|c| c.to_string()).collect(),
@@ -693,11 +696,14 @@ mod tests {
                     columns: cols.iter().map(|c| c.to_string()).collect(),
                     referenced_table: to.to_string(),
                     referenced_columns: vec!["id".into()],
+                    on_delete: None,
+                    on_update: None,
                 })
                 .collect(),
             indexes: vec![],
             unreadable: None,
             constraints: Vec::new(),
+            comment: None,
         }
     }
 
@@ -715,6 +721,9 @@ mod tests {
             columns: vec!["cid".into()],
             condition: None,
             collations: Vec::new(),
+            method: None,
+            orders: Vec::new(),
+            prefixes: Vec::new(),
         });
         let mut customer = table("customer", &[("id", false), ("email", false)], &["id"], &[]);
         customer.indexes.push(Index {
@@ -723,6 +732,9 @@ mod tests {
             columns: vec!["email".into()],
             condition: None,
             collations: Vec::new(),
+            method: None,
+            orders: Vec::new(),
+            prefixes: Vec::new(),
         });
         vec![
             customer,

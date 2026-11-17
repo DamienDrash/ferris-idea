@@ -1,6 +1,7 @@
 # SPEC-0041: Quick fixes and refactorings through the language server (code actions)
 
-- **Version:** 3 · **Date:** 2026-11-13 (v3: requests say that they were invoked; the MCP tool lists
+- **Version:** 4 · **Date:** 2026-11-16 (v4: `code_actions` lists a title once, behaviour 7, AK-7;
+  headless check of F-033 on 2026-11-16, OBS-0072); 2026-11-13 (v3: requests say that they were invoked; the MCP tool lists
   applicable actions first and leaves disabled ones out unless asked; v2: lazily computed actions are
   resolved before they are previewed or applied)
 - **Sources:** GEN (IDEs offer context actions at the caret or selection — fixes for problems and
@@ -48,6 +49,11 @@ after a preview.
    offers as applicable (for example "Move to a new file" at any position of a TypeScript file).
    `apply_code_action` refuses a disabled action with its reason (behaviour 3). The window's list (SPEC-0076
    behaviour 2) keeps showing the disabled ones greyed after the applicable ones. [STD, GEN]
+7. **v4 – One entry per title:** as the editor's list does (SPEC-0076 v4 behaviour 8), `code_actions`
+   lists an action whose title is already listed only once, keeping the first (an applicable one before
+   a disabled one). jdtls sends "Organize imports" twice at an unused import and "Add all missing
+   imports" twice at an unresolved type; `apply_code_action` chooses by title and takes the first, so
+   the second entry could never be chosen. [GEN]
 
 ## Acceptance criteria
 - **AK-1** With `clangd`: a missing semicolon yields a preferred quick fix whose application makes the file
@@ -69,6 +75,8 @@ after a preview.
 - **AK-6 (v3)** With typescript-language-server (skipped without it): with the caret on a use of a variable
   "Inline variable" is offered without a reason and applies; "Convert default export to named export" comes
   with the server's reason.
+- **AK-7 (v4, behaviour 7)** `actions::tests::applicable_actions_come_first_and_disabled_ones_can_be_left_out`: two equal titles
+  become one, an applicable one is kept before a disabled one of the same title.
 
 ## Out of scope
 Actions on save, organise imports as

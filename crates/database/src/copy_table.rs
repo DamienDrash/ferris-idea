@@ -3,7 +3,7 @@
 
 use serde::Serialize;
 
-use crate::ddl::default_expr;
+use crate::ddl::{default_expr, index_term};
 use crate::edit::run_one;
 use crate::{DbError, Dialect, OnError, Outcome, Session, Table, introspect, quote_identifier};
 
@@ -148,7 +148,13 @@ pub fn copy_statements(
         }) {
             if !seen.contains(&&i.columns) {
                 seen.push(&i.columns);
-                parts.push(format!("UNIQUE ({})", list(&i.columns, d)));
+                // SPEC-0013 v9 behaviours 24–25: MySQL and MariaDB keep a term's prefix length,
+                // without which a key on a `text` column cannot be made, and its sort order. A
+                // PostgreSQL constraint takes neither.
+                let terms: Vec<String> = (0..i.columns.len())
+                    .map(|n| index_term(t, i, n, d, d.mysql_like()))
+                    .collect();
+                parts.push(format!("UNIQUE ({})", terms.join(", ")));
             }
         }
     }
@@ -573,6 +579,9 @@ mod tests {
             nullable,
             default: default.map(str::to_owned),
             generated: None,
+            expression: None,
+            identity: None,
+            comment: None,
         };
         CopySource {
             table: Table {
@@ -597,6 +606,8 @@ mod tests {
                     columns: vec!["warehouse_id".into()],
                     referenced_table: "warehouse".into(),
                     referenced_columns: vec!["id".into()],
+                    on_delete: None,
+                    on_update: None,
                 }],
                 indexes: vec![
                     Index {
@@ -605,6 +616,9 @@ mod tests {
                         columns: vec!["id".into()],
                         condition: None,
                         collations: Vec::new(),
+                        method: None,
+                        orders: Vec::new(),
+                        prefixes: Vec::new(),
                     },
                     Index {
                         name: "item_sku_key".into(),
@@ -612,6 +626,9 @@ mod tests {
                         columns: vec!["sku".into()],
                         condition: None,
                         collations: Vec::new(),
+                        method: None,
+                        orders: Vec::new(),
+                        prefixes: Vec::new(),
                     },
                     Index {
                         name: "item_lower".into(),
@@ -619,10 +636,14 @@ mod tests {
                         columns: vec!["lower(sku)".into()],
                         condition: None,
                         collations: Vec::new(),
+                        method: None,
+                        orders: Vec::new(),
+                        prefixes: Vec::new(),
                     },
                 ],
                 unreadable: None,
                 constraints: Vec::new(),
+                comment: None,
             },
             checks: vec!["CHECK ((qty >= 0))".into()],
             identity: Vec::new(),
@@ -648,6 +669,21 @@ mod tests {
             CopyTarget::default_for("item", Some(" ")).table,
             "item_copy"
         );
+    }
+
+    /// SPEC-0013 v9 AK-22 (OBS-0076 D5): a unique key on a prefix of a `text` column keeps its
+    /// length and sort order on MySQL, without which the copy's key cannot be made; PostgreSQL's
+    /// constraint takes neither.
+    #[test]
+    fn a_unique_prefix_key_keeps_its_length() {
+        let mut s = source();
+        s.table.indexes[1].prefixes = vec![Some(20)];
+        s.table.indexes[1].orders = vec![Some("DESC".into())];
+        let target = CopyTarget::default_for("item", None);
+        let sql = copy_statements(&s, &target, CopyOptions::default(), Dialect::MySql);
+        assert!(sql[0].contains("UNIQUE (`sku`(20) DESC)"), "{}", sql[0]);
+        let sql = copy_statements(&s, &target, CopyOptions::default(), Dialect::PostgreSql);
+        assert!(sql[0].contains("UNIQUE (\"sku\")"), "{}", sql[0]);
     }
 
     #[test]

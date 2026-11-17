@@ -1,6 +1,12 @@
 # SPEC-0089: Database tool window
 
-- **Version:** 13 · **Date:** 2026-11-16 (v13: routines, triggers and types in folders of their kind, Show DDL on them, behaviour 25, AK-27–28 — SPEC-0013 v6/v7; v12 is taken by the open branches of SPEC-0016 v3); 2026-11-16 (v11.1: AK-7 restated by what the user sees — a table
+- **Version:** 15 · **Date:** 2026-11-17 (v15: a foreign key's row and its documentation name its actions, an
+  index's row and line its access method, behaviour 27, AK-30 — SPEC-0013 v8, OBS-0076 D1–D2); 2026-11-16 (v14: the selection stays on its node while rows come and go, also
+  while a connection is read again after Copy Table, and goes to the nearest parent of a node that
+  is gone, behaviour 26, AK-29 — screen run of 2026-11-16, B3); 2026-11-16 (v13: routines, triggers and types in folders of their kind,
+  Show DDL on them, behaviour 25, AK-27–28 — SPEC-0013 v6/v7); 2026-11-16 (v12: once a connection is
+  read, its row says whether the connection is encrypted, behaviour 24, AK-26 — SPEC-0016 v3,
+  IMP-0421); 2026-11-16 (v11.1: AK-7 restated by what the user sees — a table
   created meanwhile loses its unknown mark after Refresh; its old wording, no cached schema right after
   Refresh, contradicts SPEC-0192 v3 behaviour 11, which reads the schema again at once for the open
   files; no change of behaviour, found by the Linux window self-test); 2026-11-15 (v11: every Refresh
@@ -167,6 +173,11 @@ See what is in the project's databases without leaving the editor.
     SQL editors that the schemas are out of date (behaviour 5 v4, SPEC-0192 v3 behaviour 11). Until
     v11 the toolbar button read the tree again without telling them: the tree showed a table created
     meanwhile, while an open `.sql` file kept marking it unknown, also after typing. [GEN]
+24. **v12 – Encryption on the row (SPEC-0016 v3, IMP-0421):** once a connection's schema has been
+    read, the detail of its row ends in "· TLS" when the session is encrypted and in "· TLS: no" when
+    it is not, so a plain connection to a server on the loopback (`prefer` without TLS, or `disable`)
+    is visible without a Test Connection. Before the read, after a failed read, for SQLite and DuckDB
+    and when the server does not say, nothing is added. Refresh forgets it with the schema. [GEN]
 25. **v13 – Routines, triggers and types (SPEC-0013 v6 behaviour 18, v7 behaviour 20):** when a
     connection's current schema is read, its routines, triggers and types are read with it (a
     failing read leaves them out, as the sequences of v5 behaviour 12). After the sequences each
@@ -179,6 +190,22 @@ See what is in the project's databases without leaving the editor.
     opens it in a read-only tab `<name> (DDL).sql` (a routine's name with its arguments); a
     missing privilege or a failing read goes to the status line. Rename is not offered on them.
     The other schemas of v3 behaviour 8 list only tables and views. [GEN]
+26. **v14 – The selection is a node (screen run 2026-11-16, B3):** whenever rows come or go —
+    a connection or schema is read (again), a node is expanded or collapsed, a store level arrives,
+    Refresh — the selection stays on the node it was on, not on the row number it had. While the
+    node has no row (its connection is being read again, as after Copy Table, SPEC-0191 behaviour
+    6), its nearest parent that has one is selected, and the node is selected again once its row is
+    back, unless the user selected another row meanwhile. A node that is gone after the read leaves
+    the selection on that parent (a dropped table: the `tables` folder of its connection); a node
+    hidden by collapsing a parent gives the selection to that parent for good. Until v14 the row
+    number was kept while a connection was read again: after Copy Table on a table of one
+    connection, the selection jumped to the row of another connection. [GEN]
+27. **v15 – Actions and methods (SPEC-0013 v8 behaviours 21–22, OBS-0076):** the detail of a
+    foreign key's row ends in its actions in small letters (`(a) → parent(id) on delete cascade on
+    update set null`), and its line in the quick documentation in capitals (`… → parent(id) ON DELETE
+    CASCADE`); nothing is added for `NO ACTION`. An index with an access method other than the
+    default one ends its detail in `· gin` and its documentation line names it (`Index tags_idx using
+    gin (tags)`). The condition of a PostgreSQL partial index shows like SQLite's (behaviour 20). [GEN]
 
 ## Acceptance criteria
 - **AK-1** Connection rows and details, loading, failure and empty states, groups, sections and the texts
@@ -262,6 +289,8 @@ See what is in the project's databases without leaving the editor.
   `.sql` file names a table that does not exist and is marked unknown; the table is created; the
   toolbar's Refresh (`DatabaseView::refresh_from_toolbar`, what the button runs) clears the mark
   without an edit, and an edit afterwards does not bring it back.
+- **AK-26 (v12, behaviour 24)** `db_tree_model::tests::a_read_connection_says_whether_it_is_encrypted`:
+  "· TLS" and "· TLS: no" after the read, nothing before it or when unknown.
 - **AK-27 (v13, behaviour 25)** `db_tree_model::tests::routines_triggers_and_types_in_folders`:
   folders in the dialect's order with their counts, overloads with their arguments, a trigger
   with table and timing, a type with what it is.
@@ -269,6 +298,14 @@ See what is in the project's databases without leaving the editor.
   (`tests/it/db_object_definitions.rs`: `show_ddl_opens_the_definition_of_a_trigger`, macOS;
   written, not yet built): a SQLite file with a trigger lists it under `triggers`, and Show DDL
   opens `stock_check (DDL).sql` read-only with SQLite's statement.
+- **AK-29 (v14, behaviour 26)** Window test in the test harness (`tests/it/sql_beta_handtests.rs`,
+  `b2_b3_copy_table_names_its_connection_and_keeps_the_selection`, macOS, SQLite, two connections):
+  after Copy Table on `item` of the first connection the selection is still on `item` once the
+  connection is read again; a selected table dropped outside the IDE leaves the selection on its
+  `tables` folder after the connection is read again.
+
+- **AK-30 (v15, behaviour 27)** `db_tree_model::tests::foreign_key_actions_and_index_methods_in_rows`;
+  `object_doc::tests::foreign_key_actions_and_index_methods_in_the_documentation`.
 
 ## Out of scope
 Adding or editing connections in a dialog (F-051 remains partly open), renaming or comparing objects of

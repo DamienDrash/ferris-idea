@@ -353,6 +353,32 @@ impl SearchRequest {
         Ok(found)
     }
 
+    /// [`Self::list`] with the matches of each listed file that is open with unsaved changes found
+    /// in its editor's text (`unsaved`: workspace-relative path and text) with the same filter,
+    /// so the list shows what the editors hold; a file whose editor text no longer matches leaves
+    /// the list (`SPEC-0066` v7 behaviour 19).
+    pub fn list_with(
+        &self,
+        workspace: &idecraft_core::Workspace,
+        max_matches: usize,
+        unsaved: &[(PathBuf, String)],
+    ) -> Result<WorkspaceSearch, idecraft_core::SearchError> {
+        let mut found = self.list(workspace, max_matches)?;
+        if unsaved.is_empty() {
+            return Ok(found);
+        }
+        let finder = idecraft_core::Finder::new(&self.query)?;
+        for file in &mut found.files {
+            if let Some((_, text)) = unsaved.iter().find(|(path, _)| *path == file.path) {
+                let mut matches = finder.find(text);
+                keep_context(self.context, &file.path, text, &mut matches);
+                file.matches = matches;
+            }
+        }
+        found.files.retain(|f| !f.matches.is_empty());
+        Ok(found)
+    }
+
     /// What Replace All — or, with `only` (a file and the listed match's char range), Replace —
     /// changes: exactly the matches [`Self::list`] returns now, searched again at this moment, so
     /// nothing outside the scope or the filter and nothing that no longer matches is touched
@@ -737,6 +763,50 @@ mod tests {
             .plan_replacement(&ws, "x", None, &|_| Some("absent".to_owned()))
             .unwrap();
         assert!(elsewhere.files.is_empty());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    /// SPEC-0066 v7 AK-9 (behaviour 19): a listed file open with unsaved changes shows the
+    /// matches of its editor's text; after the editor's text was replaced it leaves the list.
+    #[test]
+    fn the_list_shows_the_matches_of_unsaved_editors() {
+        let (root, ws) = project(
+            "list-unsaved",
+            &[
+                ("a/A.java", "long total;\nlong total;\n"),
+                ("b/B.java", "long total;\n"),
+            ],
+        );
+        let all = request("total", Scope::Project);
+        let disk = ResultList::from_search(&all.list(&ws, 1000).unwrap());
+        assert_eq!(disk.summary(), "3 matches in 2 files");
+        // One match left in the editor of A.java: its line, not the disk's two.
+        let edited = vec![(
+            PathBuf::from("a/A.java"),
+            "long sum;\n\nlong total;\n".to_owned(),
+        )];
+        let found = all.list_with(&ws, 1000, &edited).unwrap();
+        let a = found
+            .files
+            .iter()
+            .find(|f| f.path == std::path::Path::new("a/A.java"))
+            .unwrap();
+        assert_eq!(a.matches.len(), 1);
+        assert_eq!(a.matches[0].line, 2);
+        assert_eq!(
+            ResultList::from_search(&found).summary(),
+            "2 matches in 2 files"
+        );
+        // Replace All in the editor, unsaved: the file is no longer listed.
+        let replaced = vec![(
+            PathBuf::from("a/A.java"),
+            "long sum;\nlong sum;\n".to_owned(),
+        )];
+        let found = all.list_with(&ws, 1000, &replaced).unwrap();
+        assert_eq!(
+            ResultList::from_search(&found).summary(),
+            "1 match in 1 file"
+        );
         let _ = std::fs::remove_dir_all(root);
     }
 

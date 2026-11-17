@@ -285,6 +285,6 @@ pub use usages_view::{UsagesEvent, UsagesView};
 pub use vcs_ops_view::{PushEvent, PushView, UpdateEvent, UpdateView, VcsOpsEvent, VcsOpsView};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub use workbench_view::{
-    HiddenBottom, MenuPlace, PluginPanel, RemoteStateDir, WorkbenchView, open_live_window,
-    queue_opened, take_opened,
+    EditorSelectionState, HiddenBottom, MenuPlace, PluginPanel, RemoteStateDir, WorkbenchView,
+    open_live_window, queue_opened, take_opened,
 };

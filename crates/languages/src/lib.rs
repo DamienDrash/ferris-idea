@@ -7,6 +7,7 @@
 use std::path::Path;
 
 pub mod actions;
+pub mod config_completion;
 pub mod context;
 pub mod copyright;
 pub mod debug_plan;

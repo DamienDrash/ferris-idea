@@ -1,7 +1,9 @@
 # SPEC-0021: Exporting result data
 
-- **Version:** 3 · **Date:** 2026-11-05 (v1 2026-10-31: formats and MCP tool; v3: the export dialog
-  fits the panel and answers to Enter — hand test 115, D42)
+- **Version:** 4 · **Date:** 2026-11-16 (v1 2026-10-31: formats and MCP tool; v3 2026-11-05: the
+  export dialog fits the panel and answers to Enter — hand test 115, D42; v4: the preview shows its
+  lines at the Services window's default height and scrolls with a scroll bar — screen run of
+  2026-11-16, B1)
 - **Sources:** GEN (database tools export query results and tables as CSV, TSV, JSON, Markdown and SQL
   `INSERT` statements; F-054), STD (RFC 4180 CSV; JSON RFC 8259; SQL string literals per dialect,
   SPEC-0017), OBS-0005 (export not reachable from menu bar or visible toolbar → IMP-0013), SPEC-0012,
@@ -56,6 +58,13 @@ difference between NULL and an empty string.
     bottom, the format list and the preview shrink (and scroll) first, and the Cancel/Export row stays
     visible at the bottom however low the panel is. Enter and ⌘Enter run the export, Escape closes the
     dialog. [GEN]
+    **v4 (B1, screen run 2026-11-16):** the preview is never cut off unseen. It is as high as its
+    lines (at most about ten lines), so at the Services window's default height a short preview —
+    two selected rows with the header — shows every line in full; the choices above it and the
+    format list give up room first. A preview longer than its box, or a dialog in a panel too low
+    for all its parts, scrolls, and a scroll bar beside the scrolling part shows that more is there.
+    Until v4 the preview shrank first and showed only its first two lines, without a scroll bar.
+    [GEN]
 12. MCP tool `export_data` (connection, one `SELECT`, format, optional table and header): needs
    `read-data`; the statement must only read; all rows are exported (not a page). Exports larger than
    5 MiB are refused with the size, so the caller can narrow the query. Files are not written. [ADR-0008,
@@ -77,6 +86,10 @@ difference between NULL and an empty string.
 - **AK-9** (v2) By hand (round 4, hand test 115): copy formats and export dialog next to the reference.
 - **AK-10** (v3) Window self-test: with the export dialog open the bottom of its button row lies inside
   the Services panel, and Enter writes the file (self-test `table_editor_steps`).
+- **AK-11** (v4) Window test in the test harness (`tests/it/sql_beta_handtests.rs`,
+  `b1_the_export_preview_shows_its_lines`, SQLite): two rows selected, CSV with header, the dialog
+  at the default window and Services height — all three preview lines are painted in full inside the
+  preview; hand test 115's low window still keeps the Export button inside the panel (AK-10).
 
 ## Out of scope
 Excel/XLSX, user-defined or scripted formats, transposed output, streaming exports larger than memory, writing files (the editor does that),

@@ -15,4 +15,5 @@ mod kotlin_class_sources;
 mod lifetime;
 mod lldb;
 mod method_exit;
+mod native_memory;
 mod python_more;

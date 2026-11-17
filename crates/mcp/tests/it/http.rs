@@ -465,7 +465,10 @@ async fn the_cli_client_is_named_in_the_question_and_quits() {
         let found = idecraft_mcp::client::running_windows(&cfg);
         assert_eq!(found.len(), 1, "{found:?}");
         let mut client = idecraft_mcp::client::Client::connect(&found[0], "idecraft-cli").unwrap();
-        let created = client.call("create_file", json!({"dir": "", "name": "a.txt"}));
+        let created = client.call(
+            "create_file",
+            json!({"dir": "", "name": "a.txt", "dry_run": false}),
+        );
         let quit = client.call("quit_ide", json!({}));
         (created, quit)
     })

@@ -1,6 +1,6 @@
 # SPEC-0206: Terminal search and shell integration
 
-- **Version:** 1 · **Date:** 2026-11-03
+- **Version:** 2 · **Date:** 2026-11-17 (v2: the search over MCP; found headless for F-076, OBS-0075)
 - **Sources:** GEN (terminals find text in the scrollback; IDE terminals install shell integration
   themselves so that prompts and commands are known: marks for finished commands and their exit
   status, jumping between prompts; F-076), STD (OSC 133 `A`/`B`/`C`/`D[;status]` prompt marks as
@@ -35,6 +35,12 @@ Long output needs a search, and the terminal should know where commands start an
    `IDECRAFT_SHELL_INTEGRATION=0` turns it off. [STD, GEN]
 6. **MCP:** `terminal_render` returns `prompts`: per OSC 133 prompt the history line, the command text
    between `B` and `C` and the exit status. [ADR-0008]
+7. **v2 – MCP search:** `terminal_render` takes `find` and `match_case` and returns `matches`:
+   per occurrence the history line (0 is the oldest scrollback line, the numbering of
+   `prompts`), the first column and the column after the last, top to bottom, found as the find
+   field of behaviour 1 finds them (case-insensitive unless `match_case`; a match does not span
+   lines). Without `find`, `matches` is null. Before v2 an agent could not check what the find
+   field highlights. [ADR-0008]
 
 ## Acceptance criteria
 - **AK-1** Search over history and screen with and without case; marks with stable line numbers when
@@ -45,6 +51,9 @@ Long output needs a search, and the terminal should know where commands start an
   it, Escape returns; ⌘↑ jumps to the previous prompt; the failed command's mark is red.
 - **AK-4** MCP `terminal_render` with `prompts` (protocol test).
 - **AK-5** By hand next to the reference (round 4, no. 141).
+- **AK-6 (v2)** MCP `terminal_render` with `find`: a match in the scrollback and one on the
+  screen, case-insensitive; with `match_case` only the exact one; no `find`, no `matches`
+  (protocol test `terminal_render_tool`).
 
 ## Out of scope
 Regular expressions and whole words in the search, command blocks drawn as boxes, fish and

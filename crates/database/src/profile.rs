@@ -709,13 +709,30 @@ impl ConnectionProfile {
             }
         }
         if !self.tls.is_empty() {
-            if !matches!(
-                self.dialect,
-                Dialect::PostgreSql | Dialect::MySql | Dialect::MariaDb
-            ) {
+            // SQL Server takes a CA file only (`SPEC-0116` v6 behaviour 15).
+            let sql_server_ca = self.dialect == Dialect::SqlServer
+                && self.tls.cert_file.is_none()
+                && self.tls.key_file.is_none();
+            if self.dialect == Dialect::SqlServer && !sql_server_ca {
+                return Err(invalid(
+                    if self.tls.cert_file.is_some() {
+                        "cert file"
+                    } else {
+                        "key file"
+                    },
+                    "is not taken by SQL Server, only a CA file",
+                ));
+            }
+            if !sql_server_ca
+                && !matches!(
+                    self.dialect,
+                    Dialect::PostgreSql | Dialect::MySql | Dialect::MariaDb
+                )
+            {
                 return Err(invalid(
                     "tls",
-                    "files are available for PostgreSQL, MySQL and MariaDB",
+                    "files are available for PostgreSQL, MySQL and MariaDB, a CA file for SQL \
+                     Server",
                 ));
             }
             if self.ssl == SslMode::Disable {
@@ -1267,6 +1284,24 @@ mod tests {
         my.tls.cert_file = Some("/c.pem".into());
         my.tls.key_file = Some("/k.pem".into());
         assert_eq!(field(&my), "cert file");
+        // SPEC-0116 v6 AK-10: SQL Server takes a CA file, checked as for the others, and no
+        // client certificate.
+        let mut ms =
+            ConnectionProfile::from_url("s", "sqlserver://u@h/db?sslmode=verify-full").unwrap();
+        ms.tls.ca_file = Some("/ca.pem".into());
+        assert!(ms.validate().is_ok());
+        ms.ssl = SslMode::Require;
+        assert_eq!(field(&ms), "ca file");
+        ms.ssl = SslMode::VerifyFull;
+        ms.tls.cert_file = Some("/c.p12".into());
+        assert_eq!(field(&ms), "cert file");
+        ms.tls.cert_file = None;
+        ms.tls.key_file = Some("/k.pem".into());
+        assert_eq!(field(&ms), "key file");
+        let mut ora = ConnectionProfile::from_url("o", "oracle://u@h:1521/X").unwrap();
+        ora.ssl = SslMode::VerifyFull;
+        ora.tls.ca_file = Some("/ca.pem".into());
+        assert_eq!(field(&ora), "tls");
 
         let mut slow = pg();
         slow.options.query_timeout_secs = Some(0);

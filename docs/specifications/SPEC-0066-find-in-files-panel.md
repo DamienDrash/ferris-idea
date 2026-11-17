@@ -1,6 +1,6 @@
 # SPEC-0066: Find in Files panel
 
-- **Version:** 5 · **Date:** 2026-11-12 (v2: Replace in Files; v3: side-by-side comparison OBS-0023 —
+- **Version:** 7 · **Date:** 2026-11-17 (v7: the list shows the matches of unsaved editors, behaviour 19, AK-9, beta finding B1 of hand test 6); 2026-11-12 (v2: Replace in Files; v3: side-by-side comparison OBS-0023 —
   scope, preview, pinning, comments and strings, line breaks; v4: only the project's own sources,
   decision of the Project Owner of 2026-11-12; v5: a replacement changes what the list shows; v6: the
   toggle and the line for a remote project too, same decision for the remaining places)
@@ -106,6 +106,16 @@ behaviour 13, SPEC-0318 v8 behaviour 13).**
    are; the host's line on what was not searched follows the summary in the head. Replace in Files
    stays unavailable for a remote project. [GEN; decision]
 
+**v7 (beta screen run of workflow (a), hand test 6).**
+19. **The list shows what the editors hold:** a listed file that is open in an editor with unsaved
+   changes shows the matches of the editor's text — lines, places and counts in the summary — found
+   with the same query, options and comments/strings filter; a file whose editor text no longer
+   matches leaves the list. So after Replace All, which changes an open file in its editor without
+   saving (behaviour 7), the list searched again no longer shows the replaced text. A file whose
+   matches are only in unsaved text is still not listed (the files to search are those on disk).
+   Before v7 the list kept showing "2 matches in 1 file" with the old text of the open file after
+   Replace All. [GEN]
+
 ## Acceptance criteria
 - **AK-1** Rows per file and match, match position after trimming the line, selection skipping file rows
   without wrapping, summary texts (unit test).
@@ -140,8 +150,14 @@ behaviour 13, SPEC-0318 v8 behaviour 13).**
   `find_in_files_view::tests::the_host_request_carries_scope_and_toggle`; the host's side: SPEC-0029
   AK-11); in the window of a remote project: the toggle and the line in the head (hand test).
 
+- **AK-9 (v7, behaviour 19)** A listed file with unsaved changes shows the editor's matches and
+  leaves the list once its editor no longer matches
+  (`find_in_files_model::tests::the_list_shows_the_matches_of_unsaved_editors`); in the harness
+  window, after Replace All over an open and a closed file, the list shows no match
+  (`workflow_a_beta_handtests.rs::hand_test_6_replace_in_files`).
+
 ## Out of scope
-Replace in Files for a remote project (since v6 its search follows behaviours 14 to 16). Matches only in unsaved editor text (the search reads the files on disk), a replace preview per match,
+Replace in Files for a remote project (since v6 its search follows behaviours 14 to 16). Files whose matches are only in unsaved editor text (the files to search are read on disk; since v7 the matches of a listed file come from its editor), a replace preview per match,
 modules and named custom scopes (one module per workspace), search history of the panel.
 
 ## Known deviations from the reference

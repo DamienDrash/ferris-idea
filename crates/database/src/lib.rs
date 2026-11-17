@@ -47,6 +47,7 @@ mod sqlite;
 mod sqlserver;
 mod summary;
 mod table_query;
+mod tds_tls;
 mod tunnel;
 
 pub use agent_files::refused_file_access;
@@ -85,8 +86,8 @@ pub use grid_edit::{CellState, GridEdits};
 pub use history::{HISTORY_LIMIT, HistoryEntry, QueryHistory, history_file, keeps_secret};
 pub use inspect::{Fix, Problem, Severity, inspect};
 pub use introspect::{
-    Column, ConstraintName, ForeignKey, Index, ObjectDdl, Table, TableConstraint, ViewDef,
-    constraint_names, introspect, introspect_schema, sequence_query, sequences, show_ddl,
+    Column, ConstraintName, ForeignKey, Index, ObjectDdl, Table, TableConstraint, UNKNOWN_SCHEMA,
+    ViewDef, constraint_names, introspect, introspect_schema, sequence_query, sequences, show_ddl,
     show_ddl_in, view_body, view_definitions, view_definitions_in,
 };
 pub use mysql::MySqlSession;
@@ -124,13 +125,17 @@ pub use schema_objects::{
     sqlite_trigger_event,
 };
 pub use script::{Statement, block_comments, split_statements};
+#[cfg(target_os = "linux")]
+pub use secret::SecretServiceStore;
 #[cfg(debug_assertions)]
 pub use secret::test_store;
 pub use secret::{
-    Credentials, KeychainStore, MemoryStore, Secret, SecretError, SecretStore, SystemStore,
-    UNREACHABLE as KEYCHAIN_UNREACHABLE, keychain_reachable, resolve_credentials,
+    Credentials, KeychainStore, KeyringStore, MemoryStore, Secret, SecretError, SecretStore,
+    SystemStore, UNREACHABLE as KEYCHAIN_UNREACHABLE, keychain_reachable, resolve_credentials,
 };
-pub use session::{CONNECT_TIMEOUT, CancelHandle, Driver, Session, SessionError};
+pub use session::{
+    CONNECT_TIMEOUT, CancelHandle, Driver, Session, SessionError, TlsPlan, is_loopback, tls_plan,
+};
 pub use sql_files::{
     CONSOLES_DIR, SQL_FILES, bind_file, bound_connection, create_console, next_console,
 };

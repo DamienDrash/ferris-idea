@@ -946,7 +946,7 @@ mod tests {
         }
     }
 
-    /// SPEC-0072 v12 AK-33 (window check of 2026-11-14): with a tool window left of the editor
+    /// SPEC-0072 v12 AK-35 (window check of 2026-11-14): with a tool window left of the editor
     /// the panel stays off it — right of the list, narrowed when the window ends there — and
     /// goes left only inside the editor area; it never lies over the list.
     #[test]

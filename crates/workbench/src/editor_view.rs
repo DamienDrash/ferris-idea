@@ -511,6 +511,9 @@ pub struct EditorView {
     /// The read-only state was set for a library source and does not follow the file's
     /// attribute (`SPEC-0336` behaviour 18).
     locked: bool,
+    /// The text is not checked: a library source shows no inspections and no diagnostics
+    /// (`SPEC-0149` v5 behaviour 11).
+    unchecked: bool,
     /// The encoding the file was read in and is written in (`SPEC-0336` behaviour 11).
     encoding: idecraft_core::file_properties::FileEncoding,
     /// The state of the encoding choices when the disk was last looked at.
@@ -731,6 +734,7 @@ impl EditorView {
             save_all_in_window: false,
             host_problems: Vec::new(),
             locked: false,
+            unchecked: false,
             encoding: Default::default(),
             choice_generation: idecraft_core::file_properties::choice_generation(),
             frozen: None,
@@ -2184,6 +2188,7 @@ impl EditorView {
         if save {
             // No tidying on save: the file gets exactly the agent's text.
             self.save();
+            self.redetect_language(cx);
             cx.emit(EditorEvent::Saved);
         }
         cx.notify();
@@ -2806,6 +2811,12 @@ impl EditorView {
     }
 
     fn merge_problems(&mut self) {
+        // A library source shows no problems at all (SPEC-0149 v5 behaviour 11).
+        if self.unchecked {
+            self.problems.clear();
+            self.hidden_by_level = 0;
+            return;
+        }
         // An own finding on exactly the text of a server diagnostic is shown once (SPEC-0070 v5
         // behaviour 7).
         let own = if self.remote_document {
@@ -4021,6 +4032,9 @@ impl EditorView {
             "SaveAll" | "SaveDocument" => {
                 self.tidy_before_save(cx);
                 self.save();
+                // A hashbang line or modeline typed and saved takes effect at once (SPEC-0004 v9
+                // behaviour 19).
+                self.redetect_language(cx);
                 cx.emit(EditorEvent::Saved);
                 return true;
             }
@@ -4181,6 +4195,18 @@ impl EditorView {
         SyntaxDocument::new(language, tsx, &text)
             .ok()
             .map(|d| f(&d))
+    }
+
+    /// Checks the text or not: a library source is read, not checked, so it shows neither IDECraft's
+    /// own inspections nor diagnostics of any other source (`SPEC-0149` v5 behaviour 11).
+    pub fn set_unchecked(&mut self, on: bool) {
+        self.unchecked = on;
+        self.merge_problems();
+    }
+
+    /// Whether the text is not checked (a library source).
+    pub fn is_unchecked(&self) -> bool {
+        self.unchecked
     }
 
     /// Makes the text read-only (a library source, `SPEC-0149` v4 behaviour 11).

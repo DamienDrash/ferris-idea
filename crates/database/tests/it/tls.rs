@@ -1,10 +1,13 @@
 //! SPEC-0016 against the reference databases (local PostgreSQL without TLS, MySQL 8.4 with its
-//! self-signed certificate). Uses `IDECRAFT_TEST_PG` / `IDECRAFT_TEST_MYSQL`; the SSL mode in those
+//! self-signed certificate, v3: SQL Server 2022 with the test CA that `mssql.sh start` installs). Uses
+//! `IDECRAFT_TEST_PG` / `IDECRAFT_TEST_MYSQL` / `IDECRAFT_TEST_SQLSERVER`; the SSL mode in those
 //! URLs is replaced per test.
+
+use std::net::ToSocketAddrs;
 
 use crate::common;
 
-use idecraft_database::{ConnectionProfile, Session, SessionError, SslMode};
+use idecraft_database::{ConnectionProfile, Driver, PgSession, Session, SessionError, SslMode};
 
 fn profile(var: &str, mode: SslMode) -> Option<ConnectionProfile> {
     let url = std::env::var(var).ok()?;
@@ -193,6 +196,169 @@ async fn readable_client_keys_are_refused() {
         .to_string();
     assert!(
         err.contains(&key.display().to_string()) && err.contains("0640"),
+        "{err}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// SPEC-0016 v3 AK-12 (live): `prefer` for a host off the loopback needs TLS. The socket goes to
+/// the reference PostgreSQL as through an SSH tunnel, while the profile names `db.example.invalid`,
+/// the host the database would have as the SSH server sees it. Without TLS on the server there is
+/// no connection, and the error says why and how to give the server TLS; with host `localhost` the
+/// same server is reached without TLS and says so.
+#[tokio::test]
+async fn postgres_prefer_off_the_loopback_needs_tls() {
+    let Some(local) = profile("IDECRAFT_TEST_PG", SslMode::Prefer) else {
+        return;
+    };
+    let socket = format!(
+        "{}:{}",
+        local.host.clone().unwrap_or_else(|| "localhost".into()),
+        local.effective_port().unwrap_or(5432)
+    )
+    .to_socket_addrs()
+    .unwrap()
+    .next()
+    .unwrap();
+    let credentials = common::credentials(&local);
+    let mut here = local.clone();
+    here.host = Some("localhost".into());
+    let session = Session::from(Driver::Postgres(
+        PgSession::connect_via(&here, &credentials, Some(socket))
+            .await
+            .unwrap(),
+    ));
+    let offers_tls = session.encrypted().await;
+    let mut remote = local.clone();
+    remote.host = Some("db.example.invalid".into());
+    let result = PgSession::connect_via(&remote, &credentials, Some(socket)).await;
+    match offers_tls {
+        // The reference server has no TLS: `prefer` off the loopback refuses.
+        Some(false) => {
+            let err = result.err().unwrap();
+            let text = err.to_string();
+            assert!(
+                matches!(err, SessionError::Tls { mode: "prefer", .. }),
+                "{text}"
+            );
+            assert!(
+                text.contains("db.example.invalid")
+                    && text.contains("server does not support TLS")
+                    && text.contains("not on this machine")
+                    && text.contains("ssl = on"),
+                "{text}"
+            );
+        }
+        // A server with TLS (CI's may have it): encrypted, as with `require`.
+        _ => {
+            let session = Session::from(Driver::Postgres(result.unwrap()));
+            assert_eq!(session.encrypted().await, Some(true));
+        }
+    }
+}
+
+/// The SQL Server profile of `IDECRAFT_TEST_SQLSERVER` with `mode`.
+fn sql_server(mode: SslMode) -> Option<ConnectionProfile> {
+    profile("IDECRAFT_TEST_SQLSERVER", mode)
+}
+
+/// SPEC-0016 v3 AK-13, SPEC-0116 v6 AK-10 (live): TLS with SQL Server comes about on every
+/// platform, macOS included: `require` and `prefer` connect encrypted, `disable` does not;
+/// `verify-full` without a CA file fails on the certificate (the system trusts neither the
+/// server's own nor the test CA's); with the test CA of `mssql.sh tls`
+/// (`IDECRAFT_TEST_SQLSERVER_CA`) it connects to `localhost` and fails on the host name for
+/// `127.0.0.1`, which the certificate does not name. SPEC-0016 v4 AK-14, SPEC-0116 v7 AK-11: a CA
+/// file that did not sign the server's certificate is the only anchor, so the chain check ends the
+/// handshake naming that file, in `verify-full` and `verify-ca`.
+#[tokio::test]
+async fn sql_server_modes() {
+    let Some(require) = sql_server(SslMode::Require) else {
+        return;
+    };
+    let credentials = common::credentials(&require);
+    let encrypted = async |p: ConnectionProfile| {
+        Session::connect(&p, &credentials)
+            .await
+            .unwrap_or_else(|e| panic!("{e}"))
+            .encrypted()
+            .await
+    };
+    assert_eq!(encrypted(require).await, Some(true));
+    assert_eq!(
+        encrypted(sql_server(SslMode::Prefer).unwrap()).await,
+        Some(true)
+    );
+    assert_eq!(
+        encrypted(sql_server(SslMode::Disable).unwrap()).await,
+        Some(false)
+    );
+    let mut verify = sql_server(SslMode::VerifyFull).unwrap();
+    let err = Session::connect(&verify, &credentials).await.err().unwrap();
+    assert!(
+        matches!(
+            err,
+            SessionError::Tls {
+                mode: "verify-full",
+                ..
+            }
+        ),
+        "{err}"
+    );
+    let Some(ca) = std::env::var("IDECRAFT_TEST_SQLSERVER_CA")
+        .ok()
+        .map(std::path::PathBuf::from)
+        .filter(|ca| ca.is_file())
+    else {
+        return;
+    };
+    verify.tls.ca_file = Some(ca);
+    verify.host = Some("localhost".into());
+    assert_eq!(encrypted(verify.clone()).await, Some(true));
+    verify.host = Some("127.0.0.1".into());
+    let err = Session::connect(&verify, &credentials).await.err().unwrap();
+    assert!(
+        matches!(
+            err,
+            SessionError::Tls {
+                mode: "verify-full",
+                ..
+            }
+        ) && err.to_string().contains("host name"),
+        "{err}"
+    );
+    // A CA that did not sign the certificate: no connection, no fallback; the chain check of
+    // SPEC-0116 v7 names the file before the system's roots are asked.
+    let dir = temp("mssql-foreign");
+    let Some(foreign) = foreign_ca(&dir) else {
+        return;
+    };
+    verify.host = Some("localhost".into());
+    verify.tls.ca_file = Some(foreign.clone());
+    let named = format!(
+        "not issued by a certificate in the CA file {}",
+        foreign.display()
+    );
+    let err = Session::connect(&verify, &credentials).await.err().unwrap();
+    assert!(
+        matches!(
+            err,
+            SessionError::Tls {
+                mode: "verify-full",
+                ..
+            }
+        ) && err.to_string().contains(&named),
+        "{err}"
+    );
+    verify.ssl = SslMode::VerifyCa;
+    let err = Session::connect(&verify, &credentials).await.err().unwrap();
+    assert!(
+        matches!(
+            err,
+            SessionError::Tls {
+                mode: "verify-ca",
+                ..
+            }
+        ) && err.to_string().contains(&named),
         "{err}"
     );
     let _ = std::fs::remove_dir_all(&dir);

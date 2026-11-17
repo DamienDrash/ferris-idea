@@ -1,6 +1,6 @@
 # ADR-0023: IDECraft as an agent harness — tools, verification and orchestration, no agent loop of our own
 
-- **Status:** proposed · 2026-11-05 · written on the project owner's request of 2026-11-05 ("is it possible and
+- **Status:** accepted · 2026-11-17 by the project owner (proposed 2026-11-05) · written on the project owner's request of 2026-11-05 ("is it possible and
   sensible to build the IDE, AI-first and with MCP, into an AI harness"). It frames
   ADR-0008 and ADR-0012 to ADR-0017 as one product direction. Implementation is planned for
   M10–M12 and starts only after quality gate QG-1 (ADR-0015). Rule 7 applies now.

@@ -2,6 +2,7 @@
 //! program to build and link instead of one per file. Each former file is a module here.
 
 mod call_cli;
+mod f083_handtests;
 mod f084_handtests;
 mod helper_processes;
 mod no_display;

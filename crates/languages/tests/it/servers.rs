@@ -1427,7 +1427,8 @@ async fn formatting_with_the_defaults_per_language() {
 }
 
 /// SPEC-0043/AK-5 with real servers: groovy-language-server has no formatter and the answer says
-/// so; gopls formats files but no selection; bash-language-server without shfmt is not asked, and
+/// so; gopls formats files but no selection (v8: a selection through the whole file, as
+/// kotlin-language-server, AK-15); bash-language-server without shfmt is not asked, and
 /// the answer names shfmt instead of "already formatted". v5: Markdown needs no server.
 #[tokio::test]
 async fn servers_that_cannot_format_say_why() {
@@ -1479,27 +1480,99 @@ async fn servers_that_cannot_format_say_why() {
         skip("groovy-language-server not installed");
     }
 
+    // SPEC-0043 v8 behaviour 15: gopls formats no ranges, so a selection goes through the whole
+    // file; the lines after it stay as they are.
     if installed("gopls") {
         std::fs::write(root.join("go.mod"), "module lab\n\ngo 1.22\n").unwrap();
         let file = root.join("main.go");
-        std::fs::write(&file, "package main\nfunc   main(){\n}\n").unwrap();
+        let ugly = "package main\nfunc   a(){\nx:=1\n_ = x\n}\nfunc   b(){\n}\n";
+        std::fs::write(&file, ugly).unwrap();
         let first = Range {
             start_line: 1,
             start_character: 0,
-            end_line: 2,
-            end_character: 1,
+            end_line: 5,
+            end_character: 0,
         };
-        let why = refused(plan_format(&root, &file, Some(&first), options, WAIT).await);
-        assert!(
-            why.starts_with("gopls formats whole files only, not a selection"),
-            "{why}"
+        let plan = plan_format(&root, &file, Some(&first), options, WAIT)
+            .await
+            .unwrap();
+        assert_eq!(
+            plan.formatted,
+            "package main\n\nfunc a() {\n\tx := 1\n\t_ = x\n}\nfunc   b(){\n}\n"
         );
+        assert!(plan.whitespace_only);
+        assert_eq!(plan.edits.edits.len(), 1);
+        // The same lines again: nothing left to do.
+        std::fs::write(&file, &plan.formatted).unwrap();
+        let again = Range {
+            start_line: 2,
+            start_character: 0,
+            end_line: 6,
+            end_character: 0,
+        };
+        let plan = plan_format(&root, &file, Some(&again), options, WAIT)
+            .await
+            .unwrap();
+        assert!(plan.edits.edits.is_empty(), "{:?}", plan.edits);
         let plan = plan_format(&root, &file, None, options, WAIT)
             .await
             .unwrap();
-        assert_eq!(plan.formatted, "package main\n\nfunc main() {\n}\n");
+        assert_eq!(
+            plan.formatted,
+            "package main\n\nfunc a() {\n\tx := 1\n\t_ = x\n}\nfunc b() {\n}\n"
+        );
     } else {
         skip("gopls not installed");
+    }
+
+    // SPEC-0043 v8 behaviour 15: kotlin-language-server's own range formatting split `Int` at the
+    // end of a selection inside a line and lost the indentation of a member; through the whole
+    // file the selected lines get the whole file's layout.
+    if installed("kotlin-language-server") {
+        let file = root.join("Shop.kt");
+        let ugly = "package demo\nclass Shop {\nfun total(price:Int,qty:Int):Int{\nval sum=price*qty\n      if(sum>10){return sum}\nreturn 0}\nfun other(){}\n}\n";
+        std::fs::write(&file, ugly).unwrap();
+        let inside = Range {
+            start_line: 2,
+            start_character: 0,
+            end_line: 2,
+            end_character: 30,
+        };
+        let plan = plan_format(&root, &file, Some(&inside), options, WAIT)
+            .await
+            .unwrap();
+        let lines: Vec<&str> = plan.formatted.lines().collect();
+        assert_eq!(
+            lines[2], "    fun total(price: Int, qty: Int): Int {",
+            "{}",
+            plan.formatted
+        );
+        assert_eq!(&lines[3..], &ugly.lines().collect::<Vec<_>>()[3..]);
+        let block = Range {
+            start_line: 3,
+            start_character: 0,
+            end_line: 5,
+            end_character: 0,
+        };
+        let plan = plan_format(&root, &file, Some(&block), options, WAIT)
+            .await
+            .unwrap();
+        assert!(plan.whitespace_only);
+        assert!(
+            plan.formatted.starts_with(
+                "package demo\nclass Shop {\nfun total(price:Int,qty:Int):Int{\n        val sum = price * qty\n        if (sum > 10) {\n"
+            ),
+            "{}",
+            plan.formatted
+        );
+        assert!(
+            plan.formatted
+                .ends_with("        }\nreturn 0}\nfun other(){}\n}\n"),
+            "{}",
+            plan.formatted
+        );
+    } else {
+        skip("kotlin-language-server not installed");
     }
 
     if installed("bash-language-server") {

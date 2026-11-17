@@ -20,9 +20,10 @@
 //! commands for the user to confirm (`SPEC-0276`, permission `suggest-commands`).
 //!
 //! Connector plugins (`SPEC-0314`, ADR-0024, permission `profile-network`): host functions
-//! `idecraft.net_connect`, `net_send`, `net_recv` and `net_close` reach only the host and port of
-//! the connection the user picked, after a grant per plugin and host; every connection is logged
-//! locally.
+//! `idecraft.net_connect`, `net_connect_tls`, `net_send`, `net_recv` and `net_close` reach only the
+//! host and port of the connection the user picked, after a grant per plugin and host; every
+//! connection is logged locally. A connection without TLS only where the connection's SSL mode
+//! allows plain text, elsewhere TLS the host makes (`SPEC-0314` v2 behaviour 10).
 
 use std::path::{Path, PathBuf};
 
@@ -45,12 +46,13 @@ pub use files::{
 };
 pub use network::{
     AuditRecord, CONNECT_TIMEOUT, ConnectorAnswer, ConnectorRequest, Holder, IO_TIMEOUT,
-    MAX_CONNECTIONS, MAX_RECV, NET_BAD, NET_FAILED, NET_NO_ACCESS, NET_REFUSED, NET_TOO_MANY,
-    NETWORK_AUDIT, NETWORK_GRANTS, NetAccess, NetworkGrant, NetworkWarning, Readiness, Target,
-    audit_records, grant_network, network_granted, network_grants, network_warning, now_rfc3339,
-    readiness, revoke_network, status_meaning,
+    MAX_CONNECTIONS, MAX_RECV, NET_BAD, NET_FAILED, NET_NEEDS_TLS, NET_NO_ACCESS, NET_REFUSED,
+    NET_TLS_FAILED, NET_TOO_MANY, NETWORK_AUDIT, NETWORK_GRANTS, NetAccess, NetMode, NetTls,
+    NetworkGrant, NetworkWarning, Readiness, Target, audit_records, grant_network, is_loopback,
+    network_granted, network_grants, network_warning, now_rfc3339, readiness, revoke_network,
+    status_meaning,
 };
-pub use review::{Review, ReviewKind, compare_versions, review, update_grants};
+pub use review::{Review, ReviewKind, compare_versions, install_reviewed, review, update_grants};
 pub use run_configs::{
     MAX_ARG, MAX_ARGS, MAX_ENV, MAX_NAME, MAX_SUGGESTIONS, RUN_PERMISSIONS, RunAllowance,
     RunAllowances, RunConfigContext, RunType, SuggestedCommand, allow, check_suggestion,
@@ -518,6 +520,21 @@ fn network_functions(linker: &mut Linker<Host>) -> Result<(), wasmi::errors::Lin
     )?;
     linker.func_wrap(
         "idecraft",
+        "net_connect_tls",
+        |mut caller: wasmi::Caller<'_, Host>, ptr: i32, len: i32| -> i32 {
+            if caller.data().access.network.is_none() {
+                return NET_NO_ACCESS;
+            }
+            let Some(text) =
+                bytes_of(&caller, ptr, len, 1024).and_then(|b| String::from_utf8(b).ok())
+            else {
+                return NET_BAD;
+            };
+            caller.data_mut().sockets.connect_tls(&text)
+        },
+    )?;
+    linker.func_wrap(
+        "idecraft",
         "net_send",
         |mut caller: wasmi::Caller<'_, Host>, handle: i32, ptr: i32, len: i32| -> i32 {
             if caller.data().access.network.is_none() {
@@ -677,16 +694,7 @@ fn module_problem(bytes: &[u8], error: &dyn std::fmt::Display) -> String {
 impl Plugin {
     /// Loads the module at `path` and reads its manifest (behaviour 1).
     pub fn load(path: &Path) -> Result<Self, PluginError> {
-        let name = label(path);
-        let io = |e: std::io::Error| PluginError::Io(name.clone(), e.to_string());
-        let size = std::fs::metadata(path).map_err(io)?.len();
-        if size > MAX_MODULE {
-            return Err(PluginError::Invalid(
-                name,
-                "the file is larger than 16 MiB".into(),
-            ));
-        }
-        let bytes = std::fs::read(path).map_err(io)?;
+        let bytes = read_module(path)?;
         Self::from_bytes(path, &bytes)
     }
 
@@ -1009,24 +1017,52 @@ pub fn installed(dir: &Path) -> Vec<Installed> {
 }
 
 /// Installs the module at `source` into `dir` under its file name, after checking that it loads
-/// as a plugin; an installed plugin of the same name (enabled or not) is replaced. The manifest.
+/// as a plugin; an installed plugin of the same name (enabled or not) is replaced. The file is read
+/// once and the bytes checked are the bytes installed (`SPEC-0211` v3 behaviour 7). The manifest.
 pub fn install(dir: &Path, source: &Path) -> Result<Manifest, PluginError> {
-    let plugin = Plugin::load(source)?;
-    let name = label(source);
+    install_reviewed(dir, &review(dir, source)?)
+}
+
+/// Reads a module file of at most [`MAX_MODULE`] bytes, never more, also when it grows while it
+/// is read.
+pub(crate) fn read_module(path: &Path) -> Result<Vec<u8>, PluginError> {
+    use std::io::Read;
+    let name = label(path);
     let io = |e: std::io::Error| PluginError::Io(name.clone(), e.to_string());
-    let stem = name
-        .strip_suffix(".wasm")
-        .ok_or_else(|| PluginError::Invalid(name.clone(), "the file must end in .wasm".into()))?;
-    std::fs::create_dir_all(dir).map_err(io)?;
-    let _ = std::fs::remove_file(dir.join(format!("{stem}{DISABLED}")));
-    // Copy beside the target first, so a failed copy never leaves half a module behind.
-    let target = dir.join(&name);
+    let mut bytes = Vec::new();
+    std::fs::File::open(path)
+        .map_err(io)?
+        .take(MAX_MODULE + 1)
+        .read_to_end(&mut bytes)
+        .map_err(io)?;
+    if bytes.len() as u64 > MAX_MODULE {
+        return Err(PluginError::Invalid(
+            name,
+            "the file is larger than 16 MiB".into(),
+        ));
+    }
+    Ok(bytes)
+}
+
+/// Writes `bytes` as `name` into `dir` through a new file beside it, so a failed write never
+/// leaves half a module behind and nothing already lying there (a link) is written through.
+pub(crate) fn write_new_module(dir: &Path, name: &str, bytes: &[u8]) -> Result<(), PluginError> {
+    use std::io::Write;
+    let io = |e: std::io::Error| PluginError::Io(name.to_owned(), e.to_string());
     let part = dir.join(format!("{name}.part"));
-    std::fs::copy(source, &part).map_err(io)?;
-    std::fs::rename(&part, &target).map_err(io)?;
-    // An update never keeps a grant the new version no longer asks for (SPEC-0211 behaviour 4).
-    update_grants(dir, stem, &plugin.manifest.permissions)?;
-    Ok(plugin.manifest)
+    let _ = std::fs::remove_file(&part);
+    let mut out = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&part)
+        .map_err(io)?;
+    let written = out.write_all(bytes).and_then(|()| out.sync_all());
+    drop(out);
+    if let Err(e) = written.and_then(|()| std::fs::rename(&part, dir.join(name))) {
+        let _ = std::fs::remove_file(&part);
+        return Err(io(e));
+    }
+    Ok(())
 }
 
 /// Enables or disables the plugin `file` of `dir` (renames between `.wasm` and `.wasm.disabled`).

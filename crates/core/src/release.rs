@@ -9,7 +9,7 @@
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// The project's maturity stage (CONTENT_STYLE_GUIDE §5): `pre-alpha`, `alpha` or `beta`.
-pub const STAGE: &str = "alpha";
+pub const STAGE: &str = "beta";
 
 /// Version and stage as one label, e.g. `0.8.0 (alpha)`.
 pub fn version_label() -> String {

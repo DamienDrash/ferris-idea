@@ -208,6 +208,91 @@ impl Keystroke {
     }
 }
 
+/// A text naming keys a dialog or popup handles itself, written with the macOS symbols, in the
+/// notation of the system (`SPEC-0028` v7 behaviour 12): unchanged on macOS; elsewhere each key
+/// with its modifiers becomes `Ctrl+Alt+Shift+Key` (⌘ and ⌃ as `Ctrl`, since such dialogs take
+/// either), and ↩ ⌫ ⌦ ⎋ ⇥ become `Enter`, `Backspace`, `Delete`, `Esc`, `Tab`. Arrows stay.
+pub fn local_keys(text: &str, macos: bool) -> String {
+    if macos {
+        return text.to_owned();
+    }
+    let named = |c: char| match c {
+        '↩' => Some("Enter"),
+        '⌫' => Some("Backspace"),
+        '⌦' => Some("Delete"),
+        '⎋' => Some("Esc"),
+        '⇥' => Some("Tab"),
+        '↑' => Some("↑"),
+        '↓' => Some("↓"),
+        '←' => Some("←"),
+        '→' => Some("→"),
+        _ => None,
+    };
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = String::new();
+    let mut i = 0;
+    while i < chars.len() {
+        let (mut ctrl, mut alt, mut shift) = (false, false, false);
+        let start = i;
+        while i < chars.len() {
+            match chars[i] {
+                '⌘' | '⌃' => ctrl = true,
+                '⌥' => alt = true,
+                '⇧' => shift = true,
+                _ => break,
+            }
+            i += 1;
+        }
+        let modified = i > start;
+        let key = match chars.get(i) {
+            Some(&c) if named(c).is_some() => {
+                i += 1;
+                named(c).map(str::to_owned)
+            }
+            // After modifiers: a letter, a digit, F1–F12 or a word such as `Enter`.
+            Some(&c) if modified && c.is_alphanumeric() => {
+                let from = i;
+                while i < chars.len() && chars[i].is_alphanumeric() {
+                    i += 1;
+                }
+                let word: String = chars[from..i].iter().collect();
+                Some(if word.chars().count() == 1 {
+                    word.to_uppercase()
+                } else {
+                    word
+                })
+            }
+            Some(&c) if modified && !c.is_whitespace() => {
+                i += 1;
+                Some(c.to_string())
+            }
+            _ => None,
+        };
+        match key {
+            Some(key) => {
+                let mut parts = Vec::new();
+                if ctrl {
+                    parts.push("Ctrl".to_owned());
+                }
+                if alt {
+                    parts.push("Alt".to_owned());
+                }
+                if shift {
+                    parts.push("Shift".to_owned());
+                }
+                parts.push(key);
+                out.push_str(&parts.join("+"));
+            }
+            None if modified => out.extend(&chars[start..i]),
+            None => {
+                out.push(chars[i]);
+                i += 1;
+            }
+        }
+    }
+    out
+}
+
 fn display_key(key: &str, macos: bool) -> String {
     let named = match key {
         "BACK_SPACE" if macos => "⌫",
@@ -1229,6 +1314,19 @@ pub(crate) fn write_atomic(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// SPEC-0028 v7 AK-14: keys a dialog handles itself, per platform.
+    #[test]
+    fn local_keys_follow_the_platform() {
+        let text = "More (⇧⌘F8) · ⌥K · ⇧↩ collapse · ⌘↩ done · ⌘N · ↑↓ recent · Evaluate (↩) · ⌘⌫ · ⌥[ · ⎋ ⇥ ⌦ · ⌃⇧R · ⌥Enter";
+        assert_eq!(local_keys(text, true), text);
+        assert_eq!(
+            local_keys(text, false),
+            "More (Ctrl+Shift+F8) · Alt+K · Shift+Enter collapse · Ctrl+Enter done · Ctrl+N · ↑↓ recent · Evaluate (Enter) · Ctrl+Backspace · Alt+[ · Esc Tab Delete · Ctrl+Shift+R · Alt+Enter"
+        );
+        assert_eq!(local_keys("⌥e", false), "Alt+E");
+        assert_eq!(local_keys("no keys here", false), "no keys here");
+    }
 
     #[test]
     fn layout_keys_stand_in_for_us_shortcut_keys() {

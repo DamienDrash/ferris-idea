@@ -234,6 +234,7 @@ pub fn sorted(report: &TestReport, by: Sort) -> TestReport {
         suites: std::mem::take(&mut out.suites),
         output: None,
         totals: out.totals,
+        file: None,
     };
     sort_suite(&mut root, by);
     out.suites = root.suites;
@@ -309,6 +310,124 @@ pub fn test_at<'a>(report: &'a TestReport, path: &[usize]) -> Option<&'a TestCas
     let s = suite?;
     last.checked_sub(s.suites.len())
         .and_then(|j| s.tests.get(j))
+}
+
+/// Where the test at `path` is declared (`SPEC-0088` v5 behaviour 12): its file and the 0-based
+/// line of its ▶ marker (`SPEC-0045` behaviours 12, 13), the file's first line without one. Jest
+/// and Vitest: the file the report names for the test's suite, the marker of the full name (the
+/// suites' names below the file and the test's own, joined by spaces). pytest: the file of the
+/// module of the test's class (`tests.test_prices.TestCart` → `tests/test_prices.py`) below
+/// `root`, the marker of the test's name (parameters `[…]` dropped) in its class. `None` when the
+/// report names no file the project has (other runners, a remembered run of Jest).
+pub fn test_source(
+    report: &TestReport,
+    path: &[usize],
+    root: &std::path::Path,
+) -> Option<(std::path::PathBuf, usize)> {
+    use idecraft_languages::jvm::MarkerKind;
+    let case = test_at(report, path)?;
+    let (_, suite_path) = path.split_last()?;
+    let mut suites = Vec::new();
+    let mut list = &report.suites;
+    for &i in suite_path {
+        let s = list.get(i)?;
+        list = &s.suites;
+        suites.push(s);
+    }
+    let read = |file: &std::path::Path| std::fs::read_to_string(file).ok();
+    let name_of = |file: &std::path::Path| {
+        file.file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default()
+    };
+    // Jest and Vitest: the nearest suite that names its file.
+    if let Some(k) = suites.iter().rposition(|s| s.file.is_some()) {
+        let file = std::path::PathBuf::from(suites[k].file.as_deref()?);
+        let file = if file.is_absolute() {
+            file
+        } else {
+            root.join(file)
+        };
+        if !file.is_file() {
+            return None;
+        }
+        let mut names: Vec<&str> = suites[k + 1..].iter().map(|s| s.name.as_str()).collect();
+        names.push(&case.name);
+        let full = names.join(" ");
+        let markers = idecraft_languages::js_tests::markers(&name_of(&file), &read(&file)?);
+        let line = markers
+            .iter()
+            .find(|m| m.kind == MarkerKind::TestMethod && m.class == full)
+            .or_else(|| markers.iter().find(|m| m.class == full))
+            .map_or(0, |m| m.line);
+        return Some((file, line));
+    }
+    // pytest: the module part of the class, the classes after it (names with a capital).
+    let class = case.class.as_deref()?;
+    let parts: Vec<&str> = class.split('.').collect();
+    let first_class = parts
+        .iter()
+        .position(|p| p.starts_with(|c: char| c.is_uppercase()))
+        .unwrap_or(parts.len());
+    if first_class == 0 {
+        return None;
+    }
+    let module = std::path::PathBuf::from(format!("{}.py", parts[..first_class].join("/")));
+    let file = module_file(root, &module)?;
+    let own_class = parts[first_class..].last().copied().unwrap_or("");
+    let name = case.name.split('[').next().unwrap_or(&case.name);
+    let markers = idecraft_languages::test_markers::markers(&name_of(&file), &read(&file)?);
+    let line = markers
+        .iter()
+        .find(|m| m.method.as_deref() == Some(name) && m.class == own_class)
+        .or_else(|| markers.iter().find(|m| m.method.as_deref() == Some(name)))
+        .map_or(0, |m| m.line);
+    Some((file, line))
+}
+
+/// The file `rel` below `root`: `root/rel` itself, else the shortest path of the project that ends
+/// with it (pytest names modules from its own root folder, which may be a folder of the project).
+/// Hidden folders and those of packages and builds are not looked in.
+fn module_file(root: &std::path::Path, rel: &std::path::Path) -> Option<std::path::PathBuf> {
+    let direct = root.join(rel);
+    if direct.is_file() {
+        return Some(direct);
+    }
+    const SKIP: &[&str] = &[
+        "node_modules",
+        "target",
+        "venv",
+        "__pycache__",
+        "build",
+        "dist",
+    ];
+    let mut found: Option<std::path::PathBuf> = None;
+    let mut todo = vec![(root.to_path_buf(), 0usize)];
+    while let Some((dir, depth)) = todo.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let Ok(kind) = entry.file_type() else {
+                continue;
+            };
+            if kind.is_dir() {
+                if depth < 8 && !name.starts_with('.') && !SKIP.contains(&name.as_str()) {
+                    todo.push((path, depth + 1));
+                }
+            } else if kind.is_file()
+                && path.ends_with(rel)
+                && found
+                    .as_ref()
+                    .is_none_or(|f| path.components().count() < f.components().count())
+            {
+                found = Some(path);
+            }
+        }
+    }
+    found
 }
 
 /// What the right side shows for a selected test (behaviour 4): its message, details and output.
@@ -428,6 +547,7 @@ mod tests {
                 suites: Vec::new(),
                 output: None,
                 totals: Totals::default(),
+                file: None,
             }],
             totals: Totals::default(),
         }
@@ -471,5 +591,69 @@ mod tests {
             named_after(&junit, "CartTest").suites[0].name,
             "shop.CartTest"
         );
+    }
+
+    /// SPEC-0088 v5 AK-9 (behaviour 12): a test's file and line for pytest (a module test, a
+    /// class test, a parametrized one, a module below a folder pytest ran from) and for Jest (a
+    /// test inside a `describe`), nothing for a report without files.
+    #[test]
+    fn the_source_of_a_test() {
+        let root =
+            std::env::temp_dir().join(format!("idecraft-test-source-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("svc/tests")).unwrap();
+        std::fs::write(
+            root.join("svc/tests/test_calc.py"),
+            "import pytest\n\n\ndef test_add():\n    assert 1\n\n\nclass TestCart:\n    def test_add(self):\n        assert 1\n\n\n@pytest.mark.parametrize(\"n\", [1, 2])\ndef test_each(n):\n    assert n\n",
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("sum.test.js"),
+            "test(\"top\", () => {});\n\ndescribe(\"sum\", () => {\n  it(\"fails on purpose\", () => {\n    expect(1).toBe(2);\n  });\n});\n",
+        )
+        .unwrap();
+        let junit = parse_report(
+            r#"<testsuites><testsuite name="pytest">
+<testcase classname="tests.test_calc" name="test_add"/>
+<testcase classname="tests.test_calc.TestCart" name="test_add"/>
+<testcase classname="tests.test_calc" name="test_each[2]"/>
+<testcase classname="tests.test_gone" name="test_x"/>
+</testsuite></testsuites>"#,
+            Some(ReportFormat::Junit),
+        )
+        .unwrap();
+        let file = root.join("svc/tests/test_calc.py");
+        assert_eq!(test_source(&junit, &[0, 0], &root), Some((file.clone(), 3)));
+        assert_eq!(test_source(&junit, &[0, 1], &root), Some((file.clone(), 8)));
+        assert_eq!(
+            test_source(&junit, &[0, 2], &root),
+            Some((file.clone(), 13))
+        );
+        assert_eq!(test_source(&junit, &[0, 3], &root), None, "no such module");
+        assert_eq!(test_source(&junit, &[0], &root), None, "a suite is no test");
+
+        let name = root.join("sum.test.js").to_string_lossy().into_owned();
+        let jest = parse_report(
+            &format!(
+                r#"{{"testResults":[{{"name":"{name}","status":"failed","assertionResults":[
+{{"ancestorTitles":[],"title":"top","status":"passed","failureMessages":[]}},
+{{"ancestorTitles":["sum"],"title":"fails on purpose","status":"failed","failureMessages":["Expected: 2"]}}]}}]}}"#
+            ),
+            Some(ReportFormat::from_name("jest").unwrap()),
+        )
+        .unwrap();
+        // The file's suite holds the `sum` suite first, then the test `top`.
+        assert_eq!(
+            test_source(&jest, &[0, 0, 0], &root),
+            Some((root.join("sum.test.js"), 3))
+        );
+        assert_eq!(
+            test_source(&jest, &[0, 1], &root),
+            Some((root.join("sum.test.js"), 0))
+        );
+        // A remembered run keeps no file: nothing to open.
+        let remembered = idecraft_core::tree_only(&jest);
+        assert_eq!(test_source(&remembered, &[0, 0, 0], &root), None);
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

@@ -405,6 +405,8 @@ pub const STATUS_BAR: &[Control] = &[
     c("status-line-separator", "Line Separator").detail("How lines of this file end"),
     c("status-encoding", "File Encoding").detail("The encoding the file is read and saved in"),
     c("status-indent", "Indentation").detail("Indent of this file"),
+    c("status-file-type", "File Type")
+        .detail("The language the file is treated as; click to override it"),
     c("column-mode-widget", "Column Selection Mode")
         .action("EditorToggleColumnMode")
         .detail("Click to turn it off"),

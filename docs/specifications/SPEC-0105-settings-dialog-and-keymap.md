@@ -1,6 +1,6 @@
 # SPEC-0105: Settings dialog and keymap settings
 
-- **Version:** 8 · **Date:** 2026-11-16 (v8: Select All, Copy, Cut, Paste, Undo and Redo act on
+- **Version:** 9 · **Date:** 2026-11-16 (v9: each page says whether its settings belong to the IDE or to the project and where they are kept, project pages are marked in the list; File › Manage IDE Settings imports and exports a settings file; behaviours 13, 14; v8: Select All, Copy, Cut, Paste, Undo and Redo act on
   the dialog's focused field, also when the menu bar takes the key; the page list rolls, with a
   scroll bar, keeps the page shown in view and takes ↑/↓ after a click; the dialog takes the
   window's height and a page taller than its area rolls; behaviours 10–12, OBS-0062 S6, S7; v7: a visible search field and the found label marked on the page, Revert changes and Restore defaults per page, a dot after changed pages, behaviours 7–9, OBS-0062 S1–S3; v6: the page list has the reference's outline with the group Appearance & Behavior first and Advanced Settings last, SPEC-0337 behaviour 1, OBS-0048; v5: the search finds a page by the label of every setting on it; v4: ⇧⌫ restores on a chosen keymap row also with a search typed, changes apply without OK/Apply; v3: the search takes committed text through the input handler; v2: typing goes on in the search, ⌫ on Mac keyboards, action titles; hand test 30)
@@ -12,7 +12,10 @@
   the page, Revert changes and Restore defaults on a changed page, a dot after pages with changed
   settings); v8: GEN (text fields take Select All and the clipboard keys, lists that do not fit
   roll), OBS (OBS-0062 S6, S7: IDECraft's own search ignored ⌘A, and in a window 901 points high
-  its page list was cut below Tools › AI Assistant)
+  its page list was cut below Tools › AI Assistant); v9: GEN (IDE-wide and project-wide settings,
+  importing and exporting settings), OSS (`JetBrains/intellij-community`: the action ids
+  `ImportSettings` and `ExportSettings`), SPEC-0303 (the `settings` exchange file), SPEC-0315
+  (the project's inspection profile), SPEC-0150 (EditorConfig before Code Style)
 - **Feature matrix rows:** F-002, F-017
 
 ## Purpose
@@ -122,6 +125,34 @@ apply at once in every window and are kept in the reference's keymap format.
     fixed lines. The scroll bars are nodes of the semantic tree (`settings-pages-scrollbar`,
     `settings-page-scrollbar`). [OBS, GEN]
 
+13. **Where the settings are kept (v9):** the bar above a page (behaviour 8) says, after the
+    page's title, where its settings belong, in the muted text colour:
+    - "IDE · settings.toml, the same for every project" for the pages of behaviour 8 except
+      Code Style; Code Style adds "; a project's .editorconfig comes first" (SPEC-0150);
+    - "IDE · keymaps/IDECraft.toml" (Keymap), "IDE · plugins folder" (Plugins), "IDE ·
+      trusted-projects.toml" (Trusted Locations);
+    - "Project · .idea/inspectionProfiles/Project_Default.xml, shared with the project's files"
+      (Inspections, SPEC-0315);
+    - "Read from this project and this machine; nothing is stored here" (Build Tools,
+      Languages & Frameworks, which only show what IDECraft finds).
+    The page list puts a muted "project" after each page whose settings belong to the project.
+    The text and the marks are nodes of the semantic tree (`settings-page-scope`,
+    `settings-page-project-<title>`). Until v8 nothing in the dialog said which settings applied
+    to every project and which went with the project. [GEN]
+14. **Import and export (v9):** File › Manage IDE Settings holds "Import Settings…"
+    (`ImportSettings`) and "Export Settings…" (`ExportSettings`); Find Action finds both under
+    that group. Export Settings asks in the system's save dialog, starting in the project's
+    folder with the name `settings.idcsettings`, and writes the `settings` exchange file of
+    SPEC-0303 behaviour 13 (Editor, Appearance with the theme, Version Control and Code Style,
+    and the user keymap's changes; never the AI Assistant, the terminal, MCP or other private
+    settings, never a secret); the status bar names the file written and the sections left
+    out. Import Settings asks in the system's open dialog for a file and shows its import
+    preview (SPEC-0303 behaviour 11): nothing changes before the user confirms there, and what
+    was imported applies at once in every window. A file that cannot be written or read is
+    named with the reason in the status bar and nothing changes. Both are the user's own:
+    UI automation by an external client cannot run them (SPEC-0319, undeclared effects). [OSS,
+    GEN, SPEC-0303]
+
 ## Acceptance criteria
 - **AK-1** Keystrokes and user keymaps round-trip through text and XML, with keyboard, two-stroke,
   mouse and removed entries; a user keymap overrides and removes bundled shortcuts (unit test).
@@ -183,9 +214,28 @@ apply at once in every window and are kept in the reference's keymap format.
   view, dragging the list's thumb back to the top brings Appearance back; a click on Appearance
   and ↓ go page by page to Advanced Settings, which is then in view; on Font the preview, cut at
   first, is in view after the wheel over the page.
+- **AK-15 (v9)** Unit tests: `settings_model::tests::every_page_says_where_its_settings_are_kept`:
+  every page has a scope, only Inspections belongs to the project, the pages of behaviour 8
+  name `settings.toml` and Code Style names `.editorconfig`; `menus::tests::
+  manage_ide_settings_imports_and_exports` and `everywhere::tests::
+  reference_comparison_items_have_titles_and_groups`: the submenu, its two items and their
+  Find Action titles.
+- **AK-16 (v9)** In a window of the test harness with a settings folder and a project of its own
+  (`crates/workbench/tests/it/settings_scope_and_exchange.rs`:
+  `pages_name_their_scope_and_settings_go_out_and_come_back`): the scope text of Font and of
+  Inspections in the semantic tree, the "project" mark after Inspections only; Export Settings
+  from the menu action, with the path chosen in the save dialog that starts in the project's
+  folder, writes a `settings` file holding the changed protected branches and not the terminal's
+  shell, and the status bar names the file and the terminal as left out; after the branches are
+  changed again, the import preview of that file changes nothing until Import is confirmed with
+  Enter, which brings the exported branches back into the settings file and the window and leaves
+  the shell alone; a file that cannot be written leaves a reason in the status bar.
 
 ## Out of scope
-Further pages (editor font, code style, version control, plugins …), project-level settings,
+Further pages (editor font, code style, version control, plugins …), (v9) project-level
+values of the IDE's own settings (a project overriding the font, the code style or the version
+control settings in a shared file; the project's code style is shared through `.editorconfig`),
+"Restore Default Settings…" for every page at once and the reference's settings synchronisation,
 choosing among several keymaps, mouse and two-stroke recording in the dialog (two-strokes are possible
 through `set_shortcut`), the reference's shortcut-conflict dialog, importing keymaps of other IDEs.
 
@@ -195,7 +245,10 @@ each change at once and has no such buttons (behaviour 4a). (v7) Revert changes 
 takes back a page's changes since the dialog opened, as Cancel would for that page; there is no
 Cancel for all pages at once, and the reference's preview of a change before Apply is the change
 itself in IDECraft. (v8) The reference's Settings is a window of its own; IDECraft's dialog lies
-over the IDE window and takes its size from it (behaviour 12). Settings shows two pages for now. Recording adds a one-keystroke shortcut directly and reports
+over the IDE window and takes its size from it (behaviour 12). (v9) Export Settings writes one
+text file of IDECraft's exchange format with the shared sections only (behaviour 14), without a
+choice of parts and without private settings or secrets; Import Settings always lists each
+change before anything is written (SPEC-0303). Settings shows two pages for now. Recording adds a one-keystroke shortcut directly and reports
 conflicts in a note instead of a dialog that asks whether to remove the other assignments. A keymap
 change applies without first copying the bundled keymap under a new name; the copy is always called
 `IDECraft`. Observed in OBS-0008: the reference shows the actions as a tree of groups with display

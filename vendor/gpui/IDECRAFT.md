@@ -60,6 +60,14 @@ What differs from the published crate, and nothing else:
 4. **`Cargo.toml`:** the `[[example]]` entries are removed, and with them the folder `examples/`
    (4.7 MB of demos that are never built here). `Cargo.lock` of the package is removed (a path
    dependency uses the workspace's lock file).
+   Its `taffy` dependency is raised from `=0.9.0` to `=0.9.2` (2026-11-16): taffy 0.9.0 requires
+   `grid` 0.18, which has GHSA-38c5-483c-4qqp (integer overflow in `Grid::expand_rows`, undefined
+   behaviour through a safe API, `grid` >= 0.17, <= 1.0.0); taffy 0.9.2 requires `grid` ^1.0.0,
+   which resolves to the fixed 1.0.1. The patch release changes no API that gpui uses: between
+   0.9.0 and 0.9.2 the hand-written `Default` impls of the style enums became `derive(Default)`
+   with the same defaults, and block, flexbox and grid layout got fixes. `Cargo.toml.orig` stays as
+   published. gpui sizes a grid only for an element styled `display: grid` (`Styled::grid`);
+   no IDECraft crate calls it.
 5. **Notices of change (Apache-2.0 §4(b)):** every changed file (`Cargo.toml`, `src/window.rs`,
    `src/window/prompts.rs`, `src/platform.rs`, `src/platform/mac/window.rs`,
    `src/platform/windows/window.rs`, `src/platform/test/platform.rs`, `src/app/test_context.rs`)

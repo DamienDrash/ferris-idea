@@ -50,8 +50,14 @@ pub fn form_url(form: &ConnectionForm) -> Option<Result<(System, String), StoreE
             _ => return Some(Err(StoreError::Url(format!("invalid port `{p}`")))),
         },
     };
+    // `prefer` off the loopback is TLS without certificate checks, as `require` (SPEC-0310 v4
+    // behaviour 3, SPEC-0016 v3); plain text only for a store on the loopback.
+    let ssl = match form.ssl {
+        SslMode::Prefer if !idecraft_database::is_loopback(Some(host)) => SslMode::Require,
+        mode => mode,
+    };
     let tls = matches!(
-        form.ssl,
+        ssl,
         SslMode::Require | SslMode::VerifyCa | SslMode::VerifyFull
     );
     let scheme = match (system, tls) {
@@ -72,7 +78,7 @@ pub fn form_url(form: &ConnectionForm) -> Option<Result<(System, String), StoreE
     url.push('/');
     url.push_str(&encode(form.database.trim()));
     let mut query: Vec<&str> = Vec::new();
-    match (system, form.ssl) {
+    match (system, ssl) {
         (System::Mongodb, SslMode::VerifyFull | SslMode::VerifyCa) => query.push("tls=true"),
         (System::Mongodb, SslMode::Require) => {
             query.extend(["tls=true", "tlsAllowInvalidCertificates=true"]);
@@ -240,7 +246,7 @@ mod tests {
     fn dialog_fields_become_store_urls() {
         let url = |f: &ConnectionForm| form_url(f).unwrap().unwrap().1;
         assert_eq!(
-            url(&form("mongodb", SslMode::Prefer)),
+            url(&form("mongodb", SslMode::Disable)),
             "mongodb://app%20user@db.local:27018/shop?authSource=admin"
         );
         assert_eq!(
@@ -269,6 +275,30 @@ mod tests {
             (p.system, p.read_only, p.id.as_str()),
             (System::Redis, true, "x")
         );
+    }
+
+    /// SPEC-0310 v4 AK-10: `prefer` off the loopback is the TLS URL of `require`; plain text only
+    /// for a store on the loopback.
+    #[test]
+    fn prefer_needs_tls_off_the_loopback() {
+        let url = |f: &ConnectionForm| form_url(f).unwrap().unwrap().1;
+        let at = |system: &str, host: &str| {
+            let mut f = form(system, SslMode::Prefer);
+            f.host = host.into();
+            f.user.clear();
+            f.port.clear();
+            url(&f)
+        };
+        assert_eq!(
+            at("mongodb", "db.local"),
+            "mongodb://db.local/shop?tls=true&tlsAllowInvalidCertificates=true"
+        );
+        assert_eq!(
+            at("redis", "db.local"),
+            "rediss://db.local/shop?insecure=true"
+        );
+        assert_eq!(at("mongodb", "localhost"), "mongodb://localhost/shop");
+        assert_eq!(at("redis", "127.0.0.1"), "redis://127.0.0.1/shop");
     }
 
     #[test]

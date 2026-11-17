@@ -1,10 +1,12 @@
 //! Network for connector plugins (`SPEC-0314`, ADR-0024): a plugin with the permission
 //! `profile-network` may open TCP connections to the host and port of the connection the user
 //! picked, and nowhere else, after a grant per plugin and host. Every connection is written to a
-//! local audit log that never leaves the machine.
+//! local audit log that never leaves the machine. v2: the connection's SSL mode decides whether a
+//! connection without TLS is allowed; elsewhere the host makes the TLS itself (`SPEC-0314` v2
+//! behaviour 10, `SPEC-0016` v4 behaviour 14).
 
 use std::io::{Read, Write};
-use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
+use std::net::{IpAddr, SocketAddr, TcpStream, ToSocketAddrs};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -35,6 +37,93 @@ pub const NET_FAILED: i32 = -3;
 pub const NET_TOO_MANY: i32 = -4;
 /// `net_*` answer: a bad argument or handle.
 pub const NET_BAD: i32 = -5;
+/// `net_connect` answer: the connection's SSL mode needs TLS for this host; `net_connect_tls`
+/// makes it (`SPEC-0314` v2 behaviour 10).
+pub const NET_NEEDS_TLS: i32 = -6;
+/// `net_connect_tls` answer: the TLS handshake failed, or the CA file could not be read.
+pub const NET_TLS_FAILED: i32 = -7;
+
+/// The SSL mode of the connection a plugin call serves, as profiles write it (`SPEC-0016`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum NetMode {
+    /// No TLS.
+    Disable,
+    /// TLS when possible; without it only on the loopback.
+    Prefer,
+    /// TLS without certificate checks.
+    Require,
+    /// TLS; the certificate's chain is checked, not the host name.
+    VerifyCa,
+    /// TLS; certificate chain and host name are checked. The default, the strictest.
+    #[default]
+    VerifyFull,
+}
+
+/// What the connection's SSL mode asks of a plugin's connections (`SPEC-0314` v2 behaviour 10).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct NetTls {
+    /// The profile's SSL mode.
+    pub mode: NetMode,
+    /// The profile's CA file (PEM), which replaces the system's trusted roots.
+    pub ca_file: Option<PathBuf>,
+}
+
+/// Whether `host` (as [`Target`] keeps it) is this machine's loopback: `localhost`, an address in
+/// 127.0.0.0/8 or `::1` (`SPEC-0016` v3 behaviour 3).
+pub fn is_loopback(host: &str) -> bool {
+    host.eq_ignore_ascii_case("localhost")
+        || host.parse::<IpAddr>().is_ok_and(|ip| ip.is_loopback())
+}
+
+impl NetTls {
+    /// Whether `net_connect`, without TLS, may reach `target`: `disable` on any host, `prefer` on
+    /// the loopback, nothing else.
+    pub fn allows_plain(&self, target: &Target) -> bool {
+        match self.mode {
+            NetMode::Disable => true,
+            NetMode::Prefer => is_loopback(&target.host),
+            NetMode::Require | NetMode::VerifyCa | NetMode::VerifyFull => false,
+        }
+    }
+
+    /// The TLS settings of `net_connect_tls`: TLS 1.2 at least, the mode's checks, the CA file
+    /// instead of the system's roots.
+    fn connector(&self) -> Result<native_tls::TlsConnector, String> {
+        let mut builder = native_tls::TlsConnector::builder();
+        builder.min_protocol_version(Some(native_tls::Protocol::Tlsv12));
+        match self.mode {
+            NetMode::VerifyFull => {}
+            NetMode::VerifyCa => {
+                builder.danger_accept_invalid_hostnames(true);
+            }
+            NetMode::Disable | NetMode::Prefer | NetMode::Require => {
+                builder
+                    .danger_accept_invalid_certs(true)
+                    .danger_accept_invalid_hostnames(true);
+            }
+        }
+        if let Some(file) = &self.ca_file {
+            let shown = file.display();
+            let text = std::fs::read_to_string(file).map_err(|e| format!("{shown}: {e}"))?;
+            let mut found = false;
+            for block in text
+                .split_inclusive("-----END CERTIFICATE-----")
+                .filter(|b| b.contains("-----BEGIN CERTIFICATE-----"))
+            {
+                let cert = native_tls::Certificate::from_pem(block.trim().as_bytes())
+                    .map_err(|e| format!("{shown}: {e}"))?;
+                builder.add_root_certificate(cert);
+                found = true;
+            }
+            if !found {
+                return Err(format!("{shown}: no PEM certificate found"));
+            }
+            builder.disable_built_in_roots(true);
+        }
+        builder.build().map_err(|e| e.to_string())
+    }
+}
 
 /// A host and port, the host lowercased, without a trailing dot or IPv6 brackets.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -211,6 +300,8 @@ pub struct NetAccess {
     pub holder: Holder,
     /// Audit file; none writes no audit (never used by IDECraft itself).
     pub audit: Option<PathBuf>,
+    /// What the connection's SSL mode allows (`SPEC-0314` v2 behaviour 10).
+    pub tls: NetTls,
 }
 
 /// One line of the audit log (`SPEC-0314` behaviour 9).
@@ -235,6 +326,12 @@ pub struct AuditRecord {
     /// Bytes received (on `closed`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub received: Option<u64>,
+    /// Whether the host made TLS for the connection (on `opened` and `closed`, `SPEC-0314` v2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tls: Option<bool>,
+    /// Why a connection was refused for want of TLS or its TLS failed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 /// The last `limit` audit records of `dir`, oldest first; only plugin `plugin`'s when given.
@@ -265,12 +362,59 @@ fn append(file: &Path, record: &AuditRecord) {
     }
 }
 
+/// A plugin's socket: plain, or inside TLS the host made.
+enum Stream {
+    Plain(TcpStream),
+    Tls(Box<native_tls::TlsStream<TcpStream>>),
+}
+
+impl Stream {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match self {
+            Stream::Plain(s) => s.read(buf),
+            Stream::Tls(s) => s.read(buf),
+        }
+    }
+
+    fn write_all(&mut self, bytes: &[u8]) -> std::io::Result<()> {
+        match self {
+            Stream::Plain(s) => s.write_all(bytes).and_then(|()| s.flush()),
+            Stream::Tls(s) => s.write_all(bytes).and_then(|()| s.flush()),
+        }
+    }
+
+    fn shutdown(&mut self) {
+        match self {
+            Stream::Plain(s) => {
+                let _ = s.shutdown(std::net::Shutdown::Both);
+            }
+            Stream::Tls(s) => {
+                let _ = s.shutdown();
+                let _ = s.get_ref().shutdown(std::net::Shutdown::Both);
+            }
+        }
+    }
+
+    fn tls(&self) -> bool {
+        matches!(self, Stream::Tls(_))
+    }
+}
+
 struct Connection {
-    stream: TcpStream,
+    stream: Stream,
     address: SocketAddr,
     target: String,
     sent: u64,
     received: u64,
+}
+
+/// What one audit line says besides plugin, holder and time.
+#[derive(Default)]
+struct Entry<'a> {
+    address: Option<SocketAddr>,
+    bytes: Option<(u64, u64)>,
+    tls: Option<bool>,
+    error: Option<&'a str>,
 }
 
 /// The sockets of one call; whatever is still open closes (and is logged) when the call ends.
@@ -288,13 +432,7 @@ impl Sockets {
         }
     }
 
-    fn log(
-        &self,
-        target: &str,
-        address: Option<SocketAddr>,
-        outcome: &str,
-        bytes: Option<(u64, u64)>,
-    ) {
+    fn log(&self, target: &str, outcome: &str, entry: Entry<'_>) {
         let Some(access) = &self.access else {
             return;
         };
@@ -308,33 +446,76 @@ impl Sockets {
                 plugin: access.plugin.clone(),
                 holder: access.holder,
                 target: target.to_owned(),
-                address: address.map(|a| a.to_string()),
+                address: entry.address.map(|a| a.to_string()),
                 outcome: outcome.to_owned(),
-                sent: bytes.map(|b| b.0),
-                received: bytes.map(|b| b.1),
+                sent: entry.bytes.map(|b| b.0),
+                received: entry.bytes.map(|b| b.1),
+                tls: entry.tls,
+                error: entry.error.map(str::to_owned),
             },
         );
     }
 
-    /// `net_connect` (`SPEC-0314` behaviour 3).
+    /// `net_connect` (`SPEC-0314` behaviour 3): no TLS, where the connection's SSL mode allows it.
     pub(crate) fn connect(&mut self, text: &str) -> i32 {
+        self.open_to(text, false)
+    }
+
+    /// `net_connect_tls` (`SPEC-0314` v2 behaviours 3 and 10): TLS the host makes.
+    pub(crate) fn connect_tls(&mut self, text: &str) -> i32 {
+        self.open_to(text, true)
+    }
+
+    fn open_to(&mut self, text: &str, tls: bool) -> i32 {
         let Some(access) = self.access.clone() else {
             return NET_NO_ACCESS;
         };
         let shown: String = text.chars().take(300).collect();
         let Some(asked) = Target::parse(text) else {
-            self.log(&shown, None, "refused", None);
+            self.log(&shown, "refused", Entry::default());
             return NET_BAD;
         };
         if asked != access.target {
             // Nothing is resolved for a target that is not the profile's.
-            self.log(&asked.label(), None, "refused", None);
+            self.log(&asked.label(), "refused", Entry::default());
             return NET_REFUSED;
         }
+        if !tls && !access.tls.allows_plain(&access.target) {
+            // Nor for a connection without TLS the mode does not allow (behaviour 10).
+            let error = Some("needs TLS");
+            self.log(
+                &asked.label(),
+                "refused",
+                Entry {
+                    error,
+                    ..Entry::default()
+                },
+            );
+            return NET_NEEDS_TLS;
+        }
         if self.open.iter().flatten().count() >= MAX_CONNECTIONS {
-            self.log(&asked.label(), None, "refused", None);
+            self.log(&asked.label(), "refused", Entry::default());
             return NET_TOO_MANY;
         }
+        let connector = if tls {
+            match access.tls.connector() {
+                Ok(c) => Some(c),
+                Err(e) => {
+                    let error = Some(e.as_str());
+                    self.log(
+                        &asked.label(),
+                        "failed",
+                        Entry {
+                            error,
+                            ..Entry::default()
+                        },
+                    );
+                    return NET_TLS_FAILED;
+                }
+            }
+        } else {
+            None
+        };
         let addresses: Vec<SocketAddr> = (access.target.host.as_str(), access.target.port)
             .to_socket_addrs()
             .map(Iterator::collect)
@@ -344,7 +525,34 @@ impl Sockets {
                 let _ = stream.set_read_timeout(Some(IO_TIMEOUT));
                 let _ = stream.set_write_timeout(Some(IO_TIMEOUT));
                 let _ = stream.set_nodelay(true);
-                self.log(&asked.label(), Some(address), "opened", None);
+                let stream = match &connector {
+                    None => Stream::Plain(stream),
+                    Some(c) => match c.connect(&access.target.host, stream) {
+                        Ok(s) => Stream::Tls(Box::new(s)),
+                        Err(e) => {
+                            let error = match e {
+                                native_tls::HandshakeError::Failure(e) => e.to_string(),
+                                native_tls::HandshakeError::WouldBlock(_) => {
+                                    "the TLS handshake did not finish".into()
+                                }
+                            };
+                            let entry = Entry {
+                                address: Some(address),
+                                tls: Some(true),
+                                error: Some(&error),
+                                ..Entry::default()
+                            };
+                            self.log(&asked.label(), "failed", entry);
+                            return NET_TLS_FAILED;
+                        }
+                    },
+                };
+                let entry = Entry {
+                    address: Some(address),
+                    tls: Some(stream.tls()),
+                    ..Entry::default()
+                };
+                self.log(&asked.label(), "opened", entry);
                 let conn = Connection {
                     stream,
                     address,
@@ -366,7 +574,7 @@ impl Sockets {
                 return i32::try_from(handle).unwrap_or(NET_BAD);
             }
         }
-        self.log(&asked.label(), None, "failed", None);
+        self.log(&asked.label(), "failed", Entry::default());
         NET_FAILED
     }
 
@@ -380,7 +588,7 @@ impl Sockets {
         let Some(c) = self.conn(handle) else {
             return NET_BAD;
         };
-        match c.stream.write_all(bytes).and_then(|()| c.stream.flush()) {
+        match c.stream.write_all(bytes) {
             Ok(()) => {
                 c.sent += bytes.len() as u64;
                 i32::try_from(bytes.len()).unwrap_or(NET_BAD)
@@ -416,13 +624,15 @@ impl Sockets {
         let Some(c) = self.open.get_mut(i).and_then(Option::take) else {
             return NET_BAD;
         };
-        let _ = c.stream.shutdown(std::net::Shutdown::Both);
-        self.log(
-            &c.target,
-            Some(c.address),
-            "closed",
-            Some((c.sent, c.received)),
-        );
+        let mut c = c;
+        c.stream.shutdown();
+        let entry = Entry {
+            address: Some(c.address),
+            bytes: Some((c.sent, c.received)),
+            tls: Some(c.stream.tls()),
+            error: None,
+        };
+        self.log(&c.target, "closed", entry);
         0
     }
 }
@@ -546,7 +756,7 @@ pub fn network_warning(
 }
 
 /// What a `connector` action gets (`SPEC-0314` behaviour 4).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize)]
 pub struct ConnectorRequest {
     /// `test`.
     pub op: String,
@@ -560,6 +770,13 @@ pub struct ConnectorRequest {
     pub user: Option<String>,
     /// Password, if stored or typed.
     pub password: Option<String>,
+    /// The profile's SSL mode (`SPEC-0314` v2 behaviour 4); the host keeps the plugin to it.
+    pub ssl: NetMode,
+    /// Whether `net_connect`, without TLS, is allowed for this connection; the host sets it.
+    pub plain: bool,
+    /// The profile's CA file; read by the host, never shown to the plugin.
+    #[serde(skip)]
+    pub ca_file: Option<PathBuf>,
 }
 
 /// What a `connector` action answers.
@@ -608,9 +825,7 @@ impl Plugin {
                 "it has no connector action".into(),
             ));
         };
-        let mut request = request.clone();
-        request.host.clone_from(&access.target.host);
-        request.port = access.target.port;
+        let (request, access) = prepared(request, access);
         let input = serde_json::to_string(&request)
             .map_err(|e| PluginError::Failed(name.clone(), e.to_string()))?;
         let output = self.run_in(
@@ -625,6 +840,21 @@ impl Plugin {
         serde_json::from_str(&output)
             .map_err(|e| PluginError::Failed(name, format!("its answer: {e}")))
     }
+}
+
+/// The request as the plugin reads it and the access the host keeps it to: the granted target,
+/// the connection's SSL mode and CA file with the grant, and whether a connection without TLS is
+/// allowed (`SPEC-0314` v2 behaviours 4 and 10).
+fn prepared(request: &ConnectorRequest, mut access: NetAccess) -> (ConnectorRequest, NetAccess) {
+    let mut request = request.clone();
+    request.host.clone_from(&access.target.host);
+    request.port = access.target.port;
+    access.tls = NetTls {
+        mode: request.ssl,
+        ca_file: request.ca_file.clone(),
+    };
+    request.plain = access.tls.allows_plain(&access.target);
+    (request, access)
 }
 
 /// Where a connection through a plugin stands before it is made (`SPEC-0314` behaviours 5–8).
@@ -699,6 +929,8 @@ pub fn readiness(
         target: target.clone(),
         holder,
         audit: Some(dir.join(NETWORK_AUDIT)),
+        // The strictest until `run_connector` takes the connection's mode.
+        tls: NetTls::default(),
     };
     Readiness::Ready(Box::new(plugin), access, warning)
 }
@@ -828,10 +1060,15 @@ mod tests {
     /// A connector plugin whose action connects to the target given as its input, sends `ping`
     /// and answers what came back, or `E<n>` for error `-n`.
     fn probe() -> Vec<u8> {
+        probe_through("net_connect")
+    }
+
+    /// [`probe`] connecting through the host function `connect`.
+    fn probe_through(connect: &str) -> Vec<u8> {
         let manifest = r#"{"name":"Net probe","version":"1.0","author":"IDECraft tests","permissions":["profile-network"],"actions":[{"id":"connect","title":"Connect","kind":"connector"}]}"#;
         let wat = format!(
             r#"(module
-  (import "idecraft" "net_connect" (func $connect (param i32 i32) (result i32)))
+  (import "idecraft" "{connect}" (func $connect (param i32 i32) (result i32)))
   (import "idecraft" "net_send" (func $send (param i32 i32 i32) (result i32)))
   (import "idecraft" "net_recv" (func $recv (param i32 i32) (result i64)))
   (import "idecraft" "net_close" (func $close (param i32) (result i32)))
@@ -891,6 +1128,10 @@ mod tests {
                 target: target.clone(),
                 holder,
                 audit: Some(dir.join(NETWORK_AUDIT)),
+                tls: NetTls {
+                    mode: NetMode::Prefer,
+                    ca_file: None,
+                },
             }),
             ..crate::Access::default()
         };
@@ -993,5 +1234,287 @@ mod tests {
         assert_eq!(none.author, "unknown author");
         assert!(none.lines[0].contains("the host and port of the connection you pick"));
         assert!(none.host.is_none() && none.port.is_none());
+    }
+
+    /// The access of a probe call to `target` under `mode` with `ca_file`.
+    fn access_with(
+        dir: &Path,
+        target: &Target,
+        mode: NetMode,
+        ca_file: Option<PathBuf>,
+    ) -> crate::Access {
+        crate::Access {
+            network: Some(NetAccess {
+                plugin: "netprobe".into(),
+                target: target.clone(),
+                holder: Holder::User,
+                audit: Some(dir.join(NETWORK_AUDIT)),
+                tls: NetTls { mode, ca_file },
+            }),
+            ..crate::Access::default()
+        }
+    }
+
+    /// SPEC-0314 v2 AK-6, SPEC-0016 v4 AK-15: a connection without TLS only where the
+    /// connection's SSL mode allows plain text; elsewhere `-6` before anything is resolved.
+    #[test]
+    fn plain_connections_follow_the_ssl_mode() {
+        let dir = temp("plain");
+        let plugin = Plugin::from_bytes(&dir.join("netprobe.wasm"), &probe()).unwrap();
+        let run = |target: &Target, mode| {
+            plugin
+                .run_in(
+                    "connect",
+                    &target.label(),
+                    crate::FUEL,
+                    access_with(&dir, target, mode, None),
+                )
+                .unwrap()
+        };
+        let local = Target::new("127.0.0.1", 9);
+        for mode in [NetMode::Require, NetMode::VerifyCa, NetMode::VerifyFull] {
+            assert_eq!(run(&local, mode), "E6", "{mode:?}");
+        }
+        let remote = Target::new("db.example.invalid", 5432);
+        assert_eq!(run(&remote, NetMode::Prefer), "E6");
+        let log = audit_records(&dir, Some("netprobe"), 100);
+        assert_eq!(log.len(), 4);
+        assert!(log.iter().all(|r| r.outcome == "refused"
+            && r.error.as_deref() == Some("needs TLS")
+            && r.address.is_none()));
+        // `prefer` on the loopback and `disable` on any host may go without TLS.
+        let (port, server) = pong_server();
+        assert_eq!(
+            run(&Target::new("127.0.0.1", port), NetMode::Prefer),
+            "pong"
+        );
+        server.join().unwrap();
+        let (port, server) = pong_server();
+        assert_eq!(
+            run(&Target::new("127.0.0.1", port), NetMode::Disable),
+            "pong"
+        );
+        server.join().unwrap();
+        let opened: Vec<_> = audit_records(&dir, Some("netprobe"), 100)
+            .into_iter()
+            .filter(|r| r.outcome == "opened")
+            .collect();
+        assert_eq!(opened.len(), 2);
+        assert!(opened.iter().all(|r| r.tls == Some(false)));
+        let off = |mode| NetTls {
+            mode,
+            ca_file: None,
+        };
+        assert!(off(NetMode::Disable).allows_plain(&remote));
+        assert!(!off(NetMode::Prefer).allows_plain(&remote));
+        for host in ["localhost", "127.0.0.1", "127.8.9.10", "::1"] {
+            assert!(
+                off(NetMode::Prefer).allows_plain(&Target::new(host, 1)),
+                "{host}"
+            );
+        }
+        for host in [
+            "0.0.0.0",
+            "::ffff:127.0.0.1",
+            "localhost.example",
+            "10.0.0.5",
+        ] {
+            assert!(
+                !off(NetMode::Prefer).allows_plain(&Target::new(host, 1)),
+                "{host}"
+            );
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A test certificate authority and a server certificate for `localhost` it signed, valid
+    /// from today for less than a year (macOS refuses server certificates valid for longer).
+    struct TestPki {
+        ca_pem: String,
+        chain: Vec<rustls::pki_types::CertificateDer<'static>>,
+        key: Vec<u8>,
+    }
+
+    fn test_pki(name: &str) -> TestPki {
+        let today = now_rfc3339();
+        let year: i32 = today[..4].parse().unwrap();
+        let month: u8 = today[5..7].parse().unwrap();
+        let day: u8 = today[8..10].parse().unwrap();
+        let ca_key = rcgen::KeyPair::generate().unwrap();
+        let mut ca = rcgen::CertificateParams::new(Vec::<String>::new()).unwrap();
+        ca.distinguished_name.push(rcgen::DnType::CommonName, name);
+        ca.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
+        ca.key_usages = vec![
+            rcgen::KeyUsagePurpose::KeyCertSign,
+            rcgen::KeyUsagePurpose::CrlSign,
+        ];
+        let ca_cert = ca.self_signed(&ca_key).unwrap();
+        let issuer = rcgen::Issuer::from_params(&ca, &ca_key);
+        let key = rcgen::KeyPair::generate().unwrap();
+        let mut leaf = rcgen::CertificateParams::new(vec!["localhost".to_owned()]).unwrap();
+        leaf.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ServerAuth];
+        leaf.not_before = rcgen::date_time_ymd(year, month, day);
+        leaf.not_after = rcgen::date_time_ymd(year + 1, month, 1);
+        let leaf = leaf.signed_by(&key, &issuer).unwrap();
+        TestPki {
+            ca_pem: ca_cert.pem(),
+            chain: vec![leaf.der().clone(), ca_cert.der().clone()],
+            key: key.serialize_der(),
+        }
+    }
+
+    /// A TLS server on 127.0.0.1 with `pki`'s certificate that answers `pong` to `ping` on each of
+    /// `count` connections; a connection whose handshake fails is counted too.
+    fn tls_server(pki: &TestPki, count: usize) -> (u16, std::thread::JoinHandle<()>) {
+        let provider = std::sync::Arc::new(rustls::crypto::ring::default_provider());
+        let key = rustls::pki_types::PrivateKeyDer::Pkcs8(pki.key.clone().into());
+        let config = std::sync::Arc::new(
+            rustls::ServerConfig::builder_with_provider(provider)
+                .with_safe_default_protocol_versions()
+                .unwrap()
+                .with_no_client_auth()
+                .with_single_cert(pki.chain.clone(), key)
+                .unwrap(),
+        );
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let t = std::thread::spawn(move || {
+            for _ in 0..count {
+                let Ok((tcp, _)) = listener.accept() else {
+                    return;
+                };
+                let conn = rustls::ServerConnection::new(config.clone()).unwrap();
+                let mut s = rustls::StreamOwned::new(conn, tcp);
+                let mut buf = [0; 4];
+                if s.read_exact(&mut buf).is_ok() && &buf == b"ping" {
+                    let _ = s.write_all(b"pong");
+                    let _ = s.flush();
+                }
+            }
+        });
+        (port, t)
+    }
+
+    /// A server on 127.0.0.1 without TLS that answers anything with `pong` once.
+    fn plain_server() -> (u16, std::thread::JoinHandle<()>) {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let t = std::thread::spawn(move || {
+            if let Ok((mut s, _)) = listener.accept() {
+                let mut buf = [0; 512];
+                let _ = s.read(&mut buf);
+                let _ = s.write_all(b"pong");
+            }
+        });
+        (port, t)
+    }
+
+    /// SPEC-0314 v2 AK-6, SPEC-0016 v4 AK-15: `net_connect_tls` makes TLS in every mode, with the
+    /// mode's checks and the CA file instead of the system's roots; a failed handshake is `-7`
+    /// and logged with its reason.
+    #[test]
+    fn tls_made_by_the_host_checks_as_the_mode_says() {
+        let dir = temp("tls");
+        let plugin = Plugin::from_bytes(
+            &dir.join("netprobe.wasm"),
+            &probe_through("net_connect_tls"),
+        )
+        .unwrap();
+        let ours = test_pki("IDECraft plugin test CA");
+        let ca = dir.join("ca.pem");
+        std::fs::write(&ca, &ours.ca_pem).unwrap();
+        let other = dir.join("other-ca.pem");
+        std::fs::write(&other, test_pki("Another CA").ca_pem).unwrap();
+        let empty = dir.join("empty.pem");
+        std::fs::write(&empty, "no certificate\n").unwrap();
+        let run = |target: &Target, mode, ca_file: Option<&Path>| {
+            plugin
+                .run_in(
+                    "connect",
+                    &target.label(),
+                    crate::FUEL,
+                    access_with(&dir, target, mode, ca_file.map(Path::to_path_buf)),
+                )
+                .unwrap()
+        };
+        // `require`: encrypted, the certificate not checked.
+        let (port, server) = tls_server(&ours, 1);
+        assert_eq!(
+            run(&Target::new("127.0.0.1", port), NetMode::Require, None),
+            "pong"
+        );
+        server.join().unwrap();
+        // `verify-full` with the CA file that signed the certificate, for its host name.
+        let (port, server) = tls_server(&ours, 3);
+        let named = Target::new("localhost", port);
+        assert_eq!(run(&named, NetMode::VerifyFull, Some(&ca)), "pong");
+        // Without it the system's roots do not know the test CA; another CA file neither.
+        assert_eq!(run(&named, NetMode::VerifyFull, None), "E7");
+        assert_eq!(run(&named, NetMode::VerifyFull, Some(&other)), "E7");
+        server.join().unwrap();
+        // A CA file without certificates fails before anything is resolved.
+        assert_eq!(run(&named, NetMode::VerifyFull, Some(&empty)), "E7");
+        // A server without TLS.
+        let (port, server) = plain_server();
+        assert_eq!(
+            run(&Target::new("127.0.0.1", port), NetMode::Require, None),
+            "E7"
+        );
+        server.join().unwrap();
+        let log = audit_records(&dir, Some("netprobe"), 100);
+        let outcomes: Vec<&str> = log.iter().map(|r| r.outcome.as_str()).collect();
+        assert_eq!(
+            outcomes,
+            [
+                "opened", "closed", "opened", "closed", "failed", "failed", "failed", "failed"
+            ]
+        );
+        assert!(log[..4].iter().all(|r| r.tls == Some(true)));
+        assert!(
+            log[4..]
+                .iter()
+                .all(|r| r.error.as_deref().is_some_and(|e| !e.is_empty()))
+        );
+        assert!(
+            log[6]
+                .error
+                .as_deref()
+                .unwrap()
+                .contains("no PEM certificate")
+        );
+        assert!(log[6].address.is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// SPEC-0314 v2 AK-6: the plugin's input names the SSL mode and whether it may go without
+    /// TLS, never the CA file; the host keeps the mode and the file with the grant.
+    #[test]
+    fn the_request_names_the_mode() {
+        let request = ConnectorRequest {
+            op: "test".into(),
+            host: "ignored".into(),
+            ssl: NetMode::Prefer,
+            ca_file: Some(PathBuf::from("/home/u/ca.pem")),
+            ..ConnectorRequest::default()
+        };
+        let access = |host: &str| NetAccess {
+            plugin: "netprobe".into(),
+            target: Target::new(host, 5432),
+            holder: Holder::User,
+            audit: None,
+            tls: NetTls::default(),
+        };
+        let (local, kept) = prepared(&request, access("127.0.0.1"));
+        assert!(local.plain);
+        assert_eq!(local.host, "127.0.0.1");
+        assert_eq!(kept.tls.mode, NetMode::Prefer);
+        assert_eq!(kept.tls.ca_file, Some(PathBuf::from("/home/u/ca.pem")));
+        let (remote, _) = prepared(&request, access("db.example.com"));
+        assert!(!remote.plain);
+        let json = serde_json::to_value(&remote).unwrap();
+        assert_eq!(json["ssl"], "prefer");
+        assert_eq!(json["plain"], false);
+        assert!(json.get("ca_file").is_none(), "{json}");
+        assert_eq!(NetTls::default().mode, NetMode::VerifyFull);
     }
 }

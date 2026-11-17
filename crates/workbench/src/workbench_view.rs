@@ -54,6 +54,7 @@ pub use build_actions::{
     SHORTCUT_TASK as BUILD_SHORTCUT_TASK,
 };
 pub use menus::MenuPlace;
+pub use tabs_view::EditorSelectionState;
 
 #[path = "workbench_annotate.rs"]
 mod annotate;
@@ -807,6 +808,9 @@ pub struct WorkbenchView {
     )>,
     /// Folder below the host's home that backends are uploaded to (SPEC-0158; tests use another).
     remote_backend_dir: String,
+    /// The IDECraft program uploaded as the backend; this program when unset (tests running in a
+    /// test binary name the `idecraft` program instead).
+    remote_backend_binary: Option<PathBuf>,
     /// A host file to put the caret in once it is open: host path and 0-based line.
     remote_open_line: Option<(String, usize)>,
     /// Problems the backend found in the host file checked last (SPEC-0158 behaviour 8).
@@ -1615,6 +1619,7 @@ impl WorkbenchView {
             remote_backend: None,
             remote_problems: None,
             remote_backend_dir: idecraft_remote::BACKEND_DIR.to_owned(),
+            remote_backend_binary: None,
             remote_open_line: None,
             remote_home: None,
             remote_extra: Vec::new(),
@@ -3673,6 +3678,15 @@ impl WorkbenchView {
                 }
                 RunViewEvent::OpenConfiguration(name) => {
                     this.open_run_config_editor(Some(name.clone()), window, cx)
+                }
+                // SPEC-0088 v5 behaviour 12: a test's source, the editor focused.
+                RunViewEvent::OpenSource(path, line) => {
+                    this.open_at_line(path, *line, window, cx);
+                    this.focus_active(window, cx);
+                }
+                RunViewEvent::Status(text) => {
+                    this.status = Some(text.clone());
+                    cx.notify();
                 }
                 // SPEC-0088 v3 behaviour 7: only the tests that failed run again.
                 RunViewEvent::RerunFailed(name, report) => {
@@ -6692,12 +6706,12 @@ impl WorkbenchView {
                         let (profile, report) = &**done;
                         let lines = copy_report_lines(report);
                         let failed = report.error.is_some();
+                        // SPEC-0191 behaviour 6: the result is shown in the Services Output too
+                        // (hand test 114: it was logged into a hidden window), under the name of
+                        // the connection it ran on (v2, B2: not the last console's).
                         let services = this.ensure_services(window, cx);
-                        services.update(cx, |s, cx| {
-                            for line in &lines {
-                                s.log(line.clone(), failed, cx);
-                            }
-                        });
+                        services.update(cx, |s, cx| s.report(&profile.name, &lines, failed, cx));
+                        this.show_services = true;
                         let summary = lines.first().cloned().unwrap_or_default();
                         if failed {
                             view.update(cx, |d, cx| d.set_note(lines.join("\n"), true, cx));
@@ -9171,7 +9185,7 @@ impl WorkbenchView {
         }
     }
 
-    /// The menu of a ▶ marker (behaviour 1): Run, and Debug for a `main`.
+    /// The menu of a ▶ marker (behaviour 1): Run, and Debug for a `main` and a Jest test.
     pub fn run_marker_menu(
         &mut self,
         path: &Path,
@@ -9256,7 +9270,10 @@ impl WorkbenchView {
             return;
         };
         let mut items = vec![format!("Run '{}'", config.name)];
-        if marker.kind == MarkerKind::Main {
+        // A Jest test or suite can be debugged too (SPEC-0045 v6 behaviour 12).
+        if marker.kind == MarkerKind::Main
+            || idecraft_languages::debug_plan::is_npx_jest(&config.command)
+        {
             items.push(format!("Debug '{}'", config.name));
         }
         self.show_jvm_popup(
@@ -9720,7 +9737,10 @@ impl WorkbenchView {
                 v.show_busy(format!("Starting IDECraft's backend in {folder}…"), cx)
             });
         }
-        let binary = std::env::current_exe().unwrap_or_default();
+        let binary = self
+            .remote_backend_binary
+            .clone()
+            .unwrap_or_else(|| std::env::current_exe().unwrap_or_default());
         let dir = folder.clone();
         let install = self.remote_backend_dir.clone();
         let task = cx.background_executor().spawn(async move {
@@ -9773,6 +9793,12 @@ impl WorkbenchView {
     /// Uploads backends to `dir` below the host's home instead (self-test).
     pub fn set_remote_backend_dir(&mut self, dir: &str) {
         self.remote_backend_dir = dir.to_owned();
+    }
+
+    /// Uploads `binary` as the backend instead of this program (window tests, which run in a test
+    /// binary that is no `idecraft`).
+    pub fn set_remote_backend_binary(&mut self, binary: PathBuf) {
+        self.remote_backend_binary = Some(binary);
     }
 
     /// The backend's folder on the host, if one runs.
@@ -10197,7 +10223,8 @@ impl WorkbenchView {
                             let root = this.root.clone();
                             let view = cx.new(|cx| TerminalView::with_command(root, command, cx));
                             this.restore_terminals(window, cx);
-                            this.add_terminal_tab(Some(view), None, window, cx);
+                            // The tab is named after the configuration (behaviour 9).
+                            this.add_terminal_tab(Some(view), Some(name.clone()), window, cx);
                             this.show_terminal = true;
                             this.status = Some(format!("Running {name} on {}", remote.target.host));
                         }
@@ -14356,6 +14383,7 @@ impl WorkbenchView {
                 } else {
                     self.closed_histories.take(path, &text)
                 };
+                let library = !remote && is_library_source(path);
                 cx.new(|cx| {
                     let mut e = EditorView::new(&text, Some(path.to_path_buf()), cx);
                     if let Some(history) = history {
@@ -14371,8 +14399,14 @@ impl WorkbenchView {
                     e.set_method_breakpoints(methods, cx);
                     e.set_remote_document(remote);
                     e.set_save_all_in_window(true);
+                    // A library source is read-only and not checked (SPEC-0149 v5 behaviour 11),
+                    // however it was opened.
+                    if library {
+                        e.set_read_only(true);
+                        e.set_unchecked(true);
+                    }
                     // Unused declarations from the project's index (SPEC-0098 v12 behaviour 26).
-                    if !remote {
+                    if !remote && !library {
                         e.set_project_root(&root, cx);
                     }
                     e
@@ -14610,7 +14644,11 @@ impl WorkbenchView {
         } else {
             self.plugin_extensions(idecraft_plugins::ActionKind::Complete, &path)
         };
-        if language.is_none() && jobs.is_empty() {
+        // Configuration files of the bean model complete their keys without a language server
+        // (SPEC-0115 v7 behaviour 19).
+        let config =
+            remote.is_none() && idecraft_languages::config_completion::is_config_path(&path);
+        if language.is_none() && jobs.is_empty() && !config {
             return;
         }
         let (text, caret, line, column, line_text) = {
@@ -14687,7 +14725,7 @@ impl WorkbenchView {
                                 .ok()
                             })
                     };
-                    let mut found = if language.is_some() {
+                    let mut found = if language.is_some() || config {
                         let first = ask(&text, column);
                         // Nothing for a typed name after a member access: ask without the name
                         // and narrow here, so `.sout` finds a postfix template the server calls
@@ -18718,7 +18756,9 @@ impl WorkbenchView {
         let Some(path) = self.here(cx).map(|h| h.path) else {
             return;
         };
-        if idecraft_languages::LanguageId::detect(&path).is_none() {
+        if idecraft_languages::LanguageId::detect(&path).is_none()
+            && !idecraft_languages::config_completion::is_config_path(&path)
+        {
             return;
         }
         let sql_file = path
@@ -19259,12 +19299,14 @@ impl WorkbenchView {
                 insert_spaces: indent != "\t",
                 trim_trailing_whitespace: true,
                 insert_final_newline: true,
-            };
+            }
+            .with_editorconfig(&idecraft_core::editorconfig::editorconfig_for(&path));
             (buffer.text(), range, options)
         };
         self.status = Some("Reformatting…".into());
         cx.notify();
         let root = self.root.clone();
+        let sent = text.clone();
         cx.spawn_in(window, async move |this, cx| {
             let file = path.clone();
             let plan = cx
@@ -19288,9 +19330,14 @@ impl WorkbenchView {
                 this.status = Some(match plan {
                     Ok(plan) if plan.edits.edits.is_empty() => "Already formatted.".into(),
                     Ok(plan) => match this.editors.get(&path) {
+                        // Typed meanwhile: the edits are of the text that was sent.
+                        Some(editor) if editor.read(cx).state.buffer.text() != sent => {
+                            "The text changed while reformatting; nothing was changed.".into()
+                        }
+                        // Every caret and selection stays on its text (SPEC-0075 v7 behaviour 2).
                         Some(editor) => {
                             let n = plan.edits.edits.len();
-                            editor.update(cx, |e, cx| e.apply_text_edits(&plan.edits.edits, cx));
+                            editor.update(cx, |e, cx| e.apply_reformat(&plan.formatted, cx));
                             format!("Reformatted: {n} change(s).")
                         }
                         None => "The file was closed.".into(),
@@ -20712,7 +20759,9 @@ impl WorkbenchView {
                 .parent()
                 .map(Path::to_path_buf)
         });
+        let unsaved = self.unsaved_texts(cx);
         view.update(cx, |v, cx| {
+            v.set_unsaved(unsaved);
             v.set_open_files(open_files, current_dir, cx);
             v.set_replacing(replacing, cx);
             match selected {
@@ -20792,10 +20841,33 @@ impl WorkbenchView {
         self.status = Some(crate::find_in_files_model::replaced_line(
             count, changed, &plan.left, &failed, plan.gone,
         ));
+        // The list follows the editors' text, the replaced unsaved text included (SPEC-0066 v7
+        // behaviour 19).
+        let unsaved = self.unsaved_texts(cx);
         if let Some(v) = &self.find_in_files {
-            v.update(cx, |v, cx| v.refresh(cx));
+            v.update(cx, |v, cx| {
+                v.set_unsaved(unsaved);
+                v.refresh(cx)
+            });
         }
         cx.notify();
+    }
+
+    /// The workspace-relative path and text of each editor with unsaved changes, for the result
+    /// list of Find in Files (`SPEC-0066` v7 behaviour 19).
+    fn unsaved_texts(&self, cx: &gpui::App) -> Vec<(PathBuf, String)> {
+        let canonical = self.root.canonicalize().ok();
+        self.editors
+            .iter()
+            .filter(|(_, e)| e.read(cx).is_modified())
+            .filter_map(|(path, e)| {
+                let rel = path
+                    .strip_prefix(&self.root)
+                    .ok()
+                    .or_else(|| path.strip_prefix(canonical.as_deref()?).ok())?;
+                Some((rel.to_path_buf(), e.read(cx).state.buffer.text()))
+            })
+            .collect()
     }
 
     /// Reads the installed plugins again (SPEC-0104 behaviour 2) and returns their actions for
@@ -22457,6 +22529,7 @@ impl WorkbenchView {
         let pending = PendingPluginTest {
             dialog: dialog.clone(),
             id,
+            // The form's SSL mode and CA file go with the grant (`SPEC-0314` v2 behaviour 10).
             request: idecraft_plugins::ConnectorRequest {
                 op: "test".into(),
                 host: target.host.clone(),
@@ -22464,6 +22537,14 @@ impl WorkbenchView {
                 database: non_empty(&form.database),
                 user: non_empty(&form.user),
                 password,
+                ssl: plugin_ssl(form.ssl),
+                plain: false,
+                ca_file: form
+                    .extras
+                    .tls
+                    .ca_file
+                    .as_deref()
+                    .map(idecraft_database::expand_home),
             },
             dir,
             module,
@@ -25839,6 +25920,9 @@ impl WorkbenchView {
             "IDECraft.SettingsKeymap" => {
                 self.open_settings(crate::settings_model::Page::Keymap, window, cx)
             }
+            // File › Manage IDE Settings (SPEC-0105 v9 behaviour 14).
+            "ExportSettings" => self.export_settings(window, cx),
+            "ImportSettings" => self.import_settings(window, cx),
             // Stash asks for a message and Keep index; Unstash lists the stashes (SPEC-0106 v3).
             "Git.Stash" => self.open_stash_dialog(window, cx),
             "Git.Unstash" => self.open_stashes(window, cx),
@@ -28614,6 +28698,35 @@ impl WorkbenchView {
                         .child(item),
                 );
             }
+            // The file's type; a click opens Override File Type for it (SPEC-0004 v9
+            // behaviour 20).
+            if let Some(label) = self.status_file_type(cx) {
+                let control = declared!(STATUS_BAR, "status-file-type");
+                bar = bar.child(
+                    div()
+                        .id(control.name)
+                        .semantics(
+                            crate::semantics::Semantics::new(crate::semantics::Role::Button)
+                                .name(label.clone())
+                                .test_id(control.name)
+                                .action(crate::semantics::AxAction::Click)
+                                .effects(&[crate::semantics::Effect::None]),
+                        )
+                        .tip(control)
+                        .map(status_widget)
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            if let Some(path) = this.active_path() {
+                                this.file_type_action_on(
+                                    crate::context_menu::OVERRIDE_FILE_TYPE,
+                                    vec![path],
+                                    window,
+                                    cx,
+                                );
+                            }
+                        }))
+                        .child(label),
+                );
+            }
         }
         bar
     }
@@ -30482,6 +30595,19 @@ struct PendingPluginTest {
     target: idecraft_plugins::Target,
     connector: String,
     status: &'static str,
+}
+
+/// A profile's SSL mode as the plugin host knows it (`SPEC-0314` v2 behaviour 10).
+fn plugin_ssl(mode: idecraft_database::SslMode) -> idecraft_plugins::NetMode {
+    use idecraft_database::SslMode;
+    use idecraft_plugins::NetMode;
+    match mode {
+        SslMode::Disable => NetMode::Disable,
+        SslMode::Prefer => NetMode::Prefer,
+        SslMode::Require => NetMode::Require,
+        SslMode::VerifyCa => NetMode::VerifyCa,
+        SslMode::VerifyFull => NetMode::VerifyFull,
+    }
 }
 
 /// Whether `path` is a library source copied to the cache (SPEC-0149 v3 behaviour 11).

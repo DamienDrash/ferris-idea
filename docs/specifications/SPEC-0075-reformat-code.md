@@ -1,6 +1,6 @@
 # SPEC-0075: Reformat Code from the editor
 
-- **Version:** 6 · **Date:** 2026-11-14 (v6: Reformat File… with its options, behaviour 8, AK-6 and AK-7; ninth package of docs/research/KEYMAP_COVERAGE.md); 2026-11-13 (v5: the layout of both formatters follows the second comparison, SPEC-0043 v6, OBS-0036 FM5b and FM6b, and the Markdown formatter can refuse a file, behaviour 7); 2026-11-13 (v4: SQL and Markdown files are formatted by IDECraft itself, behaviour 7, SPEC-0043 v5, OBS-0036 FM5 and FM6; SCSS and Less indent with two spaces, behaviour 1, OBS-0036 FM1); 2026-11-13 (v3: a file nothing can format says so in the status bar instead of doing nothing, behaviour 6, with the sentences of SPEC-0043 v4; headless run for F-039); 2026-11-12 (v2: Python files are formatted with the project's ruff or black, SPEC-0329; OBS-0034 L9)
+- **Version:** 7 · **Date:** 2026-11-17 (v7: through a language server every caret and the selection stay on their text and a text changed meanwhile is left alone, behaviour 2, AK-8; a selection in a Go, Rust, TOML, YAML, Svelte or Kotlin file goes through the whole file, SPEC-0043 v8 behaviour 15; headless pre-check OBS-0074); 2026-11-14 (v6: Reformat File… with its options, behaviour 8, AK-6 and AK-7; ninth package of docs/research/KEYMAP_COVERAGE.md); 2026-11-13 (v5: the layout of both formatters follows the second comparison, SPEC-0043 v6, OBS-0036 FM5b and FM6b, and the Markdown formatter can refuse a file, behaviour 7); 2026-11-13 (v4: SQL and Markdown files are formatted by IDECraft itself, behaviour 7, SPEC-0043 v5, OBS-0036 FM5 and FM6; SCSS and Less indent with two spaces, behaviour 1, OBS-0036 FM1); 2026-11-13 (v3: a file nothing can format says so in the status bar instead of doing nothing, behaviour 6, with the sentences of SPEC-0043 v4; headless run for F-039); 2026-11-12 (v2: Python files are formatted with the project's ruff or black, SPEC-0329; OBS-0034 L9)
 - **Sources:** GEN (reformat the file or the selection by shortcut; F-039), OSS (action id `ReformatCode`
   with ⌥⌘L / Ctrl+Alt+L in the ported keymaps), SPEC-0043 (formatting through the language server),
   SPEC-0072 (requests on unsaved text)
@@ -20,6 +20,16 @@ Lay out code according to the language's formatter without leaving the editor.
 2. **Apply:** the edits change the editor as one undo step with the caret kept in place. The status bar
    says how many changes were made, "Already formatted." when there were none, or why formatting failed
    (e.g. the server cannot format ranges). [GEN]
+   (v7, OBS-0074) Kept in place means: every caret and every selection stays on its text, as with
+   IDECraft's own formatters (behaviour 7) and Reformat File (behaviour 8) — a selection that was
+   formatted is still selected over the same text, and with several carets each stays before the
+   same visible character. Before v7 the result of a language server left a single caret at the
+   end of the selection. When the editor's text changed while the server was formatting, nothing
+   is applied and the status bar says "The text changed while reformatting; nothing was changed."
+   A selection in a file whose server formats whole files only, or ranges unreliably
+   (kotlin-language-server), is formatted through the whole file (SPEC-0043 v8 behaviour 15); the
+   options follow `.editorconfig` for trailing whitespace and the final newline (SPEC-0043 v8
+   behaviour 1). [GEN, SPEC-0057 v7 behaviour 9]
 3. Edits planned on unsaved text refer to that text, also for rename (SPEC-0074) and other plans built
    from server edits: the text a replaced range held is taken from what the server saw, not from disk.
    [GEN]
@@ -108,6 +118,13 @@ Lay out code according to the language's formatter without leaving the editor.
   line the unused import is removed as one undo step and nothing is formatted; Only changed lines in an SQL file is refused with
   the formatter's sentence (`ninth_package_keymap.rs::reformat_file_dialog_*`). With a language
   server formatting changed ranges: not checked.
+
+- **AK-8 (v7, behaviour 2)** In a window of the test harness with clangd
+  (`crates/workbench/tests/it/f039_reformat.rs`, skipped without clangd): a selected statement is
+  still selected over its formatted text and the next function stays as it was; one ⌘Z gives back
+  the text and the selection (`a_reformatted_selection_stays_selected`); with two carets in the
+  file both stay before the same character after the whole file is formatted
+  (`every_caret_stays_on_its_text`).
 
 ## Out of scope
 Optimize imports from `ReformatCode` itself (v6: from Reformat File…, behaviour 8), rearrange code,

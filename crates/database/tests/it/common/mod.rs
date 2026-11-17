@@ -1,6 +1,6 @@
 //! Passwords of the local reference servers for the live tests. Like `oracle.rs` and `sqlserver.rs`:
 //! `IDECRAFT_TEST_<X>_PASSWORD`, or a file named by `IDECRAFT_TEST_<X>_PASSWORD_FILE`
-//! (`scripts/ci-local.sh` sets these), where `<X>` is `PG`, `MYSQL` or `MARIADB` after the
+//! (`scripts/ci-local.sh` sets these), where `<X>` is `PG`, `MYSQL`, `MARIADB` or `SQLSERVER` after the
 //! profile's dialect. Without one the server is expected to need no password (GitHub's service
 //! containers).
 
@@ -12,6 +12,7 @@ pub fn credentials(profile: &ConnectionProfile) -> Credentials {
         Dialect::PostgreSql => "IDECRAFT_TEST_PG",
         Dialect::MySql => "IDECRAFT_TEST_MYSQL",
         Dialect::MariaDb => "IDECRAFT_TEST_MARIADB",
+        Dialect::SqlServer => "IDECRAFT_TEST_SQLSERVER",
         _ => return Credentials::NotNeeded,
     };
     match password(var) {

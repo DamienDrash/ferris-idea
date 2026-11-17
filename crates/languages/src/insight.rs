@@ -778,6 +778,11 @@ impl Converter for Files {
 /// ([`from_the_build`]); a server under load publishes the refined list many seconds later.
 pub(crate) const REFINE_WAIT: Duration = Duration::from_secs(30);
 
+/// How long a question waits for the next list of a server that publishes its diagnostics in
+/// steps (`SPEC-0042` v23 behaviour 41): typescript-language-server sends the semantic check's
+/// list some hundred milliseconds after the syntax check's, longer for a server just started.
+pub(crate) const STEP_QUIET: Duration = Duration::from_secs(2);
+
 /// Whether `list` is jdtls's list from its build of the saved file: every problem named by its line
 /// only, at character 0 with no width. Its refined list names them exactly; when jdtls has the build
 /// already it publishes only the refined one (`SPEC-0076` v8 behaviour 10).
@@ -832,6 +837,9 @@ pub(crate) struct Opened {
     /// The server publishes an opened file's diagnostics twice; the second list is the answer
     /// (`SPEC-0042` v20 behaviour 36).
     publishes_twice: bool,
+    /// The server publishes an opened file's diagnostics in steps; the last list is the answer
+    /// (`SPEC-0042` v23 behaviour 41).
+    publishes_in_steps: bool,
     /// The document version last sent to a server of its own.
     version: i64,
 }
@@ -856,6 +864,7 @@ impl Opened {
         let server = crate::servers::resolve_for(language, root)?;
         let pulls_diagnostics = server.candidate.pulls_diagnostics;
         let publishes_twice = server.candidate.publishes_twice;
+        let publishes_in_steps = server.candidate.publishes_in_steps;
         // The newest list is the answer also after bash-language-server got its text again.
         let refines_diagnostics =
             server.candidate.refines_diagnostics || server.candidate.rereads_saved_files;
@@ -896,6 +905,7 @@ impl Opened {
                 pulls_diagnostics,
                 refines_diagnostics,
                 publishes_twice,
+                publishes_in_steps,
                 version: 2,
             });
         }
@@ -1016,6 +1026,7 @@ impl Opened {
                 pulls_diagnostics,
                 refines_diagnostics,
                 publishes_twice,
+                publishes_in_steps,
                 version: 2,
             }),
             Err(e) => {
@@ -1220,6 +1231,14 @@ impl Opened {
                             .as_array()
                             .cloned()
                             .unwrap_or_default();
+                        // In steps: the next list follows soon, or this one was the last.
+                        if self.publishes_in_steps
+                            && c.publications(&self.uri) < crate::servers::STEPS
+                        {
+                            first = Some(list);
+                            until = deadline.min(tokio::time::Instant::now() + STEP_QUIET);
+                            continue;
+                        }
                         if self.publishes_twice && first.is_none() && c.publications(&self.uri) < 2
                         {
                             first = Some(list);
@@ -1265,6 +1284,7 @@ impl Opened {
             pulls_diagnostics: false,
             refines_diagnostics: false,
             publishes_twice: false,
+            publishes_in_steps: false,
             version: 2,
         }
     }
@@ -1585,6 +1605,32 @@ pub async fn complete_in(
     limit: usize,
     wait: Duration,
 ) -> Result<Vec<CompletionItem>, LspError> {
+    // Configuration keys come from the bean model, not from a language server (`SPEC-0115` v7
+    // behaviour 19, `SPEC-0134` v6 behaviour 8).
+    {
+        let rel = file.strip_prefix(root).unwrap_or(file);
+        let disk;
+        let source = match text {
+            Some(t) => Some(t),
+            None if crate::config_completion::is_config_path(rel)
+                || rel.extension().is_some_and(|e| e == "java") =>
+            {
+                disk = std::fs::read_to_string(file).ok();
+                disk.as_deref()
+            }
+            None => None,
+        };
+        if let Some(source) = source
+            && crate::config_completion::is_key_site(rel, source, line, character)
+        {
+            let model = crate::spring::project_model(root);
+            if let Some(items) = crate::config_completion::key_completions(
+                &model, rel, source, line, character, limit,
+            ) {
+                return Ok(items);
+            }
+        }
+    }
     let mut o = Opened::open_text(root, file, text, wait).await?;
     let language = LanguageId::detect(file);
     let script = matches!(
@@ -1885,12 +1931,22 @@ mod tests {
 
     /// SPEC-0042 v20 AK-37: what a scripted server sends, in order; `None` a pause of a minute.
     async fn diagnostics_after(publishes_twice: bool, script: &[Option<Value>]) -> Vec<Value> {
+        diagnostics_scripted(publishes_twice, false, script).await
+    }
+
+    /// [`diagnostics_after`] for a server that publishes in steps (`in_steps`) or twice.
+    async fn diagnostics_scripted(
+        publishes_twice: bool,
+        in_steps: bool,
+        script: &[Option<Value>],
+    ) -> Vec<Value> {
         use tokio::io::{AsyncWriteExt, duplex};
         let (client_out, _server_in) = duplex(1 << 16);
         let (mut server_out, client_in) = duplex(1 << 16);
         let client = LspClient::new(client_in, client_out, None::<tokio::io::DuplexStream>);
         let mut o = Opened::over(client, Path::new("/p/src/Report.php"), "<?php\n");
         o.publishes_twice = publishes_twice;
+        o.publishes_in_steps = in_steps;
         let script = script.to_vec();
         tokio::spawn(async move {
             for step in script {
@@ -1959,6 +2015,34 @@ mod tests {
         assert_eq!(messages(&late), checked);
         let other = diagnostics_after(false, &[published(&[]), published(&checked)]).await;
         assert!(other.is_empty());
+    }
+
+    /// SPEC-0042 v23 AK-45: typescript-language-server's last list of up to three is the
+    /// answer; a list followed by a long pause is the answer; three lists end the wait at once.
+    #[tokio::test(start_paused = true)]
+    async fn the_last_step_of_a_server_that_publishes_in_steps_is_the_answer() {
+        let semantic = ["Cannot find name 'helper'."];
+        let all = [
+            "Cannot find name 'helper'.",
+            "'unused' is declared but never read.",
+        ];
+        let steps = diagnostics_scripted(
+            false,
+            true,
+            &[published(&[]), published(&semantic), published(&all)],
+        )
+        .await;
+        assert_eq!(messages(&steps), all);
+        // Two kinds merged into one list: the second list, after the quiet time.
+        let merged = diagnostics_scripted(false, true, &[published(&[]), published(&all)]).await;
+        assert_eq!(messages(&merged), all);
+        // Nothing more within the quiet time: the list so far.
+        let paused =
+            diagnostics_scripted(false, true, &[published(&semantic), None, published(&all)]).await;
+        assert_eq!(messages(&paused), semantic);
+        // Without the property the first list stays the answer.
+        let once = diagnostics_scripted(false, false, &[published(&[]), published(&all)]).await;
+        assert!(once.is_empty());
     }
 
     /// SPEC-0141/AK-9 (v4): the Vue server's generated context is recognised, a symbol whose type

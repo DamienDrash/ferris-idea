@@ -264,6 +264,7 @@ mod tests {
             suites: Vec::new(),
             output: None,
             totals: Totals::default(),
+            file: None,
         };
         TestReport {
             format: crate::testreport::ReportFormat::Junit,

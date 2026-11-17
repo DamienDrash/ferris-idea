@@ -1,6 +1,6 @@
 # SPEC-0091: Debugging in the window
 
-- **Version:** 19 · **Date:** 2026-11-14 (v19: Quick Evaluate Expression, behaviour 44, AK-24; eighth package of docs/research/KEYMAP_COVERAGE.md; v18: Go files and Go tests through Delve, SPEC-0039 v7; v17: a breakpoint the session cannot bind is hollow, SPEC-0127 v5, OBS-0035 L14; v16: JVM values in one form with the size of collections, no `this` row in a frame without a receiver, OBS-0035 L11 and L12; v15: values at the end of a line are placed one after the other; v14: a value with line breaks stays on one row; v2: Python scripts through debugpy; v3: evaluate expression,
+- **Version:** 22 · **Date:** 2026-11-16 (v22 (v20 and v21 are taken by #891 and #902): a value with line breaks after a line of code is put on one line too, behaviour 13, AK-27; hand test 20 of the beta of workflow (a)); 2026-11-14 (v19: Quick Evaluate Expression, behaviour 44, AK-24; eighth package of docs/research/KEYMAP_COVERAGE.md; v18: Go files and Go tests through Delve, SPEC-0039 v7; v17: a breakpoint the session cannot bind is hollow, SPEC-0127 v5, OBS-0035 L14; v16: JVM values in one form with the size of collections, no `this` row in a frame without a receiver, OBS-0035 L11 and L12; v15: values at the end of a line are placed one after the other; v14: a value with line breaks stays on one row; v2: Python scripts through debugpy; v3: evaluate expression,
   breakpoints kept across restarts; v4: Node.js scripts through js-debug; v5: watches, threads, values
   in the editor; v6: the field's hint is a placeholder; v7: debugger items in the editor menu, the
   adapter's echo of the command line, closure scopes; v8: values in the editor also for the fields of the
@@ -162,6 +162,11 @@ the editor.
    25`. A local of the same name hides the field. JavaScript frames are left out, because there `this`
    is often the global object with thousands of members. The fields follow the shown frame: another
    frame or thread fetches its own. [GEN, STD, OBS]
+   **(v22)** A value with line breaks, such as the source of a function that js-debug gives for a
+   Node.js variable, is put on one line before it is cut, as in the Variables list (behaviour 40):
+   line breaks and the white space around them become one space. The value after a line of code is
+   one line of text; with a line break in it the editor could not lay it out and the application
+   ended with an error (found in the harness walk of hand test 20, 2026-11-16). [GEN]
 14. **The frame's object (v9):** in OBS-0014 the reference showed `this` with its object id and its
    text, and the fields the method uses (`qty`, `unitPriceCents`) at the top of the variables; IDECraft
    showed only `this = Inventory$Item@15` and its type. Now:
@@ -501,7 +506,7 @@ the editor.
   list, Inspect, Step Out of Code Block to line 18, hot swap printing `value 2`. MCP tools
   (`crates/mcp/tests/it/protocol.rs`: tool list, `debug` right, renderers). Window self-test steps
   `java_debug_more_steps`, `python_debug_more_steps` (written, not yet run in the window).
-- **AK-19 (v13)** `extras::tests::{thread_names_and_states, views_of_values}` (SLEEPING, `0xFF`),
+- **AK-25 (v13)** `extras::tests::{thread_names_and_states, views_of_values}` (SLEEPING, `0xFF`),
   `context_menu` tests (views by kind), window self-test `IDECRAFT_SELFTEST_ONLY=java-debug` 35/35 and
   `debug-more` 26/26, full window self-test green; next to the reference in OBS-0025 re-check 2.
 - **AK-18 (v12)** In the window (by hand or the self-test): the thread list's groups and icons,
@@ -528,6 +533,10 @@ the editor.
   window of the test harness the action without a session is not available and leaves the
   Debug window closed (`eighth_package_keymap.rs::quick_evaluate_needs_a_paused_session`).
   With a debugger: not checked.
+- **AK-27 (v22, behaviour 13)** Unit test `debug_model::tests::an_inline_function_value_is_one_line`;
+  in a window of the test harness a Node.js program paused with a function among its variables
+  shows its values after the lines (`workflow_a_beta_handtests.rs::hand_test_20_debug_node`, with
+  js-debug). In the window on the screen: hand test 20.
 
 ## Out of scope
 Conditional breakpoints and logpoints in the UI (the session supports them, SPEC-0039), a breakpoints

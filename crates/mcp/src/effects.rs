@@ -168,6 +168,7 @@ pub const TOOLS: &[ToolEffect] = &[
     tool("bookmarks", &[], Dry::None, &[], &[]),
     tool("browse_store", &[], Dry::None, &[Reach::Database, Reach::Network], &[DATABASE, TRUSTED]),
     tool("build_command_suggestions", &[], Dry::None, &[], &[]),
+    tool("build_project", &[Change::Processes], Dry::DryRun(true), &[Reach::Process], &[RUN, TRUSTED]),
     tool("build_task", &[Change::Files], Dry::None, &[], &[WRITE]),
     tool("build_tool_links", &[Change::Files], Dry::None, &[], &[WRITE]),
     tool("build_tool_options", &[Change::Files], Dry::None, &[], &[WRITE]),
@@ -189,18 +190,21 @@ pub const TOOLS: &[ToolEffect] = &[
     tool("config_key", &[], Dry::None, &[], &[]),
     tool("copy_file", &[Change::Files], Dry::DryRun(true), &[], &[WRITE]),
     tool("copy_table", &[Change::Database], Dry::Apply, &[Reach::Database, Reach::Network], &[SSH, DATABASE, TRUSTED]),
-    tool("create_file", &[Change::Files], Dry::None, &[], &[WRITE]),
+    tool("create_file", &[Change::Files], Dry::DryRun(true), &[], &[WRITE]),
     tool("database_problem_report", &[], Dry::None, &[], &[]),
     tool("debug_adapters", &[], Dry::None, &[Reach::Process], &[]),
     tool("debug_attach", &[Change::Ide, Change::Processes], Dry::DryRun(true), &[Reach::Process, Reach::Network], &[DEBUG]),
     tool("debug_breakpoints", &[Change::Ide, Change::Processes], Dry::None, &[], &[DEBUG]),
     tool("debug_completions", &[Change::Processes], Dry::None, &[], &[DEBUG]),
+    tool("debug_disassemble", &[Change::Processes], Dry::None, &[], &[DEBUG]),
     tool("debug_evaluate", &[Change::Ide, Change::Processes], Dry::None, &[], &[DEBUG]),
     tool("debug_field_watch", &[Change::Ide, Change::Processes], Dry::None, &[], &[DEBUG]),
     tool("debug_hot_swap", &[Change::Ide, Change::Processes], Dry::None, &[Reach::Process], &[DEBUG]),
     tool("debug_inspect", &[Change::Ide, Change::Processes], Dry::None, &[], &[DEBUG]),
+    tool("debug_memory", &[Change::Processes], Dry::None, &[], &[DEBUG]),
     tool("debug_pause", &[Change::Ide, Change::Processes], Dry::None, &[], &[DEBUG]),
     tool("debug_processes", &[], Dry::None, &[Reach::Process], &[]),
+    tool("debug_registers", &[Change::Processes], Dry::None, &[], &[DEBUG]),
     tool("debug_renderers", &[Change::Files], Dry::DryRun(true), &[], &[WRITE]),
     tool("debug_reset_frame", &[Change::Ide, Change::Processes], Dry::None, &[], &[DEBUG]),
     tool("debug_resume", &[Change::Ide, Change::Processes], Dry::None, &[], &[DEBUG]),
@@ -233,6 +237,7 @@ pub const TOOLS: &[ToolEffect] = &[
     tool("edit_table_data", &[Change::Database], Dry::Apply, &[Reach::Database, Reach::Network], &[SSH, DATABASE, TRUSTED]),
     tool("editor_action", &[], Dry::None, &[Reach::Process], &[]),
     tool("editor_keystrokes", &[], Dry::None, &[], &[]),
+    tool("editor_selection", &[], Dry::None, &[], &[]),
     tool("editor_tabs", &[Change::Ide], Dry::None, &[], &[UI]),
     tool("editorconfig", &[], Dry::None, &[], &[]),
     tool("endpoints", &[], Dry::None, &[], &[]),
@@ -364,6 +369,7 @@ pub const TOOLS: &[ToolEffect] = &[
     tool("read_file", &[], Dry::None, &[], &[]),
     tool("read_table_data", &[], Dry::None, &[Reach::Database, Reach::Network], &[SSH, DATABASE, TRUSTED]),
     tool("recent_projects", &[], Dry::None, &[], &[]),
+    tool("redo_refactoring", &[Change::Files], Dry::None, &[], &[WRITE]),
     tool("reference_index", &[], Dry::None, &[], &[]),
     tool("related_files", &[], Dry::None, &[], &[]),
     tool("remote_access_off", &[Change::Settings, Change::Remote], Dry::None, &[], &[SSH]),
@@ -400,6 +406,7 @@ pub const TOOLS: &[ToolEffect] = &[
     tool("rename_sql_object", &[Change::Files, Change::Database], Dry::Apply, &[Reach::Database, Reach::Network], &[SSH, WRITE, DATABASE, TRUSTED]),
     tool("rename_symbol", &[Change::Files], Dry::DryRun(true), &[Reach::Process], &[WRITE]),
     tool("replace_in_files_preview", &[], Dry::None, &[], &[]),
+    tool("replace_text_in_file", &[Change::Files], Dry::DryRun(true), &[], &[WRITE]),
     tool("resource_bundle", &[Change::Files], Dry::DryRun(true), &[], &[WRITE]),
     tool("restore_local_revision", &[Change::Files], Dry::DryRun(true), &[], &[WRITE]),
     tool("revoke_plugin_network", &[Change::Settings], Dry::None, &[], &[SETTINGS]),
@@ -459,7 +466,7 @@ pub const TOOLS: &[ToolEffect] = &[
     tool("terminal_command", &[Change::Processes], Dry::DryRun(true), &[Reach::Process], &[RUN]),
     tool("terminal_read", &[], Dry::None, &[], &[TERMINAL_READ]),
     tool("terminal_render", &[], Dry::None, &[], &[]),
-    tool("terminal_sessions", &[], Dry::None, &[], &[]),
+    tool("terminal_sessions", &[], Dry::None, &[], &[TERMINAL_READ]),
     tool("test_connection", &[], Dry::None, &[Reach::Database, Reach::Network], &[SSH, DATABASE, TRUSTED]),
     tool("themes", &[Change::Settings], Dry::None, &[], &[SETTINGS]),
     tool("todo_items", &[], Dry::None, &[], &[]),
@@ -694,7 +701,9 @@ mod tests {
         let table = effect("copy_table").unwrap();
         assert!(is_dry_run(table, none));
         assert!(!is_dry_run(table, json!({"apply": true}).as_object()));
-        assert!(!is_dry_run(effect("create_file").unwrap(), none));
+        // `create_file` is a dry run unless asked otherwise (SPEC-0006 v56 behaviour 10).
+        assert!(is_dry_run(effect("create_file").unwrap(), none));
+        assert!(!is_dry_run(effect("rename_file").unwrap(), none));
         assert!(effect("read_file").unwrap().changes.is_empty());
         // A database decision decides: a preview is a dry run, a reading tool on a connection
         // is logged (SPEC-0012 v3 behaviour 16).

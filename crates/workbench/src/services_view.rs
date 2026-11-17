@@ -38,6 +38,9 @@ const CHAR_WIDTH: f32 = 7.8;
 const ROW_HEIGHT: f32 = 24.;
 /// Rows the export preview shows (SPEC-0021 v2 behaviour 11).
 const PREVIEW_ROWS: usize = 20;
+/// Width of the export dialog's column of choices beside the preview (`SPEC-0021` v4 behaviour
+/// 11).
+const EXPORT_CHOICES_WIDTH: f32 = 250.;
 /// Room left and right, above and below the plan's diagram in its area (`SPEC-0110` v14
 /// behaviour 21).
 const DIAGRAM_MARGIN: (f32, f32) = (12., 4.);
@@ -295,8 +298,13 @@ pub struct ServicesView {
     plan_step: Option<usize>,
     /// Several hints of the Plan tab are all shown rather than the first (v14 behaviour 21).
     plan_hints_open: bool,
-    /// The Diagram view is fitted into its area rather than drawn at 100 % (v14 behaviour 21).
-    diagram_fit: bool,
+    /// How the Diagram view is scaled: as it opens fitted but readable, fitted wholly, or 100 %
+    /// (v14 behaviour 21, v15 behaviour 22).
+    diagram_zoom: crate::plan_view_model::DiagramZoom,
+    /// The Diagram view's horizontal scroll, which starts at the top step (v15 behaviour 22).
+    plan_diagram_scroll: gpui::ScrollHandle,
+    /// The Diagram view still has to be scrolled to its top step after its next layout.
+    plan_diagram_align: std::rc::Rc<std::cell::Cell<bool>>,
     /// Size of the Plan tab's area below its head as last painted (0 before the first paint).
     plan_area: std::rc::Rc<std::cell::Cell<(f32, f32)>>,
     /// The marked statement of the Schema Diff tab (v5 behaviour 14).
@@ -342,6 +350,9 @@ pub struct ServicesView {
     export: Option<ExportDialog>,
     /// Bottom edges of the export dialog's button row and of the panel, as last painted (D42).
     export_edges: std::rc::Rc<std::cell::Cell<(f32, f32)>>,
+    /// The export dialog's format list, choices and preview, which scroll with a scroll bar
+    /// (`SPEC-0021` v4 behaviour 11).
+    export_scrolls: [gpui::ScrollHandle; 3],
     /// Where exports go by default.
     root: PathBuf,
     /// A header edge being dragged (`SPEC-0099` v2 behaviour 8).
@@ -396,7 +407,9 @@ impl ServicesView {
             flame_metric: crate::plan_view_model::FlameMetric::Total,
             plan_step: None,
             plan_hints_open: false,
-            diagram_fit: true,
+            diagram_zoom: crate::plan_view_model::DiagramZoom::Readable,
+            plan_diagram_scroll: gpui::ScrollHandle::new(),
+            plan_diagram_align: std::rc::Rc::new(std::cell::Cell::new(true)),
             plan_area: std::rc::Rc::new(std::cell::Cell::new((0., 0.))),
             statement_mark: None,
             tab: 0,
@@ -424,6 +437,7 @@ impl ServicesView {
             last_copy: None,
             export: None,
             export_edges: Default::default(),
+            export_scrolls: Default::default(),
             root: std::env::current_dir().unwrap_or_default(),
             column_drag: None,
             size_menu: false,
@@ -1166,7 +1180,8 @@ impl ServicesView {
         self.flame_metric = crate::plan_view_model::FlameMetric::Total;
         self.plan_step = None;
         self.plan_hints_open = false;
-        self.diagram_fit = true;
+        self.diagram_zoom = crate::plan_view_model::DiagramZoom::Readable;
+        self.plan_diagram_align.set(true);
         self.statement_mark = None;
         self.selection = None;
         self.editing = false;
@@ -1194,6 +1209,28 @@ impl ServicesView {
     pub fn log(&mut self, line: String, failed: bool, cx: &mut Context<Self>) {
         self.output.push((line, failed));
         cx.notify();
+    }
+
+    /// Lines of work done on the connection named `connection` outside a console, such as Copy
+    /// Table (`SPEC-0191` v2 behaviour 6): the header names that connection from now on, the lines
+    /// are added to Output and Output is shown.
+    pub fn report(
+        &mut self,
+        connection: &str,
+        lines: &[String],
+        failed: bool,
+        cx: &mut Context<Self>,
+    ) {
+        self.connection = connection.to_owned();
+        self.output
+            .extend(lines.iter().map(|line| (line.clone(), failed)));
+        self.show_output(cx);
+        cx.notify();
+    }
+
+    /// The connection the header names: the one of the last run or report (tests).
+    pub fn connection(&self) -> &str {
+        &self.connection
     }
 
     /// Output lines so far.
@@ -1307,15 +1344,29 @@ impl ServicesView {
         }
     }
 
-    /// Whether the Diagram view is fitted into its area (v14 behaviour 21).
+    /// Whether the Diagram view is fitted into its area, as it opens or by Fit (v14 behaviour 21).
     pub fn plan_diagram_fit(&self) -> bool {
-        self.diagram_fit
+        self.diagram_zoom != crate::plan_view_model::DiagramZoom::Full
     }
 
-    /// Fits the Diagram view into its area (`true`) or draws it at 100 %.
+    /// How the Diagram view is scaled (v15 behaviour 22).
+    pub fn plan_diagram_zoom_mode(&self) -> crate::plan_view_model::DiagramZoom {
+        self.diagram_zoom
+    }
+
+    /// Fit (`true`): the whole diagram inside its area, down to 25 %; or 100 % (v15 behaviour 22).
     pub fn set_plan_diagram_fit(&mut self, fit: bool, cx: &mut Context<Self>) {
-        self.diagram_fit = fit;
+        self.diagram_zoom = if fit {
+            crate::plan_view_model::DiagramZoom::Fit
+        } else {
+            crate::plan_view_model::DiagramZoom::Full
+        };
         cx.notify();
+    }
+
+    /// The Diagram view's horizontal scroll offset in pixels (v15 behaviour 22; tests).
+    pub fn plan_diagram_scroll_x(&self) -> f32 {
+        -f32::from(self.plan_diagram_scroll.offset().x)
     }
 
     /// Size of the Plan tab's area below its head, as last painted (v14 behaviour 21).
@@ -1330,7 +1381,7 @@ impl ServicesView {
         let metrics = crate::plan_view_model::diagram_metrics(&boxes, CHAR_WIDTH, ROW_HEIGHT);
         let (w, h) = self.plan_area.get();
         let area = (w - DIAGRAM_MARGIN.0 * 2., h - DIAGRAM_MARGIN.1 * 2.);
-        let zoom = crate::plan_view_model::diagram_zoom(&metrics, area, self.diagram_fit);
+        let zoom = crate::plan_view_model::diagram_zoom(&metrics, area, self.diagram_zoom);
         Some((metrics, zoom))
     }
 
@@ -2671,6 +2722,11 @@ impl ServicesView {
                         cell(width)
                             .id(("services-column", k))
                             .relative()
+                            .semantics(
+                                Semantics::new(Role::ColumnHeader)
+                                    .name(name.clone())
+                                    .test_id(format!("services-column-{k}")),
+                            )
                             .flex()
                             .gap_1()
                             .hover(|s| s.bg(c(p.tree_hover)))
@@ -2791,6 +2847,11 @@ impl ServicesView {
                         };
                         cell(*w)
                             .id(("services-cell", r * 10_000 + k))
+                            .relative()
+                            .semantics(
+                                Semantics::new(Role::Cell)
+                                    .test_id(format!("services-cell-{r}-{k}")),
+                            )
                             .font(mono.clone())
                             .when(numeric[k], |d| d.text_right())
                             .when(value.is_none(), |d| d.text_color(c(p.ui_dim)))
@@ -2842,6 +2903,12 @@ impl ServicesView {
         // D41: a field never shrinks below a usable width; the toolbar wraps instead.
         let labelled_field = |label: &'static str, w: f32, field: Entity<EditorView>| {
             div()
+                .relative()
+                .semantics(
+                    Semantics::new(Role::TextInput)
+                        .name(label)
+                        .test_id(format!("services-field-{label}")),
+                )
                 .ml_2()
                 .w(px(w))
                 .flex_none()
@@ -2859,6 +2926,8 @@ impl ServicesView {
         let button = |id: &'static str, label: String, cx: &mut Context<Self>| {
             div()
                 .id(id)
+                .relative()
+                .semantics(Semantics::new(Role::Button).name(label.clone()).test_id(id))
                 .px_2()
                 .rounded(px(4.))
                 .hover(|s| s.bg(c(p.tree_hover)))
@@ -3548,6 +3617,12 @@ impl ServicesView {
         let item = |id: (&'static str, usize), label: String, on: bool| {
             div()
                 .id(id)
+                .relative()
+                .semantics(
+                    Semantics::new(Role::MenuItem)
+                        .name(label.clone())
+                        .test_id(format!("{}-{}", id.0, id.1)),
+                )
                 .px_2()
                 .rounded(px(4.))
                 .when(on, |d| d.bg(c(p.tree_selection)))
@@ -3626,6 +3701,12 @@ impl ServicesView {
             .children(ExportFormat::ALL.into_iter().enumerate().map(|(n, f)| {
                 div()
                     .id(("services-format", n))
+                    .relative()
+                    .semantics(
+                        Semantics::new(Role::MenuItem)
+                            .name(f.label())
+                            .test_id(format!("services-format-{}", f.label())),
+                    )
                     .px_2()
                     .rounded(px(4.))
                     .when(f == current, |d| d.bg(c(p.tree_selection)))
@@ -3638,6 +3719,13 @@ impl ServicesView {
             .child(
                 div()
                     .id("services-header")
+                    .relative()
+                    .semantics(
+                        Semantics::new(Role::CheckBox)
+                            .name("Header row")
+                            .checked(header)
+                            .test_id("services-header"),
+                    )
                     .mt_1()
                     .px_2()
                     .border_t_1()
@@ -3822,6 +3910,19 @@ impl ServicesView {
         let choice = |id: &'static str, label: &'static str, on: bool, cx: &mut Context<Self>| {
             div()
                 .id(id)
+                .relative()
+                // The header row is a switch; the others pick one of their group.
+                .semantics(if id == "export-header" {
+                    Semantics::new(Role::CheckBox)
+                        .name(label)
+                        .checked(on)
+                        .test_id(id)
+                } else {
+                    Semantics::new(Role::RadioButton)
+                        .name(label)
+                        .selected(on)
+                        .test_id(id)
+                })
                 .px_2()
                 .rounded(px(4.))
                 .when(on, |d| d.bg(c(p.tree_selection)))
@@ -3847,6 +3948,7 @@ impl ServicesView {
         let error = c(p.status_text(crate::palette::Status::Error));
         let mut rows = div()
             .flex()
+            .flex_wrap()
             .gap_1()
             .child(div().w(px(70.)).text_color(c(p.ui_muted)).child("Rows"))
             .child(choice(
@@ -3870,8 +3972,8 @@ impl ServicesView {
             ));
         }
         // D42: the dialog never grows past the panel. It is held between the panel's top and
-        // bottom edges, the format list and the preview shrink first, and the buttons stay at the
-        // bottom (SPEC-0021 v3 behaviour 11).
+        // bottom edges, the format list, the choices and the preview shrink first (and scroll), and
+        // the buttons stay at the bottom (SPEC-0021 v3 and v4 behaviour 11).
         let edges = self.export_edges.clone();
         let edge = move |footer: bool| {
             let edges = edges.clone();
@@ -3888,6 +3990,10 @@ impl ServicesView {
             .left_0()
             .size_full()
         };
+        // SPEC-0021 v4 behaviour 11 (B1): the choices and the preview stand side by side, so the
+        // preview has the full height of the dialog's middle; whatever does not fit scrolls with a
+        // scroll bar beside it.
+        let thumb = c(p.ui_dim).opacity(0.6);
         let dialog_box = div()
             .max_w(px(720.))
             .w_full()
@@ -3921,11 +4027,19 @@ impl ServicesView {
                             .w(px(150.))
                             .flex_none()
                             .overflow_y_scroll()
+                            .track_scroll(&self.export_scrolls[0])
                             .flex()
                             .flex_col()
                             .children(ExportFormat::ALL.into_iter().enumerate().map(|(n, f)| {
                                 div()
                                     .id(("export-format", n))
+                                    .relative()
+                                    .semantics(
+                                        Semantics::new(Role::RadioButton)
+                                            .name(f.label())
+                                            .selected(f == current)
+                                            .test_id(format!("export-format-{}", f.label())),
+                                    )
                                     .px_2()
                                     .rounded(px(4.))
                                     .when(f == current, |d| d.bg(c(p.tree_selection)))
@@ -3938,11 +4052,19 @@ impl ServicesView {
                                     ))
                             })),
                     )
+                    .child(crate::scroll_bar::vertical(
+                        "export-formats-scrollbar",
+                        "Formats",
+                        &self.export_scrolls[0],
+                        thumb,
+                    ))
                     .child(
                         div()
-                            .flex_1()
-                            .min_w_0()
-                            .min_h_0()
+                            .id("export-choices")
+                            .w(px(EXPORT_CHOICES_WIDTH))
+                            .flex_none()
+                            .overflow_y_scroll()
+                            .track_scroll(&self.export_scrolls[1])
                             .flex()
                             .flex_col()
                             .gap_1()
@@ -3981,27 +4103,73 @@ impl ServicesView {
                             .when(dialog.to_file, |d| {
                                 d.child(
                                     crate::metrics::field_frame()
-                                        .child(div().flex_1().child(dialog.path.clone())),
+                                        .child(div().flex_1().min_w_0().child(dialog.path.clone())),
                                 )
-                            })
-                            .child(div().text_color(c(p.ui_muted)).child("Preview"))
+                            }),
+                    )
+                    .child(crate::scroll_bar::vertical(
+                        "export-choices-scrollbar",
+                        "Export options",
+                        &self.export_scrolls[1],
+                        thumb,
+                    ))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .min_h_0()
+                            .flex()
+                            .flex_col()
+                            .gap_1()
+                            .child(div().flex_none().text_color(c(p.ui_muted)).child("Preview"))
                             .child(
                                 div()
-                                    .id("export-preview")
                                     .flex_1()
-                                    .min_h(px(40.))
-                                    .max_h(px(200.))
-                                    .overflow_scroll()
-                                    .px_2()
-                                    .bg(rgb(p.console_background))
-                                    .font(mono())
-                                    .text_size(px(crate::fonts::EDITOR_FONT_SIZE))
-                                    .children(
-                                        self.export_preview()
-                                            .lines()
-                                            .map(|l| div().whitespace_nowrap().child(l.to_owned()))
-                                            .collect::<Vec<_>>(),
-                                    ),
+                                    .min_h_0()
+                                    .flex()
+                                    .child(
+                                        div()
+                                            .id("export-preview")
+                                            .relative()
+                                            .semantics(
+                                                Semantics::new(Role::ScrollView)
+                                                    .name("Preview")
+                                                    .test_id("export-preview"),
+                                            )
+                                            .flex_1()
+                                            .min_w_0()
+                                            .overflow_scroll()
+                                            .track_scroll(&self.export_scrolls[2])
+                                            .px_2()
+                                            .bg(rgb(p.console_background))
+                                            .font(mono())
+                                            .text_size(px(crate::fonts::EDITOR_FONT_SIZE))
+                                            .children(
+                                                self.export_preview()
+                                                    .lines()
+                                                    .enumerate()
+                                                    .map(|(n, l)| {
+                                                        div()
+                                                            .relative()
+                                                            .semantics(
+                                                                Semantics::new(Role::Label)
+                                                                    .name(l.to_owned())
+                                                                    .test_id(format!(
+                                                                        "export-preview-line-{n}"
+                                                                    )),
+                                                            )
+                                                            .whitespace_nowrap()
+                                                            .child(l.to_owned())
+                                                    })
+                                                    .collect::<Vec<_>>(),
+                                            ),
+                                    )
+                                    .child(crate::scroll_bar::vertical(
+                                        "export-preview-scrollbar",
+                                        "Preview",
+                                        &self.export_scrolls[2],
+                                        thumb,
+                                    )),
                             ),
                     ),
             )
@@ -4022,14 +4190,31 @@ impl ServicesView {
                     .child(edge(true))
                     .child(div().flex_1())
                     .child(
-                        crate::metrics::button("export-cancel", "Cancel", false).on_click(
-                            cx.listener(|this, _: &gpui::ClickEvent, _, cx| this.close_export(cx)),
-                        ),
+                        crate::metrics::button("export-cancel", "Cancel", false)
+                            .relative()
+                            .semantics(
+                                Semantics::new(Role::Button)
+                                    .name("Cancel")
+                                    .test_id("export-cancel"),
+                            )
+                            .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                                this.close_export(cx)
+                            })),
                     )
                     .child(
-                        crate::metrics::button("export-run", "Export", !dialog.running).on_click(
-                            cx.listener(|this, _: &gpui::ClickEvent, _, cx| this.run_export(cx)),
-                        ),
+                        crate::metrics::button("export-run", "Export", !dialog.running)
+                            .relative()
+                            .semantics(
+                                Semantics::new(Role::Button)
+                                    .name("Export")
+                                    .enabled(!dialog.running)
+                                    .test_id("export-run"),
+                            )
+                            .on_click(
+                                cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                                    this.run_export(cx)
+                                }),
+                            ),
                     ),
             );
         div()
@@ -4351,7 +4536,7 @@ impl ServicesView {
                 (false, "100 %", "plan-zoom-100"),
             ] {
                 switches = switches.child(
-                    switch(id.into(), label, self.diagram_fit == fit).on_click(cx.listener(
+                    switch(id.into(), label, self.plan_diagram_fit() == fit).on_click(cx.listener(
                         move |this, _: &gpui::ClickEvent, _, cx| this.set_plan_diagram_fit(fit, cx),
                     )),
                 );
@@ -4485,7 +4670,7 @@ impl ServicesView {
         // The area below the head, measured as it is painted; when it changes while the diagram
         // is fitted, the next frame fits it again (as the ER diagram, SPEC-0111 v7 behaviour 8).
         let area = self.plan_area.clone();
-        let refit = mode == PlanMode::Diagram && self.diagram_fit;
+        let refit = mode == PlanMode::Diagram && self.plan_diagram_fit();
         let measure = gpui::canvas(
             |_, _, _| {},
             move |bounds, _, window, cx| {
@@ -4646,11 +4831,26 @@ impl ServicesView {
             lines.push(line(parent_x, parent_bottom, 1., mid - parent_bottom));
         }
         let selected = self.plan_step;
+        // Opened and wider than its area at the readable zoom: it starts with the top step in the
+        // middle (v15 behaviour 22); once, after the layout that knows the area.
+        let (w, _) = self.plan_area.get();
+        if self.diagram_zoom == crate::plan_view_model::DiagramZoom::Readable
+            && w > 0.
+            && self.plan_diagram_align.get()
+            && let Some(top) = boxes.iter().find(|b| b.parent.is_none())
+        {
+            let x =
+                crate::plan_view_model::top_step_offset(&m, z, top.x, w - DIAGRAM_MARGIN.0 * 2.);
+            self.plan_diagram_align.set(false);
+            self.plan_diagram_scroll
+                .set_offset(gpui::point(px(-x), px(0.)));
+        }
         div()
             .id("plan-diagram")
             .mx(px(DIAGRAM_MARGIN.0))
             .my(px(DIAGRAM_MARGIN.1))
             .overflow_x_scroll()
+            .track_scroll(&self.plan_diagram_scroll)
             .own_axis()
             .child(
                 div()

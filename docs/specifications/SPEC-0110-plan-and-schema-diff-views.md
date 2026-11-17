@@ -1,6 +1,6 @@
 # SPEC-0110: Query plan and schema comparison in the window
 
-- **Version:** 14 · **Date:** 2026-11-16 (v14: the head of the Plan tab stays while the view scrolls, several hints take one line, the diagram is fitted into its area, behaviour 21, AK-26 — IMP-0450, window check of the plan views, OBS-0070 V6 P2); 2026-11-16 (v13: the Plan tab's Diagram and Flame views and the properties of a step, behaviours 19 and 20, AK-23 to AK-25 — F-059, OBS-0070 V6); 2026-11-16 (v12: Compare With… compares two single tables or views, behaviour 18 — OBS-0068 L8); 2026-11-16 (v11: every script names its target schema, on PostgreSQL only
+- **Version:** 15 · **Date:** 2026-11-16 (v15: the diagram opens fitted but not below 60 %, starting at its top step; Fit still fits it wholly, behaviour 22, AK-27 — OBS-0070 P3); 2026-11-16 (v14: the head of the Plan tab stays while the view scrolls, several hints take one line, the diagram is fitted into its area, behaviour 21, AK-26 — IMP-0450, window check of the plan views, OBS-0070 V6 P2); 2026-11-16 (v13: the Plan tab's Diagram and Flame views and the properties of a step, behaviours 19 and 20, AK-23 to AK-25 — F-059, OBS-0070 V6); 2026-11-16 (v12: Compare With… compares two single tables or views, behaviour 18 — OBS-0068 L8); 2026-11-16 (v11: every script names its target schema, on PostgreSQL only
   for its own transaction, behaviour 16 — IMP-0415, SPEC-0018 v7 behaviour 19; v10: statements tied to
   a table drop in the list, constraints in the differences, both schema names given to the migration,
   behaviours 4, 7 and 16 — OBS-0068 L5–L7; v9: a hint names its step once, behaviour 2 — OBS-0068 L11);
@@ -248,6 +248,17 @@ migration script that the SQL console can run.
     This changes only how the tab is laid out; agents read the same plan, hints included, with
     `explain_sql` (behaviour 20), so there is no new MCP tool. The reference was not observed for
     this (whether it keeps its switches in place is open). [GEN, ADR-0008]
+22. **Readable when it opens (v15, OBS-0070 P3):** in the window check of 2026-11-16 a plan of six
+    steps in a tool window of normal height (about 220 px below the head) was fitted so small that
+    no box could be read; at 100 % everything could. The Diagram view now opens — for every new
+    plan, and when Diagram is chosen for it — at the zoom of Fit (behaviour 21), but not below
+    60 %, the size at which the boxes' text stays readable. A diagram that is larger than its area
+    at that zoom starts at its top step: the view is at its top, and a diagram wider than the area
+    is scrolled sideways so that the top step stands in the middle (never before the diagram's
+    start or past its end); the rest scrolls as at 100 %. While it is shown that way it is fitted
+    again, with the same lower limit, whenever the area changes size. A click on Fit still fits
+    the whole diagram into the area, down to 25 %, as behaviour 21 says; 100 % is unchanged. The
+    Fit switch is shown chosen in both fitted states. [GEN; deviation from v14]
 
 ## Acceptance criteria
 - **AK-1** Plan rows: depth, columns, full-scan mark and measured values from a nested plan; script text
@@ -361,6 +372,14 @@ migration script that the SQL console can run.
   view; at 100 % a wheel turn moves the boxes up but not sideways, and the switches and the hint
   line stay where they were; Fit again and a taller window fit it larger with every box whole,
   a low window down to 25 %; no key reaches the editor. Runs on the Mac.
+- **AK-27 (v15, behaviour 22)** Unit test
+  `plan_view_model::tests::the_diagram_fits_its_area_and_hints_collapse`: as it opens the zoom is
+  the fit where that is 60 % or more and 60 % below it, 100 % while the area is not known; six
+  steps in a column in an area 220 px high fit below 40 % with Fit and open at 60 %; a diagram
+  wider than its area starts with the top step in the middle, never before its start or past its
+  end. In a window of the test harness (`plan_views.rs`: `the_head_stays_and_the_diagram_fits`,
+  macOS; changed, not yet built): as it opens the zoom is the fit but at least 60 % and the top
+  step is whole in view; a click on Fit fits the whole diagram with every box whole.
 
 ## Out of scope
 Objects SPEC-0018 leaves out, comparing a database

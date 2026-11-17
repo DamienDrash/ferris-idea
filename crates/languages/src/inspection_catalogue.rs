@@ -114,7 +114,9 @@ pub(crate) const META: &[Meta] = &[
         Level::Info,
         "Finds a name that a function reads and no scope defines: not the function, an \
          enclosing function or class, the module (also further down) and not Python's built-in \
-         names. 'Create parameter' appends it to the function's parameters when they are plain \
+         names. 'Import' adds a 'from module import name' for each module of the project that \
+         defines the name at its top level and each standard library module that offers it, or \
+         'import name' for a standard library module. 'Create parameter' appends it to the function's parameters when they are plain \
          names only; callers are not changed, so a call that does not pass it fails until it \
          does. With a default value, '*', '/', '*args' or '**kwargs' no parameter is created, \
          because the callers' arguments would move. By default it shows nothing and only offers \

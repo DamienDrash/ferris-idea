@@ -1,9 +1,11 @@
 # SPEC-0054: Debugging through MCP
 
-- **Version:** 5 · **Date:** 2026-11-16 (v5: `debug_sessions` lists the open sessions, behaviour 10, AK-5, OBS-0071 G5; deviation IMP-0446); 2026-11-13 (v4: Go programs and tests with Delve; v3: Python scripts through debugpy, waiting for a program that still runs, inspecting is logged; v2: pending breakpoints in the state, `source_map`)
+- **Version:** 6 · **Date:** 2026-11-16 (v6: registers, memory and disassembly of a stopped native session, behaviour 11, AK-6–8, OBS-0071 O5); 2026-11-16 (v5: `debug_sessions` lists the open sessions, behaviour 10, AK-5, OBS-0071 G5; deviation IMP-0446); 2026-11-13 (v4: Go programs and tests with Delve; v3: Python scripts through debugpy, waiting for a program that still runs, inspecting is logged; v2: pending breakpoints in the state, `source_map`)
 - **Sources:** GEN (agents set breakpoints, run to them, step and inspect variables; F-070, F-071), STD
   (Debug Adapter Protocol: `launch`, `setBreakpoints`, `stopped`/`exited`/`terminated` events,
-  `stackTrace`, `scopes`, `variables`, `evaluate`, `continue`/`next`/`stepIn`/`stepOut`, `disconnect`),
+  `stackTrace`, `scopes`, `variables`, `evaluate`, `continue`/`next`/`stepIn`/`stepOut`, `disconnect`;
+  v6: `readMemory`, `disassemble`, the capabilities `supportsReadMemoryRequest` and
+  `supportsDisassembleRequest`, `instructionPointerReference`),
   SPEC-0039 (DAP client and session), SPEC-0053 (rights and log), the project owner's decision on PO-STATUS question 3
 - **Feature matrix rows:** F-070, F-071
 
@@ -67,6 +69,29 @@ variables, expressions — under the user's `debug` right.
     no right, so an agent that lost a session number can find it and stop it. A server knows only the
     sessions started through it: over stdio each `idecraft call` is a server of its own, the window's
     HTTP server keeps them while it runs. [GEN; OBS-0071 G5]
+11. **Registers, memory and disassembly (v6):** three tools read what a native program holds while
+    its session is stopped (lldb-dap, SPEC-0039). Each needs the `debug` right like the other debug
+    tools, is refused with a reason while the program runs, after it ended and for an unknown
+    session, and sends no request that writes memory, changes a value or moves the program.
+    Addresses are hexadecimal: an agent writes them with `0x` (1 to 16 digits; decimal is refused),
+    IDECraft writes every address as `0x` and 16 lowercase digits. [STD: DAP; OBS-0071 O5]
+    a. **`debug_registers`:** the registers of the stopped thread's top frame from the frame's
+       register scope (lldb-dap's `Registers`), by group as the adapter gives them (General Purpose
+       Registers, Floating Point Registers, …), each register with name and value as shown; at
+       most 512 per group, `left_out` counts the rest. A frame without a register scope is
+       refused: "The debug adapter shows no registers for this frame".
+    b. **`debug_memory`:** `address` and `count` bytes (default 256, at most 4096; a larger count
+       is cut and the answer says `capped`) with DAP `readMemory`. The answer has the start
+       address, `requested`, `read`, `unreadable` (bytes after those read the adapter could not
+       read) and rows of 16 bytes: address, the bytes in hexadecimal, the bytes as ASCII with `.`
+       for what is not printable. An adapter without `supportsReadMemoryRequest` is refused:
+       "The debug adapter cannot read memory".
+    c. **`debug_disassemble`:** `count` instructions (default 32, at most 256) with DAP
+       `disassemble` and symbols, from `address` or, without one, from the stopped thread's current
+       instruction (the top frame's `instructionPointerReference`), starting `before` instructions
+       ahead (default 0, at most 256). Each instruction has its address, bytes, text, symbol and,
+       where the adapter knows them, file and line. An adapter without
+       `supportsDisassembleRequest` is refused: "The debug adapter cannot disassemble".
 
 ## Acceptance criteria
 - **AK-1** Without the `debug` right: the dry run returns the launch request; start, resume, evaluate and
@@ -89,11 +114,37 @@ variables, expressions — under the user's `debug` right.
 - **AK-5 (v5)** `protocol.rs`: `debug_sessions_lists_nothing_without_a_session` — without any right
   the list is empty with `limit` 4; `debug_a_program_through_mcp` (skipped without lldb-dap) — after
   the start one session, stopped with a thread and adapter `lldb-dap`, and none after `debug_stop`.
+- **AK-6 (v6)** Unit tests in `crates/debugger/src/native.rs`: addresses parsed only as `0x` hex
+  and written with 16 digits (`addresses_are_hexadecimal`), defaults, limits and a refused zero
+  (`counts_are_capped`), base64 (`base64_is_decoded`), a fixed `readMemory` answer as rows with
+  text and unreadable bytes (`memory_answers_become_rows`), a fixed `disassemble` answer
+  (`disassembly_answers_become_instructions`), the register scope and the limit per group
+  (`the_register_scope_is_found_by_name`).
+- **AK-7 (v6)** Against a stub adapter answering as lldb-dap does (`crates/debugger/tests/it/
+  native_memory.rs`): registers by group, the current instruction, memory with the count cut to
+  4096 and the request's hexadecimal reference, disassembly starting two instructions ahead with
+  the count cut to 256, no request that writes or moves the program
+  (`registers_memory_and_disassembly_of_a_stopped_native_session`); an adapter without the
+  capabilities is refused with the three reasons and gets no request
+  (`an_adapter_without_native_reads_is_refused_with_a_reason`). Over MCP without the `debug`
+  right all three tools are refused (`protocol.rs` `debugging_needs_the_debug_right`).
+- **AK-8 (v6)** With lldb-dap and a real C program (skipped without lldb-dap, a C compiler or
+  unattended debugging): stopped at a breakpoint, the registers of the top frame hold the program
+  counter equal to the frame's instruction address, `readMemory` of a known 32-byte buffer at the
+  address the program evaluates gives its bytes as two rows with text, and the disassembly
+  starting four instructions ahead holds the current instruction between others, with lines and,
+  from the function's start, the symbol `main` (lldb-dap names a symbol on the first instruction
+  of a function only); instruction text without lldb-dap's trailing column padding
+  (`crates/debugger/tests/it/lldb.rs` `registers_memory_and_disassembly_with_lldb_dap`). Over MCP
+  the same through `debug_registers`, `debug_memory` (a local `int` of 42 as `2a 00 00 00`) and
+  `debug_disassemble` at the current instruction (`protocol.rs` `debug_a_program_through_mcp`).
+  First run on 2026-11-16 on the Mac (macOS, arm64) with Xcode's lldb-dap; the build server has
+  no lldb-dap.
 
 ## Out of scope
 Starting Java programs (the window does; agents attach to a JDWP port, SPEC-0147), watch
 expressions as a list kept by the server (an agent evaluates what it wants to watch after each
-stop), data breakpoints.
+stop), data breakpoints, writing memory and registers (v6 reads them only).
 Later specifications added attaching (SPEC-0147), js-debug (SPEC-0039 v5), Kotlin (SPEC-0132),
 changing variables (SPEC-0194) and threads (SPEC-0091 v12).
 

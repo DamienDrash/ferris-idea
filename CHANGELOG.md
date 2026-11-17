@@ -11,6 +11,102 @@ are pull requests; a short hash marks a commit made without one.
 
 ## Unreleased
 
+## IDECraft v0.20.0 — 2026-11-17
+
+Stage: beta
+
+Beta from this version, for both priority workflows: (a) a project in a priority language (open,
+edit, navigate, run or debug, commit with Git) and (b) SQL against PostgreSQL or MySQL. Evidence:
+every hand test of both workflows in round 5 passed in an agent run (SQL on 2026-11-16 after #921
+and #926; workflow (a) on 2026-11-17 after #927 and #936, hand test 19 retested after #936, #939),
+with no open defect left for them; the window self-test green on the tag `v0.19.0` (1,065 checks,
+0 failed, every window performance budget met); every feature-matrix row of both workflows at
+parity stage 3 or higher. Not checkable with screen control and named as limits: the trackpad part
+of hand test 193, ⌘Tab in 208 and step 6 of 209.
+
+### Added
+- `themes` shows Sync with OS with the preferred dark and light themes and which theme is shown, and can switch Sync with OS. While it is on, a theme chosen by an agent becomes the preferred theme of its kind, as in the theme popup (SPEC-0060) (#940)
+
+### Fixed
+- Show DDL of a MySQL or MariaDB table now keeps the prefix length of an index term, such as `KEY (body(20))`. Before, the script wrote an index on a `text` column that could not be run. Copy Table keeps it too (SPEC-0013 v9) (#941)
+- Show DDL now keeps `DESC` and `COLLATE` of index terms on PostgreSQL, MySQL and MariaDB, and `NULLS FIRST`/`NULLS LAST` on PostgreSQL (SPEC-0013 v9) (#941)
+- Show DDL now keeps `AUTO_INCREMENT`, PostgreSQL identity columns, and generated columns with their expression. A PostgreSQL generated column's expression no longer shows as its default (SPEC-0013 v9) (#941)
+- Show DDL, `describe_table` and the schema now include table and column comments on PostgreSQL, MySQL and MariaDB (SPEC-0013 v9) (#941)
+- Asking for the tables or the DDL of a schema that does not exist now says that the schema does not exist (SPEC-0013 v9) (#941)
+- Recent projects list each folder once, also when the list names it in several spellings, such as with a trailing slash, through `..` or through a link (SPEC-0094) (#940)
+
+### Security
+- Installing a plugin installs exactly the file that was shown for review. Before, Install read the file again, so a file that changed after the review was installed unreviewed (SPEC-0211) (#940)
+- What you granted a plugin stays with that plugin. A different plugin installed under the same file name is shown as "Replace" and starts with nothing granted. Before, it took over the rights and network grants of the plugin it replaced, or of one removed by hand (SPEC-0211) (#940)
+
+## IDECraft v0.19.0 — 2026-11-17
+
+Stage: alpha
+
+### Added
+
+- In Python, a name that is not defined can now be imported with ⌥↩: from a module of the project that defines it, or from the standard library (`Import 'defaultdict' from 'collections'`). The import fix comes before Create parameter (SPEC-0098) (#928)
+- MCP tools `debug_registers`, `debug_memory` and `debug_disassemble` read the registers, memory and machine code of a stopped native debug session, with limits on the amount and hexadecimal addresses (SPEC-0054) (#911)
+- A file whose name does not say its language now takes the language from a Vim modeline (`vim: set ft=yaml :`) or an Emacs modeline (`-*- mode: python -*-`). The modeline is checked before the hashbang line. The MCP tool `file_type` reports the source `modeline` (SPEC-0004) (#906)
+- The status bar shows the language of the open file, or `Plain Text` if it has none. Click it to open Override File Type (SPEC-0004) (#906)
+- The Database tool window shows whether a connection it has read is encrypted ("TLS" or "TLS: no") (SPEC-0089) (#879)
+- The schema of PostgreSQL, MySQL, MariaDB and SQLite connections now includes foreign key actions (`ON DELETE`, `ON UPDATE`). Show DDL, the Database tree, quick documentation and `describe_table` show them (SPEC-0013 v8, SPEC-0089 v15) (#938)
+- PostgreSQL indexes now include their partial-index condition and their access method, such as `gin`. MySQL and MariaDB tables now include their check constraints (SPEC-0013 v8) (#938)
+- Agents can redo a refactoring they undid: `redo_refactoring` applies it again in every file it changed, refuses when one of them changed since, and labels the files "Redo <name>" in Local History (SPEC-0193) (#935)
+- `terminal_render` finds text in the output as the terminal's find field does and lists the matches (SPEC-0206) (#935)
+- Reformat Code formats a selection in Go, Rust, TOML, YAML and Svelte files: the selected lines take the layout of the whole file, and every other line stays as it is. Before, the selection was refused (SPEC-0043) (#933)
+- Configuration keys complete with ⌃Space: inside `${…}` and in the `name` of `@ConfigProperty` and `@Property` the keys your configuration files define, with the value the application gets (secrets as `•••`); in `application.properties` and `application.yml` the keys the code reads that the file lacks, then those of the other files. `complete_code` returns them too (SPEC-0115, SPEC-0134) (#930)
+- Spring Boot, Quarkus and Micronaut projects get a suggested run configuration that starts the application: "Spring Boot" (`spring-boot:run`, `bootRun`), "Quarkus dev" (`quarkus:dev`, `quarkusDev`) and "Micronaut run" (`mn:run`, `run`) (SPEC-0048) (#930)
+
+### Changed
+
+- The query plan's diagram opens fitted but no smaller than 60 %, so its boxes stay readable in a low tool window, and starts at its top step; Fit still shows the whole diagram (SPEC-0110) (#920)
+- A hashbang line or modeline you type takes effect as soon as you save the file, without reopening it (SPEC-0004) (#906)
+
+### Fixed
+
+- Java refactorings and quick fixes indent new lines with the file's indentation instead of tabs (SPEC-0095) (#928)
+- After Extract Field or Introduce Parameter in Java, the name popup opens at the new name, and `apply_code_action` reports it as `new_name` (SPEC-0095) (#928)
+- Extract Field and Introduce Parameter in Python, and Introduce Parameter in JavaScript and TypeScript, now say that the refactoring is not available for the language. Before, they asked for a different selection (SPEC-0095) (#928)
+- Quick fixes of a TypeScript file opened just before, such as Add import, are no longer missing when the language server reports its checks one after another (SPEC-0042) (#928)
+- `code_actions` lists each title once (SPEC-0041) (#928)
+- The preview of the Export dialog in the Services window shows all its lines at the window's default height, beside the choices, and scrolls with a scroll bar when longer (SPEC-0021) (#926)
+- After Copy Table the Services window names the connection the copy ran on, not the one of the last console run (SPEC-0191) (#926)
+- The selection in the Database window stays on its table while a connection is read again, as after Copy Table, and goes to the nearest parent when the table is gone (SPEC-0089) (#926)
+- Copy Table (F5 in the Database window) now opens the Services window on Output, where the number of copied rows is listed (SPEC-0191) (#921)
+- The functional tests run where Git has no user identity of its own, as on a fresh CI runner: their test repositories carry one (#919)
+- SQL Server: a script with a variable (`DECLARE @n …`) or with `IF`, `WHILE` and `BEGIN TRY … END CATCH` blocks runs as one batch up to its `GO`, so the variable is known and the blocks work (SPEC-0005, SPEC-0116) (#869)
+- SQL Server: every result set comes back, also from `EXEC` of a procedure with two queries and from two queries of one batch (SPEC-0116) (#869)
+- SQL Server: Test Connection says whether the connection is encrypted, also for a login without server rights (SPEC-0116) (#869)
+- Oracle: a procedure, function, package, trigger or type that does not compile is reported as an error with the line and column of each compile error (SPEC-0142) (#869)
+- Show DDL kept a PostgreSQL partial index without its `WHERE` clause, and a `gin` index without `USING gin`. Such a partial unique index no longer counts as a key of the table (SPEC-0013 v8) (#938)
+- When a server's certificate is refused, the connection test now points to the CA file and no longer suggests SSL mode `disable` (SPEC-0016 v5) (#938)
+- The connection test names a MariaDB server's version once: `MariaDB 12.3.3` (SPEC-0108 v12) (#938)
+- A double click or Enter on a test in the Run window's test results opens its file at the test, for pytest, Jest and Vitest (SPEC-0088) (#936)
+- A failed test's message in the Run window starts at its top, with the expected and received values, not at the end of the stack trace (SPEC-0088) (#936)
+- After Replace All in Replace in Files the result list shows the text of open, unsaved files, so replaced matches are gone from it (SPEC-0066) (#936)
+- A library source opened read-only, such as `String.java` from the JDK, shows no inspection warnings and leaves the Problems window's File tab empty (SPEC-0149) (#936)
+- The ▶ of a Jest test offers Debug as well as Run, and debugging stops at breakpoints in the test (SPEC-0045) (#936)
+- A second rename or refactoring by an agent right after the first now changes every file again. Before, the language server still had the old text of files the first one had written, so the second could leave a usage with the old name (SPEC-0042) (#935)
+- Redoing several undone refactorings goes in the order they were made (SPEC-0193) (#935)
+- `terminal_sessions` names the cell of each shell, so shells stacked in one split can be told apart (SPEC-0205) (#935)
+- Reformat Code through a language server keeps the selection and every caret on their text, and leaves the file alone when it was changed while formatting. Before, a single caret was left at the end of the selection (SPEC-0075) (#933)
+- Reformatting a selection in a Kotlin file no longer splits a name at the end of the selection or drops the indentation of the selected lines (SPEC-0043) (#933)
+- Formatting follows `trim_trailing_whitespace` and `insert_final_newline` from `.editorconfig` (SPEC-0043) (#933)
+- In C, C++, Ruby, Lua, Swift and R files, function and method names are coloured as functions, and YAML keys are coloured as keys instead of like their values (SPEC-0027) (#933)
+- Debugging a Node.js program no longer ends IDECraft when a variable holds a function: its source shows on one line after the code (SPEC-0091) (#927)
+
+### Security
+
+- serde_with 3.24.0: serializing an empty sequence or map as a key-value map no longer panics (GHSA-7gcf-g7xr-8hxj) (#918)
+- SSL mode `prefer` no longer falls back to an unencrypted connection without a word: a PostgreSQL, MySQL, MariaDB, SQL Server or Oracle server on another machine is reached only with TLS, and the error says how to give that server TLS; a server on this machine may still answer unencrypted, and Test Connection and the Database tool window then say "TLS: no" (SPEC-0016) (#879)
+- SQL Server connections are encrypted on macOS too, at TLS 1.2 or newer, and `verify-full` checks the certificate against a CA file that the connection dialog now takes for SQL Server (SPEC-0116) (#879)
+- MongoDB and Redis stores saved from the connection dialog with `prefer` use TLS when they are on another machine (SPEC-0310) (#879)
+- The saved terminal history reaches an agent only with the `terminal-read` right, with secrets masked, and each read is written to the agent log. Before, `terminal_sessions` returned up to 1,000 saved lines per shell to any agent (SPEC-0205) (#935)
+- The window toolkit's layout library is updated to taffy 0.9.2, which brings grid 1.0.1 with the fix for GHSA-38c5-483c-4qqp (integer overflow in `Grid::expand_rows`); IDECraft's own views do not use grid layout (#929)
+- A CA file is the only trust anchor of a SQL Server connection too: a server whose certificate was not issued by a certificate in the file is refused before the login is sent, also when the system trusts the authority that issued it (SPEC-0116) (#883)
+- Database connectors from WebAssembly plugins follow the connection's SSL mode: a connection without TLS only for `disable`, or for `prefer` to a server on this machine; elsewhere IDECraft makes the TLS for the plugin, with the mode's certificate checks and the connection's CA file (SPEC-0314) (#883)
+
 ## IDECraft v0.18.0 — 2026-11-16
 
 Stage: alpha
@@ -162,6 +258,10 @@ Stage: alpha
 - Gutter marks for beans and injection points in Spring, Jakarta EE, Quarkus and Micronaut projects: `●` on a bean class, a `@Bean` or producer method leads to the places the bean is injected, `→` on an injection point leads to the beans that fit. One target opens directly, several open a chooser (SPEC-0115, SPEC-0134). (#725)
 - The Spring tool window narrows its beans by typed text and by kind, and a panel beside the list shows what the selected bean needs and which beans need it; a click opens that bean (SPEC-0115). (#725)
 - The MCP tool `config_key` returns the defining lines, the usages and the value of a configuration key, by name or by a place in a Java or configuration file. `spring_beans` returns the gutter marks and shown values of a file with `path`, the dependencies and dependents of a bean with `bean`, and counts `main_beans` and `test_beans`. `set_ide_settings` has `config_values` (SPEC-0115, SPEC-0134). (#725)
+- The MCP tool `replace_text_in_file` replaces a text in a project file as the window shows it, saved or not. Without `replace_all` the text must occur exactly once; otherwise nothing changes and the answer names how many places there are and on which lines. It is a dry run unless asked and writes through the open editor as one undo step (SPEC-0006) (#830)
+- The MCP tool `list_files` takes `glob`, such as `*.rs` or `src/*Test.java` (SPEC-0006) (#830)
+- The MCP tool `editor_selection` returns the path, range and text of the selection in the focused editor of the running window, with secrets masked (SPEC-0006) (#830)
+- The MCP tool `build_project` runs what Build Project runs and returns each step's outcome and the compilers' errors and warnings with file, line and column. It is a dry run unless asked and needs the `run` right and a trusted project (SPEC-0006, SPEC-0100) (#830)
 
 ### Changed
 - Outside contributions can be merged under the new IDECraft Contributor License Agreement: you keep your copyright, accept the CLA with one sentence in your first pull request and sign off your commits (#901)
@@ -220,8 +320,12 @@ Stage: alpha
 - View › Tool Windows › Spring and Find Action open the Spring tool window like its stripe button does: the window at the bottom gives way at once, and a shown Spring window without the focus takes the focus (SPEC-0115). (#725)
 - The Spring tool window lists the beans of the application by default: beans declared under `src/test/` are left out and counted in the header ("18 beans · 3 in tests not listed"). *Tests* lists them too, marked as test beans. The problems are listed while no filter narrows the list (SPEC-0115). (#725)
 - Undo (⌘Z, Ctrl+Z) puts every caret and selection back where it was before the undone edit, and Redo (⇧⌘Z, Ctrl+Shift+Z) where they were after it. An edit made with several carets or in column selection is undone with all its carets still there, typing over a selection brings the selection back, and after undoing Move Line, Delete Line, Duplicate, Reformat Code, Optimize Imports, a quick fix or a reload from disk the caret is where it was. Until now one caret went to the end of the changed text (SPEC-0057). (#716)
+- The MCP tool `create_file` takes `text` for the new file's content and is a dry run unless `dry_run: false` is passed; it never overwrites. A client that relied on creating the file at once passes `dry_run: false` (SPEC-0006, SPEC-0275) (#830)
 
 ### Fixed
+- In the Remote Host window, Enter on a listed search hit, symbol, problem or run configuration opens it at its line or runs it while the field still holds the query that listed it (`?text`, `@name`, `!`, `>`), and ↑ and ↓ choose the row from the field. Before, Enter asked IDECraft's backend on the host again, so nothing in the list could be opened or started with the keyboard. A double click on such a row opens or runs it too (SPEC-0158) (#861)
+- The Remote Host window keeps its buttons in view when the folder shown is long: the folder and the help line are shortened instead, so Start Backend and Delete can always be clicked (SPEC-0158) (#861)
+- A run configuration started on a host from the Remote Host window opens its SSH terminal tab under the configuration's name (SPEC-0158) (#861)
 - ⌘⏎ in a `.sql` file without a data source now also opens the list of connections while the Database tool window is open. The window's tree has no selected row until you select one, so a file no longer runs on its first connection without asking; ↓ in the tree selects the first row (SPEC-0192) (#909)
 - A table a script creates earlier, temporary tables included, is no longer underlined as unknown in the script's later statements (SPEC-0192) (#909)
 - Search Everywhere finds Java records and enums under Classes and Symbols, nested ones too, in the window and over MCP (SPEC-0031) (#890)

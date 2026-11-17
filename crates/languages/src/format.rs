@@ -82,6 +82,21 @@ impl FormatOptions {
             insert_spaces: !tabs,
             ..Self::default()
         }
+        .with_editorconfig(&config)
+    }
+
+    /// These options with trim trailing whitespace and insert final newline as `config` sets them
+    /// (behaviour 1, v8); what it leaves unset stays.
+    pub fn with_editorconfig(self, config: &idecraft_core::editorconfig::EditorConfig) -> Self {
+        Self {
+            trim_trailing_whitespace: config
+                .trim_trailing_whitespace()
+                .unwrap_or(self.trim_trailing_whitespace),
+            insert_final_newline: config
+                .insert_final_newline()
+                .unwrap_or(self.insert_final_newline),
+            ..self
+        }
     }
 
     fn json(&self) -> serde_json::Value {
@@ -168,6 +183,129 @@ pub fn whitespace_only(a: &str, b: &str) -> bool {
         .eq(b.chars().filter(|c| !c.is_whitespace()))
 }
 
+/// The lines `first..=last` (0-based) of `old` laid out as in `whole`, a formatter's result for
+/// all of `old`, and the rest of `old` left as it is (behaviour 15). The visible characters of
+/// `old` and `whole` are matched where both sides agree from the start and from the end; inside
+/// the lines, the text between the first and the last visible character is `whole`'s, the
+/// indentation before it and the line break after it too, unless the formatter joined these lines
+/// with the line before or after them, in which case `old`'s stay. Returns the edit (range in
+/// `old`, replacement), `None` when the lines hold only white space, and `Err` when the formatter
+/// changed visible characters among them.
+fn lines_from_whole(
+    old: &str,
+    whole: &str,
+    first: usize,
+    last: usize,
+) -> Result<Option<(std::ops::Range<usize>, String)>, ()> {
+    let o: Vec<char> = old.chars().collect();
+    let n: Vec<char> = whole.chars().collect();
+    // Char offsets of the lines in `old`: from the start of `first` to after the line break of
+    // `last` (or the end of the text).
+    let mut line = 0;
+    let (mut start, mut end) = (None, o.len());
+    if first == 0 {
+        start = Some(0);
+    }
+    for (i, c) in o.iter().enumerate() {
+        if *c == '\n' {
+            line += 1;
+            if line == first {
+                start = Some(i + 1);
+            }
+            if line == last + 1 {
+                end = i + 1;
+                break;
+            }
+        }
+    }
+    let Some(start) = start else {
+        return Ok(None);
+    };
+    let vo: Vec<usize> = (0..o.len()).filter(|&i| !o[i].is_whitespace()).collect();
+    let vn: Vec<usize> = (0..n.len()).filter(|&i| !n[i].is_whitespace()).collect();
+    let k1 = vo.partition_point(|&i| i < start);
+    let k2 = vo.partition_point(|&i| i < end);
+    if k1 == k2 {
+        return Ok(None);
+    }
+    // Visible characters that agree from the start and from the end.
+    let prefix = vo
+        .iter()
+        .zip(&vn)
+        .take_while(|(a, b)| o[**a] == n[**b])
+        .count();
+    let suffix = vo
+        .iter()
+        .rev()
+        .zip(vn.iter().rev())
+        .take(vo.len().min(vn.len()) - prefix)
+        .take_while(|(a, b)| o[**a] == n[**b])
+        .count();
+    let map = |k: usize| -> Option<usize> {
+        if k < prefix {
+            Some(k)
+        } else if k >= vo.len() - suffix {
+            Some(k + vn.len() - vo.len())
+        } else {
+            None
+        }
+    };
+    // Every visible character of the lines, and the ones next to them, must be matched.
+    let (m1, m2) = (map(k1).ok_or(())?, map(k2 - 1).ok_or(())?);
+    if m2 - m1 != k2 - 1 - k1 {
+        return Err(());
+    }
+    let before = if k1 == 0 {
+        Some(0)
+    } else {
+        map(k1 - 1).map(|m| vn[m] + 1)
+    };
+    let after = if k2 == vo.len() {
+        Some(n.len())
+    } else {
+        map(k2).map(|m| vn[m])
+    };
+    let (Some(before), Some(after)) = (before, after) else {
+        return Err(());
+    };
+    let text = |v: &[char]| v.iter().collect::<String>();
+    let breaks = |v: &[char]| v.iter().filter(|c| **c == '\n').count();
+    // The index in `v` after its `count`-th line break (0 for none).
+    let after_breaks = |v: &[char], count: usize| match count {
+        0 => 0,
+        _ => v
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| **c == '\n')
+            .nth(count - 1)
+            .map_or(0, |(i, _)| i + 1),
+    };
+    // Indentation: the formatter's white space before the first visible character, after as many
+    // line breaks as stay outside the lines.
+    let outside = breaks(&o[if k1 == 0 { 0 } else { vo[k1 - 1] + 1 }..start]);
+    let ws = &n[before..vn[m1]];
+    let lead = if breaks(ws) >= outside {
+        text(&ws[after_breaks(ws, outside)..])
+    } else {
+        text(&o[start..vo[k1]])
+    };
+    // The line break: the formatter's white space after the last visible character, up to as many
+    // line breaks as the lines held.
+    let inside = breaks(&o[vo[k2 - 1] + 1..end]);
+    let ws = &n[vn[m2] + 1..after];
+    let trail = if end == o.len() {
+        text(ws)
+    } else if breaks(ws) >= inside {
+        text(&ws[..after_breaks(ws, inside)])
+    } else {
+        text(&o[vo[k2 - 1] + 1..end])
+    };
+    Ok(Some((
+        start..end,
+        format!("{lead}{}{trail}", text(&n[vn[m1]..=vn[m2]])),
+    )))
+}
+
 /// What a language's files are called in a message: "Markdown files", "shell scripts".
 fn files_of(language: LanguageId) -> String {
     match language {
@@ -235,19 +373,76 @@ pub fn missing_tool(program: &str, root: &Path, path_var: &OsStr) -> Option<Stri
     }
 }
 
-/// What to say when the server `program` does not offer the formatting asked for (behaviours 2
-/// and 8): it formats whole files but no ranges (`whole_files`), or it has no formatter.
-pub fn not_offered(program: &str, file: &Path, range: bool, whole_files: bool) -> String {
-    if range && whole_files {
-        return format!(
-            "{program} formats whole files only, not a selection: reformat without a selection (MCP: without `range`)"
-        );
-    }
+/// What to say when the server `program` has no formatter (behaviours 2 and 8). A server that
+/// formats whole files but no ranges formats a selection through the whole file (behaviour 15).
+pub fn not_offered(program: &str, file: &Path) -> String {
     let files = LanguageId::detect(file).map_or_else(|| "such files".to_owned(), files_of);
     format!(
         "{program} has no formatter, so {files} are not reformatted.{}",
         prettier_hint(file)
     )
+}
+
+/// Servers whose range formatting is not used although they offer it, because it formats the
+/// selected text as if it stood alone (behaviour 15): kotlin-language-server's ktfmt splits a
+/// name at the end of a selection inside a line, fails on a selection that ends inside a block,
+/// and drops the indentation of a selected member.
+pub fn ranges_through_whole_file(program: &str) -> bool {
+    program == "kotlin-language-server"
+}
+
+/// The lines of the selection `r` laid out as in `whole`, the server's result for the whole of
+/// `old` (behaviour 15): the edits and the text after them.
+fn selection_of(
+    program: &str,
+    old: &str,
+    whole: &str,
+    r: &Range,
+) -> Result<(Vec<crate::rename::Edit>, String), LspError> {
+    let first = r.start_line as usize;
+    // A selection that ends at the start of a line does not take that line.
+    let last = if r.end_character == 0 && r.end_line > r.start_line {
+        r.end_line as usize - 1
+    } else {
+        r.end_line as usize
+    };
+    let Some((range, replacement)) = lines_from_whole(old, whole, first, last).map_err(|()| {
+        LspError::Refused(format!(
+            "{program} formats a selection only as part of the whole file, and there it changes more than white space in the selected lines or next to them, so they were left as they are: reformat without a selection (MCP: without `range`)"
+        ))
+    })?
+    else {
+        return Ok((Vec::new(), old.to_owned()));
+    };
+    let chars: Vec<char> = old.chars().collect();
+    let was: String = chars[range.clone()].iter().collect();
+    if was == replacement {
+        return Ok((Vec::new(), old.to_owned()));
+    }
+    // Line and character of a char offset of `old`.
+    let place = |at: usize| {
+        let line = chars[..at].iter().filter(|c| **c == '\n').count() as u64;
+        let column = chars[..at].iter().rev().take_while(|c| **c != '\n').count() as u64;
+        (line, column)
+    };
+    let ((start_line, start_character), (end_line, end_character)) =
+        (place(range.start), place(range.end));
+    let mut formatted: String = chars[..range.start].iter().collect();
+    formatted.push_str(&replacement);
+    formatted.extend(&chars[range.end..]);
+    Ok((
+        vec![crate::rename::Edit {
+            range: Range {
+                start_line,
+                start_character,
+                end_line,
+                end_character,
+            },
+            old_text: was,
+            new_text: replacement,
+        }],
+        formatted,
+    ))
 }
 
 /// What to say when the server answered without edits but showed an error or asked a question
@@ -329,13 +524,15 @@ pub async fn plan_format_in(
     let mut o = Opened::open_text(root, file, text, wait).await?;
     let result = async {
         let opts = options.json();
+        let whole_files = offered(&o.capabilities["documentFormattingProvider"]);
+        // A selection through the whole file's result: the server formats no ranges, or not
+        // reliably (behaviour 15).
+        let through_whole = range.is_some()
+            && whole_files
+            && (!offered(&o.capabilities["documentRangeFormattingProvider"])
+                || ranges_through_whole_file(program));
         let (method, capability, params) = match range {
-            None => (
-                "textDocument/formatting",
-                "documentFormattingProvider",
-                json!({"textDocument": {"uri": o.uri}, "options": opts}),
-            ),
-            Some(r) => {
+            Some(r) if !through_whole => {
                 let start = o.position(r.start_line, r.start_character)["position"].clone();
                 let end = o.position(r.end_line, r.end_character)["position"].clone();
                 (
@@ -345,14 +542,14 @@ pub async fn plan_format_in(
                            "range": {"start": start, "end": end}, "options": opts}),
                 )
             }
+            _ => (
+                "textDocument/formatting",
+                "documentFormattingProvider",
+                json!({"textDocument": {"uri": o.uri}, "options": opts}),
+            ),
         };
         if !offered(&o.capabilities[capability]) {
-            return Err(LspError::Refused(not_offered(
-                program,
-                file,
-                range.is_some(),
-                offered(&o.capabilities["documentFormattingProvider"]),
-            )));
+            return Err(LspError::Refused(not_offered(program, file)));
         }
         // What the server said before belongs to other questions.
         o.lsp().take_messages();
@@ -364,7 +561,10 @@ pub async fn plan_format_in(
             path: file.to_path_buf(),
             edits: Vec::new(),
         });
-        let formatted = apply_edits(&o.text, &edits.edits).map_err(LspError::Protocol)?;
+        let mut formatted = apply_edits(&o.text, &edits.edits).map_err(LspError::Protocol)?;
+        if let Some(r) = range.filter(|_| through_whole) {
+            (edits.edits, formatted) = selection_of(program, &o.text, &formatted, r)?;
+        }
         // A server that answers with the whole text also when nothing changes
         // (vscode-css-language-server, vscode-html-language-server) has no edits to make
         // (behaviour 4).
@@ -486,6 +686,16 @@ mod tests {
         assert_eq!(options("configured/theme.scss", &style), (8, true));
         assert_eq!(options("configured/data.json", &style), (6, false));
         assert_eq!(options("configured/config.yaml", &style), (2, true));
+        // v8: trim trailing whitespace and the final newline as the `.editorconfig` sets them.
+        std::fs::write(
+            dir.join("configured/.editorconfig"),
+            "[*.txt]\ntrim_trailing_whitespace = false\n[*.md]\ninsert_final_newline = false\n",
+        )
+        .unwrap();
+        let txt = FormatOptions::for_file(&dir.join("configured/notes.txt"), &style);
+        assert!(!txt.trim_trailing_whitespace && txt.insert_final_newline);
+        let md = FormatOptions::for_file(&dir.join("configured/notes.md"), &style);
+        assert!(md.trim_trailing_whitespace && !md.insert_final_newline);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -580,20 +790,11 @@ mod tests {
     #[test]
     fn formatting_a_server_does_not_offer() {
         assert_eq!(
-            not_offered("gopls", Path::new("main.go"), true, true),
-            "gopls formats whole files only, not a selection: reformat without a selection (MCP: without `range`)"
-        );
-        assert_eq!(
-            not_offered(
-                "groovy-language-server",
-                Path::new("a.groovy"),
-                false,
-                false
-            ),
+            not_offered("groovy-language-server", Path::new("a.groovy")),
             "groovy-language-server has no formatter, so Groovy files are not reformatted."
         );
         // A selection in a file whose server formats nothing: the same as for the file.
-        let markdown = not_offered("marksman", Path::new("README.md"), true, false);
+        let markdown = not_offered("marksman", Path::new("README.md"));
         assert!(
             markdown.starts_with("marksman has no formatter, so Markdown files are not reformatted. The project's Prettier formats such files"),
             "{markdown}"
@@ -602,6 +803,112 @@ mod tests {
         assert!(offered(&json!({"rangesSupport": true})));
         assert!(!offered(&json!(false)));
         assert!(!offered(&serde_json::Value::Null));
+        assert!(ranges_through_whole_file("kotlin-language-server"));
+        assert!(!ranges_through_whole_file("clangd"));
+    }
+
+    /// SPEC-0043 v8 AK-15: the selected lines laid out as in the whole file's result, the rest
+    /// as it was.
+    #[test]
+    fn a_selection_through_the_whole_file() {
+        let take = |old: &str, whole: &str, first: usize, last: usize| {
+            lines_from_whole(old, whole, first, last).map(|edit| {
+                edit.map(|(range, text)| {
+                    let chars: Vec<char> = old.chars().collect();
+                    let mut out: String = chars[..range.start].iter().collect();
+                    out.push_str(&text);
+                    out.extend(&chars[range.end..]);
+                    out
+                })
+            })
+        };
+        let old = "func a() {\nx:=1\n      if x>1{return}\nreturn\n}\nfunc b(){y:=2}\n";
+        let whole = "func a() {\n\tx := 1\n\tif x > 1 {\n\t\treturn\n\t}\n\treturn\n}\nfunc b() { y := 2 }\n";
+        // The two middle lines only; the line after them and `b` stay as they were.
+        assert_eq!(
+            take(old, whole, 1, 2).unwrap().unwrap(),
+            "func a() {\n\tx := 1\n\tif x > 1 {\n\t\treturn\n\t}\nreturn\n}\nfunc b(){y:=2}\n"
+        );
+        // The last line, without a line break at the end of the file.
+        let old_end = "a {\nb  c}";
+        assert_eq!(
+            take(old_end, "a {\n    b c\n}\n", 1, 1).unwrap().unwrap(),
+            "a {\n    b c\n}\n"
+        );
+        // The first line of the file.
+        assert_eq!(
+            take("  x=1\ny=2\n", "x = 1\ny = 2\n", 0, 0)
+                .unwrap()
+                .unwrap(),
+            "x = 1\ny=2\n"
+        );
+        // Blank lines the formatter removes among the selected lines go; those before them stay.
+        assert_eq!(
+            take("a\n\n\n\nb\n\n\nc\n", "a\n\nb\n\nc\n", 2, 4)
+                .unwrap()
+                .unwrap(),
+            "a\n\nb\n\n\nc\n"
+        );
+        // Lines of white space only: nothing to do.
+        assert_eq!(take("a\n   \nb\n", "a\n\nb\n", 1, 1), Ok(None));
+        // A formatter that joins the selected line with the next one: the line break stays.
+        assert_eq!(
+            take("if x\n{\n  y }\n", "if x {\n    y\n}\n", 0, 0)
+                .unwrap()
+                .unwrap(),
+            "if x\n{\n  y }\n"
+        );
+        // Visible characters changed outside the lines (sorted imports) do not matter; among them
+        // they refuse.
+        let old_imports = "use b;\nuse a;\nfn f(){1}\n";
+        let sorted = "use a;\nuse b;\nfn f() {\n    1\n}\n";
+        assert_eq!(
+            take(old_imports, sorted, 2, 2).unwrap().unwrap(),
+            "use b;\nuse a;\nfn f() {\n    1\n}\n"
+        );
+        assert_eq!(take(old_imports, sorted, 0, 0), Err(()));
+        // A selection past the end.
+        assert_eq!(take("a\n", "a\n", 5, 6), Ok(None));
+        // Whatever is taken changes only white space, and a second run changes nothing.
+        let once = take(old, whole, 1, 2).unwrap().unwrap();
+        assert!(whitespace_only(old, &once));
+        let again = take(&once, whole, 1, 2).unwrap();
+        assert!(again.is_none_or(|t| t == once));
+    }
+
+    /// SPEC-0043 v8 AK-15: the edit and text of a selection through the whole file; a result
+    /// that differs in visible characters is refused with a sentence.
+    #[test]
+    fn the_edit_of_a_selection_through_the_whole_file() {
+        let r = |sl, sc, el, ec| Range {
+            start_line: sl,
+            start_character: sc,
+            end_line: el,
+            end_character: ec,
+        };
+        let old = "fn a(){\nlet x=1;\n}\n";
+        let whole = "fn a() {\n    let x = 1;\n}\n";
+        // Up to the start of line 2: line 1 only.
+        let (edits, text) = selection_of("rust-analyzer", old, whole, &r(1, 3, 2, 0)).unwrap();
+        assert_eq!(text, "fn a(){\n    let x = 1;\n}\n");
+        assert_eq!(edits.len(), 1);
+        assert_eq!(edits[0].range, r(1, 0, 2, 0));
+        assert_eq!(edits[0].old_text, "let x=1;\n");
+        assert_eq!(
+            crate::rename::apply_edits(old, &edits).unwrap(),
+            text,
+            "the edit gives the text"
+        );
+        // Already laid out: no edits.
+        let (edits, text) = selection_of("rust-analyzer", whole, whole, &r(1, 0, 1, 4)).unwrap();
+        assert!(edits.is_empty());
+        assert_eq!(text, whole);
+        let why = selection_of("rustfmt", "b\na\n", "a\nb\n", &r(0, 0, 0, 1)).unwrap_err();
+        assert!(
+            why.to_string()
+                .contains("rustfmt formats a selection only as part of the whole file"),
+            "{why}"
+        );
     }
 
     /// AK-5: the tool a server formats with is looked for before the server is asked.

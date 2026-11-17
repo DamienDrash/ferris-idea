@@ -256,6 +256,55 @@ impl Page {
     }
 }
 
+/// Where the settings of a page belong (`SPEC-0105` v9 behaviour 13).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Scope {
+    /// The IDE's own settings, the same for every project.
+    Ide,
+    /// Settings kept with the project and shared with its files.
+    Project,
+    /// Nothing is stored: the page shows what IDECraft finds.
+    Found,
+}
+
+impl Page {
+    /// Where the page's settings belong and the sentence the bar above the page shows about it
+    /// (`SPEC-0105` v9 behaviour 13).
+    pub fn scope(self) -> (Scope, &'static str) {
+        match self {
+            Page::Keymap => (Scope::Ide, "IDE · keymaps/IDECraft.toml"),
+            Page::Plugins => (Scope::Ide, "IDE · plugins folder"),
+            Page::TrustedLocations => (Scope::Ide, "IDE · trusted-projects.toml"),
+            Page::Inspections => (
+                Scope::Project,
+                "Project · .idea/inspectionProfiles/Project_Default.xml, shared with the project's files",
+            ),
+            Page::BuildTools | Page::Languages => (
+                Scope::Found,
+                "Read from this project and this machine; nothing is stored here",
+            ),
+            Page::CodeStyle => (
+                Scope::Ide,
+                "IDE · settings.toml, the same for every project; a project's .editorconfig comes first",
+            ),
+            Page::Appearance
+            | Page::SystemSettings
+            | Page::Notifications
+            | Page::Editor
+            | Page::Font
+            | Page::EditorTabs
+            | Page::NaturalLanguages
+            | Page::VersionControl
+            | Page::Terminal
+            | Page::Ai
+            | Page::Advanced => (
+                Scope::Ide,
+                "IDE · settings.toml, the same for every project",
+            ),
+        }
+    }
+}
+
 /// Pages whose title or keywords contain `query` (all pages for an empty query).
 pub fn pages(query: &str) -> Vec<Page> {
     let q = query.trim().to_lowercase();
@@ -569,6 +618,31 @@ mod page_settings_tests {
 
 #[cfg(test)]
 mod tests {
+
+    /// SPEC-0105 AK-15 (v9): every page says where its settings are kept.
+    #[test]
+    fn every_page_says_where_its_settings_are_kept() {
+        let mut probe = idecraft_core::IdeSettings::default();
+        for page in Page::ALL {
+            let (scope, text) = page.scope();
+            assert!(!text.is_empty(), "{page:?}");
+            assert_eq!(
+                scope == Scope::Project,
+                page == Page::Inspections,
+                "{page:?}"
+            );
+            // The pages with settings of the IDE layer of their own name `settings.toml`.
+            let own = copy_page(page, &idecraft_core::IdeSettings::default(), &mut probe);
+            assert_eq!(own, text.contains("settings.toml"), "{page:?}: {text}");
+            if own {
+                assert_eq!(scope, Scope::Ide);
+            }
+        }
+        assert!(Page::CodeStyle.scope().1.contains(".editorconfig"));
+        assert!(Page::Inspections.scope().1.contains("Project_Default.xml"));
+        assert_eq!(Page::BuildTools.scope().0, Scope::Found);
+        assert_eq!(Page::Keymap.scope().0, Scope::Ide);
+    }
     use super::*;
 
     /// SPEC-0105 v8 AK-13: the dialog takes the window's room (OBS-0062 S7: in a window 901

@@ -161,7 +161,8 @@ See the language server's errors and warnings where they are, while editing.
 
 - **AK-11 (v11, behaviour 4c)** The order of the status bar: a note younger than 4 s before a tool's
   finding, the finding afterwards, a language server's problem before a fresh "Saved"
-  (`workbench_view::status_order_tests::a_fresh_note_stands_before_the_problem_at_the_caret`).- **AK-12 (v12, behaviour 14)** By hand in a window, not done yet: an error on a marked occurrence keeps
+  (`workbench_view::status_order_tests::a_fresh_note_stands_before_the_problem_at_the_caret`).
+- **AK-13 (v12, behaviour 14)** By hand in a window, not done yet: an error on a marked occurrence keeps
   its underline; the stripe shows both marks (SPEC-0295/AK-8).
 - **AK-12 (v13, behaviour 4d)** `status_note_model::tests::notes_go_after_a_fixed_time_failures_later`:
   outcomes go after 10 s, failures after 30 s. By hand: Copy Path — the note goes after 10 s.

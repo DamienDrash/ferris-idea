@@ -1,6 +1,9 @@
 # SPEC-0004: Language identification
 
-- **Version:** 8 · **Date:** 2026-11-15 (v8: every other typed filter and the merge result take
+- **Version:** 9 · **Date:** 2026-11-16 (v9: F-030 check without a screen — an Emacs or Vim
+  modeline names the language, behaviour 18; a hashbang line or modeline typed and saved takes
+  effect at once, behaviour 19; the status bar names the file type and opens Override File Type,
+  behaviour 20; IMP-0495, IMP-0496; v8: every other typed filter and the merge result take
   committed text, behaviour 17b; v7: the speed search of the Database tool window and
   the filter of the Spring tool window take committed text too, behaviour 17a; v6: OBS-0052 G1–G4 — icons follow the detected language
   and an overridden file is marked, Override and Revert are offered only where they apply, the list
@@ -17,7 +20,10 @@
   New; ids only, no code), OBS v6 (OBS-0052: the reference's tree shows a hashbang script and an
   overridden file with their language's icon and the override with a small mark; Find Action
   offers Revert only for an overridden file and Override only for one without; its list of file
-  types has icons, narrows as one types and selects the exact match)
+  types has icons, narrows as one types and selects the exact match), GEN v9 (the modeline forms
+  of Vim — `vi:`, `vim:`, `ex:` with `ft=`, `filetype=`, `syntax=` in the first or last five
+  lines — and of Emacs — `-*- mode: … -*-` on the first line, the second after `#!`; a status bar
+  that names the file type and changes it on a click, as common editors do)
 - **Feature matrix rows:** F-030
 
 ## Purpose
@@ -46,8 +52,9 @@ Decide which language service handles a file.
    (`python3.12` is `python`). `python`, `pypy` → Python; `sh`, `bash`, `zsh`, `dash`, `ksh`,
    `ash` → Shell; `node`, `nodejs` → JavaScript; `ts-node`, `tsx` → TypeScript; `ruby` → Ruby;
    `php` → PHP; `lua`, `luajit` → Lua; `Rscript` → R; `groovy` → Groovy; `scala` → Scala;
-   `swift` → Swift. At most the first 256 bytes of a regular file are read, only for absolute
-   paths; the answer is kept until the file's modification time changes. [GEN]
+   `swift` → Swift. At most the first 256 bytes of the first line count, only for absolute
+   paths of regular files (v9: read with the modeline, behaviour 18); the answer is kept until
+   the file's modification time changes. [GEN]
 10. **File name patterns (v5):** a project keeps its own associations in
    `.idecraft/file-types.toml`, table `patterns`: a pattern on the file name (`*` any run of
    characters, `?` one character, compared ignoring case) and the LSP id of its language, or
@@ -132,6 +139,29 @@ Decide which language service handles a file.
    pane; shortcuts with ⌘/⌃ (and ⌥ where they had a meaning) keep it. The mnemonic keys of the
    Bookmarks popup and the answer keys of the merge window's questions pick by key, not by text,
    and stay as they are. [GEN]
+18. **v9 – Editor modelines:** a file whose name gives no language (behaviours 1, 2, 8) and which
+   no override or pattern decides takes the language its editor modeline names, before its
+   hashbang line (behaviour 9): Emacs' `-*- mode: python -*-` or `-*- python -*-` on the first
+   line, or on the second when the first is a hashbang line; Vim's `vim:`, `vi:` or `ex:` at the
+   start of a line or after a blank, with the option `ft=`, `filetype=`, `syntax=` or `syn=`
+   (`vim: set ft=yaml :`, `vim:ft=rust`), on one of the first or the last five lines. Modes are
+   compared ignoring case and an Emacs `-mode` suffix; besides each language's LSP id and name,
+   the common short names count (`py`, `sh`, `bash`, `zsh`, `shell-script`, `js`, `js2`, `ts`,
+   `c++`, `nxml`, `md`, `gfm`, `conf-toml`, `less-css`, `ess-r`, `kt`, `rs`, `yml`). A mode that is
+   no language of IDECraft (`perl`) decides nothing. At most the first and the last 1 KiB of a
+   regular file are read, a start holding a NUL byte counts as no text, and the answer is kept
+   until the file's modification time changes. A name that gives a language is never overruled
+   by a modeline (the name costs no read). `file_type` reports the source `modeline`; the icon
+   follows as for a hashbang line (behaviour 15). [GEN]
+19. **v9 – Saved first lines take effect:** after an editor saves its file (⌘S, Save All, an
+   agent's edit with save) its language is decided again (behaviours 9–12, 18), so a hashbang
+   line or modeline typed and saved gives the new highlighting and comment tokens at once; the
+   text, the caret and the undo steps stay. [GEN]
+20. **v9 – The status bar names the file type:** while an editor of a local project is active,
+   the status bar shows the name of its language after the indent widget (`Plain Text` without
+   one; a `.tsx` file `TypeScript`), following every change of behaviours 12, 13 and 19 at once.
+   A click on it opens the list of Override File Type (behaviour 13) for the editor's file; the
+   tooltip is "File Type". A remote project shows no such widget. [GEN]
 
 ## Acceptance criteria
 - **AK-1** Priority languages (Python, SQL, JS, TS, Java) are detected from their extensions.
@@ -189,6 +219,21 @@ Decide which language service handles a file.
   the key `a` committing other text (also `ü`/`ä`) give that text, Shift with real keys, ⌫ takes
   the last character, Escape keeps its meaning.
 
+- **AK-14 (v9)** Unit tests `file_types::tests::{modelines_name_the_language,
+  files_with_a_modeline}`: the Emacs and Vim forms of behaviour 18 with their places (first line,
+  second after `#!`, first or last five lines, not the middle), unknown modes and lines that only
+  look alike decide nothing, a modeline before the hashbang line, a file longer than 1 KiB read at
+  its end, a name that says its language not overruled, a file with NUL bytes not read as text;
+  MCP `file_type_tool` reports the source `modeline`.
+- **AK-15 (v9)** Unit test `workbench_file_types::tests::the_status_bar_names_the_file_type`
+  (a language's name, Plain Text, the React ids of `.tsx`/`.jsx`).
+- **AK-16 (v9)** Window test `modelines_saved_hashbangs_and_the_status_bar` in
+  `crates/workbench/tests/it/file_types.rs`: `settings.conf` with `# vim: set ft=yaml :` opens as
+  YAML and the status bar says `YAML`; an extensionless file is Plain Text, a hashbang line typed
+  with real keys changes nothing before ⌘S and makes it Python after, text kept and not modified;
+  a real click on the status bar widget opens the list, `plain text` and Enter save the override
+  and the widget says `Plain Text`.
+
 ## Out of scope (v5)
 A Settings page that lists and edits the patterns (they are edited through Associate with File
 Type, the file and MCP); patterns of the whole IDE; ignored files and folders; file types of
@@ -198,4 +243,13 @@ one's own with keywords; detection from the content beyond the hashbang line.
 The reference keeps file name patterns for the whole IDE in its settings; IDECraft keeps them,
 like the overrides, in the project (`.idecraft/file-types.toml`), so they travel with the project
 and agents see the same as the window. (v6) The override mark is IDECraft's own drawing, not the
-reference's arrow. Compared side by side in OBS-0052 (G1–G4 closed in v6).
+reference's arrow. Compared side by side in OBS-0052 (G1–G4 closed in v6). (v9) Editor modelines
+(behaviour 18) and the file type in the status bar (behaviour 20) go beyond what the reference
+documents (IMP-0495, IMP-0496); neither was compared side by side yet.
+
+## Not covered yet (v9, F-030 check without a screen)
+`Makefile`, `CMakeLists.txt` and `.gitignore` have no language: each needs a language of its own
+with a grammar for highlighting (a new dependency, its licence checked first). Binary files are
+not opened (SPEC-0336 behaviour 3 says why in the status bar); an image viewer and a hex view are
+features of their own. Files larger than 20 MiB open whole and stay editable (SPEC-0260 budgets
+for 50 MB files) instead of the reference's read-only view in parts.

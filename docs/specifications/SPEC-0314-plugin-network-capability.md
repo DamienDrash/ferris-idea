@@ -1,10 +1,15 @@
 # SPEC-0314: Network capability for WebAssembly connector plugins
 
-- **Version:** 1 · **Date:** 2026-11-05
+- **Version:** 2 · **Date:** 2026-11-16 (v2: the connection's SSL mode decides whether a plugin
+  gets a connection without TLS; elsewhere IDECraft makes the TLS — `net_connect_tls`, answers `-6`
+  and `-7`, `ssl` in the request, `tls` in the audit; behaviours 3, 4, 9, 10, AK-6, SPEC-0016 v4,
+  IMP-0427); 2026-11-05 (v1)
 - **Sources:** GEN (plugin platforms of editors and browsers give extensions network access either
   not at all or broadly, with one install-time prompt), STD (TCP, RFC 3986 host syntax), the project owner's
   decision on PO-STATUS question 25 (2026-11-05), ADR-0007, ADR-0016, ADR-0020, ADR-0023 rule 7,
-  ADR-0024, SPEC-0156, SPEC-0211, SPEC-0300, SPEC-0302
+  ADR-0024, SPEC-0156, SPEC-0211, SPEC-0300, SPEC-0302; v2: STD (TLS 1.2, RFC 5246), SPEC-0016 v4,
+  the coordinator's decision under rule 12 (PO-STATUS 2026-11-16: no plain text off the loopback
+  without the user's explicit `disable`), IMP-0427
 - **Feature matrix rows:** F-080, F-060
 
 ## Purpose
@@ -41,7 +46,13 @@ clear warning and decides.
      case-insensitively without a trailing dot, the port exactly. Any other target returns `-2` and
      nothing is resolved. `-3` means the name did not resolve or no address accepted within 10 s,
      `-4` that 4 connections are open, `-5` a bad argument. Only the target's own name is resolved,
-     by the host.
+     by the host. **v2:** the connection has no TLS; where the connection's SSL mode does not allow
+     that (behaviour 10) the answer is `-6` and nothing is resolved.
+   - **v2:** `net_connect_tls(ptr, len: i32) -> i32` takes the same argument and gives the same
+     answers, but the handle's bytes travel inside TLS that the host makes from the first byte on,
+     with the checks of behaviour 10; `-7` means the TLS handshake failed (no TLS on that port, a
+     version below TLS 1.2, a certificate or host name the mode does not accept). `net_send`,
+     `net_recv` and `net_close` work on both kinds of handle alike.
    - `net_send(handle, ptr, len: i32) -> i32` writes all bytes and returns the count (`-3` error or
      30 s time limit, `-5` bad handle).
    - `net_recv(handle, max: i32) -> i64` reads up to `max` (at most 1 MiB) bytes. It returns them
@@ -51,7 +62,9 @@ clear warning and decides.
 
    Connections left open close when the call ends. No other socket operation exists. [ADR-0024]
 4. **Connector calls.** The input of a `connector` action is JSON: `op` (`test`), and the profile's
-   `host`, `port`, `database` and `user`, plus `password` when one is stored or typed. The answer is
+   `host`, `port`, `database` and `user`, plus `password` when one is stored or typed. **v2:** also
+   `ssl`, the profile's SSL mode (`disable`, `prefer`, `require`, `verify-ca`, `verify-full`), and
+   `plain`, whether `net_connect` is allowed for this connection (behaviour 10). The answer is
    `{ok: true, note}` or `{ok: false, error}`. The call runs in a fresh instance with the normal
    instruction budget, off the UI thread. [ADR-0016]
 5. **Grants.** A call gets network access only when all of these hold:
@@ -104,7 +117,26 @@ clear warning and decides.
 9. **Audit.** Every `net_connect` adds a record to `plugins/network-audit.jsonl` with `time`,
    `plugin`, `holder`, `target`, `address` (the address connected to, if any), `outcome` (`opened`,
    `refused`, `failed`). Every close adds `closed` with `sent` and `received` byte counts. Nothing
-   in the log leaves the machine. The file holds no passwords and no payload. [ADR-0007, ADR-0023]
+   in the log leaves the machine. The file holds no passwords and no payload. **v2:** `opened` and
+   `closed` records carry `tls` (true when the host made TLS for the connection); a connection
+   refused for want of TLS is `refused` with `error` "needs TLS"; a failed TLS handshake is `failed`
+   with `error`, the TLS library's reason. [ADR-0007, ADR-0023]
+10. **v2 – TLS by the connection's SSL mode (SPEC-0016 v4 behaviour 14, IMP-0427).** The host cannot
+    see whether a plugin encrypts what it sends, so it decides by the connection the user picked.
+    The caller hands the host the profile's SSL mode and CA file with the grant; the host itself
+    decides whether the target is on the loopback (`localhost`, 127.0.0.0/8, `::1`, as SPEC-0016 v3
+    behaviour 3):
+    - `net_connect` (no TLS) is allowed for `disable` on any host and for `prefer` on the loopback;
+      for `prefer` off the loopback and for `require`, `verify-ca` and `verify-full` on every host
+      it answers `-6`.
+    - `net_connect_tls` is allowed in every mode. It refuses anything below TLS 1.2. `require`,
+      `prefer` and `disable` encrypt without checking the certificate; `verify-ca` checks the chain;
+      `verify-full` checks the chain and the host name. A CA file (PEM) replaces the system's
+      trusted roots; it is read when the call starts, and a file that cannot be read gives `-7`.
+    A plugin learns from `plain` in its input which one to use. A protocol that turns TLS on inside
+    its own messages (PostgreSQL's request for TLS, MySQL, SQL Server's TDS 7) cannot be spoken
+    through `net_connect_tls`; such a plugin reaches a server off the loopback only when the user
+    chose `disable`. [STD, GEN, rule 12]
 
 ## Acceptance criteria
 - **AK-1** Grant logic: granting, re-granting, holder separation, revoking by host and by plugin,
@@ -117,17 +149,31 @@ clear warning and decides.
 - **AK-4** MCP: `list_connectors` carries `warning` and `requires_grant`; `test_connection` without
   an agent grant refuses with both fields and opens no connection; with an agent grant it connects
   and the audit names holder `agent` (protocol test).
+- **AK-6** (v2, behaviour 10) With a WAT plugin and local servers: `net_connect` answers `-6` and
+  logs `refused` with "needs TLS" for `require`, `verify-ca` and `verify-full` on `127.0.0.1` and
+  for `prefer` on a host off the loopback, without resolving it; it connects for `prefer` and
+  `disable` on `127.0.0.1` (audit `tls: false`), and `disable` allows it off the loopback too
+  (`network::tests::plain_connections_follow_the_ssl_mode`). `net_connect_tls` talks to a TLS
+  server with `require` (audit `tls: true`), and with `verify-full` and the CA file that signed the
+  server's certificate for `localhost`; it answers `-7` and logs `failed` with the reason for
+  `verify-full` without that CA file, for a CA file of another authority, for a CA file without
+  certificates (before anything is resolved) and for a server without TLS
+  (`…::tls_made_by_the_host_checks_as_the_mode_says`). The request carries `ssl` and `plain`, never
+  the CA file (`…::the_request_names_the_mode`).
 - **AK-5** Window self-test steps (written, run in the nightly window test): Test Connection on a
   plugin connector opens the warning with plugin, author, host and port, status and the review
   sentence, with Cancel selected; Escape cancels with the note; Tab and Enter allow, store a user
   grant and run the test; a second test does not ask again.
 
 ## Out of scope
-Database tool window sessions, the query console and introspection through plugins; TLS inside
-the host (a plugin can implement it itself); UDP, listening sockets and connections to other hosts,
-which will not be added.
+Database tool window sessions, the query console and introspection through plugins; UDP,
+listening sockets and connections to other hosts, which will not be added. v1 left TLS to the
+plugin; v2 makes it in the host (behaviour 10), and a plugin's own TLS over `net_connect` counts as
+no TLS, since the host cannot check it. Switching an open connection to TLS (STARTTLS) is not
+offered: the host could not tell the bytes before the switch from a password.
 
 ## Known deviations from the reference
 The reference has no sandboxed connector plugins; its JDBC drivers run with the IDE's full rights.
 IDECraft confines a connector plugin to the one host and port the user picked, warns people and
-agents with the same content, and keeps a local audit of every connection (IMP-0300).
+agents with the same content, and keeps a local audit of every connection (IMP-0300). v2: the
+plugin's traffic follows the connection's SSL mode, with TLS made by IDECraft (IMP-0427).

@@ -1,12 +1,12 @@
 # SPEC-0008: Database connection profiles
 
-- **Version:** 7 · **Date:** 2026-11-15 (v7: a test program may name the test-only password folder without setting the variable, behaviour 14); 2026-11-14 (v6: a system keychain that cannot be reached is named as such, behaviour 17); 2026-11-13 (v5: a relative database file belongs to the workspace, behaviour
+- **Version:** 8 · **Date:** 2026-11-17 (v8: on Linux passwords live in the Secret Service and survive a restart; without one saving is refused, behaviour 18); 2026-11-15 (v7: a test program may name the test-only password folder without setting the variable, behaviour 14); 2026-11-14 (v6: a system keychain that cannot be reached is named as such, behaviour 17); 2026-11-13 (v5: a relative database file belongs to the workspace, behaviour
   16; v4 2026-11-07; v2: secret store, credential resolution; v3: test-only
   password folder, behaviour 14; v4: tunnel, TLS files, options, colour and comment in the profile,
   `verify-ca`, behaviour 15 — SPEC-0108 v4)
 - **Sources:** GEN (database tools keep named connection profiles per project), STD (PostgreSQL libpq
   connection URI; MySQL URI syntax of Connector/C++ and MySQL Shell; SQLite file paths; RFC 3986 percent
-  encoding), OBS-0004 (weakness: user name lost after restart, then a modal login prompt blocked all
+  encoding; freedesktop.org Secret Service API, v8), ADR-0025 §3 (v8: the Secret Service on Linux), OBS-0004 (weakness: user name lost after restart, then a modal login prompt blocked all
   access → IMP-0004)
 - **Feature matrix rows:** F-051
 
@@ -37,8 +37,8 @@ through version control without secrets, and can be created from or turned into 
 10. Validation: names are unique within the file; server profiles need a host; ports are 1–65535; SQLite
     profiles need a non-empty path. Violations name the profile and the field. [GEN]
 11. Secrets are read, written and deleted through a secret store. The default store is the operating
-    system's credential store (macOS Keychain, Windows Credential Manager, Linux kernel keyring); tests
-    use an in-memory store. [GEN]
+    system's credential store (macOS Keychain, Windows Credential Manager; on Linux the Secret Service
+    since v8, behaviour 18 — before v8 the kernel keyring); tests use an in-memory store. [GEN]
 12. A secret value never appears in debug output, logs or error messages; it is shown as `***`. [GEN]
 13. Resolving the credentials of a profile never waits for input. It gives one of: no password needed
     (no secret reference), password available, or credentials missing — naming the profile and the
@@ -76,6 +76,27 @@ through version control without secrets, and can be created from or turned into 
     deleting a password fail with "the system keychain cannot be reached in this session", never
     with "no matching entry". Removing a connection that names a keychain entry is then refused and
     the profile stays, so no password is left behind without its profile (rule 12). [GEN]
+18. **v8 – Linux: the Secret Service:** on Linux the credential store is the freedesktop.org Secret
+    Service on the session bus (GNOME Keyring, KWallet and others), as for the remote keys
+    (ADR-0025 §3): only over an encrypted Secret Service session, only in the default collection,
+    which keeps the password encrypted at rest under the user's login keyring, so it survives a
+    restart. Entries carry the attributes `application = idecraft`, `service` and `account`; saving
+    replaces an entry of the same service and account. Nothing is unlocked by IDECraft: a locked
+    default collection counts as not reachable, so no prompt ever waits for input (behaviour 13).
+    - *Saving* goes only to the Secret Service. Without one (no session bus, no service, no default
+      collection, or a locked one — typical for a headless machine) saving fails with an error that
+      names the Secret Service, the reason, and says "cannot be reached in this session" and that
+      passwords are never kept in a file; nothing is written anywhere else — no file, no kernel
+      keyring.
+    - *Reading* asks the Secret Service. A password found only in the kernel keyring (stored there
+      by a version before v8 during the current login session) is given and moved once: written to
+      the Secret Service and, only after that worked, removed from the kernel keyring. A move that
+      fails still gives the password and leaves the kernel keyring as it was. Without a Secret
+      Service reading stays as before v8: the kernel keyring is read.
+    - *Removing* removes the entry from the Secret Service and any copy in the kernel keyring.
+      Without a Secret Service the removal fails with the reason (behaviour 17).
+    - Passwords of versions before v8 that were lost with a restart cannot be recovered; the user
+      enters them again once and they are then kept in the Secret Service. [STD, GEN; IMP-0004]
 
 ## Acceptance criteria
 - **AK-1** `postgresql://idecraft@127.0.0.1:54329/inventory?sslmode=disable` parses to dialect PostgreSQL,
@@ -115,9 +136,23 @@ through version control without secrets, and can be created from or turned into 
   `agents_use_only_idecrafts_own_keychain_entry`: with a reachable keychain the removal succeeds;
   without one it is refused with the reason and the profile stays. The test checks the one that
   holds in the session it runs in.
+- **AK-18 (v8, behaviour 18)** The rules of behaviour 18, with in-memory stand-ins for the Secret
+  Service and the kernel keyring, on every platform: saving goes only to the Secret Service and drops
+  a kernel keyring copy; without a Secret Service saving fails naming the Secret Service, the reason,
+  "cannot be reached in this session" and "never in a file", without the value, and the kernel
+  keyring stays empty; reading moves a kernel keyring password once and the Secret Service copy wins
+  afterwards; a failed move gives the password and keeps the old copy; without a Secret Service
+  reading takes the kernel keyring; removing clears both and fails without a Secret Service.
+- **AK-19 (v8, Linux)** Against a real Secret Service on a private session bus (`dbus-daemon` and
+  `gnome-keyring-daemon` started by the test, never the user's bus): the system store saves,
+  replaces, reads and removes a password; a password in the legacy store is moved on first read and
+  is then read from the Secret Service alone. Skipped where the programs are missing, except in CI.
+- **AK-20 (v8, Linux)** With a session bus nobody serves, saving through the system store fails
+  naming the Secret Service and "cannot be reached in this session", without the value, and the
+  legacy store stays empty; the store reports itself not reachable.
 
 ## Out of scope
-Connecting (drivers, M5.3), persistent Linux secret service (D-Bus), opening SSH tunnels (SPEC-0108 v4), JDBC-style
+Connecting (drivers, M5.3), unlocking a locked keyring or creating a collection (v8), opening SSH tunnels (SPEC-0108 v4), JDBC-style
 URLs, the connection dialog.
 
 ## Known deviations from the reference
@@ -128,3 +163,6 @@ URLs, the connection dialog.
   passwords from a private test folder instead of the keychain (behaviour 14). The reference has no
   such mode; here it lets the functional tests reach password-protected databases unattended. Release
   builds are unchanged: passwords live only in the system keychain.
+- Deviation (v8, rule 12): on Linux a password is never kept in a weaker place when the Secret
+  Service is missing — saving is refused with the reason instead of falling back to a file or to the
+  session-only kernel keyring.

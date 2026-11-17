@@ -88,8 +88,15 @@ fn stop_and_detach(mut session: DebugSession, program: &mut Running, name: &str)
 }
 
 const LOOP_C: &str = r#"#include <unistd.h>
+#ifdef __linux__
+#include <sys/prctl.h>
+#endif
 
 int main(void) {
+#ifdef __linux__
+    /* Yama (ptrace_scope 1) lets only a parent trace a process; the debugger is not ours. */
+    prctl(PR_SET_PTRACER, PR_SET_PTRACER_ANY, 0, 0, 0);
+#endif
     int ticks = 0;
     for (;;) {
         ticks++;
@@ -106,6 +113,9 @@ fn attach_to_a_native_process_by_id() {
     };
     if !can_debug_unattended() {
         return skip("this Mac needs Developer Mode to attach without a password dialog");
+    }
+    if yama_forbids_attach() {
+        return skip("Yama ptrace_scope is 2 or 3: only an administrator may attach");
     }
     let dir = temp("native");
     let source = dir.join("loop.c");
@@ -216,4 +226,13 @@ fn attach_to_python_under_debugpy_listen() {
         })
         .expect("debugpy listens");
     stop_and_detach(session, &mut program, "ticks");
+}
+
+/// On Linux, Yama's `ptrace_scope` 2 (admin only) and 3 (no attach at all) refuse an attach that
+/// `PR_SET_PTRACER` cannot open up; scope 0 and 1 allow it with the test program's opt-in.
+fn yama_forbids_attach() -> bool {
+    std::fs::read_to_string("/proc/sys/kernel/yama/ptrace_scope")
+        .ok()
+        .and_then(|s| s.trim().parse::<u8>().ok())
+        .is_some_and(|scope| scope >= 2)
 }

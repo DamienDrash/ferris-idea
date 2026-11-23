@@ -1,4 +1,4 @@
-# IDECraft roadmap
+# Ferris IDEA roadmap
 
 **As of 2026-11-16 (main `4223536e`) · v0.20.0 · stage beta · quality gate QG-1 recorded as reached.** This is the
 roadmap for readers outside the project.
@@ -13,7 +13,7 @@ version changed: [CHANGELOG.md](CHANGELOG.md).
 ## How progress is measured
 
 Progress is measured as **parity**, a feature-presence score: the project's own weighted checklist
-of how much of the reference's functional scope exists in IDECraft. The [feature matrix](docs/research/FEATURE_MATRIX.md) has 57 rows. Each row has a weight from 1 to 5
+of how much of the reference's functional scope exists in Ferris IDEA. The [feature matrix](docs/research/FEATURE_MATRIX.md) has 57 rows. Each row has a weight from 1 to 5
 and a stage from 0 to 4:
 
 | Stage | Meaning | Share counted |
@@ -87,7 +87,7 @@ Work in this phase, all **In progress**:
 - The database group: script splitting, ER diagrams, database refactorings, schema comparison,
   query plan and the newer dialects are at stage 3; they need a side-by-side comparison with a live
   connection to reach stage 4. The defects a first comparison without a connection found in
-  IDECraft are being fixed.
+  Ferris IDEA are being fixed.
 - The open round of hand tests, and the recorded failures.
 - Keymap: 56 of the 419 actions of the open macOS keymap are missing.
 - Window proof for what is implemented without one: remote debugging, containers and pods as
@@ -109,20 +109,20 @@ Work in this phase, all **In progress**:
    2 more mark plugin-supplied names as untrusted data.
 3. **A dry run for the writing tools that lack one.**
 4. **A harness benchmark.** A fixed task suite on the sample projects, each agent run twice (with
-   IDECraft's tools, and with shell and files only), measuring success, turns, tokens, time and
+   Ferris IDEA's tools, and with shell and files only), measuring success, turns, tokens, time and
    reverted changes. Until it exists, the project makes no claim that its tools make agents better.
 
 ## Later: the AI-native phase
 
 **Planned, after the database tools.** QG-1 opens this phase. The direction is described in
 [ADR-0023](docs/adr/0023-idecraft-as-agent-harness.md) (accepted on 2026-11-17) and
-[the vision](docs/architecture/AI_NATIVE_VISION.md). The rule stays that IDECraft ships no agent
+[the vision](docs/architecture/AI_NATIVE_VISION.md). The rule stays that Ferris IDEA ships no agent
 loop and no model of its own.
 
 | Milestone | Content |
 |---|---|
 | M10 Headless core and capability layer | every tool and every window action through one registry with versioned schemas, declared effects, error codes and cancellation ([ADR-0012](docs/adr/0012-headless-core-capability-api.md)) |
-| M11 Hosting agents | IDECraft starts an agent as a subprocess over the Agent Client Protocol, shows its plan, diffs and questions, and answers its permission requests by policy ([ADR-0013](docs/adr/0013-protocol-adapters.md)) |
+| M11 Hosting agents | Ferris IDEA starts an agent as a subprocess over the Agent Client Protocol, shows its plan, diffs and questions, and answers its permission requests by policy ([ADR-0013](docs/adr/0013-protocol-adapters.md)) |
 | Change sets and verification gates | an agent's edits as one reviewable, partly applicable, revertible unit; "done" only when format, build, inspections and affected tests pass, checked by code and not by the model |
 | Context packs | symbol, callers, diagnostics, related tests and recent changes within a token budget |
 | Tighter containment | per-command allow lists, policy files a team can review, a sandbox or worktree per agent session |

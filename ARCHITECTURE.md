@@ -1,6 +1,6 @@
 # Architecture
 
-IDECraft is a modular IDE written in Rust: 29 workspace crates. The mobile
+Ferris IDEA is a modular IDE written in Rust: 29 workspace crates. The mobile
 apps have thin Swift and Kotlin shells over a Rust core, and the build and
 check scripts are shell and Python. Language intelligence comes from external,
 standardised servers (LSP, DAP) wherever possible; the IDE itself owns the
@@ -153,7 +153,7 @@ graph TD
 | `crates/languages` | `idecraft-languages` | language identification (`SPEC-0004`), syntax highlighting, folding and structure (tree-sitter), LSP client and server registry, long-lived language server pool shared by window and MCP (`SPEC-0090`), code insight, rename, formatting, code actions, inspections, Search Everywhere sources | `tree-sitter` with 28 grammar crates, own JSON-RPC over stdio, `tokio` |
 | `crates/database` | `idecraft-database` | dialects and script splitting (`SPEC-0005`), connection profiles, sessions, introspection, completion, result sets and export, data editing, DDL, schema comparison, ER model and layout, SQL rename, permissions for agents, secrets in the OS keychain | `tokio-postgres`, `mysql_async` (MySQL, MariaDB), `rusqlite`, `duckdb` (bundled engine, no download), `oracle`, `tiberius` (SQL Server) behind one session interface (ADR-0011); connector catalogue of declarative definitions (ADR-0020); `keyring`; `resvg` for diagram images |
 | `crates/nosql` | `idecraft-nosql` | non-relational stores (ADR-0022): store profiles in `.idecraft/stores.toml`, MongoDB and Redis sessions, console languages (MongoDB shell subset without JavaScript, `redis-cli` quoting), browser tree, tree/grid/JSON views, edits with preview, export (`SPEC-0310`–`SPEC-0312`) | official `mongodb` driver (rustls TLS), `redis` 1.x; keychain and agent rights from `idecraft-database` |
-| `crates/debugger` | `idecraft-debugger` | DAP client, adapter detection, launch and attach, breakpoints (conditions evaluated by IDECraft when the adapter cannot), stack and variables model | own `serde` types for DAP |
+| `crates/debugger` | `idecraft-debugger` | DAP client, adapter detection, launch and attach, breakpoints (conditions evaluated by Ferris IDEA when the adapter cannot), stack and variables model | own `serde` types for DAP |
 | `crates/vcs` | `idecraft-vcs` | Git status, diff, history, blame, branches, commit with hooks, merge, three-way text merge, rebase, stash, cherry-pick, remotes | `gix`, `similar`; the `git` program for fetch/pull/push, commit hooks and conflict resolution |
 | `crates/terminal` | `idecraft-terminal` | programs in a pseudo terminal, screen model, saved sessions, scrollback search, shell integration (`SPEC-0038`, `SPEC-0205`–`SPEC-0207`) | `portable-pty`, `vte` |
 | `crates/http` | `idecraft-http` | HTTP client: request files, environments, sending (`SPEC-0046`, `SPEC-0102`) | own HTTP/1.1, `native-tls` |
@@ -170,7 +170,7 @@ graph TD
 | `crates/plugins` | `idecraft-plugins` | plugins as sandboxed WebAssembly modules (`SPEC-0104`, ADR-0016) | `wasmi` with fuel and memory limits; host functions only as granted: read the project (`SPEC-0156`), connect to the picked profile's host and port (`SPEC-0314`, ADR-0024) |
 | `crates/ai` | `idecraft-ai` | optional AI Assistant (`SPEC-0138`), off by default: an OpenAI-compatible endpoint the user names, or the provider's own command line program for a subscription (ADR-0017) | `idecraft-http`; API keys in the OS keychain |
 | `crates/ui` | `idecraft-ui` | themes and colour schemes (`SPEC-0060`), bundled icons, keymaps (`SPEC-0028`), tool window layout (`SPEC-0167`) — no UI toolkit | `quick-xml`, `serde_json` |
-| `crates/formats` | `idecraft-formats` | IDECraft exchange files (`SPEC-0303`): import preview, import, export without secrets, Share link; the envelope, shapes and migrations are `core::format` | `toml`; JSON Schemas in `docs/formats/` |
+| `crates/formats` | `idecraft-formats` | Ferris IDEA exchange files (`SPEC-0303`): import preview, import, export without secrets, Share link; the envelope, shapes and migrations are `core::format` | `toml`; JSON Schemas in `docs/formats/` |
 | `crates/refactoring` | `idecraft-refactoring` | empty placeholder: LSP refactorings and undo groups live in `languages` and `editor`, SQL rename in `database` | — |
 | `crates/workbench` | `idecraft-workbench` | window, editor view, project tree, tabs, tool windows, dialogs and popups | `gpui` (ADR-0003) |
 | `crates/mcp` | `idecraft-mcp` | MCP server: agents use the IDE as a tool (`SPEC-0006`, 316 tools on 2026-11-16, ADR-0008) | `rmcp`; stdio, and Streamable HTTP on loopback over `hyper` (`SPEC-0221`) |
@@ -230,7 +230,7 @@ for agents has four permissions per connection; the user grants them per
 workspace, connection and target in the same grant file, nothing is granted by
 default, and the project's connection file can only narrow them (`SPEC-0012`,
 [ADR-0031](docs/adr/0031-project-files-never-grant-agents.md)). In an
-untrusted project IDECraft is built to run none of the project's code and to
+untrusted project Ferris IDEA is built to run none of the project's code and to
 refuse every tool that names a connection of the project (`SPEC-0278`).
 
 One table, `TOOLS` in `crates/mcp/src/effects.rs`, has a row per tool: what it
@@ -245,18 +245,18 @@ The user's view of this model, with the full list of its limits (no sandbox;
 formatters, linters and language servers start under trust alone; the log is
 a local file), has one home: the README section
 [What the Model Does Not Cover](README.md#what-the-model-does-not-cover).
-IDECraft contains no agent loop and no model (ADR-0023).
+Ferris IDEA contains no agent loop and no model (ADR-0023).
 
 ## Direction
 
-IDECraft is presented as an IDE AI harness: the IDE's own operations are tools
+Ferris IDEA is presented as an IDE AI harness: the IDE's own operations are tools
 for agents, under rights, previews and a local log of runs and requests
 ([ADR-0023](docs/adr/0023-idecraft-as-agent-harness.md), status *proposed*).
 Planned, none of it built: verification gates, change sets, context packs, a
 harness benchmark and a sandbox for started programs.
 
 Quality gate QG-1 ([ADR-0015](docs/adr/0015-quality-gate-ai-native.md)) is recorded as reached on
-2026-11-16 ([gate report](docs/quality/QG-1-REPORT.md)). After the database tools, IDECraft is
+2026-11-16 ([gate report](docs/quality/QG-1-REPORT.md)). After the database tools, Ferris IDEA is
 planned to grow so that people
 and agents use the same core: a headless core and one versioned capability layer
 ([ADR-0012](docs/adr/0012-headless-core-capability-api.md)) with MCP, ACP, CLI and SDK as adapters

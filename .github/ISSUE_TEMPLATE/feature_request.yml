@@ -1,12 +1,12 @@
 name: Feature request
-description: Propose a capability for IDECraft.
+description: Propose a capability for Ferris IDEA.
 labels: [enhancement]
 body:
   - type: markdown
     attributes:
       value: |
         Describe the behaviour you want in your own words. Do not paste code, help texts or
-        screenshots from other products — see the [research boundaries](https://github.com/DamienDrash/idecraft/blob/main/docs/legal/README.md).
+        screenshots from other products — see the [research boundaries](https://github.com/DamienDrash/ferris-idea/blob/main/docs/legal/README.md).
   - type: textarea
     id: need
     attributes:

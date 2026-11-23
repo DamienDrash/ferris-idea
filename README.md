@@ -1,11 +1,11 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/design/assets/idecraft-symbol.svg">
-    <img src="docs/design/assets/idecraft-symbol-light.svg" width="72" height="72" alt="IDECraft symbol: a square bracket open to the right around a small upright rectangle">
+    <img src="docs/design/assets/idecraft-symbol-light.svg" width="72" height="72" alt="Ferris IDEA symbol: a pixel crab">
   </picture>
 </p>
 
-<h1 align="center">IDECraft</h1>
+<h1 align="center">Ferris IDEA</h1>
 
 <p align="center">
   <b>Your IDE. Your database. Your model.</b><br>
@@ -29,14 +29,14 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/shot-1-hero-dark.png" width="100%" alt="IDECraft window on a small Java project: the Project tree on the left, the editor paused at a breakpoint in Warehouse.java with variable values shown beside the code, and below it the Debug tool window with two stack frames and the variables batch, ordered, item, fresh, this and items">
+  <img src="docs/images/shot-1-hero-dark.png" width="100%" alt="Ferris IDEA window on a small Java project: the Project tree on the left, the editor paused at a breakpoint in Warehouse.java with variable values shown beside the code, and below it the Debug tool window with two stack frames and the variables batch, ordered, item, fresh, this and items">
 </p>
 
 <p align="center"><sub>A Java program paused at a breakpoint, with inline values and the Debug tool window · demo project · theme IDECraft Dark · debug build of commit <code>970f18e3</code>, 2026-11-14</sub></p>
 
 <!-- SCREENSHOT (missing, hero light): the same window, project and state in theme IDECraft Light, 1440×900 at 2×, as docs/images/shot-1-hero-light.png; then wrap both in one <picture> with a prefers-color-scheme source. Until it exists the dark image is shown in both modes. -->
 
-IDECraft is a desktop IDE written in Rust: editor, code insight through language servers,
+Ferris IDEA is a desktop IDE written in Rust: editor, code insight through language servers,
 debugger, Git, database tools, HTTP client and terminal in one window. It is also what we call an
 **IDE AI harness**: 327 of its operations are typed MCP tools, so an agent you bring can rename a
 symbol, stop at a breakpoint or run SQL through the IDE instead of through a shell, and every tool
@@ -50,7 +50,7 @@ database tooling.
 
 > [!WARNING]
 > **Version 1.0 (v1.0.0), for two workflows.** A signed and notarized download for macOS on Apple
-> Silicon is on the [v1.0.0 release](https://github.com/DamienDrash/idecraft/releases/tag/v1.0.0);
+> Silicon is on the [v1.0.0 release](https://github.com/DamienDrash/ferris-idea/releases/tag/v1.0.0);
 > elsewhere you build it from source. The window is verified on macOS on Apple Silicon only. Of 57 feature rows, 37 are checked side by side against the reference; many newer
 > features have only automated tests. No external security review. Every known gap:
 > [Development Status](#development-status).
@@ -73,7 +73,7 @@ Each line carries a status word; the words are defined under [Features](#feature
 
 ## Use It, or Not Yet
 
-**Try IDECraft if**
+**Try Ferris IDEA if**
 
 - you build agents and want to see what they do with a debugger, a database session and
   refactorings instead of a shell;
@@ -94,9 +94,9 @@ Each line carries a status word; the words are defined under [Features](#feature
 tools: refactorings, the debugger, database sessions, version control, run configurations, the
 window itself.
 
-In IDECraft every tool that changes something checks a right you grant, a part of the tools
+In Ferris IDEA every tool that changes something checks a right you grant, a part of the tools
 previews first by default, and every call that changes something leaves a line in a local log. The agent's
-loop and its model stay outside: IDECraft ships no agent and no model. It supplies the tools, the
+loop and its model stay outside: Ferris IDEA ships no agent and no model. It supplies the tools, the
 checks and their limits, and the window in which you watch and verify.
 
 <!-- SCREENSHOT (missing, permission alert): the window while an MCP client over HTTP calls a tool without the needed right: the native alert naming the client, the right, the action and the workspace, with the buttons Deny, Allow Once, Always for This Workspace. Demo project, theme IDECraft Dark, 1440×900 at 2×, as docs/images/shot-5-permission-alert.png. Visible, directly here. -->
@@ -105,7 +105,7 @@ checks and their limits, and the window in which you watch and verify.
 flowchart TB
     agent["AI agent<br/>any MCP client, your model"]
     you["You"]
-    subgraph ide["IDECraft"]
+    subgraph ide["Ferris IDEA"]
         mcp["MCP server<br/>stdio, or HTTP on 127.0.0.1"]
         gate{"Right or database<br/>permission granted?<br/>Project trusted?"}
         svc["IDE services<br/>code insight · refactoring · debugger<br/>databases · Git · run · terminal"]
@@ -184,7 +184,7 @@ What an agent does with it, in five steps. Every tool can be tried from a shell 
 
 ```console
 $ idecraft call ~/shop run_sql '{"connection":"shop","sql":"select name, city from customer order by name"}'
-error: not granted: nothing was run: connection `shop` does not grant everything the SQL needs: statement 1 (read data) needs permission `read-data`; nobody was asked. What a project file says about agents grants nothing: only the user can grant it, by answering "Always for This Connection" when the IDECraft window asks a client of its MCP server over HTTP, or by adding to ~/.config/idecraft/agent-permissions.toml:
+error: not granted: nothing was run: connection `shop` does not grant everything the SQL needs: statement 1 (read data) needs permission `read-data`; nobody was asked. What a project file says about agents grants nothing: only the user can grant it, by answering "Always for This Connection" when the Ferris IDEA window asks a client of its MCP server over HTTP, or by adding to ~/.config/idecraft/agent-permissions.toml:
 
 [[connection]]
 workspace = "~/shop"
@@ -296,7 +296,7 @@ $ idecraft call ~/demo copy_file '{"path":"app.py","target_dir":".","new_name":"
   "summary": "Copied app.py to app_copy.py"
 }
 $ idecraft call ~/demo copy_file '{"path":"app.py","target_dir":".","new_name":"app_copy.py","dry_run":false}'
-error: not granted: this workspace does not grant agents the `write` right (create, change, move or delete files of the workspace); nobody was asked. Only the user can grant it: answer "Always for This Workspace" when the IDECraft window asks a client of its MCP server over HTTP, or add to ~/.config/idecraft/agent-permissions.toml:
+error: not granted: this workspace does not grant agents the `write` right (create, change, move or delete files of the workspace); nobody was asked. Only the user can grant it: answer "Always for This Workspace" when the Ferris IDEA window asks a client of its MCP server over HTTP, or add to ~/.config/idecraft/agent-permissions.toml:
 
 [[workspace]]
 path = "~/demo"
@@ -323,7 +323,7 @@ $ idecraft call ~/demo run_command '{"command":["python3","-c","print(6*7)"]}'
   }
 }
 $ idecraft call ~/demo run_command '{"command":["python3","-c","print(6*7)"],"dry_run":false}'
-error: Safe mode: ~/demo is not trusted, so IDECraft runs none of its code (build scripts, build-tool sync, run configurations, tests, tasks). Trust it with "Trust Project…" in the banner, `idecraft trust add <folder>`, or the MCP tool trust_project.
+error: Safe mode: ~/demo is not trusted, so Ferris IDEA runs none of its code (build scripts, build-tool sync, run configurations, tests, tasks). Trust it with "Trust Project…" in the banner, `idecraft trust add <folder>`, or the MCP tool trust_project.
 ```
 
 After `idecraft trust add ~/demo`:
@@ -365,7 +365,7 @@ error: withheld: `.env` is on the list of files whose names commonly hold secret
 | An IDE with a chat panel | There the assistant is a feature inside the IDE. Here the IDE is the agent's instrument: any external agent drives it through a protocol, and the chat panel is optional. |
 | An agent that edits files through a shell | Such an agent sees text and exit codes. Here it gets the project's semantics ("rename this symbol", "who calls this", "stop at this line and read the variable") and rights per operation instead of per shell command. |
 | A language-server bridge | A bridge exposes what one language server knows about code. Here the tools also cover the debugger, databases, version control, run and test, the HTTP client, containers and remote hosts. |
-| An MCP toolkit built on language servers | Such a toolkit gives an agent symbol-level tools without a window. IDECraft is the IDE itself: the operations a person uses in the window, with the person watching in that window. |
+| An MCP toolkit built on language servers | Such a toolkit gives an agent symbol-level tools without a window. Ferris IDEA is the IDE itself: the operations a person uses in the window, with the person watching in that window. |
 
 These are differences of design. Whether they make agents measurably better is not shown yet; a
 benchmark is Planned.
@@ -424,7 +424,7 @@ count says nothing about depth.
 - **Preview first, on a part of the tools.** 93 tools have a `dry_run` parameter and act only
   with `dry_run: false`; the database tools preview until the call says `apply: true` (counted
   from the tool schemas, 2026-11-16).
-- **Project trust.** In an untrusted project IDECraft is built to run none of the project's code,
+- **Project trust.** In an untrusted project Ferris IDEA is built to run none of the project's code,
   whatever the rights, and to refuse every tool that names a connection of the project
   ([SPEC-0278](docs/specifications/SPEC-0278-project-trust-and-safe-mode.md)).
 - **Exact refusals.** A refused call names the right and the entry to add, and says that nobody
@@ -454,7 +454,7 @@ count says nothing about depth.
 - **The rule "every change checks a right" is held by tests that read the tools' source.** They
   prove that a check is written in a tool's code, not that every path reaches it. Two marked
   exceptions need no right: the emergency stop of the UI driver and `local_history`, which writes
-  only IDECraft's own record.
+  only Ferris IDEA's own record.
 - **SQL is classified by its text.** A function or view of the database's own that changes data
   when a query reads it is not seen; the read-only session is the second line of defense there.
 - **The log is a record, not evidence.** It is a plain local file that a program started with
@@ -485,7 +485,7 @@ Report a security problem privately: [SECURITY.md](SECURITY.md). Specifications:
 
 ### What Leaves Your Machine
 
-Nothing by IDECraft's own choice: it has no account and no license check, and no telemetry or
+Nothing by Ferris IDEA's own choice: it has no account and no license check, and no telemetry or
 update check was found by static reading of the code (not verified by watching the running
 window's traffic). Tools it starts for you in a trusted project, such as language servers, build
 tools and package managers, may use the network themselves. Your agent is a separate program: what
@@ -501,7 +501,7 @@ feature passed its tests and, where the Notes say so, a side-by-side comparison.
 polished.
 
 A language feature needs the language server for that language, which you install yourself;
-IDECraft finds installed servers and names the install command for a missing one. Complete lists
+Ferris IDEA finds installed servers and names the install command for a missing one. Complete lists
 per version: [CHANGELOG.md](CHANGELOG.md). Evidence per row:
 [FEATURE_MATRIX.md](docs/research/FEATURE_MATRIX.md) and [PARITY.md](docs/research/PARITY.md)
 (German).
@@ -522,7 +522,7 @@ per version: [CHANGELOG.md](CHANGELOG.md). Evidence per row:
 | Web IDE | Planned |
 
 <p align="center">
-  <img src="docs/images/shot-2-database.png" width="100%" alt="IDECraft window with a SQL console that joins orders and customers, the result grid below it with four rows of customer, orders and spent, and the Database tool window on the right showing a SQLite schema tree with tables, columns, keys, one index and views">
+  <img src="docs/images/shot-2-database.png" width="100%" alt="Ferris IDEA window with a SQL console that joins orders and customers, the result grid below it with four rows of customer, orders and spent, and the Database tool window on the right showing a SQLite schema tree with tables, columns, keys, one index and views">
 </p>
 
 <p align="center"><sub>SQL console, result grid and schema tree on a SQLite sample database · demo project · theme IDECraft Dark · debug build of commit <code>970f18e3</code>, 2026-11-14</sub></p>
@@ -550,7 +550,7 @@ per version: [CHANGELOG.md](CHANGELOG.md). Evidence per row:
 <summary><b>Editor and search</b></summary>
 
 <p align="center">
-  <img src="docs/images/shot-3-editor-completion.png" width="100%" alt="IDECraft editor on a Java controller of a Spring sample project: the completion popup lists the methods of a repository after orders-dot, with the documentation of the selected method beside it; inspections are underlined in the code and counted at the top right; the Commit tool window is open on the left">
+  <img src="docs/images/shot-3-editor-completion.png" width="100%" alt="Ferris IDEA editor on a Java controller of a Spring sample project: the completion popup lists the methods of a repository after orders-dot, with the documentation of the selected method beside it; inspections are underlined in the code and counted at the top right; the Commit tool window is open on the left">
 </p>
 
 <p align="center"><sub>Member completion with documentation in a Java file, inspections in the editor · demo project · theme IDECraft Dark · debug build of commit <code>970f18e3</code>, 2026-11-14</sub></p>
@@ -584,7 +584,7 @@ per version: [CHANGELOG.md](CHANGELOG.md). Evidence per row:
 | **Python**: pyright; interpreter and virtual environments, packages, debugpy, ruff or black | Works | five named deviations accepted |
 | **JavaScript and TypeScript**: typescript-language-server; Node, package managers, Vitest and Jest, ESLint, Prettier | Works | named deviations accepted |
 | **Java and Kotlin**: jdtls, kotlin-language-server; Maven and Gradle build and tests, Generate, Optimize Imports | Works | |
-| **SQL**: IDECraft's own completion and inspections | Works | |
+| **SQL**: Ferris IDEA's own completion and inspections | Works | |
 | **Go, Rust, C and C++, PHP, Ruby, HTML, CSS, JSON** | Experimental | checked with gopls, rust-analyzer, clangd, intelephense, ruby-lsp and the HTML, CSS and JSON servers; the Ruby hand test failed |
 | **XML, YAML, Markdown, TOML, Shell, Dockerfile, Groovy, Scala, SCSS, Less, Swift, Lua, R** | Experimental | server registered and highlighting; not checked further |
 | **Frameworks**: Spring bean model, HTTP endpoints, beans and config keys for Jakarta EE, Quarkus, Micronaut | Experimental | |
@@ -620,7 +620,7 @@ per version: [CHANGELOG.md](CHANGELOG.md). Evidence per row:
 <summary><b>Version control</b></summary>
 
 <p align="center">
-  <img src="docs/images/shot-4-commit.png" width="100%" alt="IDECraft Commit tool window listing two changed files and one unversioned file with a commit message, and beside it the side-by-side diff of ProductService.java between HEAD and the working copy with one changed block highlighted">
+  <img src="docs/images/shot-4-commit.png" width="100%" alt="Ferris IDEA Commit tool window listing two changed files and one unversioned file with a commit message, and beside it the side-by-side diff of ProductService.java between HEAD and the working copy with one changed block highlighted">
 </p>
 
 <p align="center"><sub>Commit tool window with a side-by-side diff · demo project · theme IDECraft Dark · debug build of commit <code>970f18e3</code>, 2026-11-14</sub></p>
@@ -720,7 +720,7 @@ you switch it on and name an endpoint.
 
 <!-- SCREENSHOT (missing, remote project): a remote project window: Project tree of a folder on an SSH host, editor, and the host-side terminal. Neutral example host name. Theme IDECraft Dark, 1440×900 at 2×, as docs/images/shot-6-remote.png. -->
 
-**Every `ssh` IDECraft starts.** Key exchange is limited to hybrid post-quantum methods
+**Every `ssh` Ferris IDEA starts.** Key exchange is limited to hybrid post-quantum methods
 (`mlkem768x25519-sha256` preferred, `sntrup761x25519-sha512` for OpenSSH 9.0 to 9.8), with strict
 host keys and batch mode. A host that offers neither is refused with a message;
 `IDECRAFT_SSH_KEX=mlkem` allows ML-KEM only. Code: `crates/remote/src/pq.rs`. One exception is on
@@ -748,7 +748,7 @@ Design and threat model: [ADR-0025](docs/adr/0025-network-security-for-remote-co
 
 ### The Question
 
-IDECraft began on 2026-10-30 as a research question: can an IDE with the functional scope of a
+Ferris IDEA began on 2026-10-30 as a research question: can an IDE with the functional scope of a
 full commercial polyglot IDE with database tools be written from scratch in Rust by AI agents
 working for one person? The method follows clean-room principles with one stated difference:
 observation, specification and implementation are separate roles with separate commits and
@@ -767,7 +767,7 @@ UI driver exist because agents had to check their own work.
 
 ### The Goal Now
 
-IDECraft treats the agent as a first-class user of the IDE. The rule is that every feature we
+Ferris IDEA treats the agent as a first-class user of the IDE. The rule is that every feature we
 build gets a tool. A tool that changes something checks a right, and a part of the tools previews first by
 default. People keep the window and the rights. The
 original target stays: the functional scope of the reference, with deliberate deviations where the
@@ -817,7 +817,7 @@ weighted measure at each date.
 2. Decide the open points of the agent model (formatters and linters under trust alone), mark
    untrusted content on every tool, add a dry run where one is missing.
 3. Operate the window fully through tools (**In progress**: key presses only today).
-4. A benchmark that runs the same agent with and without IDECraft's tools.
+4. A benchmark that runs the same agent with and without Ferris IDEA's tools.
 5. The phase the quality gate opens: change sets with verification gates, context packs, hosting
    agents inside the window.
 
@@ -842,7 +842,7 @@ What stands in for line-by-line human review:
 
 - a specification per feature, written before the code, and tests mapped to its acceptance
   criteria;
-- functional tests that drive IDECraft from outside, for 55 of 57 feature rows;
+- functional tests that drive Ferris IDEA from outside, for 55 of 57 feature rows;
 - a window self-test that presses real keys and clicks;
 - side-by-side comparison with the reference for 44 of 57 feature rows, with the differences
   recorded;
@@ -855,11 +855,11 @@ What that does not show is code quality, maintainability or the absence of defec
 
 **A percentage against a commercial product, after two weeks?**
 The number in [Development Status](#development-status) is a feature-presence score: the project's
-own weighted checklist of how much of the reference's functional scope exists in IDECraft. Weights
+own weighted checklist of how much of the reference's functional scope exists in Ferris IDEA. Weights
 and stages are the project's judgment, the rows are coarse (one row stands for all of Java and
 Kotlin support), and the score says nothing about quality, depth or polish. The count that cannot
 be misread is the one at the top of this page: 44 of 57 rows have a documented side-by-side
-comparison. IDECraft is not a substitute for the reference.
+comparison. Ferris IDEA is not a substitute for the reference.
 
 ## How It Is Built
 
@@ -994,7 +994,7 @@ What is missing or weak:
 
 ## Platforms and Requirements
 
-The [v1.0.0 release](https://github.com/DamienDrash/idecraft/releases/tag/v1.0.0) has a signed and
+The [v1.0.0 release](https://github.com/DamienDrash/ferris-idea/releases/tag/v1.0.0) has a signed and
 notarized DMG for macOS on Apple Silicon. On every other platform, build from source.
 
 | Target | State |
@@ -1006,7 +1006,7 @@ notarized DMG for macOS on Apple Silicon. On every other platform, build from so
 | macOS app bundle | Experimental: local, ad-hoc signed, for the machine that built it |
 | iOS and Android apps | In progress: simulator and emulator only |
 
-Verified on one machine: an Apple Silicon Mac with macOS 27. External programs IDECraft calls when
+Verified on one machine: an Apple Silicon Mac with macOS 27. External programs Ferris IDEA calls when
 you use the feature: `git`, `ssh`, `kubectl`, and per language a server and a debug adapter.
 
 <!-- CAPTURE E (measurement): on the build Mac, for the tagged version: size of target/ after `cargo build -p idecraft`, resident memory of the window idle on a sample project, minimum macOS version the binary starts on. Add as a three-row table here, labelled "measured on one machine". -->
@@ -1019,7 +1019,7 @@ you use the feature: `git`, `ssh`, `kubectl`, and per language a server and a de
 | Kotlin | kotlin-language-server | kotlin-debug-adapter |
 | SQL | none needed | — |
 
-The MCP tool `language_servers` lists what IDECraft found and names the install command for what
+The MCP tool `language_servers` lists what Ferris IDEA found and names the install command for what
 is missing.
 
 ## Build from Source
@@ -1076,7 +1076,7 @@ no display.
 ## Configuration and Files
 
 <details>
-<summary><b>Where IDECraft keeps things, and how to remove them</b></summary>
+<summary><b>Where Ferris IDEA keeps things, and how to remove them</b></summary>
 
 Your settings folder is `$IDECRAFT_CONFIG_DIR`, else `$XDG_CONFIG_HOME/idecraft`, else
 `~/.config/idecraft`.
@@ -1094,7 +1094,7 @@ Your settings folder is `$IDECRAFT_CONFIG_DIR`, else `$XDG_CONFIG_HOME/idecraft`
 | `.idecraft/agent-log.jsonl` | workspace | the log of runs and requests by agents |
 
 Passwords and API keys are in the OS keychain, not in these files. Formats and schemas:
-[docs/formats](docs/formats/README.md). To remove IDECraft's data, delete the settings folder and
+[docs/formats](docs/formats/README.md). To remove Ferris IDEA's data, delete the settings folder and
 the `.idecraft` folder of each project, and remove its entries from the keychain.
 
 </details>
@@ -1157,7 +1157,7 @@ with Claude Code. Other clients are expected to work and are not tested yet.
 </details>
 
 <details>
-<summary><b>Does IDECraft include an agent or a model?</b></summary>
+<summary><b>Does Ferris IDEA include an agent or a model?</b></summary>
 
 No. It provides tools, rights and checks; the agent loop belongs to the agent you connect. The
 built-in AI Assistant is an optional chat. Hosting agents inside the window is Planned.
@@ -1178,14 +1178,14 @@ clients yet.
 
 The IDE, the MCP server and the local tools need no network and no account. The network is used by
 what you ask for (Git remotes, HTTP requests, package indexes, remote hosts, the AI Assistant if
-you switch it on) and by tools IDECraft starts for you in a trusted project.
+you switch it on) and by tools Ferris IDEA starts for you in a trusted project.
 
 </details>
 
 <details>
 <summary><b>What does it cost?</b></summary>
 
-IDECraft has no price, no trial and no paid tier; the [license](#license) terms apply. A separate
+Ferris IDEA has no price, no trial and no paid tier; the [license](#license) terms apply. A separate
 license for what the terms exclude can be agreed with the licensor. The agent you bring has its
 own costs.
 
@@ -1203,7 +1203,7 @@ free.
 <details>
 <summary><b>Is it a replacement for the reference IDE?</b></summary>
 
-No. The reference defines the functional target. IDECraft 1.0 is usable day to day for its two priority workflows; many other features are less complete than the reference.
+No. The reference defines the functional target. Ferris IDEA 1.0 is usable day to day for its two priority workflows; many other features are less complete than the reference.
 
 </details>
 
@@ -1225,7 +1225,7 @@ under [AGENTS.md](AGENTS.md).
 Contact for licence requests and for anything that is not a public issue: Damien Frigewski,
 <dfrigewski@gmail.com>. Security reports: [SECURITY.md](SECURITY.md).
 
-Development happens in a private working repository. This repository, `DamienDrash/idecraft`,
+Development happens in a private working repository. This repository, `DamienDrash/ferris-idea`,
 receives an export of it with a fresh history: one commit per published version, without the
 development history.
 
@@ -1238,26 +1238,26 @@ privately as [SECURITY.md](SECURITY.md) describes.
 
 ## License
 
-IDECraft is **source-available** under the [PolyForm Shield License 1.0.0](LICENSE.md). In short:
+Ferris IDEA is **source-available** under the [PolyForm Shield License 1.0.0](LICENSE.md). In short:
 you may read, build, use, change and pass it on for any purpose, at work included, except to
-provide a product that competes with IDECraft or with another product the licensor provides using
+provide a product that competes with Ferris IDEA or with another product the licensor provides using
 it. A product competes even when it is free of charge. Whoever gets a copy from you must get the
 license terms and the notice line with it. Anything the license does not allow needs the
 licensor's written consent. The licensor is Damien Frigewski; ask by e-mail to
 <dfrigewski@gmail.com> (details in [LICENSING.md](LICENSING.md)). It is not open-source software. This paragraph is a summary, not the terms: the license text decides, and
 [LICENSING.md](LICENSING.md) answers common questions.
 
-IDECraft comes as is, without warranty, as far as the law allows (license, "No Liability"). Keep
+Ferris IDEA comes as is, without warranty, as far as the law allows (license, "No Liability"). Keep
 backups of what you open with it.
 
 The name and logo are not covered by the license: [TRADEMARKS.md](TRADEMARKS.md) says how the
-project wants them used. "IDECraft" is not a registered trademark. Third-party parts keep their own licenses: [NOTICE](NOTICE),
+project wants them used. "Ferris IDEA" is not a registered trademark. Third-party parts keep their own licenses: [NOTICE](NOTICE),
 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md), [LICENSES](LICENSES/README.md) and
 [PROVENANCE.md](docs/legal/PROVENANCE.md).
 
 ## Independent Project Notice
 
-IDECraft is an independent research project. It is not affiliated with, endorsed by, or
+Ferris IDEA is an independent research project. It is not affiliated with, endorsed by, or
 sponsored by JetBrains or the ArtCraft team. JetBrains, IntelliJ IDEA and DataGrip are
 trademarks of JetBrains s.r.o.; ArtCraft is a trademark of the ArtCraft Team. All other names are
 trademarks of their owners.
@@ -1266,11 +1266,11 @@ trademarks of their owners.
 
 - **IntelliJ Platform, community edition** (`JetBrains/intellij-community`, Apache-2.0): the
   bundled keymaps, theme and color-scheme files and icons of open areas are unchanged copies; the
-  IDECraft themes inherit from the Islands themes and override colors. Rules, default values,
+  Ferris IDEA themes inherit from the Islands themes and override colors. Rules, default values,
   action ids and menu titles of open areas were re-expressed from the same sources. All of it is
   recorded in [PROVENANCE.md](docs/legal/PROVENANCE.md).
 - **JetBrains Mono** (SIL OFL 1.1), the editor font, bundled unmodified with its license file.
-- **Nord** color palette (MIT): the color values of the IDECraft themes and of the brand.
+- **Nord** color palette (MIT): the color values of the Ferris IDEA themes and of the brand.
 - The Rust libraries this project stands on, among them GPUI, tree-sitter, ropey, gix, rmcp,
   wasmi, rustls, snow and libcrux, and the language servers and debug adapters of each language's
   community. The full list is in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

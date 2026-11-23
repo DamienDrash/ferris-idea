@@ -1,6 +1,6 @@
 # Security policy
 
-IDECraft is in alpha and has had no independent security review. It runs programs, opens network
+Ferris IDEA is in alpha and has had no independent security review. It runs programs, opens network
 connections to hosts you name and offers its operations to AI agents, so reports about its
 security are welcome and taken seriously.
 
@@ -80,7 +80,7 @@ Known limits, documented and not vulnerabilities in themselves (improvements are
   and has had no independent audit.
 
 Out of scope: problems in language servers, debug adapters, database servers and other programs
-IDECraft starts but does not ship (report those to their projects); a machine or user account that
+Ferris IDEA starts but does not ship (report those to their projects); a machine or user account that
 is already compromised; social engineering.
 
 The README lists these limits for users under

@@ -5,7 +5,7 @@ labels: [database, connector]
 ---
 
 <!--
-IDECraft fills this in from "Share…" in the connection dialog (SPEC-0302). Attach the
+Ferris IDEA fills this in from "Share…" in the connection dialog (SPEC-0302). Attach the
 .idcconnector file if the text below is cut. Definitions are data only: they never run code.
 Please say which server version you tried it with. Do not include passwords or host names.
 -->

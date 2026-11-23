@@ -1,11 +1,11 @@
 name: Shared file
-description: Share an IDECraft file (run configuration, keymap, theme, data sources, settings, connector).
+description: Share a Ferris IDEA file (run configuration, keymap, theme, data sources, settings, connector).
 labels: [shared-file]
 body:
   - type: markdown
     attributes:
       value: |
-        IDECraft filled in this form with the file's text (SPEC-0303). Check it before you submit:
+        Ferris IDEA filled in this form with the file's text (SPEC-0303). Check it before you submit:
         exported files leave out passwords, tokens and agent rights, but read it once yourself.
   - type: input
     id: kind

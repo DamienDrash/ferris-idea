@@ -1,11 +1,11 @@
 name: Bug report
-description: Something in IDECraft does not work as documented.
+description: Something in Ferris IDEA does not work as documented.
 labels: [bug]
 body:
   - type: markdown
     attributes:
       value: |
-        IDECraft is in alpha. Do not report security problems here; see SECURITY.md. Please check the [status](https://github.com/DamienDrash/idecraft#development-status) first.
+        Ferris IDEA is in alpha. Do not report security problems here; see SECURITY.md. Please check the [status](https://github.com/DamienDrash/ferris-idea#development-status) first.
         Do not attach screenshots or code from other products.
   - type: textarea
     id: what

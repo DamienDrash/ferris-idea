@@ -1,6 +1,6 @@
 //! Order and filter of the context-actions popup (`SPEC-0076`), free of the UI toolkit.
 
-use idecraft_languages::actions::{CodeAction, OwnRefactoring, RefactoringTarget};
+use ferris_idea_languages::actions::{CodeAction, OwnRefactoring, RefactoringTarget};
 
 /// How long the language server has in all to say where a refactoring can act, and again to plan
 /// the chosen one; after that the status bar names the server and the limit (`SPEC-0095` v9
@@ -24,11 +24,52 @@ fn rank(a: &CodeAction) -> (bool, bool, u8) {
 /// `actions` in the popup's order; equal ranks keep the server's order. An action whose title
 /// came already is left out: jdtls offers some source actions twice (OBS-0027, `SPEC-0076` v4
 /// behaviour 8), and applying looks the action up by its title.
-pub fn order(mut actions: Vec<CodeAction>) -> Vec<CodeAction> {
+/// The run rows of a ▶ marker on the caret's line (`SPEC-0076` v11 behaviour 14) stand after the
+/// leading quick fixes and before the other actions.
+pub fn order(actions: Vec<CodeAction>) -> Vec<CodeAction> {
+    use ferris_idea_languages::context_actions::is_run;
+    let (run, mut actions): (Vec<CodeAction>, Vec<CodeAction>) =
+        actions.into_iter().partition(is_run);
     actions.sort_by_key(rank);
     let mut seen = std::collections::HashSet::new();
     actions.retain(|a| seen.insert(a.title.clone()));
+    let at = actions
+        .iter()
+        .position(|a| !is_fix(a) || a.disabled.is_some())
+        .unwrap_or(actions.len());
+    let run: Vec<CodeAction> = run
+        .into_iter()
+        .filter(|a| seen.insert(a.title.clone()))
+        .collect();
+    actions.splice(at..at, run);
     actions
+}
+
+/// Ferris IDEA's own offers at the caret as rows of the list, without asking a language server
+/// (`SPEC-0076` v12 behaviour 18): installing a missing package first (it fixes the import's
+/// error), then the own fixes, then the rows with a submenu of options.
+pub fn local_actions(installs: &[String], own: &[String], options: &[String]) -> Vec<CodeAction> {
+    installs
+        .iter()
+        .chain(own)
+        .chain(options)
+        .map(|title| CodeAction {
+            title: title.clone(),
+            kind: Some("quickfix".into()),
+            preferred: true,
+            disabled: None,
+            fixes: Vec::new(),
+        })
+        .collect()
+}
+
+/// The language server's actions that join a list opened with `local` (`SPEC-0076` v12
+/// behaviour 18): those whose title is not shown yet, in the server's order.
+pub fn server_additions(local: &[CodeAction], server: Vec<CodeAction>) -> Vec<CodeAction> {
+    server
+        .into_iter()
+        .filter(|a| local.iter().all(|l| l.title != a.title))
+        .collect()
 }
 
 /// Whether `a` is a quick fix (shown with the red bulb) rather than an intention.
@@ -58,7 +99,7 @@ pub fn first_enabled(actions: &[CodeAction], shown: &[usize]) -> Option<usize> {
 
 /// A refactoring asked for by its own shortcut (`SPEC-0095`); lives with the code actions so that
 /// agents and live tests match the same way.
-pub use idecraft_languages::actions::Refactoring;
+pub use ferris_idea_languages::actions::Refactoring;
 
 /// A place a refactoring shortcut can act on, as the popup lists it (`SPEC-0095` v2 behaviour 6).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -66,7 +107,7 @@ pub struct TargetChoice {
     /// The row: the expression's text on one line, shortened.
     pub label: String,
     /// The range it stands for.
-    pub range: idecraft_languages::insight::Range,
+    pub range: ferris_idea_languages::insight::Range,
     /// The matching actions there; the first is applied.
     pub actions: Vec<CodeAction>,
 }
@@ -77,7 +118,7 @@ const LABEL_CHARS: usize = 60;
 /// The rows for `targets`, inside out: the text with runs of white space joined to one space,
 /// shortened to [`LABEL_CHARS`]; equal labels get their line number.
 pub fn target_choices(
-    targets: Vec<idecraft_languages::actions::RefactoringTarget>,
+    targets: Vec<ferris_idea_languages::actions::RefactoringTarget>,
 ) -> Vec<TargetChoice> {
     let mut out: Vec<TargetChoice> = Vec::new();
     for t in targets {
@@ -114,10 +155,61 @@ pub trait RefactoringServer {
     fn loading(&self) -> bool;
     /// Where the refactoring can act, or why the question failed.
     fn targets(&mut self) -> Result<Vec<RefactoringTarget>, String>;
-    /// Why IDECraft's own refactoring refuses the place, where there is one.
+    /// Why Ferris IDEA's own refactoring refuses the place, where there is one.
     fn own_refusal(&mut self) -> Option<String>;
     /// Waits at most `wait` until the server has loaded the project; whether it has.
     fn loaded_within(&mut self, wait: std::time::Duration) -> bool;
+}
+
+/// What the place at 0-based `line` and char `column` of `text` (the file `path`) offers to
+/// Refactor This (`SPEC-0095` v14 behaviour 4b): read from the text and the syntax tree, so the
+/// list never offers what cannot act there. `selected` is the selected text; `project_file` says
+/// whether the file is a file of this project on this machine.
+pub fn refactor_spot(
+    path: &std::path::Path,
+    text: &str,
+    line: usize,
+    column: usize,
+    selected: Option<&str>,
+    project_file: bool,
+) -> ferris_idea_languages::actions::RefactorSpot {
+    let line_text = text.lines().nth(line).unwrap_or_default();
+    let word = crate::usages_model::word_at(line_text, column);
+    let on_name = !word.is_empty()
+        && !word.starts_with(|c: char| c.is_ascii_digit())
+        && selected.is_none_or(|t| t.trim() == word);
+    // The byte where the name at the caret ends in the whole text.
+    let line_start: usize = text.split_inclusive('\n').take(line).map(str::len).sum();
+    let chars: Vec<char> = line_text.chars().collect();
+    let mut end = column.min(chars.len());
+    while end < chars.len() && (chars[end].is_alphanumeric() || chars[end] == '_') {
+        end += 1;
+    }
+    let word_end = line_start + chars[..end].iter().map(|c| c.len_utf8()).sum::<usize>();
+    let before_parameters =
+        on_name && ferris_idea_languages::signature::open_paren_after(text, word_end).is_some();
+    let spans = ferris_idea_languages::syntax::declaration_spans_of(path, text, 10_000);
+    let declaration = on_name && spans.iter().any(|d| d.line == line && d.name == word);
+    let is_function = |d: &ferris_idea_languages::syntax::DeclarationSpan| {
+        matches!(d.kind.as_str(), "method" | "function")
+    };
+    let in_function = spans
+        .iter()
+        .any(|d| is_function(d) && d.line < line && line <= d.end_line);
+    let in_class = spans
+        .iter()
+        .any(|d| !is_function(d) && d.start_line <= line && line <= d.end_line);
+    let java = path
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("java"));
+    ferris_idea_languages::actions::RefactorSpot {
+        on_name,
+        before_parameters,
+        declaration,
+        in_code: in_function || (!in_class && !declaration),
+        java,
+        project_file,
+    }
 }
 
 /// What a refactoring's shortcut asks for.
@@ -127,8 +219,9 @@ pub struct Asked {
     pub refactoring: Refactoring,
     /// The selected text, `None` for a bare caret.
     pub selected: Option<String>,
-    /// Whether the caret or the selection is on a name (Refactor This offers Rename then).
-    pub on_name: bool,
+    /// What the place offers to Refactor This (Rename on a name and the rest, `SPEC-0095` v14
+    /// behaviour 4b).
+    pub spot: ferris_idea_languages::actions::RefactorSpot,
 }
 
 /// What a refactoring's request ends in. Every outcome is something the user sees: a list, an
@@ -138,12 +231,12 @@ pub enum Outcome {
     /// The places the refactoring can act on: one place with one action is applied, one place
     /// with several actions lists the actions, several places are listed.
     Places(Vec<RefactoringTarget>),
-    /// Refactor This: the server's actions and IDECraft's own entries in one list, and what the
+    /// Refactor This: the server's actions and Ferris IDEA's own entries in one list, and what the
     /// status bar says beside it.
     Menu {
         /// The server's actions.
         actions: Vec<CodeAction>,
-        /// IDECraft's own entries.
+        /// Ferris IDEA's own entries.
         own: Vec<OwnRefactoring>,
         /// The status line beside the list.
         note: Option<String>,
@@ -190,7 +283,7 @@ pub fn failed_message(what: &str, error: &str, loading: Option<&str>) -> String 
     match loading {
         Some(server) => format!(
             "{what} failed: {error}. {}",
-            idecraft_languages::actions::loading_message(server)
+            ferris_idea_languages::actions::loading_message(server)
         ),
         None => format!("{what} failed: {error}"),
     }
@@ -200,7 +293,7 @@ pub fn failed_message(what: &str, error: &str, loading: Option<&str>) -> String 
 /// that is still starting or loading the project (`SPEC-0095` v10 behaviour 12).
 pub fn no_actions_message(loading: Option<&str>) -> String {
     match loading {
-        Some(server) => idecraft_languages::actions::loading_message(server),
+        Some(server) => ferris_idea_languages::actions::loading_message(server),
         None => "No context actions available here.".into(),
     }
 }
@@ -216,7 +309,7 @@ pub fn not_repeated_message(refactoring: Refactoring) -> String {
 
 /// Asks `server` once and says where the request stands: an answer with places is taken; an
 /// empty one or a failure from a server that is still loading the project is not final, and the
-/// request waits ([`Step::Waiting`]) unless IDECraft's own refactoring gave its reason; from a
+/// request waits ([`Step::Waiting`]) unless Ferris IDEA's own refactoring gave its reason; from a
 /// ready server the empty answer and the failure are said as they are (`SPEC-0095` v10
 /// behaviours 12 and 13).
 pub fn ask(server: &mut impl RefactoringServer, asked: &Asked) -> Step {
@@ -232,7 +325,9 @@ pub fn ask_again(
     asked: &Asked,
     left: std::time::Duration,
 ) -> Outcome {
-    let still = Outcome::Status(idecraft_languages::actions::loading_message(&server.name()));
+    let still = Outcome::Status(ferris_idea_languages::actions::loading_message(
+        &server.name(),
+    ));
     if left.is_zero() || !server.loaded_within(left) {
         return still;
     }
@@ -267,7 +362,7 @@ fn answer(
     found: Result<Vec<RefactoringTarget>, String>,
     may_wait: bool,
 ) -> Step {
-    use idecraft_languages::actions::loading_message;
+    use ferris_idea_languages::actions::loading_message;
     let refactoring = asked.refactoring;
     let name = server.name();
     let loading = server.loading();
@@ -279,7 +374,7 @@ fn answer(
     });
     if refactoring == Refactoring::Any {
         // Refactor This lists the server's refactorings at the one place it asks about and
-        // IDECraft's own (behaviour 4a); a server that fails, is slow or still loads leaves the
+        // Ferris IDEA's own (behaviour 4a); a server that fails, is slow or still loads leaves the
         // own ones, and the status bar says beside the list what is missing.
         let (actions, note) = match found {
             Ok(mut places) if places.len() == 1 => (places.remove(0).actions, None),
@@ -295,7 +390,7 @@ fn answer(
                 )),
             ),
         };
-        let own = idecraft_languages::actions::refactor_this_own(&actions, asked.on_name);
+        let own = ferris_idea_languages::actions::refactor_this_own(&actions, &asked.spot);
         if actions.is_empty() && own.is_empty() {
             return Step::Done(Outcome::Status(note.unwrap_or_else(none)));
         }
@@ -303,7 +398,7 @@ fn answer(
     }
     let said = match found {
         Ok(places) if !places.is_empty() => return Step::Done(Outcome::Places(places)),
-        // IDECraft's own refactoring says itself what it refuses (SPEC-0330 behaviour 14); that
+        // Ferris IDEA's own refactoring says itself what it refuses (SPEC-0330 behaviour 14); that
         // does not depend on the server.
         Ok(_) => match server.own_refusal() {
             Some(own) => return Step::Done(Outcome::Status(own)),
@@ -326,7 +421,7 @@ pub struct FileServer {
     root: std::path::PathBuf,
     path: std::path::PathBuf,
     text: String,
-    range: idecraft_languages::insight::Range,
+    range: ferris_idea_languages::insight::Range,
     refactoring: Refactoring,
     name: String,
     runtime: tokio::runtime::Runtime,
@@ -338,11 +433,11 @@ impl FileServer {
         root: &std::path::Path,
         path: &std::path::Path,
         text: String,
-        range: idecraft_languages::insight::Range,
+        range: ferris_idea_languages::insight::Range,
         refactoring: Refactoring,
     ) -> Result<Self, String> {
-        let name = idecraft_languages::LanguageId::detect(path)
-            .and_then(|language| idecraft_languages::servers::resolve_for(language, root).ok())
+        let name = ferris_idea_languages::LanguageId::detect(path)
+            .and_then(|language| ferris_idea_languages::servers::resolve_for(language, root).ok())
             .map_or_else(
                 || "The language server".to_owned(),
                 |s| s.candidate.program.to_owned(),
@@ -369,13 +464,13 @@ impl RefactoringServer for FileServer {
     }
 
     fn loading(&self) -> bool {
-        idecraft_languages::pool::loading(&self.root, &self.path).is_some()
+        ferris_idea_languages::pool::loading(&self.root, &self.path).is_some()
     }
 
     fn targets(&mut self) -> Result<Vec<RefactoringTarget>, String> {
         // The server has a limit in all, after which the status bar says so (behaviour 11).
         self.runtime
-            .block_on(idecraft_languages::actions::refactoring_targets_within(
+            .block_on(ferris_idea_languages::actions::refactoring_targets_within(
                 &self.root,
                 &self.path,
                 Some(&self.text),
@@ -388,7 +483,7 @@ impl RefactoringServer for FileServer {
     }
 
     fn own_refusal(&mut self) -> Option<String> {
-        idecraft_languages::actions::own_refusal(
+        ferris_idea_languages::actions::own_refusal(
             &self.path,
             Some(&self.text),
             &self.range,
@@ -398,7 +493,7 @@ impl RefactoringServer for FileServer {
 
     fn loaded_within(&mut self, wait: std::time::Duration) -> bool {
         self.runtime
-            .block_on(idecraft_languages::pool::loaded_within(
+            .block_on(ferris_idea_languages::pool::loaded_within(
                 &self.root, &self.path, wait,
             ))
     }
@@ -411,56 +506,25 @@ pub const PREVIEW_LINES: usize = 12;
 /// changed lines as `- old` and `+ new`, at most [`PREVIEW_LINES`] per file (behaviour 7). `text_of`
 /// gives a file's current text (the editor's, else the disk's).
 pub fn preview(
-    files: &[idecraft_languages::rename::FileEdits],
+    files: &[ferris_idea_languages::rename::FileEdits],
     root: &std::path::Path,
     text_of: impl Fn(&std::path::Path) -> Option<String>,
 ) -> Vec<String> {
-    use idecraft_languages::rename::{Edit, apply_edits};
     let mut out = Vec::new();
-    for file in files {
-        out.push(
-            file.path
-                .strip_prefix(root)
-                .unwrap_or(&file.path)
-                .display()
-                .to_string(),
-        );
-        let Some(text) = text_of(&file.path) else {
+    for file in ferris_idea_languages::context_actions::preview_files(files, root, text_of) {
+        out.push(file.path);
+        let Some(hunks) = file.hunks else {
             out.push("  (cannot be read)".into());
             continue;
         };
-        let lines: Vec<&str> = text.split('\n').collect();
-        // Edits sharing lines form one hunk.
-        let mut hunks: Vec<(usize, usize, Vec<&Edit>)> = Vec::new();
-        for e in &file.edits {
-            let (a, b) = (e.range.start_line as usize, e.range.end_line as usize);
-            match hunks.last_mut() {
-                Some((_, end, list)) if a <= *end => {
-                    *end = (*end).max(b);
-                    list.push(e);
-                }
-                _ => hunks.push((a, b, vec![e])),
-            }
-        }
         let mut changed = Vec::new();
-        for (a, b, list) in hunks {
-            let b = b.min(lines.len().saturating_sub(1));
-            let old = lines.get(a..=b).map(|l| l.join("\n")).unwrap_or_default();
-            let shifted: Vec<Edit> = list
-                .iter()
-                .map(|e| {
-                    let mut e = (*e).clone();
-                    e.range.start_line -= a as u64;
-                    e.range.end_line -= a as u64;
-                    e
-                })
-                .collect();
-            let Ok(new) = apply_edits(&old, &shifted) else {
+        for hunk in hunks {
+            let Some(after) = hunk.after else {
                 changed.push("  (changed since)".to_owned());
                 continue;
             };
-            changed.extend(old.split('\n').map(|l| format!("- {l}")));
-            changed.extend(new.split('\n').map(|l| format!("+ {l}")));
+            changed.extend(hunk.before.iter().map(|l| format!("- {l}")));
+            changed.extend(after.iter().map(|l| format!("+ {l}")));
         }
         let more = changed.len().saturating_sub(PREVIEW_LINES);
         out.extend(changed.into_iter().take(PREVIEW_LINES));
@@ -477,7 +541,7 @@ pub enum FindingOption {
     /// Fix every finding of the inspection in the file.
     FixAll,
     /// Suppress the inspection for the statement, method or class.
-    Suppress(idecraft_languages::inspections::SuppressScope),
+    Suppress(ferris_idea_languages::inspections::SuppressScope),
     /// Turn the inspection off in the project's profile.
     Disable,
     /// Run only this inspection over a scope (`SPEC-0125` v3).
@@ -493,7 +557,7 @@ pub enum FindingOption {
 impl FindingOption {
     /// The option a submenu label stands for.
     pub fn of_label(label: &str) -> Option<Self> {
-        use idecraft_languages::inspections::SuppressScope;
+        use ferris_idea_languages::inspections::SuppressScope;
         Some(match label {
             l if l.starts_with("Fix all '") => Self::FixAll,
             "Suppress for statement" => Self::Suppress(SuppressScope::Statement),
@@ -536,13 +600,13 @@ pub fn finding_options_with(
     path: &std::path::Path,
     text: &str,
     at: usize,
-    extra: Vec<idecraft_languages::inspections::Finding>,
+    extra: Vec<ferris_idea_languages::inspections::Finding>,
 ) -> (
     Vec<(String, &'static str, usize)>,
     Vec<crate::intentions_view::RowOptions>,
     Vec<String>,
 ) {
-    use idecraft_languages::inspections::{findings_at, name_of};
+    use ferris_idea_languages::inspections::{findings_at, name_of};
     let java = path
         .extension()
         .is_some_and(|e| e.eq_ignore_ascii_case("java"));
@@ -564,10 +628,13 @@ pub fn finding_options_with(
             continue;
         }
         let mut labels = Vec::new();
-        let safe_delete =
-            fix.is_some_and(|x| x.action == Some(idecraft_languages::reference_index::SAFE_DELETE));
+        let safe_delete = fix
+            .is_some_and(|x| x.action == Some(ferris_idea_languages::reference_index::SAFE_DELETE));
         // A duplicate property key is removed place by place (SPEC-0155 v2 behaviour 5).
-        if fix.is_some() && !safe_delete && idecraft_languages::inspections::fix_all_applies(f.id) {
+        if fix.is_some()
+            && !safe_delete
+            && ferris_idea_languages::inspections::fix_all_applies(f.id)
+        {
             labels.push(format!("Fix all '{name}' problems in file"));
         }
         labels.push("Run inspection on…".into());
@@ -585,7 +652,7 @@ pub fn finding_options_with(
         // SPEC-0098 v13 behaviour 28: `@Suppress` on the declaration, the class or the file,
         // each only where it applies.
         if kotlin && f.id.starts_with("kotlin.") {
-            use idecraft_languages::inspections::{SuppressScope, suppress};
+            use ferris_idea_languages::inspections::{SuppressScope, suppress};
             for (label, scope) in [
                 ("Suppress for declaration", SuppressScope::Statement),
                 ("Suppress for class", SuppressScope::Class),
@@ -597,7 +664,7 @@ pub fn finding_options_with(
             }
         }
         // SPEC-0125 v3 behaviour 8: only with a fix, and not twice.
-        if fix.is_some() && f.level != idecraft_languages::inspections::Level::Info {
+        if fix.is_some() && f.level != ferris_idea_languages::inspections::Level::Info {
             labels.push("Disable highlighting, keep fix".into());
         }
         labels.push("Disable inspection".into());
@@ -617,8 +684,8 @@ pub fn finding_options_with(
 
 /// The preview of an own fix: the changed lines of `text` before (`- `) and after (`+ `) its byte
 /// edits (`SPEC-0125` v2 behaviour 9, IMP-0307).
-pub fn own_fix_preview(text: &str, edits: &[idecraft_languages::jvm::TextEdit]) -> Vec<String> {
-    let mut sorted: Vec<&idecraft_languages::jvm::TextEdit> = edits.iter().collect();
+pub fn own_fix_preview(text: &str, edits: &[ferris_idea_languages::jvm::TextEdit]) -> Vec<String> {
+    let mut sorted: Vec<&ferris_idea_languages::jvm::TextEdit> = edits.iter().collect();
     sorted.sort_by_key(|e| e.range.start);
     let (Some(first), Some(last)) = (sorted.first(), sorted.iter().map(|e| e.range.end).max())
     else {
@@ -707,10 +774,10 @@ mod tests {
         assert_eq!(
             FindingOption::of_label(&options[0].labels[1]),
             Some(FindingOption::Suppress(
-                idecraft_languages::inspections::SuppressScope::Statement
+                ferris_idea_languages::inspections::SuppressScope::Statement
             ))
         );
-        let edit = idecraft_languages::jvm::TextEdit {
+        let edit = ferris_idea_languages::jvm::TextEdit {
             range: text.find("s ==").unwrap()..text.find(") {}").unwrap(),
             text: "\"x\".equals(s)".into(),
         };
@@ -735,6 +802,48 @@ mod tests {
         }
     }
 
+    /// SPEC-0076 v12 AK-15: the list opens with Ferris IDEA's own offers without a language
+    /// server, in well under 100 ms; the server's actions join without repeating a title.
+    #[test]
+    fn own_offers_open_at_once_and_the_server_adds_to_them() {
+        // The README of the window check: a typo and grammar findings, no language server.
+        let text = "# Tool\n\nThis tool prints a mesage to the console.\n\n\
+                    It have three option. Their is no config file.\n";
+        let path = std::path::Path::new("/tmp/README.md");
+        let at = text.find("mesage").unwrap() + 2;
+        // The editor has inspected the open file before ⌥↩ (its highlighting), so the typo's
+        // suggestions are known; the list reuses them.
+        let _ = ferris_idea_languages::inspections::inspect_text(path, text);
+        let started = std::time::Instant::now();
+        let own: Vec<String> = ferris_idea_languages::inspections::fixes_at(path, text, at)
+            .into_iter()
+            .map(|f| f.title)
+            .collect();
+        let local = local_actions(&[], &own, &[]);
+        let took = started.elapsed();
+        assert!(!local.is_empty(), "the typo has own fixes");
+        assert!(
+            took < std::time::Duration::from_millis(100),
+            "the first list took {took:?}"
+        );
+        assert!(local.iter().all(|a| a.preferred && a.disabled.is_none()));
+        // Installs first, then own fixes, then rows with options.
+        let rows = local_actions(&["Install x".into()], &["Fix".into()], &["Opt".into()]);
+        let titles: Vec<&str> = rows.iter().map(|a| a.title.as_str()).collect();
+        assert_eq!(titles, ["Install x", "Fix", "Opt"]);
+        // The server's later actions: a title already shown is left out, the rest keep order.
+        let more = server_additions(
+            &rows,
+            vec![
+                action("Create a Table of Contents", Some("source"), false, false),
+                action("Fix", Some("quickfix"), true, false),
+                action("Extract", Some("refactor"), false, false),
+            ],
+        );
+        let titles: Vec<&str> = more.iter().map(|a| a.title.as_str()).collect();
+        assert_eq!(titles, ["Create a Table of Contents", "Extract"]);
+    }
+
     #[test]
     fn orders_preferred_fixes_refactorings_then_disabled() {
         let list = order(vec![
@@ -755,6 +864,47 @@ mod tests {
                 "Disabled"
             ]
         );
+    }
+
+    /// SPEC-0076 v11 AK-11 (behaviour 14): the run rows stand after the quick fixes and before
+    /// the other actions, whatever the server prefers.
+    #[test]
+    fn run_rows_follow_the_quick_fixes() {
+        let run = |t: &str| {
+            action(
+                t,
+                Some(ferris_idea_languages::context_actions::RUN_KIND),
+                false,
+                false,
+            )
+        };
+        let list = order(vec![
+            action("Add Javadoc", Some("source"), false, false),
+            run("Run 'Inventory'"),
+            action("Preferred refactor", Some("refactor"), true, false),
+            run("Debug 'Inventory'"),
+            action("Insert ';'", Some("quickfix"), false, false),
+            action("Off", Some("quickfix"), false, true),
+        ]);
+        let titles: Vec<&str> = list.iter().map(|a| a.title.as_str()).collect();
+        assert_eq!(
+            titles,
+            [
+                "Run 'Inventory'",
+                "Debug 'Inventory'",
+                "Preferred refactor",
+                "Insert ';'",
+                "Add Javadoc",
+                "Off"
+            ]
+        );
+        let list = order(vec![
+            action("Insert ';'", Some("quickfix"), true, false),
+            run("Run 'Inventory'"),
+            action("Add Javadoc", Some("source"), false, false),
+        ]);
+        let titles: Vec<&str> = list.iter().map(|a| a.title.as_str()).collect();
+        assert_eq!(titles, ["Insert ';'", "Run 'Inventory'", "Add Javadoc"]);
     }
 
     /// SPEC-0076 v4 behaviour 8 (OBS-0027): a title jdtls sends twice is listed once.
@@ -797,8 +947,8 @@ mod tests {
     /// SPEC-0095 v2 AK-5: the rows of the expression list.
     #[test]
     fn target_rows_are_short_single_lines() {
-        use idecraft_languages::actions::RefactoringTarget;
-        use idecraft_languages::insight::Range;
+        use ferris_idea_languages::actions::RefactoringTarget;
+        use ferris_idea_languages::insight::Range;
         let t = |line: u64, text: &str| RefactoringTarget {
             range: Range {
                 start_line: line,
@@ -873,7 +1023,7 @@ mod tests {
 
     fn place(titles: &[&str]) -> RefactoringTarget {
         RefactoringTarget {
-            range: idecraft_languages::insight::Range {
+            range: ferris_idea_languages::insight::Range {
                 start_line: 11,
                 start_character: 22,
                 end_line: 11,
@@ -891,7 +1041,11 @@ mod tests {
         Asked {
             refactoring,
             selected: None,
-            on_name: true,
+            spot: ferris_idea_languages::actions::RefactorSpot {
+                on_name: true,
+                in_code: true,
+                ..Default::default()
+            },
         }
     }
 
@@ -995,7 +1149,7 @@ mod tests {
             Outcome::Status("Inline failed: jdtls: no answer within 45 s".into())
         );
 
-        // IDECraft's own refusal does not wait for the server.
+        // Ferris IDEA's own refusal does not wait for the server.
         let mut server = Scripted {
             loading: true,
             own_refusal: Some("Cannot inline a parameter.".into()),
@@ -1095,6 +1249,31 @@ mod tests {
         assert!(!empty.visible());
     }
 
+    /// SPEC-0095 v14 AK-26 (behaviour 4b): the place's facts from the text alone.
+    #[test]
+    fn the_spot_of_refactor_this_comes_from_the_text() {
+        let path = std::path::Path::new("src/shapes/Main.java");
+        let text = "package shapes;\n\npublic class Main {\n    double total(Shape s) {\n        return s.area() * 2;\n    }\n}\n";
+        // `area` of the call in the method's body.
+        let call = refactor_spot(path, text, 4, 18, None, true);
+        assert!(call.on_name && call.before_parameters && call.in_code && call.java);
+        assert!(!call.declaration);
+        // The method's name: a declaration with parameters, not code that runs.
+        let decl = refactor_spot(path, text, 3, 12, None, true);
+        assert!(decl.on_name && decl.declaration && decl.before_parameters && !decl.in_code);
+        // The class's name.
+        let class = refactor_spot(path, text, 2, 15, None, false);
+        assert!(class.declaration && !class.before_parameters && !class.in_code);
+        assert!(!class.project_file);
+        // `2` and a selection that is more than the name: no name.
+        assert!(!refactor_spot(path, text, 4, 27, None, true).on_name);
+        let wide = refactor_spot(path, text, 4, 18, Some("s.area()"), true);
+        assert!(!wide.on_name && wide.in_code);
+        // A script outside every function is code that runs; Python has no constant of jdtls.
+        let py = refactor_spot(std::path::Path::new("a.py"), "x = f(1)\n", 0, 4, None, true);
+        assert!(py.in_code && py.before_parameters && !py.java);
+    }
+
     #[test]
     fn refactorings_by_kind_and_title() {
         let a = |title: &str, kind: Option<&str>| CodeAction {
@@ -1120,8 +1299,8 @@ mod tests {
 
     #[test]
     fn preview_shows_changed_lines_per_file() {
-        use idecraft_languages::insight::Range;
-        use idecraft_languages::rename::{Edit, FileEdits};
+        use ferris_idea_languages::insight::Range;
+        use ferris_idea_languages::rename::{Edit, FileEdits};
         use std::path::{Path, PathBuf};
         let at = |line: u64, from: u64, to: u64, old: &str, new: &str| Edit {
             range: Range {

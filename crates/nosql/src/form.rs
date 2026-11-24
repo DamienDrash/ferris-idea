@@ -4,7 +4,7 @@
 
 use std::path::Path;
 
-use idecraft_database::{ConnectionForm, Secret, SecretStore, SslMode, secret_ref};
+use ferris_idea_database::{ConnectionForm, Secret, SecretStore, SslMode, secret_ref};
 
 use crate::{
     MongoSession, RedisSession, StoreError, StoreProfile, System, load_stores, save_stores,
@@ -13,7 +13,7 @@ use crate::{
 
 /// The store system of connector `id` when it is a non-relational store (SPEC-0300 catalogue).
 pub fn store_system(id: &str) -> Option<System> {
-    let c = idecraft_database::catalogue().get(id)?.clone();
+    let c = ferris_idea_database::catalogue().get(id)?.clone();
     if !c.is_store() {
         return None;
     }
@@ -53,7 +53,7 @@ pub fn form_url(form: &ConnectionForm) -> Option<Result<(System, String), StoreE
     // `prefer` off the loopback is TLS without certificate checks, as `require` (SPEC-0310 v4
     // behaviour 3, SPEC-0016 v3); plain text only for a store on the loopback.
     let ssl = match form.ssl {
-        SslMode::Prefer if !idecraft_database::is_loopback(Some(host)) => SslMode::Require,
+        SslMode::Prefer if !ferris_idea_database::is_loopback(Some(host)) => SslMode::Require,
         mode => mode,
     };
     let tls = matches!(
@@ -224,12 +224,12 @@ pub fn test_store_form(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use idecraft_database::MemoryStore;
+    use ferris_idea_database::MemoryStore;
 
     fn form(system: &str, ssl: SslMode) -> ConnectionForm {
         ConnectionForm {
             name: "Shop".into(),
-            dialect: idecraft_database::Dialect::PostgreSql,
+            dialect: ferris_idea_database::Dialect::PostgreSql,
             system: Some(system.into()),
             host: "db.local".into(),
             port: "27018".into(),
@@ -303,7 +303,8 @@ mod tests {
 
     #[test]
     fn saving_keeps_the_password_in_the_keychain_and_removing_deletes_it() {
-        let dir = std::env::temp_dir().join(format!("idecraft-store-form-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("ferris-idea-store-form-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let secrets = MemoryStore::default();
         let p = StoreProfile::from_url("Cache", "redis://default@localhost/0").unwrap();
@@ -328,7 +329,10 @@ mod tests {
     #[test]
     fn redis_from_the_dialog_list_is_saved_as_a_store() {
         // The form the connection dialog builds when Redis is picked from the system list.
-        let redis = idecraft_database::catalogue().get("redis").unwrap().clone();
+        let redis = ferris_idea_database::catalogue()
+            .get("redis")
+            .unwrap()
+            .clone();
         let mut f = ConnectionForm::for_connector(&redis);
         f.name = "cache".into();
         f.host = "127.0.0.1".into();
@@ -336,17 +340,17 @@ mod tests {
         f.database = "2".into();
         let p = form_profile(&f, "new").expect("Redis is a store").unwrap();
         let dir =
-            std::env::temp_dir().join(format!("idecraft-store-dialog-{}", std::process::id()));
+            std::env::temp_dir().join(format!("ferris-idea-store-dialog-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let name = save_store(&dir, p, None, None, &MemoryStore::default()).unwrap();
         assert_eq!(name, "cache");
         let text = std::fs::read_to_string(dir.join(crate::STORE_FILE)).unwrap();
-        assert!(text.contains("[idecraft]"), "ADR-0021 envelope: {text}");
+        assert!(text.contains("[ferris-idea]"), "ADR-0021 envelope: {text}");
         assert!(text.contains("kind = \"stores\""), "{text}");
         // New connections use TLS with certificate checks by default (SPEC-0016 v2, IMP-0370).
         assert!(text.contains("url = \"rediss://127.0.0.1:1/2\""), "{text}");
         assert!(
-            !dir.join(".idecraft/connections.toml").exists(),
+            !dir.join(".ferris-idea/connections.toml").exists(),
             "not an SQL connection"
         );
         let _ = std::fs::remove_dir_all(&dir);

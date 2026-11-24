@@ -1,5 +1,5 @@
 //! The warning before a connector plugin first connects to a host (`SPEC-0314` behaviour 7):
-//! plugin, author, target, status and that IDECraft does not review its code, with "Cancel"
+//! plugin, author, target, status and that Ferris IDEA does not review its code, with "Cancel"
 //! (selected) and "Allow and connect".
 
 use gpui::{Context, EventEmitter, FocusHandle, KeyDownEvent, Window, div, prelude::*, px};
@@ -18,7 +18,7 @@ pub enum PluginNetworkDialogEvent {
 
 /// The warning dialog.
 pub struct PluginNetworkDialog {
-    warning: idecraft_plugins::NetworkWarning,
+    warning: ferris_idea_plugins::NetworkWarning,
     allow_selected: bool,
     focus: FocusHandle,
 }
@@ -27,7 +27,7 @@ impl EventEmitter<PluginNetworkDialogEvent> for PluginNetworkDialog {}
 
 impl PluginNetworkDialog {
     /// The warning `warning`; Cancel is selected.
-    pub fn new(warning: idecraft_plugins::NetworkWarning, cx: &mut Context<Self>) -> Self {
+    pub fn new(warning: ferris_idea_plugins::NetworkWarning, cx: &mut Context<Self>) -> Self {
         Self {
             warning,
             allow_selected: false,
@@ -41,7 +41,7 @@ impl PluginNetworkDialog {
     }
 
     /// What it shows (checks).
-    pub fn warning(&self) -> &idecraft_plugins::NetworkWarning {
+    pub fn warning(&self) -> &ferris_idea_plugins::NetworkWarning {
         &self.warning
     }
 

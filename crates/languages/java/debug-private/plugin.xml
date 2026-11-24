@@ -2,8 +2,8 @@
 <?eclipse version="3.4"?>
 <plugin>
    <extension point="org.eclipse.jdt.ls.core.delegateCommandHandler">
-      <delegateCommandHandler class="dev.idecraft.javadebug.boot.PrivateDebugBootstrap">
-         <command id="idecraft.java.startPrivateDebugSession"/>
+      <delegateCommandHandler class="dev.ferrisidea.javadebug.boot.PrivateDebugBootstrap">
+         <command id="ferris-idea.java.startPrivateDebugSession"/>
       </delegateCommandHandler>
    </extension>
 </plugin>

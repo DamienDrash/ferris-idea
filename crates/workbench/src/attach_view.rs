@@ -1,8 +1,8 @@
 //! The Attach to Process dialog (`XDebugger.AttachToProcess`, ⌥⇧F5; `SPEC-0147`): the local
 //! processes with their runtime, filtered as you type; a typed `host:port` attaches to a debug port.
 
+use ferris_idea_debugger::{Process, Runtime, Target};
 use gpui::{Context, Entity, EventEmitter, FocusHandle, KeyDownEvent, Window, div, prelude::*, px};
-use idecraft_debugger::{Process, Runtime, Target};
 
 use crate::editor_view::EditorView;
 use crate::palette::Palette;
@@ -37,15 +37,14 @@ pub struct AttachRow {
 
 /// The rows for `filter` (behaviours 1 and 2): a `host:port` (or `:port`) first offers each
 /// runtime for that address, then the processes whose name, command line or id contain the
-/// filter (case-insensitive), as [`idecraft_debugger::processes`] ordered them.
+/// filter (case-insensitive), as [`ferris_idea_debugger::processes`] ordered them.
 pub fn attach_rows(processes: &[Process], filter: &str) -> Vec<AttachRow> {
     let filter = filter.trim();
     let mut rows = Vec::new();
     if let Some(target) = Target::parse_address(filter) {
         // A Delve server is talked to on this machine only: its port is not protected
         // (SPEC-0147 v3 behaviour 7).
-        let local =
-            matches!(&target, Target::Address { host, .. } if idecraft_debugger::is_loopback(host));
+        let local = matches!(&target, Target::Address { host, .. } if ferris_idea_debugger::is_loopback(host));
         let offered = Runtime::ALL
             .iter()
             .filter(|&&runtime| runtime != Runtime::Go || local);
@@ -63,7 +62,7 @@ pub fn attach_rows(processes: &[Process], filter: &str) -> Vec<AttachRow> {
             host_target: None,
         }));
     }
-    if let Some((attach, folder)) = idecraft_debugger::parse_host_target(filter) {
+    if let Some((attach, folder)) = ferris_idea_debugger::parse_host_target(filter) {
         // Not Go: its programs in a container or pod are not attached to (SPEC-0147 v3).
         let offered = Runtime::ALL.iter().filter(|&&r| r != Runtime::Go);
         rows.extend(offered.map(|&runtime| AttachRow {

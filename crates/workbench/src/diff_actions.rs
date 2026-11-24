@@ -2,11 +2,11 @@
 //! the UI toolkit: what a side of a viewer is and whether it may be written, where a step
 //! between differences leads and when it goes on to another file, the next and previous file of
 //! a list, the current pane and the rows of the settings popup. The rules follow the open
-//! IntelliJ platform (`docs/legal/PROVENANCE.md`); the code is IDECraft's own.
+//! IntelliJ platform (`docs/legal/PROVENANCE.md`); the code is Ferris IDEA's own.
 
 use std::path::{Path, PathBuf};
 
-use idecraft_vcs::DiffRow;
+use ferris_idea_vcs::DiffRow;
 
 /// One of the two panes of the side-by-side view (behaviour 19).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -369,7 +369,8 @@ mod tests {
             assert!(why.message("a.rs").starts_with("a.rs "), "{why:?}");
         }
         // The facts of a real file: writable, read-only, gone.
-        let dir = std::env::temp_dir().join(format!("idecraft-diff-facts-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("ferris-idea-diff-facts-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("a.txt");
@@ -406,12 +407,12 @@ mod tests {
     /// SPEC-0084 v5 behaviours 19 and 22.
     #[test]
     fn the_pane_names_its_line_and_the_popup_its_views() {
-        let rows = idecraft_vcs::side_by_side("a\nb\n", "a\nnew\nb\n");
+        let rows = ferris_idea_vcs::side_by_side("a\nb\n", "a\nnew\nb\n");
         // Row 1 is the added line: the left pane has no line there and names the one above.
         assert_eq!(pane_line(&rows, 1, Pane::Right), Some(2));
         assert_eq!(pane_line(&rows, 1, Pane::Left), Some(1));
         assert_eq!(pane_line(&rows, 2, Pane::Left), Some(2));
-        let added = idecraft_vcs::side_by_side("", "x\n");
+        let added = ferris_idea_vcs::side_by_side("", "x\n");
         assert_eq!(pane_line(&added, 0, Pane::Left), None);
         assert_eq!(
             pane_status(Pane::Left, "HEAD", Some(1)),

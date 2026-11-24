@@ -529,7 +529,7 @@ pub fn enable() {
     POOL.get_or_init(|| {
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::Builder::new()
-            .name("idecraft-lsp-pool".into())
+            .name("ferris-idea-lsp-pool".into())
             .spawn(move || {
                 let rt = tokio::runtime::Builder::new_current_thread()
                     .enable_all()
@@ -907,11 +907,11 @@ pub fn disk_changed(root: &Path, changes: Vec<(PathBuf, crate::watched_files::Ki
     });
 }
 
-/// Files IDECraft itself wrote on disk outside an editor buffer — a refactoring, its undo or
+/// Files Ferris IDEA itself wrote on disk outside an editor buffer — a refactoring, its undo or
 /// redo over MCP — are told to the running servers of `root` at once, as changed, before the
 /// call returns (`SPEC-0042` v24 behaviour 42): the next question then sees the new text, also
 /// when it comes sooner than the window's look at the disk, or in a server without a window
-/// (`idecraft mcp`, `idecraft call`). Paths are filtered like [`disk_changed`]'s. Waits at most
+/// (`ferris-idea mcp`, `ferris-idea call`). Paths are filtered like [`disk_changed`]'s. Waits at most
 /// 5 s; a server that does not answer is not waited for again.
 pub fn files_written(root: &Path, paths: &[&Path]) {
     use crate::watched_files::{Kind, inside, told};
@@ -938,7 +938,7 @@ pub fn files_written(root: &Path, paths: &[&Path]) {
 }
 
 /// [`disk_changed`] for the changes of a snapshot comparison (`SPEC-0026`).
-pub fn disk_changes(root: &Path, changes: &[idecraft_core::FileChange]) {
+pub fn disk_changes(root: &Path, changes: &[ferris_idea_core::FileChange]) {
     disk_changed(root, crate::watched_files::kinds(changes));
 }
 

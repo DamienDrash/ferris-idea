@@ -7,16 +7,17 @@
 //! of its own; the user's settings are never read or written. The editor font size is one value for
 //! the whole process, so the test has a process of its own, as `font_size_actions.rs`. Further
 //! tests check the gaps of OBS-0062: S1–S5 (`SPEC-0105` v7) and S6, S7 (`SPEC-0105` v8: Select
-//! All in the fields, the rolling page list and page).
+//! All in the fields, the rolling page list and page), and S8 of the window check of 2026-11-18
+//! (`SPEC-0105` v10: a page's note goes with the page).
 
 #![cfg(target_os = "macos")]
 
 use std::path::PathBuf;
 
+use ferris_idea_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
+use ferris_idea_workbench::settings_model::Page;
+use ferris_idea_workbench::{SettingsView, WorkbenchView, semantics};
 use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext, point, px};
-use idecraft_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
-use idecraft_workbench::settings_model::Page;
-use idecraft_workbench::{SettingsView, WorkbenchView, semantics};
 
 /// Both tests set the editor font size, one value for the whole process: they run one after the
 /// other, never side by side (a parallel run saw the other test's size).
@@ -24,7 +25,7 @@ static FONT_SIZE: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 fn folder(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!(
-        "idecraft-settings-window-{tag}-{}",
+        "ferris-idea-settings-window-{tag}-{}",
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&dir);
@@ -79,7 +80,7 @@ fn font_shell_and_protected_branches_in_the_window(cx: &mut TestAppContext) {
     cx.update(|cx| {
         cx.set_global(IdeSettingsFile(file.clone()));
         cx.set_global(ThemeFile(settings.join("theme")));
-        cx.set_global(CurrentIdeSettings(idecraft_core::IdeSettings::default()));
+        cx.set_global(CurrentIdeSettings(ferris_idea_core::IdeSettings::default()));
     });
     let at = root.clone();
     let window = cx.add_window(move |_, cx| WorkbenchView::new(&at, cx));
@@ -117,9 +118,9 @@ fn font_shell_and_protected_branches_in_the_window(cx: &mut TestAppContext) {
     }
     assert_eq!(value("settings-font-value-2", cx), "1.4");
     // Applied at once and saved.
-    assert_eq!(idecraft_workbench::fonts::editor_font_size(), 16.0);
-    assert!((idecraft_workbench::fonts::editor_line_height() - 16.0 * 1.4).abs() < 1.0);
-    let saved = idecraft_core::load_ide_settings(&file);
+    assert_eq!(ferris_idea_workbench::fonts::editor_font_size(), 16.0);
+    assert!((ferris_idea_workbench::fonts::editor_line_height() - 16.0 * 1.4).abs() < 1.0);
+    let saved = ferris_idea_core::load_ide_settings(&file);
     assert_eq!(saved.editor.font_size, 16.0);
     assert!((saved.editor.line_spacing - 1.4).abs() < 1e-3, "{saved:?}");
 
@@ -146,7 +147,7 @@ fn font_shell_and_protected_branches_in_the_window(cx: &mut TestAppContext) {
     cx.run_until_parked();
     keys(cx, "enter");
     assert_eq!(
-        idecraft_core::load_ide_settings(&file)
+        ferris_idea_core::load_ide_settings(&file)
             .vcs
             .protected_branches,
         "main, release/*"
@@ -167,7 +168,7 @@ fn font_shell_and_protected_branches_in_the_window(cx: &mut TestAppContext) {
     );
 
     // The saved file read again, as at a start, holds every value.
-    let again = idecraft_core::load_ide_settings(&file);
+    let again = ferris_idea_core::load_ide_settings(&file);
     assert_eq!(again.editor.font_size, 16.0);
     assert!((again.editor.line_spacing - 1.4).abs() < 1e-3);
     assert_eq!(again.terminal.shell.as_deref(), Some("/bin/bash"));
@@ -206,7 +207,7 @@ fn search_revert_defaults_font_and_advanced(cx: &mut TestAppContext) {
     cx.update(|cx| {
         cx.set_global(IdeSettingsFile(file.clone()));
         cx.set_global(ThemeFile(settings.join("theme")));
-        cx.set_global(CurrentIdeSettings(idecraft_core::IdeSettings::default()));
+        cx.set_global(CurrentIdeSettings(ferris_idea_core::IdeSettings::default()));
     });
     let at = root.clone();
     let window = cx.add_window(move |_, cx| WorkbenchView::new(&at, cx));
@@ -239,7 +240,7 @@ fn search_revert_defaults_font_and_advanced(cx: &mut TestAppContext) {
     // S2, S3: a change offers Revert changes and Restore defaults and puts a dot after the page.
     assert!(node("settings-revert", cx).is_none());
     assert!(node("settings-page-modified-Font", cx).is_none());
-    let size = idecraft_core::IdeSettings::default().editor.font_size;
+    let size = ferris_idea_core::IdeSettings::default().editor.font_size;
     // Back to the page shown before the search; the Font page by a click in the list.
     click("settings-page-Font", cx);
     assert_eq!(view.read_with(cx, |v, _| v.page()), Page::Font);
@@ -259,7 +260,7 @@ fn search_revert_defaults_font_and_advanced(cx: &mut TestAppContext) {
         "nothing left to revert"
     );
     assert_eq!(
-        idecraft_core::load_ide_settings(&file).editor.font_size,
+        ferris_idea_core::load_ide_settings(&file).editor.font_size,
         size
     );
 
@@ -270,22 +271,35 @@ fn search_revert_defaults_font_and_advanced(cx: &mut TestAppContext) {
     cx.run_until_parked();
     keys(cx, "enter");
     assert_eq!(
-        idecraft_core::load_ide_settings(&file).editor.font_size,
+        ferris_idea_core::load_ide_settings(&file).editor.font_size,
         18.0
     );
     assert_eq!(value("settings-font-value-1", cx), "18");
     click("settings-restore-defaults", cx);
     assert_eq!(
-        idecraft_core::load_ide_settings(&file).editor.font_size,
+        ferris_idea_core::load_ide_settings(&file).editor.font_size,
         size
     );
     assert!(node("settings-page-modified-Font", cx).is_none());
+    // S8 (`SPEC-0105` v10 AK-17): the note belongs to the Font page; Tools › Terminal, chosen in
+    // the list, shows none, and neither does Font again.
+    assert_eq!(
+        view.read_with(cx, |v, _| v.note().map(str::to_owned)),
+        Some("Font: defaults restored".to_owned())
+    );
+    click("settings-page-Terminal", cx);
+    assert_eq!(view.read_with(cx, |v, _| v.page()), Page::Terminal);
+    assert_eq!(view.read_with(cx, |v, _| v.note().map(str::to_owned)), None);
+    click("settings-page-Font", cx);
+    assert_eq!(view.read_with(cx, |v, _| v.note().map(str::to_owned)), None);
     // The family from the list.
     let fonts = view.read_with(cx, |v, _| v.font_choices().to_vec());
     if fonts.len() > 1 {
         click("settings-font-family-1", cx);
         assert_eq!(
-            idecraft_core::load_ide_settings(&file).editor.font_family,
+            ferris_idea_core::load_ide_settings(&file)
+                .editor
+                .font_family,
             fonts[1]
         );
         click("settings-font-family-0", cx);
@@ -383,7 +397,7 @@ fn select_all_and_rolling_lists(cx: &mut TestAppContext) {
     cx.update(|cx| {
         cx.set_global(IdeSettingsFile(file.clone()));
         cx.set_global(ThemeFile(settings.join("theme")));
-        cx.set_global(CurrentIdeSettings(idecraft_core::IdeSettings::default()));
+        cx.set_global(CurrentIdeSettings(ferris_idea_core::IdeSettings::default()));
     });
     let at = root.clone();
     let window = cx.add_window(move |_, cx| WorkbenchView::new(&at, cx));
@@ -453,7 +467,7 @@ fn select_all_and_rolling_lists(cx: &mut TestAppContext) {
     cx.run_until_parked();
     keys(cx, "enter");
     assert_eq!(
-        idecraft_core::load_ide_settings(&file).editor.font_size,
+        ferris_idea_core::load_ide_settings(&file).editor.font_size,
         20.0
     );
     assert!(
@@ -526,6 +540,269 @@ fn select_all_and_rolling_lists(cx: &mut TestAppContext) {
     );
     keys(cx, "escape");
     assert!(bench.read_with(cx, |b, _| b.settings_dialog().is_none()));
+    let _ = std::fs::remove_dir_all(&root);
+    let _ = std::fs::remove_dir_all(&settings);
+}
+
+/// `SPEC-0105` v10 AK-18 (window check of 2026-11-18, K1): with a search typed on the keymap page,
+/// a click on a row or Tab from the search gives the keys to the list: ⌫ removes the row's
+/// shortcuts instead of shortening the search, ⇧⌫ restores them, ↓ moves; Escape gives the keys
+/// back to the search instead of closing the dialog.
+#[gpui::test]
+fn keymap_rows_take_the_keys_after_a_click_or_tab(cx: &mut TestAppContext) {
+    let settings = folder("keymap-keys");
+    let file = settings.join("settings.toml");
+    let root = folder("keymap-keys-project");
+    semantics::set_consumer(semantics::Consumer::SelfTest, true);
+    cx.update(|cx| {
+        // The test's own keymap file: the user's is never written.
+        cx.set_global(ferris_idea_workbench::keymaps::UserKeymapFile(
+            settings.join("keymaps/FerrisIDEA.toml"),
+        ));
+        cx.set_global(IdeSettingsFile(file.clone()));
+        cx.set_global(ThemeFile(settings.join("theme")));
+        cx.set_global(CurrentIdeSettings(ferris_idea_core::IdeSettings::default()));
+    });
+    let at = root.clone();
+    let window = cx.add_window(move |_, cx| WorkbenchView::new(&at, cx));
+    let bench = window.root(cx).unwrap();
+    let cx = VisualTestContext::from_window(window.into(), cx).into_mut();
+    cx.simulate_resize(gpui::size(px(1372.), px(860.)));
+    cx.run_until_parked();
+    bench.update_in(cx, |b, window, cx| {
+        b.open_settings(Page::Keymap, window, cx)
+    });
+    cx.run_until_parked();
+    let view = dialog(&bench, cx);
+    cx.simulate_input("reformat");
+    cx.run_until_parked();
+    assert_eq!(value("settings-search", cx), "reformat");
+    assert_eq!(view.read_with(cx, |v, _| v.page()), Page::Keymap);
+    // A row found by the search that has a shortcut.
+    let row = view
+        .read_with(cx, |v, _| {
+            v.rows().iter().position(|r| !r.shortcuts.is_empty())
+        })
+        .expect("an action with a shortcut matches \"reformat\"");
+    let title = view.read_with(cx, |v, _| v.rows()[row].title.clone());
+    let note = |cx: &mut VisualTestContext| view.read_with(cx, |v, _| v.note().map(str::to_owned));
+
+    // A click on the row, then ⌫: the shortcuts go, the search stays.
+    click(&format!("settings-keymap-row-{row}"), cx);
+    assert_eq!(view.read_with(cx, |v, _| v.selected()), row);
+    keys(cx, "backspace");
+    assert_eq!(
+        value("settings-search", cx),
+        "reformat",
+        "⌫ left the search alone"
+    );
+    assert_eq!(note(cx), Some(format!("{title}: shortcuts removed")));
+    // The row stays chosen without shortcuts; ⇧⌫ restores them.
+    assert_eq!(
+        view.read_with(cx, |v, _| v.rows()[v.selected()].title.clone()),
+        title
+    );
+    assert_eq!(
+        view.read_with(cx, |v, _| v.rows()[v.selected()].shortcuts.clone()),
+        ""
+    );
+    keys(cx, "shift-backspace");
+    assert_eq!(
+        note(cx),
+        Some(format!("{title}: bundled shortcuts restored"))
+    );
+    assert_eq!(value("settings-search", cx), "reformat");
+    // ↓ goes on in the list (when there is a next row).
+    assert_ne!(
+        view.read_with(cx, |v, _| v.rows()[v.selected()].shortcuts.clone()),
+        ""
+    );
+    let n = view.read_with(cx, |v, _| v.rows().len());
+    keys(cx, "down");
+    assert_eq!(
+        view.read_with(cx, |v, _| v.selected()),
+        (row + 1).min(n - 1)
+    );
+    keys(cx, "up");
+    assert_eq!(view.read_with(cx, |v, _| v.selected()), row);
+
+    // Escape gives the keys back to the search; the dialog stays, ⌫ shortens the search.
+    keys(cx, "escape");
+    assert!(
+        bench.read_with(cx, |b, _| b.settings_dialog()).is_some(),
+        "Escape on the list keeps the dialog"
+    );
+    keys(cx, "backspace");
+    assert_eq!(value("settings-search", cx), "reforma");
+    cx.simulate_input("t");
+    cx.run_until_parked();
+    assert_eq!(value("settings-search", cx), "reformat");
+
+    // Tab from the search gives the keys to the list again: ⌫ removes.
+    keys(cx, "tab");
+    assert_eq!(
+        view.read_with(cx, |v, _| v.page()),
+        Page::Keymap,
+        "Tab stays on Keymap"
+    );
+    let selected = view.read_with(cx, |v, _| v.selected());
+    let chosen = view.read_with(cx, |v, _| v.rows()[selected].title.clone());
+    keys(cx, "backspace");
+    assert_eq!(value("settings-search", cx), "reformat");
+    assert_eq!(note(cx), Some(format!("{chosen}: shortcuts removed")));
+    keys(cx, "shift-backspace");
+    assert_eq!(
+        note(cx),
+        Some(format!("{chosen}: bundled shortcuts restored"))
+    );
+
+    // Escape twice: back to the search, then the dialog closes.
+    keys(cx, "escape");
+    assert!(bench.read_with(cx, |b, _| b.settings_dialog()).is_some());
+    keys(cx, "escape");
+    assert!(
+        bench.read_with(cx, |b, _| b.settings_dialog()).is_none(),
+        "Escape from the search closes the dialog"
+    );
+    let _ = std::fs::remove_dir_all(&root);
+    let _ = std::fs::remove_dir_all(&settings);
+}
+
+/// The checked state and the selection of the semantic tree's node `id`.
+fn check_state(id: &str, cx: &mut VisualTestContext) -> (Option<bool>, Option<bool>) {
+    cx.run_until_parked();
+    cx.update(|window, _| {
+        let tree = semantics::tree(semantics::window_id(window)).expect("a semantic tree");
+        let n = tree
+            .iter()
+            .find(|n| n.test_id() == Some(id))
+            .unwrap_or_else(|| panic!("no node {id}"));
+        (n.checked(), n.selected())
+    })
+}
+
+/// `SPEC-0105` v11 AK-19 (window check of 2026-11-18, G1): on Editor › General and System
+/// Settings a click on an option's label switches it and selects its row; Space and Enter then
+/// switch the selected option and never type into the search, which stays empty; with a search
+/// typed, Space switches after the click and leaves the search as typed, Escape gives the keys
+/// back to the search.
+#[gpui::test]
+fn options_switch_by_a_click_on_the_label_and_then_by_keys(cx: &mut TestAppContext) {
+    // Opening the workbench sets the process's editor font size: one after the other with the
+    // font tests.
+    let _serial = FONT_SIZE.lock().unwrap_or_else(|e| e.into_inner());
+    let settings = folder("option-labels");
+    let file = settings.join("settings.toml");
+    let root = folder("option-labels-project");
+    std::fs::write(root.join("notes.txt"), "alpha\n").unwrap();
+    semantics::set_consumer(semantics::Consumer::SelfTest, true);
+    cx.update(|cx| {
+        // The test's own settings file: the user's is never read or written.
+        cx.set_global(IdeSettingsFile(file.clone()));
+        cx.set_global(ThemeFile(settings.join("theme")));
+        cx.set_global(CurrentIdeSettings(ferris_idea_core::IdeSettings::default()));
+    });
+    let at = root.clone();
+    let window = cx.add_window(move |_, cx| WorkbenchView::new(&at, cx));
+    let bench = window.root(cx).unwrap();
+    let cx = VisualTestContext::from_window(window.into(), cx).into_mut();
+    cx.simulate_resize(gpui::size(px(1372.), px(860.)));
+    cx.run_until_parked();
+    // An editor behind the dialog, as in the window: keys that leave the dialog would type there.
+    bench.update_in(cx, |b, window, cx| {
+        b.open(&root.join("notes.txt"), window, cx)
+    });
+    cx.run_until_parked();
+    bench.update_in(cx, |b, window, cx| {
+        b.open_settings(Page::Editor, window, cx)
+    });
+    cx.run_until_parked();
+    let view = dialog(&bench, cx);
+    let strip = |cx: &mut VisualTestContext| {
+        view.read_with(cx, |v, _| v.ide().editor.strip_trailing_spaces)
+    };
+    let before = strip(cx);
+    assert_eq!(value("settings-search", cx), "");
+
+    // A click on the label of "Remove trailing spaces on save": switched and selected.
+    click("settings-editor-0-label", cx);
+    assert_eq!(
+        strip(cx),
+        !before,
+        "a click on the label switches the option"
+    );
+    assert_eq!(view.read_with(cx, |v, _| v.selected()), 0);
+    assert_eq!(
+        check_state("settings-editor-0", cx),
+        (Some(!before), Some(true))
+    );
+    // Space and Enter switch the selected option; the search stays empty.
+    keys(cx, "space");
+    assert_eq!(strip(cx), before, "Space switches the selected option");
+    assert_eq!(
+        value("settings-search", cx),
+        "",
+        "Space typed nothing into the search"
+    );
+    keys(cx, "enter");
+    assert_eq!(strip(cx), !before, "Enter switches the selected option");
+    assert_eq!(value("settings-search", cx), "");
+    assert_eq!(view.read_with(cx, |v, _| v.page()), Page::Editor);
+    // The value went to the test's settings file.
+    let saved = std::fs::read_to_string(&file).unwrap_or_default();
+    assert!(
+        saved.contains(&format!("strip_trailing_spaces = {}", !before)),
+        "saved: {saved}"
+    );
+
+    // A click on another label moves the selection there; Space switches that one only.
+    let hints =
+        |cx: &mut VisualTestContext| view.read_with(cx, |v, _| v.ide().editor.parameter_hints);
+    let hints_before = hints(cx);
+    click("settings-editor-3-label", cx);
+    assert_eq!(hints(cx), !hints_before);
+    assert_eq!(view.read_with(cx, |v, _| v.selected()), 3);
+    assert_eq!(check_state("settings-editor-0", cx).1, Some(false));
+    keys(cx, "space");
+    assert_eq!(hints(cx), hints_before);
+    assert_eq!(strip(cx), !before, "the first option stays as it was");
+
+    // System Settings: the same for its options.
+    click("settings-page-System Settings", cx);
+    assert_eq!(view.read_with(cx, |v, _| v.page()), Page::SystemSettings);
+    let reopen =
+        |cx: &mut VisualTestContext| view.read_with(cx, |v, _| v.ide().system.reopen_last_project);
+    let reopen_before = reopen(cx);
+    click("settings-system-1-label", cx);
+    assert_eq!(reopen(cx), !reopen_before);
+    keys(cx, "space");
+    assert_eq!(reopen(cx), reopen_before);
+    assert_eq!(value("settings-search", cx), "");
+
+    // With a search typed: the click and Space switch, the search stays as typed.
+    click("settings-search", cx);
+    cx.simulate_input("trailing");
+    cx.run_until_parked();
+    assert_eq!(value("settings-search", cx), "trailing");
+    assert_eq!(view.read_with(cx, |v, _| v.page()), Page::Editor);
+    let now = strip(cx);
+    click("settings-editor-0-label", cx);
+    assert_eq!(strip(cx), !now);
+    keys(cx, "space");
+    assert_eq!(
+        strip(cx),
+        now,
+        "Space after the click switches, also with a search typed"
+    );
+    assert_eq!(value("settings-search", cx), "trailing");
+    // Escape gives the keys back to the search; the dialog stays and typing goes on there.
+    keys(cx, "escape");
+    assert!(bench.read_with(cx, |b, _| b.settings_dialog()).is_some());
+    keys(cx, "backspace");
+    assert_eq!(value("settings-search", cx), "trailin");
+    // The editor behind never got a key.
+    let text = bench.read_with(cx, |b, cx| b.active_text(cx));
+    assert_eq!(text.as_deref(), Some("alpha\n"));
     let _ = std::fs::remove_dir_all(&root);
     let _ = std::fs::remove_dir_all(&settings);
 }

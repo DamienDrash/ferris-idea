@@ -7,11 +7,11 @@
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_core::commit_messages::{COMMIT_MESSAGES_FILE, CommitMessages};
+use ferris_idea_workbench::commit_model::NO_MESSAGE_HISTORY;
+use ferris_idea_workbench::keymap_actions::MESSAGE_HISTORY;
+use ferris_idea_workbench::{CommitView, WorkbenchView};
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_core::commit_messages::{COMMIT_MESSAGES_FILE, CommitMessages};
-use idecraft_workbench::commit_model::NO_MESSAGE_HISTORY;
-use idecraft_workbench::keymap_actions::MESSAGE_HISTORY;
-use idecraft_workbench::{CommitView, WorkbenchView};
 
 fn git(dir: &Path, args: &[&str]) -> bool {
     std::process::Command::new("git")
@@ -24,7 +24,7 @@ fn git(dir: &Path, args: &[&str]) -> bool {
 /// A repository with one commit and one changed file; `None` without `git`.
 fn workspace(tag: &str) -> Option<PathBuf> {
     let root = std::env::temp_dir().join(format!(
-        "idecraft-commit-message-history-{tag}-{}",
+        "ferris-idea-commit-message-history-{tag}-{}",
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&root);
@@ -126,7 +126,7 @@ fn committed_messages_are_listed_and_a_chosen_one_replaces_the_text(cx: &mut Tes
     let (kept, problem) = CommitMessages::load(&root);
     assert_eq!(problem, None);
     assert_eq!(kept.newest_first(), ["Add the cart", body]);
-    let ignore = std::fs::read_to_string(root.join(".idecraft/.gitignore")).unwrap();
+    let ignore = std::fs::read_to_string(root.join(".ferris-idea/.gitignore")).unwrap();
     assert!(ignore.lines().any(|l| l == "commit-messages.toml"));
 
     // The field is empty after a commit; something is typed, then the history is asked for.
@@ -177,7 +177,7 @@ fn a_broken_history_file_is_said_and_replaced_by_the_next_commit(cx: &mut TestAp
     let Some(root) = workspace("broken") else {
         return;
     };
-    std::fs::create_dir_all(root.join(".idecraft")).unwrap();
+    std::fs::create_dir_all(root.join(".ferris-idea")).unwrap();
     std::fs::write(
         root.join(COMMIT_MESSAGES_FILE),
         "version = 1\nmessage = [\"s3cr3t-token\"\n",

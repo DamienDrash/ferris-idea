@@ -7,7 +7,7 @@
 use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
 
-use idecraft_core::{NotOwn, OwnSources};
+use ferris_idea_core::{NotOwn, OwnSources};
 use serde::{Deserialize, Serialize};
 
 use crate::{MAX_TEXT, now_rfc3339};
@@ -48,7 +48,7 @@ pub fn file_answer_meaning(code: i64) -> &'static str {
 
 /// Names of version control and IDE data, refused as any part of a path in any case (behaviour 7
 /// check 2).
-const DATA_NAMES: &[&str] = &[".git", ".hg", ".svn", ".jj", "cvs", ".idecraft", ".idea"];
+const DATA_NAMES: &[&str] = &[".git", ".hg", ".svn", ".jj", "cvs", ".ferris-idea", ".idea"];
 
 /// One family of the deny list (behaviour 8); every name in lower case.
 struct Family {
@@ -292,12 +292,12 @@ pub(crate) fn own_file(own: &OwnSources, rel: &str) -> Result<Checked, Refusal> 
 /// name, and only when the handle is the file that was checked (same device and inode) and no
 /// link stands on the way now that it is open. What is read afterwards comes from this handle.
 fn open_checked(own: &OwnSources, checked: &Checked) -> Result<std::fs::File, Refusal> {
-    let (handle, meta) = match idecraft_core::open_regular(&checked.file) {
+    let (handle, meta) = match ferris_idea_core::open_regular(&checked.file) {
         Ok(opened) => opened,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Err(Refusal::Missing),
         Err(_) => return Err(Refusal::Changed),
     };
-    if !idecraft_core::same_file(&checked.meta, &meta)
+    if !ferris_idea_core::same_file(&checked.meta, &meta)
         || own.readable(&checked.relative).as_deref() != Ok(checked.relative.as_path())
         || checked.file.canonicalize().ok().as_deref() != Some(checked.file.as_path())
     {
@@ -379,7 +379,7 @@ pub fn guarded(root: &Path, path: &Path) -> Option<Refusal> {
 pub struct GuardQuestion {
     /// The question; names the file and the plugin.
     pub message: String,
-    /// Why IDECraft asks, and what the plugin gets.
+    /// Why Ferris IDEA asks, and what the plugin gets.
     pub detail: String,
     /// The answers; the first is the default and changes nothing.
     pub buttons: [&'static str; 2],
@@ -392,7 +392,7 @@ pub fn guard_question(plugin: &str, action: &str, path: &str, refusal: Refusal) 
     GuardQuestion {
         message: format!("Give {path} to the plugin {plugin}?"),
         detail: format!(
-            "\"{action}\" would get the text of this file. IDECraft does not hand it to plugins by itself: {reason}. The plugin runs in its sandbox without network access; if you go on, this is noted in {FILE_AUDIT}."
+            "\"{action}\" would get the text of this file. Ferris IDEA does not hand it to plugins by itself: {reason}. The plugin runs in its sandbox without network access; if you go on, this is noted in {FILE_AUDIT}."
         ),
         buttons: ["Cancel", "Run on This File"],
     }
@@ -678,7 +678,7 @@ mod tests {
             ".git/config",
             ".GIT/config",
             "sub/.git",
-            ".idecraft/state.json",
+            ".ferris-idea/state.json",
             ".Idea/workspace.xml",
             "a/.hg/hgrc",
             "CVS/Root",
@@ -695,7 +695,8 @@ mod tests {
     // SPEC-0156/AK-7: behaviour 10.
     #[test]
     fn the_log_starts_again_at_its_limit() {
-        let dir = std::env::temp_dir().join(format!("idecraft-file-audit-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("ferris-idea-file-audit-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let log = dir.join(FILE_AUDIT);
         let record = |path: &str| FileRefusal {
@@ -727,7 +728,8 @@ mod tests {
     #[test]
     fn a_file_swapped_after_the_check_is_not_read() {
         use std::os::unix::fs::symlink;
-        let base = std::env::temp_dir().join(format!("idecraft-file-swap-{}", std::process::id()));
+        let base =
+            std::env::temp_dir().join(format!("ferris-idea-file-swap-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         let root = base.join("project");
         std::fs::create_dir_all(root.join("src")).unwrap();

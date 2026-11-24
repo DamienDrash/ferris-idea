@@ -1,6 +1,6 @@
 //! Move a file to another folder (`SPEC-0114`) and keep what refers to it working: the language
 //! server's edits for the move (`workspace/willRenameFiles`, e.g. Rust modules, Java packages,
-//! TypeScript imports), and IDECraft's own rewriting of relative `#include "…"` in C/C++ and relative
+//! TypeScript imports), and Ferris IDEA's own rewriting of relative `#include "…"` in C/C++ and relative
 //! import paths in JavaScript/TypeScript, which servers there do not update. The package line of a
 //! moved Java or Kotlin file follows its folder where the server's edits leave it unchanged
 //! (`SPEC-0275` v3 behaviour 26). Only the project's own sources are changed; edits of other files
@@ -64,7 +64,7 @@ pub fn relative(dir: &Path, to: &Path) -> String {
     parts.join("/")
 }
 
-/// Kinds of reference IDECraft rewrites itself.
+/// Kinds of reference Ferris IDEA rewrites itself.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RefKind {
     /// `#include "path"` in C and C++.
@@ -176,7 +176,7 @@ fn respell(dir: &Path, target: &Path, old: &str, kind: RefKind) -> String {
     rel
 }
 
-/// IDECraft's own edits of `text` (the file at `path`) for moving `from` to `to`: references to the
+/// Ferris IDEA's own edits of `text` (the file at `path`) for moving `from` to `to`: references to the
 /// moved file, and, in the moved file itself, its relative references, which now start elsewhere.
 pub fn own_edits(
     text: &str,
@@ -454,7 +454,7 @@ fn code_start(text: &str) -> usize {
     offset
 }
 
-/// IDECraft's own edit of a Java or Kotlin file moved from folder `old_dir` to `new_dir` of the
+/// Ferris IDEA's own edit of a Java or Kotlin file moved from folder `old_dir` to `new_dir` of the
 /// workspace at `root`: its package line to the new folder's package. Only when the line matched
 /// the old folder (so an unusual source layout is never "corrected").
 pub fn package_line_edit(
@@ -467,8 +467,8 @@ pub fn package_line_edit(
     if !has_package_line(file) {
         return None;
     }
-    let old = idecraft_core::file_ops::package_of(root, old_dir);
-    let new = idecraft_core::file_ops::package_of(root, new_dir);
+    let old = ferris_idea_core::file_ops::package_of(root, old_dir);
+    let new = ferris_idea_core::file_ops::package_of(root, new_dir);
     let declared = package_declaration(text).map(|(_, name)| name);
     if declared != old || (old.is_none() && new.is_none()) {
         return None;
@@ -495,6 +495,148 @@ pub fn update_package_line(root: &Path, file: &Path, old_dir: &Path) -> Result<b
     out.replace_range(span, &new);
     std::fs::write(file, out).map_err(|e| format!("{}: {e}", file.display()))?;
     Ok(true)
+}
+
+fn ident_char(c: char) -> bool {
+    c.is_alphanumeric() || c == '_' || c == '$'
+}
+
+/// Byte offsets of `needle` in `text` standing alone: neither an identifier character nor a dot
+/// right before it, no identifier character right after it.
+fn standalone(text: &str, needle: &str) -> Vec<usize> {
+    text.match_indices(needle)
+        .filter(|(at, _)| {
+            let before = text[..*at].chars().next_back();
+            let after = text[at + needle.len()..].chars().next();
+            !before.is_some_and(|c| ident_char(c) || c == '.') && !after.is_some_and(ident_char)
+        })
+        .map(|(at, _)| at)
+        .collect()
+}
+
+/// Whether `text` imports `name` from any package (`import a.b.Name;`, Kotlin without `;`).
+fn imports_name(text: &str, name: &str) -> bool {
+    text.lines().any(|l| {
+        let l = l.trim();
+        l.strip_prefix("import ")
+            .map(|r| r.trim().trim_end_matches(';').trim())
+            .is_some_and(|r| r.rsplit('.').next() == Some(name) && !r.starts_with("static "))
+    })
+}
+
+/// The edit inserting `import <qualified>` (with `;` unless Kotlin) after the last import line, or
+/// after the package line with a blank line, or at the start of the code.
+fn import_insertion(text: &str, qualified: &str, kotlin: bool) -> (std::ops::Range<usize>, String) {
+    let line = if kotlin {
+        format!("import {qualified}")
+    } else {
+        format!("import {qualified};")
+    };
+    let mut offset = 0;
+    let mut last_import = None;
+    for l in text.split_inclusive('\n') {
+        if l.trim_start().starts_with("import ") {
+            last_import = Some(offset + l.len());
+        }
+        offset += l.len();
+    }
+    if let Some(end) = last_import {
+        let lead = if text[..end].ends_with('\n') {
+            ""
+        } else {
+            "\n"
+        };
+        return (end..end, format!("{lead}{line}\n"));
+    }
+    if let Some((span, _)) = package_declaration(text) {
+        let end = text[span.end..]
+            .find('\n')
+            .map_or(text.len(), |i| span.end + i + 1);
+        let lead = if text[..end].ends_with('\n') {
+            ""
+        } else {
+            "\n"
+        };
+        return (end..end, format!("{lead}\n{line}\n"));
+    }
+    let at = code_start(text);
+    (at..at, format!("{line}\n\n"))
+}
+
+/// Ferris IDEA's own edits of a Java or Kotlin file at `path` (`text`, in package `package`) for the
+/// type `name` moved from package `old` to `new` (`SPEC-0114` v5 behaviour 9, window check A12
+/// V1): every qualified name `old.name` — imports, static imports, qualified uses — becomes
+/// `new.name`; a file of the old package that used the type without an import, or through
+/// `import old.*`, gets `import new.name`.
+pub fn java_reference_edits(
+    path: &Path,
+    text: &str,
+    package: Option<&str>,
+    old: &str,
+    new: &str,
+    name: &str,
+) -> Vec<(std::ops::Range<usize>, String)> {
+    if !has_package_line(path) || old == new {
+        return Vec::new();
+    }
+    let kotlin = path
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("kt"));
+    let old_qualified = format!("{old}.{name}");
+    let new_qualified = format!("{new}.{name}");
+    let mut out: Vec<(std::ops::Range<usize>, String)> = standalone(text, &old_qualified)
+        .into_iter()
+        .map(|at| (at..at + old_qualified.len(), new_qualified.clone()))
+        .collect();
+    if !out.is_empty() || package == Some(new) || imports_name(text, name) {
+        return out;
+    }
+    // Used by its simple name: from the old package itself, or through `import old.*`.
+    let wildcard = text.lines().any(|l| {
+        let l = l.trim().trim_end_matches(';').trim();
+        l.strip_prefix("import ").map(str::trim) == Some(&format!("{old}.*"))
+    });
+    if (package == Some(old) || wildcard) && !standalone(text, name).is_empty() {
+        out.push(import_insertion(text, &new_qualified, kotlin));
+    }
+    out
+}
+
+/// The imports the moved Java or Kotlin file `text` needs for the types of its old package
+/// `old` it uses by their simple names, now that it is in another package: `siblings` are the
+/// names of the old package's other files (`SPEC-0114` v5 behaviour 9).
+pub fn moved_file_imports(
+    path: &Path,
+    text: &str,
+    old: &str,
+    siblings: &[String],
+) -> Vec<(std::ops::Range<usize>, String)> {
+    if !has_package_line(path) {
+        return Vec::new();
+    }
+    let kotlin = path
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("kt"));
+    let own = path.file_stem().map(|s| s.to_string_lossy().into_owned());
+    let needed: Vec<&String> = siblings
+        .iter()
+        .filter(|s| Some(*s) != own.as_ref())
+        .filter(|s| !standalone(text, s).is_empty() && !imports_name(text, s))
+        .collect();
+    if needed.is_empty() {
+        return Vec::new();
+    }
+    let (span, first) = import_insertion(text, &format!("{old}.{}", needed[0]), kotlin);
+    let mut lines = first;
+    for s in &needed[1..] {
+        let line = if kotlin {
+            format!("import {old}.{s}\n")
+        } else {
+            format!("import {old}.{s};\n")
+        };
+        lines.push_str(&line);
+    }
+    vec![(span, lines)]
 }
 
 /// Where `file` goes when moved into `target_dir` (workspace-relative or absolute), refusing a
@@ -538,6 +680,8 @@ pub async fn plan_move(
             files.entry(path).or_default().extend(f.edits);
         }
     }
+    // Files the server changed are left to it (Java references, v5 behaviour 9).
+    let by_server: std::collections::BTreeSet<PathBuf> = files.keys().cloned().collect();
     // The moved file's package line, unless the server changed that line (behaviour 26).
     if has_package_line(&from)
         && let Ok(text) = crate::shown::read(&from)
@@ -565,9 +709,24 @@ pub async fn plan_move(
             edits.push(edit);
         }
     }
-    let listed = idecraft_core::Workspace::open(&root)
+    let listed = ferris_idea_core::Workspace::open(&root)
         .and_then(|w| w.files())
         .map_err(|e| e.to_string())?;
+    // Java and Kotlin: references to the moved type follow its package where the server gave no
+    // edits for a file, e.g. one it has not indexed because another program created it (v5
+    // behaviour 9, window check A12 V1). The listing is read from the disk now.
+    for (path, edit) in java_move_edits(&root, &from, &to, &listed, &by_server) {
+        let edits = files.entry(path).or_default();
+        let overlaps = edits.iter().any(|e| {
+            (e.range.start_line, e.range.start_character)
+                < (edit.range.end_line, edit.range.end_character)
+                && (edit.range.start_line, edit.range.start_character)
+                    < (e.range.end_line, e.range.end_character)
+        });
+        if !overlaps {
+            edits.push(edit);
+        }
+    }
     for rel in listed {
         let path = root.join(&rel);
         if ref_kind(&path).is_none() {
@@ -598,7 +757,7 @@ pub async fn plan_move(
     }
     // Only the project's own files are changed; the others are listed apart (v3 behaviour 8).
     // The moved file is taken as it is: the user chose it.
-    let own = idecraft_core::OwnSources::new(&root);
+    let own = ferris_idea_core::OwnSources::new(&root);
     let mut outside = Vec::new();
     let mut kept = Vec::new();
     for (path, mut edits) in files {
@@ -623,6 +782,69 @@ pub async fn plan_move(
         outside,
         server,
     })
+}
+
+/// The Java and Kotlin edits for moving `from` to `to` (see [`java_reference_edits`] and
+/// [`moved_file_imports`]) in the workspace files `listed` (relative to `root`), leaving out the
+/// files in `by_server`.
+fn java_move_edits(
+    root: &Path,
+    from: &Path,
+    to: &Path,
+    listed: &[PathBuf],
+    by_server: &std::collections::BTreeSet<PathBuf>,
+) -> Vec<(PathBuf, Edit)> {
+    if !has_package_line(from) {
+        return Vec::new();
+    }
+    let Ok(moved_text) = crate::shown::read(from) else {
+        return Vec::new();
+    };
+    let (Some((_, old)), Some(old_dir), Some(new_dir)) =
+        (package_declaration(&moved_text), from.parent(), to.parent())
+    else {
+        return Vec::new();
+    };
+    let Some(new) = ferris_idea_core::file_ops::package_of(root, new_dir) else {
+        return Vec::new();
+    };
+    if old == new {
+        return Vec::new();
+    }
+    let Some(name) = from.file_stem().map(|s| s.to_string_lossy().into_owned()) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    let mut siblings = Vec::new();
+    for rel in listed {
+        let path = root.join(rel);
+        if !has_package_line(&path) || normalize(&path) == normalize(from) {
+            continue;
+        }
+        if path.parent() == Some(old_dir)
+            && let Some(stem) = path.file_stem()
+        {
+            siblings.push(stem.to_string_lossy().into_owned());
+        }
+        if by_server.contains(&path) {
+            continue;
+        }
+        let Ok(text) = crate::shown::read(&path) else {
+            continue;
+        };
+        let package = package_declaration(&text).map(|(_, p)| p);
+        for (span, new_text) in
+            java_reference_edits(&path, &text, package.as_deref(), &old, &new, &name)
+        {
+            out.push((path.clone(), to_edit(&text, span, new_text)));
+        }
+    }
+    if !by_server.contains(from) {
+        for (span, new_text) in moved_file_imports(from, &moved_text, &old, &siblings) {
+            out.push((from.to_path_buf(), to_edit(&moved_text, span, new_text)));
+        }
+    }
+    out
 }
 
 /// Puts the entries `indices` of `plan.outside` into the edits to apply: files that are not the
@@ -865,5 +1087,142 @@ mod tests {
         );
         assert_eq!(out, "export * from './math'\n");
         assert_eq!(ref_kind(Path::new("a.rs")), None);
+    }
+
+    fn applied(text: &str, edits: Vec<(std::ops::Range<usize>, String)>) -> String {
+        let mut out = text.to_owned();
+        let mut edits = edits;
+        edits.sort_by_key(|(r, _)| std::cmp::Reverse(r.start));
+        for (r, new) in edits {
+            out.replace_range(r, &new);
+        }
+        out
+    }
+
+    /// SPEC-0114 v5 AK-9 (window check A12 V1): imports, static imports and qualified uses of a
+    /// moved Java type follow its package; files of its old package that used it by its simple
+    /// name, or through a wildcard import, get an import; other types are left alone.
+    #[test]
+    fn java_references_follow_the_moved_type() {
+        let main = Path::new("/p/src/main/java/lab/app/Main.java");
+        let text = "package lab.app;\n\nimport lab.inventory.Inventory;\nimport lab.inventory.InventoryItem;\nimport static lab.inventory.Inventory.EMPTY;\n\nclass Main { lab.inventory.Inventory i = new Inventory(); }\n";
+        let out = applied(
+            text,
+            java_reference_edits(
+                main,
+                text,
+                Some("lab.app"),
+                "lab.inventory",
+                "lab.stock",
+                "Inventory",
+            ),
+        );
+        assert_eq!(
+            out,
+            "package lab.app;\n\nimport lab.stock.Inventory;\nimport lab.inventory.InventoryItem;\nimport static lab.stock.Inventory.EMPTY;\n\nclass Main { lab.stock.Inventory i = new Inventory(); }\n"
+        );
+        // A neighbour in the old package used it without an import.
+        let shelf = Path::new("/p/src/main/java/lab/inventory/Shelf.java");
+        let text = "package lab.inventory;\n\nclass Shelf { Inventory of; }\n";
+        let out = applied(
+            text,
+            java_reference_edits(
+                shelf,
+                text,
+                Some("lab.inventory"),
+                "lab.inventory",
+                "lab.stock",
+                "Inventory",
+            ),
+        );
+        assert_eq!(
+            out,
+            "package lab.inventory;\n\nimport lab.stock.Inventory;\n\nclass Shelf { Inventory of; }\n"
+        );
+        // A wildcard import of the old package.
+        let text = "package lab.app;\n\nimport java.util.List;\nimport lab.inventory.*;\n\nclass A { Inventory i; }\n";
+        let out = applied(
+            text,
+            java_reference_edits(
+                main,
+                text,
+                Some("lab.app"),
+                "lab.inventory",
+                "lab.stock",
+                "Inventory",
+            ),
+        );
+        assert_eq!(
+            out,
+            "package lab.app;\n\nimport java.util.List;\nimport lab.inventory.*;\nimport lab.stock.Inventory;\n\nclass A { Inventory i; }\n"
+        );
+        // Nothing to do: another package's file without the type, and the new package itself.
+        let text = "package lab.app;\n\nclass B { String inventory; }\n";
+        assert!(
+            java_reference_edits(
+                main,
+                text,
+                Some("lab.app"),
+                "lab.inventory",
+                "lab.stock",
+                "Inventory"
+            )
+            .is_empty()
+        );
+        let text = "package lab.stock;\n\nclass C { Inventory i; }\n";
+        assert!(
+            java_reference_edits(
+                main,
+                text,
+                Some("lab.stock"),
+                "lab.inventory",
+                "lab.stock",
+                "Inventory"
+            )
+            .is_empty()
+        );
+        // Kotlin imports have no semicolon.
+        let kt = Path::new("/p/src/main/kotlin/lab/inventory/Use.kt");
+        let text = "package lab.inventory\n\nval x = Inventory()\n";
+        let out = applied(
+            text,
+            java_reference_edits(
+                kt,
+                text,
+                Some("lab.inventory"),
+                "lab.inventory",
+                "lab.stock",
+                "Inventory",
+            ),
+        );
+        assert_eq!(
+            out,
+            "package lab.inventory\n\nimport lab.stock.Inventory\n\nval x = Inventory()\n"
+        );
+    }
+
+    /// SPEC-0114 v5 AK-9: the moved file imports the types of its old package it uses.
+    #[test]
+    fn the_moved_type_imports_its_old_neighbours() {
+        let moved = Path::new("/p/src/main/java/lab/inventory/Inventory.java");
+        let text = "package lab.inventory;\n\npublic class Inventory { Shelf s; Item i; }\n";
+        let siblings = vec![
+            "Shelf".to_owned(),
+            "Item".to_owned(),
+            "Unused".to_owned(),
+            "Inventory".to_owned(),
+        ];
+        let out = applied(
+            text,
+            moved_file_imports(moved, text, "lab.inventory", &siblings),
+        );
+        assert_eq!(
+            out,
+            "package lab.inventory;\n\nimport lab.inventory.Shelf;\nimport lab.inventory.Item;\n\npublic class Inventory { Shelf s; Item i; }\n"
+        );
+        assert!(
+            moved_file_imports(moved, "package a;\nclass Inventory {}\n", "a", &siblings)
+                .is_empty()
+        );
     }
 }

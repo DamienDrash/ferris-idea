@@ -1,4 +1,4 @@
-// Modified by IDECraft: a prompt's safe answer holds the keyboard focus (see ../../../IDECRAFT.md).
+// Modified by Ferris IDEA: a prompt's safe answer holds the keyboard focus; a prompt can be withdrawn; the frame can be captured (see ../../../FERRIS_IDEA.md).
 use super::{BoolExt, MacDisplay, NSRange, NSStringExt, ns_string, renderer};
 use crate::{
     AnyWindowHandle, Bounds, Capslock, DisplayLink, ExternalPaths, FileDropEvent,
@@ -420,6 +420,9 @@ struct MacWindowState {
     select_previous_tab_callback: Option<Box<dyn FnMut()>>,
     toggle_tab_bar_callback: Option<Box<dyn FnMut()>>,
     activated_least_once: bool,
+    /// Ferris IDEA change: the panel of the latest alert `prompt` showed, so `withdraw_prompt`
+    /// closes that one only.
+    last_prompt_panel: id,
 }
 
 impl MacWindowState {
@@ -726,6 +729,7 @@ impl MacWindow {
                 select_previous_tab_callback: None,
                 toggle_tab_bar_callback: None,
                 activated_least_once: false,
+                last_prompt_panel: nil,
             })));
 
             (*native_window).set_ivar(
@@ -1126,7 +1130,7 @@ impl PlatformWindow for MacWindow {
         detail: Option<&str>,
         answers: &[PromptButton],
     ) -> Option<oneshot::Receiver<usize>> {
-        // IDECraft change (see ../../../IDECRAFT.md, SPEC-0281 v3 behaviour 8): the safe answer
+        // Ferris IDEA change (see ../../../FERRIS_IDEA.md, SPEC-0281 v3 behaviour 8): the safe answer
         // holds the keyboard focus — the one the prompt names, else the cancel answer, else the
         // default.
         //
@@ -1135,7 +1139,7 @@ impl PlatformWindow for MacWindow {
         // window's initial first responder, and with keyboard navigation on, Space presses the
         // focused button. gpui 0.2.2 added the last non-Cancel answer last on purpose, so Space
         // pressed that answer when no answer was bound to Escape: "Always for This Workspace" in
-        // IDECraft's question for an agent's right.
+        // Ferris IDEA's question for an agent's right.
         // Now the answers are added in the order given, the alert is laid out at once, and the
         // focused answer (`prompt_focused_answer`) becomes the initial first responder, so Space
         // gives the safe answer and never one that grants, removes or closes. Setting it before
@@ -1182,12 +1186,20 @@ impl PlatformWindow for MacWindow {
 
             let (done_tx, done_rx) = oneshot::channel();
             let done_tx = Cell::new(Some(done_tx));
+            // Ferris IDEA change: a sheet ended by `withdraw_prompt` reports a negative code; the
+            // answer is then dropped, so the receiver hears that nobody answered.
             let block = ConcreteBlock::new(move |answer: NSInteger| {
-                if let Some(done_tx) = done_tx.take() {
-                    let _ = done_tx.send(answer.try_into().unwrap());
+                if let Some(done_tx) = done_tx.take()
+                    && let Ok(answer) = usize::try_from(answer)
+                {
+                    let _ = done_tx.send(answer);
                 }
             });
             let block = block.copy();
+            {
+                let panel: id = msg_send![alert, window];
+                self.0.lock().last_prompt_panel = panel;
+            }
             let native_window = self.0.lock().native_window;
             let executor = self.0.lock().executor.clone();
             executor
@@ -1205,6 +1217,25 @@ impl PlatformWindow for MacWindow {
                 .detach();
 
             Some(done_rx)
+        }
+    }
+
+    fn withdraw_prompt(&self) {
+        // Ferris IDEA change (see ../../../FERRIS_IDEA.md): ends the sheet of the latest alert while it
+        // is the one attached to the window; a sheet of another alert stays.
+        let (window, panel) = {
+            let state = self.0.lock();
+            (state.native_window, state.last_prompt_panel)
+        };
+        if panel == nil {
+            return;
+        }
+        unsafe {
+            let sheet: id = msg_send![window, attachedSheet];
+            if sheet == panel {
+                // NSModalResponseAbort
+                let _: () = msg_send![window, endSheet: sheet returnCode: (-1001 as NSInteger)];
+            }
         }
     }
 
@@ -1471,6 +1502,12 @@ impl PlatformWindow for MacWindow {
     fn draw(&self, scene: &crate::Scene) {
         let mut this = self.0.lock();
         this.renderer.draw(scene);
+    }
+
+    // Ferris IDEA change (FERRIS_IDEA.md, change 8): the frame drawn into an image of its own.
+    #[cfg(not(feature = "macos-blade"))]
+    fn capture_frame(&self, scene: &crate::Scene) -> Option<image::RgbaImage> {
+        self.0.lock().renderer.capture(scene)
     }
 
     fn sprite_atlas(&self) -> Arc<dyn PlatformAtlas> {

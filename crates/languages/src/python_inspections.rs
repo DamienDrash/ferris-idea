@@ -1,4 +1,4 @@
-//! IDECraft's own Python inspections that need the scopes of a file (`SPEC-0098` v5 behaviour 12):
+//! Ferris IDEA's own Python inspections that need the scopes of a file (`SPEC-0098` v5 behaviour 12):
 //! a parameter or local name of a function that shadows a name of an enclosing function or of the
 //! module. The binding rules follow The Python Language Reference, "Naming and binding". And a
 //! method that does not use `self` (`SPEC-0098` v6 behaviour 14), with the quick fix "Make method
@@ -457,6 +457,7 @@ fn make_static(method: Node, text: &str) -> Option<Fix> {
     Some(Fix {
         learn: None,
         keep: None,
+        bundle_key: None,
         action: None,
         title: "Make method static".to_owned(),
         edits: vec![

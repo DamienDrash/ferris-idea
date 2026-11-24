@@ -1,9 +1,9 @@
 //! SPEC-0027 v6 AK-8: the colour roles of the three OBS-0033 samples (Python, TypeScript, SQL)
 //! resolve in the `Dark` scheme to the specified keys and colours.
 
-use idecraft_languages::LanguageId;
-use idecraft_languages::syntax::SyntaxDocument;
-use idecraft_ui::theme::{ColorScheme, TextStyle, ThemeId, capture_key};
+use ferris_idea_languages::LanguageId;
+use ferris_idea_languages::syntax::SyntaxDocument;
+use ferris_idea_ui::theme::{ColorScheme, TextStyle, ThemeId, capture_key};
 
 /// The Python sample of the side-by-side comparison.
 const PYTHON: &str = r#"import os

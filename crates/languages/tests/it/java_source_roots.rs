@@ -5,11 +5,11 @@
 
 use std::time::Duration;
 
-use idecraft_languages::lsp::file_diagnostics;
+use ferris_idea_languages::lsp::file_diagnostics;
 
 fn skip(reason: &str) {
     assert!(
-        std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+        ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
         "required tool missing: {reason}"
     );
     eprintln!("skipped: {reason}");
@@ -47,14 +47,14 @@ fn copy(from: &std::path::Path, to: &std::path::Path) {
 
 #[tokio::test]
 async fn maven_layout_without_build_file_has_no_package_error() {
-    if idecraft_languages::servers::resolve(idecraft_languages::LanguageId::Java).is_err() {
+    if ferris_idea_languages::servers::resolve(ferris_idea_languages::LanguageId::Java).is_err() {
         skip("jdtls not installed");
         return;
     }
     // A copy of the reference project, which has no build file.
     let source = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/reference-projects/java-basic");
-    let root = std::env::temp_dir().join(format!("idecraft-java-roots-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-java-roots-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     copy(&source, &root);
     let root = root.canonicalize().unwrap();
@@ -73,22 +73,22 @@ async fn maven_layout_without_build_file_has_no_package_error() {
         before,
         "nothing is written into the project"
     );
-    let _ = std::fs::remove_dir_all(idecraft_languages::java_roots::workspace_data_dir(&root));
+    let _ = std::fs::remove_dir_all(ferris_idea_languages::java_roots::workspace_data_dir(&root));
     let _ = std::fs::remove_dir_all(&root);
 }
 
 /// SPEC-0042 v9 AK-14 (OBS-0013 item 3): a project whose jdtls data was created without source
-/// roots (as before v8) loses the package error on the next start through IDECraft.
+/// roots (as before v8) loses the package error on the next start through Ferris IDEA.
 #[tokio::test]
 async fn data_from_before_the_roots_is_renewed() {
-    use idecraft_languages::{LanguageId, java_roots, lsp::LspClient, servers};
+    use ferris_idea_languages::{LanguageId, java_roots, lsp::LspClient, servers};
     let Ok(server) = servers::resolve(LanguageId::Java) else {
         skip("jdtls not installed");
         return;
     };
     let source = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/reference-projects/java-basic");
-    let root = std::env::temp_dir().join(format!("idecraft-java-stale-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-java-stale-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     copy(&source, &root);
     let root = root.canonicalize().unwrap();
@@ -125,7 +125,7 @@ async fn data_from_before_the_roots_is_renewed() {
         "{found:?}"
     );
     assert_eq!(
-        std::fs::read_to_string(data.join("idecraft-source-roots")).unwrap(),
+        std::fs::read_to_string(data.join("ferris-idea-source-roots")).unwrap(),
         "src/main/java"
     );
     let _ = std::fs::remove_dir_all(&data);

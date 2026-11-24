@@ -6,7 +6,7 @@ use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
-use idecraft_debugger::lifetime::{ExitGuard, children, end_tree};
+use ferris_idea_debugger::lifetime::{ExitGuard, children, end_tree};
 
 /// A shell that starts a `sleep` of its own and waits for it; returns the shell and the sleep's id.
 fn parent_with_child() -> (Child, u32) {
@@ -57,7 +57,7 @@ fn ending_a_process_ends_what_it_started() {
 fn a_guard_ends_the_process_when_its_owner_is_gone() {
     let (mut shell, sleeper) = parent_with_child();
     let guard = ExitGuard::watch(shell.id()).expect("a guard");
-    // As if IDECraft had ended without ending the process.
+    // As if Ferris IDEA had ended without ending the process.
     guard.trip();
     let _ = shell.wait();
     assert!(

@@ -26,7 +26,7 @@ Walk through the errors of a file from the keyboard and read each message where 
    action without its own tool. [ADR-0008]
 5. **Hover (v2):** resting the mouse pointer on a problem's text (wavy or grey) for half a second shows
    the problem popup at the pointer: the messages of the problems under the pointer, most serious
-   first; below them, when IDECraft has a quick fix for one of them, the first fix's title as a link
+   first; below them, when Ferris IDEA has a quick fix for one of them, the first fix's title as a link
    with its shortcut ⌥⇧↩, and a link "More actions…" with ⌥↩. Clicking the fix link applies it like
    ⌥↩ would (one undo step); "More actions…" moves the caret to the problem and opens the ⌥↩ list.
    Moving the pointer off the problem and the popup, typing, scrolling or Escape hides it. [OBS-0019]
@@ -34,13 +34,13 @@ Walk through the errors of a file from the keyboard and read each message where 
    `ShowErrorDescription` while that popup is shown extends it with the description of the
    inspection that reported the problem (SPEC-0098 v3 behaviour 6); language-server problems have
    none and the popup stays as it is. [OBS-0019]
-7. **Apply the first fix (v2):** ⌥⇧↩ applies the first of IDECraft's quick fixes for the problems at
+7. **Apply the first fix (v2):** ⌥⇧↩ applies the first of Ferris IDEA's quick fixes for the problems at
    the caret, without opening a list; with none the status bar says so. [OBS-0019, GEN]
 
 ## Acceptance criteria
 - **AK-1** Order, errors first, wrap-around in both directions, no problems (unit tests in
   `diagnostics_model`).
-- **AK-2** In a real window (`idecraft ui --selftest`, with clangd): F2 from the top of the file jumps
+- **AK-2** In a real window (`ferris-idea ui --selftest`, with clangd): F2 from the top of the file jumps
   to the undeclared identifier and shows its message; Escape closes it.
 - **AK-3** Use by hand: ⇧F2, several errors, warnings only, ⌘F1.
 - **AK-4 (v2)** Problems under a point, the popup's lines and its fix link, the extended text with the
@@ -54,6 +54,6 @@ the ⋮ menu of the reference's popup, documentation of the symbol under the poi
 popup.
 
 ## Known deviations from the reference
-The reference has a setting for whether F2 skips warnings when errors exist; IDECraft always visits
+The reference has a setting for whether F2 skips warnings when errors exist; Ferris IDEA always visits
 errors first and has no setting yet. v2: compared side by side in OBS-0019; F2 keeps a one-line
-folded method folded in the reference and unfolds it in IDECraft.
+folded method folded in the reference and unfolds it in Ferris IDEA.

@@ -1,16 +1,16 @@
-//! M3.4 criterion 2 and M3.7: the editor view on a file (`idecraft edit`), and a measurement that
+//! M3.4 criterion 2 and M3.7: the editor view on a file (`ferris-idea edit`), and a measurement that
 //! types into the middle of a 100 000-line file and reports the time from each keystroke to the
-//! frame that shows it (`idecraft spike-editor`).
+//! frame that shows it (`ferris-idea spike-editor`).
 
 use std::path::Path;
 use std::time::{Duration, Instant};
 
+use ferris_idea_editor::Carets;
+use ferris_idea_workbench::EditorView;
 use gpui::{
     App, AppContext, Application, Bounds, Context, Entity, Keystroke, Window, WindowBounds,
     WindowOptions, div, prelude::*, px, size,
 };
-use idecraft_editor::Carets;
-use idecraft_workbench::EditorView;
 
 fn open(
     text: String,
@@ -18,21 +18,21 @@ fn open(
     measure: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     Application::new().run(move |cx: &mut App| {
-        if !idecraft_workbench::fonts::register(cx) {
+        if !ferris_idea_workbench::fonts::register(cx) {
             eprintln!("warning: JetBrains Mono could not be registered; using a system font");
         }
         let bounds = Bounds::centered(None, size(px(1200.0), px(900.0)), cx);
         let title = path
             .as_ref()
             .map(|p| p.display().to_string())
-            .unwrap_or_else(|| "IDECraft editor spike".into());
+            .unwrap_or_else(|| "Ferris IDEA editor spike".into());
         let opened = cx.open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 ..Default::default()
             },
             move |window, cx| {
-                idecraft_workbench::x11_wake::until_first_frame(window);
+                ferris_idea_workbench::x11_wake::until_first_frame(window);
                 window.set_window_title(&title);
                 let editor = cx.new(|cx| EditorView::new(&text, path, cx));
                 window.focus(&editor.read(cx).focus());
@@ -65,7 +65,7 @@ impl Driver {
                 let middle = e
                     .state
                     .buffer
-                    .position_to_offset(idecraft_editor::Position::new(50_000, 4))
+                    .position_to_offset(ferris_idea_editor::Position::new(50_000, 4))
                     .unwrap_or(0);
                 e.state.carets = Carets::new(middle);
             });

@@ -1,7 +1,16 @@
-# Linux on 64-bit ARM links with lld (package `lld`). The debug build of `idecraft` has more code
+# Linux on 64-bit ARM links with lld (package `lld`). The debug build of `ferris-idea` has more code
 # than an AArch64 call can reach (±128 MiB), and GNU ld fails on it with "relocation truncated to
 # fit: R_AARCH64_CALL26"; lld inserts the range-extension thunks. Found by the Linux window
 # self-test in a Lima VM (docs/quality/QG-1-LINUX-WINDOW.md). Other targets keep their default
 # linker. RUSTFLAGS in the environment replaces this setting.
 [target.aarch64-unknown-linux-gnu]
 rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+
+# Programs Cargo runs (tests, `cargo run`) never take over the settings folder of the product's
+# former name (`SPEC-0356` behaviour 1): a test must not move the user's own folder.
+# They also keep their settings in target/test-config, not in the user's settings folder: a
+# folder of today's name there would stop the takeover of the user's real one. A variable already
+# set in the environment wins (`FERRIS_IDEA_CONFIG_DIR=~/.config/ferris-idea cargo run ...`).
+[env]
+FERRIS_IDEA_NO_TAKEOVER = "1"
+FERRIS_IDEA_CONFIG_DIR = { value = "target/test-config", relative = true }

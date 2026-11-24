@@ -19,12 +19,14 @@ pub struct CommentStyle {
 }
 
 impl CommentStyle {
-    /// `token` at the first column without a space.
+    /// `token` at the first column without a space; a token that ends with a space (`# `) is
+    /// written with that space and removed with or without it (`SPEC-0004` v12 behaviour 23).
     pub fn new(token: &str) -> Self {
+        let trimmed = token.trim_end_matches(' ');
         Self {
-            token: token.to_owned(),
+            token: trimmed.to_owned(),
             first_column: true,
-            add_space: false,
+            add_space: trimmed.len() < token.len() && !trimmed.is_empty(),
         }
     }
 }
@@ -732,6 +734,24 @@ mod tests {
             "«//a\nb»",
             |b, c| toggle_line_comment(b, c, &slash),
             "«////a\n//b»",
+        );
+        // SPEC-0004 v12 AK-20: a token with a trailing space, as a Makefile's `# ` (OBS-0090 L2).
+        let make = CommentStyle::new("# ");
+        assert!(make.add_space && make.token == "#" && make.first_column);
+        check("al|l:", |b, c| toggle_line_comment(b, c, &make), "# al|l:");
+        check("# al|l:", |b, c| toggle_line_comment(b, c, &make), "al|l:");
+        check("#al|l:", |b, c| toggle_line_comment(b, c, &make), "al|l:");
+        // An ignore file's `#` has no space.
+        let ignore = CommentStyle::new("#");
+        check(
+            "*.lo|g",
+            |b, c| toggle_line_comment(b, c, &ignore),
+            "#*.lo|g",
+        );
+        check(
+            "#*.lo|g",
+            |b, c| toggle_line_comment(b, c, &ignore),
+            "*.lo|g",
         );
     }
 

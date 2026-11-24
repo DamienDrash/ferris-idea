@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use idecraft_core::{
+use ferris_idea_core::{
     ModuleKind, Workspace, parse_run_configs, read_project, split_pep508, suggest_run_configs,
 };
 
@@ -33,7 +33,7 @@ fn this_repository_as_cargo_workspace() {
         .iter()
         .find(|m| m.dir == "crates/core")
         .unwrap();
-    assert_eq!(core.name, "idecraft-core");
+    assert_eq!(core.name, "ferris-idea-core");
     assert_eq!(
         core.version.as_deref(),
         Some(env!("CARGO_PKG_VERSION")),
@@ -68,7 +68,7 @@ fn this_repository_as_cargo_workspace() {
     let core_dep = mcp
         .dependencies
         .iter()
-        .find(|d| d.name == "idecraft-core")
+        .find(|d| d.name == "ferris-idea-core")
         .unwrap();
     assert_eq!(core_dep.requirement, "path:crates/core");
     assert!(mcp.dependencies.iter().any(|d| d.scope == "dev"));
@@ -131,7 +131,8 @@ struct Dir(PathBuf);
 
 impl Dir {
     fn new(tag: &str) -> Self {
-        let p = std::env::temp_dir().join(format!("idecraft-project-{tag}-{}", std::process::id()));
+        let p =
+            std::env::temp_dir().join(format!("ferris-idea-project-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&p);
         std::fs::create_dir_all(&p).unwrap();
         Self(p)
@@ -282,7 +283,7 @@ fn npm_python_maven_go() {
     }
     #[derive(serde::Serialize)]
     struct RunFile {
-        run: Vec<idecraft_core::RunConfig>,
+        run: Vec<ferris_idea_core::RunConfig>,
     }
     let toml_text = toml::to_string(&RunFile { run: suggestions }).unwrap();
     assert!(
@@ -562,7 +563,7 @@ fn framework_applications_get_a_start_configuration() {
             .map(|c| (c.name, c.command, c.timeout))
             .collect()
     };
-    let day = Some(idecraft_core::SERVER_TIMEOUT_SECS);
+    let day = Some(ferris_idea_core::SERVER_TIMEOUT_SECS);
     let cmd = |s: &[&str]| s.iter().map(|x| x.to_string()).collect::<Vec<_>>();
     assert_eq!(
         started(&fixtures.join("spring-shop"), "pom.xml"),

@@ -18,7 +18,7 @@
 //!   as Azure offers one. Host keys stay strict.
 //! - **Visible.** For an Azure connection the stand-in reports the negotiated method on a marker
 //!   line ([`KEX_MARKER`]) that the Git layer turns into `pq: false` and a notice.
-//! - **Switchable.** The setting [`AZURE_CLASSIC_SETTING`] (default on) and `IDECRAFT_SSH_KEX=mlkem`
+//! - **Switchable.** The setting [`AZURE_CLASSIC_SETTING`] (default on) and `FERRIS_IDEA_SSH_KEX=mlkem`
 //!   each turn it off; the strictest wins.
 
 use std::path::{Path, PathBuf};
@@ -45,8 +45,8 @@ pub const AZURE_CLASSIC_KEX: [&str; 2] = [
 pub const AZURE_CLASSIC_SETTING: &str = "git.ssh.allowClassicKexForAzureDevOps";
 
 /// Start of the line the stand-in writes to standard error after an Azure DevOps connection:
-/// `idecraft-git-ssh: host=<resolved host> kex=<negotiated method>`.
-pub const KEX_MARKER: &str = "idecraft-git-ssh:";
+/// `ferris-idea-git-ssh: host=<resolved host> kex=<negotiated method>`.
+pub const KEX_MARKER: &str = "ferris-idea-git-ssh:";
 
 /// The setting of this process, given by the window or the MCP server from the IDE settings.
 static AZURE_CLASSIC_ALLOWED: AtomicBool = AtomicBool::new(true);
@@ -103,7 +103,9 @@ pub fn git_kex(
 /// with `strict` for every host but Azure DevOps; with `azure` (`Some` while the exception is in
 /// force) for those, plus a debug log in `tmp_dir`, read for the negotiated method and removed,
 /// then writes `ssh`'s own messages (without the debug and `-v` progress lines) and the
-/// [`KEX_MARKER`] line.
+/// [`KEX_MARKER`] line. With Ferris IDEA's own SSH file `own_file` (`Some` while this process has host
+/// files), a destination that is one of its aliases gets `-F <own_file>` first, before anything
+/// is resolved (`SPEC-0121` v6 behaviour 1b, [`crate::own_hosts`]).
 pub fn git_shim_script(
     real_ssh: &str,
     strict: &[String],
@@ -111,6 +113,7 @@ pub fn git_shim_script(
     tmp_dir: &Path,
     hop: &str,
     allow_own: bool,
+    own_file: Option<&Path>,
 ) -> String {
     let q = |v: &[String]| {
         v.iter()
@@ -121,12 +124,14 @@ pub fn git_shim_script(
     let strict = q(strict);
     let ssh = crate::ssh::quote(real_ssh);
     let lib = crate::jump::route_lib(hop, allow_own);
+    let own = crate::own_hosts::stand_in_step(own_file, &ssh, &strict);
     let head = format!(
         "#!/bin/sh\n\
-         # Written by IDECraft: Git over SSH with the post-quantum key exchange on every hop; Azure\n\
+         # Written by Ferris IDEA: Git over SSH with the post-quantum key exchange on every hop; Azure\n\
          # DevOps alone also allows the strongest classical methods it offers (ADR-0025 section 1a).\n\
          {lib}\
          idc_config \"$@\"\n\
+         {own}\
          conf=$({ssh} -G {strict} \"$@\" </dev/null 2>/dev/null)\n\
          host=$(printf '%s\\n' \"$conf\" | sed -n 's/^hostname //p' | head -n 1)\n\
          idc_route \"$conf\" \"$idc_cfg\" \"$host\" || exit 255\n\
@@ -175,11 +180,14 @@ fn azure_options(program: &str) -> Option<Vec<String>> {
 fn git_shim(azure: bool) -> Option<PathBuf> {
     use sha2::{Digest, Sha256};
     use std::collections::HashMap;
-    static SHIM: OnceLock<Mutex<HashMap<(bool, bool), PathBuf>>> = OnceLock::new();
+    type Key = (bool, bool, Option<PathBuf>);
+    static SHIM: OnceLock<Mutex<HashMap<Key, PathBuf>>> = OnceLock::new();
     let allow_own = crate::jump::own_proxy_command_setting();
+    let own_file = crate::own_hosts::stand_in_file();
+    let key = (azure, allow_own, own_file.clone());
     let cell = SHIM.get_or_init(|| Mutex::new(HashMap::new()));
     let mut done = cell.lock().ok()?;
-    if let Some(p) = done.get(&(azure, allow_own)).filter(|p| p.is_file()) {
+    if let Some(p) = done.get(&key).filter(|p| p.is_file()) {
         return Some(p.clone());
     }
     let base = crate::ssh::control_dir();
@@ -201,6 +209,7 @@ fn git_shim(azure: bool) -> Option<PathBuf> {
         &dir,
         &crate::ssh::quote(&hop.display().to_string()),
         allow_own,
+        own_file.as_deref(),
     );
     let hash = Sha256::digest(script.as_bytes());
     let name: String = hash[..6].iter().map(|b| format!("{b:02x}")).collect();
@@ -209,7 +218,7 @@ fn git_shim(azure: bool) -> Option<PathBuf> {
     std::fs::write(&part, script).ok()?;
     crate::ssh::set_mode(&part, 0o700).ok()?;
     std::fs::rename(&part, &path).ok()?;
-    done.insert((azure, allow_own), path.clone());
+    done.insert(key, path.clone());
     Some(path)
 }
 
@@ -406,6 +415,7 @@ mod tests {
             Path::new("/tmp/x y"),
             "/tmp/hop",
             false,
+            None,
         );
         assert!(script.starts_with("#!/bin/sh\n"));
         assert!(
@@ -426,7 +436,15 @@ mod tests {
             "{script}"
         );
         assert!(script.contains("refused %s: ProxyCommand"), "{script}");
-        let plain = git_shim_script("/usr/bin/ssh", &strict, None, Path::new("/t"), "/h", true);
+        let plain = git_shim_script(
+            "/usr/bin/ssh",
+            &strict,
+            None,
+            Path::new("/t"),
+            "/h",
+            true,
+            None,
+        );
         assert!(!plain.contains("diffie-hellman"), "{plain}");
         assert!(!plain.contains("refused %s: ProxyCommand"), "{plain}");
         assert!(plain.ends_with(
@@ -434,9 +452,125 @@ mod tests {
         ));
     }
 
+    /// The stand-in applies the start point's rule for Ferris IDEA's own hosts at run time
+    /// (`SPEC-0121` v6 behaviour 1b): `-F <file>` for an own alias and for nothing else, not when
+    /// Git's arguments name a `-F`, not without the file, and a host added after the stand-in was
+    /// written is seen. A stand-in `ssh` answers `-G` with `host $FAKE_DEST` and records the
+    /// arguments of the connection.
+    #[test]
+    fn the_stand_in_adds_ferris_ideas_file_for_its_own_aliases_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!(
+            "ferris-idea-git-own-{}/a dir's",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let fake = dir.join("ssh");
+        std::fs::write(
+            &fake,
+            "#!/bin/sh\n\
+             for a in \"$@\"; do [ \"$a\" = -G ] && { echo \"host $FAKE_DEST\"; echo \"hostname 127.0.0.1\"; exit 0; }; done\n\
+             printf '%s\\n' \"$@\" > \"$FAKE_ARGS\"\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let own = dir.join("config");
+        let hosts = |aliases: &[&str]| {
+            let list: Vec<crate::OwnHost> = aliases
+                .iter()
+                .map(|a| crate::OwnHost {
+                    alias: (*a).to_owned(),
+                    hostname: "127.0.0.1".into(),
+                    ..Default::default()
+                })
+                .collect();
+            std::fs::write(
+                &own,
+                crate::own_hosts::render(&list, &dir.join("home/.ssh/config")),
+            )
+            .unwrap();
+        };
+        let strict = s(&["-o", "BatchMode=yes"]);
+        let script_for = |own_file: Option<&Path>| {
+            let p = dir.join(format!("git-ssh-{}", own_file.is_some()));
+            let text = git_shim_script(
+                &fake.display().to_string(),
+                &strict,
+                None,
+                &dir,
+                "/no/hop",
+                false,
+                own_file,
+            );
+            std::fs::write(&p, text).unwrap();
+            p
+        };
+        let with_own = script_for(Some(&own));
+        let args_file = dir.join("args");
+        let run = |script: &Path, dest: &str, args: &[&str]| -> Vec<String> {
+            let _ = std::fs::remove_file(&args_file);
+            let st = std::process::Command::new("sh")
+                .arg(script)
+                .args(args)
+                .env("FAKE_DEST", dest)
+                .env("FAKE_ARGS", &args_file)
+                .status()
+                .unwrap();
+            assert!(st.success(), "{dest}");
+            std::fs::read_to_string(&args_file)
+                .unwrap()
+                .lines()
+                .map(str::to_owned)
+                .collect()
+        };
+        let file = own.display().to_string();
+        let git = [
+            "-o",
+            "SendEnv=GIT_PROTOCOL",
+            "git@box-a",
+            "git-upload-pack 'r'",
+        ];
+        // No file yet: nothing changes.
+        let a = run(&with_own, "box-a", &git);
+        assert!(!a.iter().any(|x| x == "-F"), "{a:?}");
+        hosts(&["box-a"]);
+        let a = run(&with_own, "box-a", &git);
+        let f = a
+            .iter()
+            .position(|x| x == "-F")
+            .expect("-F for an own alias");
+        assert_eq!(a[f + 1], file);
+        assert!(f < a.iter().position(|x| x == "git@box-a").unwrap());
+        assert!(a.iter().any(|x| x == "ProxyCommand=none"), "{a:?}");
+        // Another host, a prefix of an alias, a pattern: unchanged.
+        for other in ["github.com", "box", "box-a.example", "box-*"] {
+            let o = run(&with_own, other, &git);
+            assert!(!o.iter().any(|x| x == "-F"), "{other}: {o:?}");
+        }
+        // Git's own -F wins; Ferris IDEA's file is not added.
+        let given = run(
+            &with_own,
+            "box-a",
+            &["-F", "/t/cfg", "box-a", "git-upload-pack 'r'"],
+        );
+        assert_eq!(given.iter().filter(|x| *x == "-F").count(), 1, "{given:?}");
+        assert!(given.windows(2).any(|w| w == ["-F", "/t/cfg"]));
+        // A host added after the stand-in was written is seen.
+        hosts(&["box-a", "box-b"]);
+        let b = run(&with_own, "box-b", &["box-b", "true"]);
+        assert!(b.windows(2).any(|w| w[0] == "-F" && w[1] == file), "{b:?}");
+        // A process without host files: the step is not there.
+        let none = script_for(None);
+        assert!(!std::fs::read_to_string(&none).unwrap().contains("idc_own"));
+        let n = run(&none, "box-a", &git);
+        assert!(!n.iter().any(|x| x == "-F"), "{n:?}");
+        let _ = std::fs::remove_dir_all(dir.parent().unwrap());
+    }
+
     #[test]
     fn reports_are_taken_from_the_messages() {
-        let stderr = "remote: counting\nidecraft-git-ssh: host=ssh.dev.azure.com kex=diffie-hellman-group18-sha512\nfatal: x";
+        let stderr = "remote: counting\nferris-idea-git-ssh: host=ssh.dev.azure.com kex=diffie-hellman-group18-sha512\nfatal: x";
         let (reports, rest) = take_kex_reports(stderr);
         assert_eq!(rest, "remote: counting\nfatal: x");
         assert_eq!(
@@ -452,7 +586,7 @@ mod tests {
             kex: "mlkem768x25519-sha256".into(),
         };
         assert_eq!(pq.pq(), Some(true));
-        let none = take_kex_reports("idecraft-git-ssh: host=ssh.dev.azure.com kex=\n").0;
+        let none = take_kex_reports("ferris-idea-git-ssh: host=ssh.dev.azure.com kex=\n").0;
         assert_eq!(none[0].pq(), None);
         let text = classic_kex_notice(
             &["ssh.dev.azure.com".into()],

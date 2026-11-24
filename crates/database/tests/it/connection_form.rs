@@ -3,11 +3,13 @@
 
 use crate::common;
 
-use idecraft_database::{ConnectionForm, ConnectionProfile, Credentials, Dialect, test_connection};
+use ferris_idea_database::{
+    ConnectionForm, ConnectionProfile, Credentials, Dialect, test_connection,
+};
 
 #[tokio::test]
 async fn test_connection_reports_success_and_failure() {
-    let dir = std::env::temp_dir().join(format!("idecraft-conn-test-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-conn-test-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("app.db");
@@ -76,7 +78,7 @@ async fn test_connection_reports_success_and_failure() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// SPEC-0108 v3 AK-7 (live, `IDECRAFT_TEST_PG` / `IDECRAFT_TEST_MYSQL`; skipped without them): the
+/// SPEC-0108 v3 AK-7 (live, `FERRIS_IDEA_TEST_PG` / `FERRIS_IDEA_TEST_MYSQL`; skipped without them): the
 /// test names the server version, measures the round trip and says whether TLS is in use.
 async fn live_details(var: &str, product: &str) {
     let Ok(url) = std::env::var(var) else {
@@ -97,7 +99,7 @@ async fn live_details(var: &str, product: &str) {
     );
     assert!(details.ping > std::time::Duration::ZERO);
     // The reference URLs disable TLS (scripts/ci-local.sh); other modes may encrypt.
-    if profile.ssl == idecraft_database::SslMode::Disable {
+    if profile.ssl == ferris_idea_database::SslMode::Disable {
         assert_eq!(details.tls, Some(false), "{details:?}");
     } else {
         assert!(details.tls.is_some(), "{details:?}");
@@ -113,10 +115,10 @@ async fn live_details(var: &str, product: &str) {
 
 #[tokio::test]
 async fn live_postgres_test_names_version_ping_and_tls() {
-    live_details("IDECRAFT_TEST_PG", "PostgreSQL").await;
+    live_details("FERRIS_IDEA_TEST_PG", "PostgreSQL").await;
 }
 
 #[tokio::test]
 async fn live_mysql_test_names_version_ping_and_tls() {
-    live_details("IDECRAFT_TEST_MYSQL", "MySQL").await;
+    live_details("FERRIS_IDEA_TEST_MYSQL", "MySQL").await;
 }

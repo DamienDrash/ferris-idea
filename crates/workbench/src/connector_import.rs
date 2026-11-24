@@ -1,8 +1,8 @@
 //! "Import database system…" (`SPEC-0302` behaviours 1–3): a file path or an `https://` URL is
 //! read, validated and shown with every query it would run; nothing is stored before Save.
 
+use ferris_idea_database::connector_share::{Review, review};
 use gpui::{Context, Entity, EventEmitter, FocusHandle, Window, div, prelude::*, px};
-use idecraft_database::connector_share::{Review, review};
 
 use crate::editor_view::EditorView;
 use crate::palette::Palette;
@@ -37,9 +37,9 @@ pub fn read_source(source: &str) -> Result<(String, String), String> {
         return Err("only https:// addresses are fetched".into());
     }
     if source.starts_with("https://") {
-        let (url, text) = idecraft_http::fetch_small_text(
+        let (url, text) = ferris_idea_http::fetch_small_text(
             source,
-            idecraft_database::connector::MAX_DEFINITION_BYTES,
+            ferris_idea_database::connector::MAX_DEFINITION_BYTES,
             3,
             std::time::Duration::from_secs(10),
         )?;
@@ -54,7 +54,7 @@ pub fn read_source(source: &str) -> Result<(String, String), String> {
     let size = std::fs::metadata(&path)
         .map_err(|e| format!("{}: {e}", path.display()))?
         .len();
-    if size > idecraft_database::connector::MAX_DEFINITION_BYTES as u64 {
+    if size > ferris_idea_database::connector::MAX_DEFINITION_BYTES as u64 {
         return Err("the file is larger than 64 KiB".into());
     }
     let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
@@ -122,7 +122,7 @@ impl ConnectorImport {
 
     /// Shows the review of `text` read from `origin`.
     pub fn show(&mut self, origin: String, text: &str) {
-        let r = review(text, &idecraft_database::reload_catalogue());
+        let r = review(text, &ferris_idea_database::reload_catalogue());
         self.note = if r.ok() {
             Some((
                 match &r.replaces {
@@ -149,13 +149,13 @@ impl ConnectorImport {
         let Some(r) = self.review.as_ref().filter(|r| r.ok()) else {
             return;
         };
-        let Some(dir) = idecraft_database::connector::connectors_dir() else {
+        let Some(dir) = ferris_idea_database::connector::connectors_dir() else {
             self.note = Some(("No settings folder".into(), true));
             cx.notify();
             return;
         };
-        let catalogue = idecraft_database::reload_catalogue();
-        match idecraft_database::connector_share::import(
+        let catalogue = ferris_idea_database::reload_catalogue();
+        match ferris_idea_database::connector_share::import(
             &dir,
             &r.text,
             &self.origin,
@@ -163,7 +163,7 @@ impl ConnectorImport {
             &catalogue,
         ) {
             Ok(_) => {
-                idecraft_database::reload_catalogue();
+                ferris_idea_database::reload_catalogue();
                 let id = r
                     .connector
                     .as_ref()

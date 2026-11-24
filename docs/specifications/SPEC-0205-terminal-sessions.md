@@ -31,7 +31,7 @@ renamed or split, a shell that ended left a dead tab, and the tabs were gone aft
 5. **End of a shell:** when the user's shell ends (e.g. `exit`), it closes as if by ⌘W. Terminals that
    run an SSH login or a remote run (SPEC-0121) stay open with their output. A program that fails to
    start shows its error instead. [GEN]
-6. **Restore:** the tabs of a project are written to `.idecraft/terminal-sessions.json` whenever tabs
+6. **Restore:** the tabs of a project are written to `.ferris-idea/terminal-sessions.json` whenever tabs
    or splits change and when the IDE quits: per tab its name and per shell its current folder and the
    last up to 1,000 lines of its history (screen included, without trailing empty lines). Opening the
    terminal of the project the next time starts the saved tabs, splits and names, each shell in its
@@ -56,7 +56,7 @@ renamed or split, a shell that ended left a dead tab, and the tabs were gone aft
 - **AK-1** Name numbering, the saved-state format with its line cap, and history lines put in front of a
   new screen (unit tests).
 - **AK-2** A real shell that runs `exit` ends its session (`pty` integration test).
-- **AK-3** In a real window (`idecraft ui --selftest`): rename a tab, split right, the second shell has
+- **AK-3** In a real window (`ferris-idea ui --selftest`): rename a tab, split right, the second shell has
   focus and runs a command, ⌘W closes it, `exit` closes a tab, and a saved state is restored with its
   names and lines.
 - **AK-4** MCP `terminal_sessions` (protocol test).

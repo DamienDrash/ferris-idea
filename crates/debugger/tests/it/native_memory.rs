@@ -8,8 +8,8 @@ use std::net::TcpListener;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use idecraft_debugger::native::{MAX_INSTRUCTIONS, MAX_MEMORY_BYTES};
-use idecraft_debugger::{
+use ferris_idea_debugger::native::{MAX_INSTRUCTIONS, MAX_MEMORY_BYTES};
+use ferris_idea_debugger::{
     DapClient, DebugSession, Event, SpecialBreakpoints, read_message, write_message,
 };
 use serde_json::{Value, json};

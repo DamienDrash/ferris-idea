@@ -162,7 +162,7 @@ pub fn convert_separators(text: &str, target: LineSeparator) -> (String, usize) 
     (out, changed)
 }
 
-/// An encoding IDECraft reads and writes (behaviour 10).
+/// An encoding Ferris IDEA reads and writes (behaviour 10).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Charset {
     /// UTF-8.
@@ -598,7 +598,7 @@ pub struct Reload {
 
 /// Judges reading `bytes` in `to` instead, against the text `now` shown (behaviour 12). Refused
 /// when the bytes are not valid in `to`, carry a byte order mark `to` cannot have, or lack the
-/// one it needs: IDECraft never reads a file into replacement characters (IMP-0404).
+/// one it needs: Ferris IDEA never reads a file into replacement characters (IMP-0404).
 pub fn reload_safety(bytes: &[u8], now: &str, to: Charset) -> Result<Reload, Refusal> {
     let cannot = |why: String| Err(Refusal::CannotReload(why));
     let encoding = match bom_of(bytes) {
@@ -649,7 +649,7 @@ pub fn convert_safety(
     }
 }
 
-/// The encodings chosen for files in this run of IDECraft (behaviour 11), by resolved path.
+/// The encodings chosen for files in this run of Ferris IDEA (behaviour 11), by resolved path.
 fn choices() -> std::sync::MutexGuard<'static, HashMap<PathBuf, Charset>> {
     static CHOICES: OnceLock<Mutex<HashMap<PathBuf, Charset>>> = OnceLock::new();
     CHOICES
@@ -670,7 +670,7 @@ pub fn chosen(path: &Path) -> Option<Charset> {
     choices().get(&key(path)).copied()
 }
 
-/// Remembers `charset` as the encoding of `path` until IDECraft quits (behaviours 13, 14).
+/// Remembers `charset` as the encoding of `path` until Ferris IDEA quits (behaviours 13, 14).
 pub fn choose(path: &Path, charset: Charset) {
     if choices().insert(key(path), charset) != Some(charset) {
         CHOICE_GENERATION.fetch_add(1, Ordering::SeqCst);
@@ -761,7 +761,7 @@ pub fn write_atomic_keeping_mode(path: &Path, bytes: &[u8]) -> std::io::Result<(
     let mut name = std::ffi::OsString::from(".");
     name.push(path.file_name().unwrap_or_default());
     name.push(format!(
-        ".idecraft-tmp-{}-{}",
+        ".ferris-idea-tmp-{}-{}",
         std::process::id(),
         COUNTER.fetch_add(1, Ordering::SeqCst)
     ));
@@ -1064,7 +1064,7 @@ mod tests {
 
     fn scratch(tag: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
-            "idecraft-file-properties-{tag}-{}",
+            "ferris-idea-file-properties-{tag}-{}",
             std::process::id()
         ));
         let _ = std::fs::remove_dir_all(&dir);

@@ -10,15 +10,15 @@
   TypeScript: types behind class fields without an annotation, values behind enum members without an
   initializer, OBS-0033 L11)
 - **Sources:** OBS-0011 step 2, finding 3 (in calls the reference shows the parameter names in grey
-  before the arguments, but not before arguments that already say what they are; IDECraft shows none),
+  before the arguments, but not before arguments that already say what they are; Ferris IDEA shows none),
   STD (LSP 3.17 `textDocument/inlayHint`: position, label as text or parts, kind `Parameter` = 2,
   `paddingLeft`/`paddingRight`), GEN (jdtls's `java.inlayHints.parameterNames.enabled` with the values
   `none`, `literals`, `all`; jdtls answers nothing for a range that reaches past the end of the file,
   seen while probing jdtls 1.64), OSS (scheme key `INLINE_PARAMETER_HINT`), SPEC-0058 (editor view),
-  SPEC-0290 (requested like semantic tokens); v2: OBS-0018 finding 14 (IDECraft shows `e1:` … before
+  SPEC-0290 (requested like semantic tokens); v2: OBS-0018 finding 14 (Ferris IDEA shows `e1:` … before
   the arguments of `List.of(1, 2, 3)`, the reference shows none), GEN (the JDK's collection factories
   name their parameters `e1` … `e10`, `k1`/`v1` …, and `elements` for the varargs form); v7: OBS-0033 item 11 (L11: the reference shows type hints behind
-  fields and the value behind enum constants, `= 0`; IDECraft shows neither), GEN
+  fields and the value behind enum constants, `= 0`; Ferris IDEA shows neither), GEN
   (typescript-language-server's preferences `includeInlayPropertyDeclarationTypeHints` and
   `includeInlayEnumMemberValueHints`, both off unless set; probed with typescript-language-server
   6.0.2: with both on, a field `count = 0` gets `: number` with kind `Type` and a space asked for
@@ -30,7 +30,7 @@
   OSS (measured over the protocol with gopls 0.24.0: no hints without the setting; with it
   `scaled(all[0], 2.5)` gets `s:` and `factor:` of kind `Parameter`, and a variadic parameter is
   labelled `a...:`); v9: OBS-0079 L3 (in `Islands Light` the reference shows `sku:`, `name:`,
-  `qty:` on a grey pill, IDECraft as grey text without a background), OSS (the open scheme `Default`,
+  `qty:` on a grey pill, Ferris IDEA as grey text without a background), OSS (the open scheme `Default`,
   parent of `Light`, gives `INLINE_PARAMETER_HINT` the background `EDEDED`,
   `Islands Dark` and `Dark` `393B40`; the theme palette's `inlay-bg` is used by no editor key)
 - **Feature matrix rows:** F-013, F-038
@@ -41,7 +41,7 @@ See which parameter a literal argument fills without opening the method's declar
 ## Behaviour
 1. **Request:** for a file whose server offers inlay hints (`inlayHintProvider`), the editor asks for
    the hints of the whole file (from the start to the end of its last line, never past it) when the
-   file is opened and after the text the server has changed (SPEC-0290 behaviour 1). IDECraft announces
+   file is opened and after the text the server has changed (SPEC-0290 behaviour 1). Ferris IDEA announces
    the client capability; jdtls is started with parameter names for literal arguments
    (`literals`). (v3) typescript-language-server gets its hint settings right after `initialized` with
    `workspace/didChangeConfiguration`, because it reads them only from there: parameter names for
@@ -72,7 +72,7 @@ See which parameter a literal argument fills without opening the method's declar
    hints; the two-argument case already worked. [OBS-0027 L18]
 3d. **(v5) Kotlin:** kotlin-language-server 1.3.12 gives parameter hints only when its setting
    `kotlin.inlayHints.parameterHints` is on (tried: none without it, all with it sent in
-   `workspace/didChangeConfiguration`); IDECraft sends that after `initialized` with parameter hints on
+   `workspace/didChangeConfiguration`); Ferris IDEA sends that after `initialized` with parameter hints on
    and type and chained hints off. The server then names every argument, so in `.kt` files a hint is
    kept only before an argument that starts with a literal — a string, a character, a number (also
    negative), `true`, `false`, `null` — and behaviours 3 and 3a apply. A call whose name starts with
@@ -98,8 +98,8 @@ See which parameter a literal argument fills without opening the method's declar
 4b. **(v9) The pill:** the label stands on a pill in the background of `INLINE_PARAMETER_HINT`,
    one pixel wider than the label on each side, 2 px inside its line above and below, with 4 px
    corners, drawn under the text and over the caret row and selections. Every bundled scheme gives
-   the key a background (`EDEDED` in `Light`, `Islands Light` and `IDECraft Light`, `393B40` in
-   `Islands Dark`, `Dark` and `IDECraft Dark`), so every theme draws the pill; a scheme without one
+   the key a background (`EDEDED` in `Light`, `Islands Light` and `Ferris IDEA Light`, `393B40` in
+   `Islands Dark`, `Dark` and `Ferris IDEA Dark`), so every theme draws the pill; a scheme without one
    draws none. The space the server asks for stays outside the pill. Until v9 the background of
    behaviour 4 was set on the text run but never drawn: the editor paints its own backgrounds and
    the toolkit draws none for a run, so the hints showed as grey text in every theme (OBS-0079 L3).
@@ -170,7 +170,7 @@ See which parameter a literal argument fills without opening the method's declar
   (`inlay::tests::no_space_before_a_hint_after_the_bracket`). With the real kotlin-language-server none of
   the four hints of AK-2d has a space before it and each has one after
   (`kotlin_parameter_hints_with_the_real_server`). The retry rule is SPEC-0290/AK-8.
-- **AK-4** In a real window (`idecraft ui --selftest`): in the Java insight file with jdtls installed,
+- **AK-4** In a real window (`ferris-idea ui --selftest`): in the Java insight file with jdtls installed,
   `add(1, count)` shows `left:` before `1` and no hint before `count`, and the text itself is
   unchanged.
 - **AK-5** The MCP tool lists the hints of a C file when clangd is installed: `add(1, 2)` gives `a:`
@@ -191,12 +191,12 @@ hint to go to the parameter, the per-method exclusion list, a smaller font for h
 `workspace/inlayHint/refresh`, resolving hints.
 
 ## Known deviations from the reference
-The reference decides itself which arguments get a hint; IDECraft relies on what the server reports
+The reference decides itself which arguments get a hint; Ferris IDEA relies on what the server reports
 and filters as in behaviours 3 and 3a, so the set of hints may differ per language. Hints are drawn with the
 editor font, not a smaller one.
 
 v5 (OBS-0035): the reference writes Kotlin hints as `name =`, the way a named argument is written;
-IDECraft keeps `name:` as in every other language.
+Ferris IDEA keeps `name:` as in every other language.
 
 v7 (OBS-0033 L11): field types and enum values are shown as typescript-language-server reports them;
 with TypeScript 7's own server (`tsc --lsp`, SPEC-0042) no hint settings are sent, so these hints are

@@ -1,6 +1,6 @@
 # SPEC-0108: Connection dialog
 
-- **Version:** 12 · **Date:** 2026-11-17 (v12: a MariaDB server's version is its number, without the product's name
+- **Version:** 13 · **Date:** 2026-11-17 (v13: Create File makes the empty SQLite or DuckDB database only when asked, in the dialog and as `create_file` of `save_connection`, agents only inside the workspace, behaviour 23, AK-24 to AK-26 — OBS-0083 L8, rule 12); 2026-11-17 (v12: a MariaDB server's version is its number, without the product's name
   and build suffix the server appends, behaviour 22, AK-23 — OBS-0076 C2); 2026-11-16 (v11: `test_connection` and `remove_connection` take the connection as `connection` too, behaviour 21, AK-22, OBS-0071 G6); 2026-11-14 (v10: the result of a test has its area from the start, so the buttons stay where they are, behaviour 20, AK-21; second window check of 2026-11-14; v9: the SSL button goes to the stricter modes first, a changed form marks the test result outdated, the labels keep to one line, behaviours 17 to 19); 2026-11-13 (v8: testing a SQLite file reads it and names what is wrong with it in
   words — not a database, locked, not readable, a folder; a relative file is found from the workspace; v7 2026-11-12: the SSH tunnel counts as open once ssh reports its listening socket, not when it names the forward, found by the server CI; v6: a long value stays inside its field; v5: the tunnel comes from the one start point of `ssh`, every
   jump host with the post-quantum key exchange, ADR-0025 v5; v4: pages General, SSH/SSL and Options; SSH tunnel through the
@@ -22,7 +22,7 @@
 
 ## Purpose
 The user adds, changes, tests and removes database connections in the window instead of editing
-`.idecraft/connections.toml` by hand; passwords stay in the system keychain.
+`.ferris-idea/connections.toml` by hand; passwords stay in the system keychain.
 
 ## Behaviour
 1. **Opening:** in the Database tool window "+" or ⌘N (Ctrl+N) opens the dialog for a new connection,
@@ -36,7 +36,7 @@ The user adds, changes, tests and removes database connections in the window ins
    1–65535, names unique). A new connection gets an id from its name, made unique, and read-only
    agent permissions; a changed one keeps its id and agent permissions. [SPEC-0008]
 4. **Password:** shown as dots and never copied or cut. A typed password is stored in the system
-   keychain (service `idecraft`, account `connection:<id>`) and the profile names that entry; an empty
+   keychain (service `ferris-idea`, account `connection:<id>`) and the profile names that entry; an empty
    password field keeps the stored one. The profile file never contains a password. SQLite needs none.
    [SPEC-0008]
 5. **Removing:** Delete on a connection asks in the tool window; a second Delete removes it and its
@@ -68,13 +68,13 @@ The user adds, changes, tests and removes database connections in the window ins
 
 8. **v4 – SSH tunnel (page SSH/SSL):** fields SSH host (an alias of `~/.ssh/config` or a host name),
    SSH port and SSH user (both from the config when empty). With a host, connecting first starts the
-   system `ssh` with the shared options of every IDECraft SSH path (from the start point
-   `idecraft_remote::SshCommand`, which checks the client and holds every `ProxyJump` hop to the same
+   system `ssh` with the shared options of every Ferris IDEA SSH path (from the start point
+   `ferris_idea_remote::SshCommand`, which checks the client and holds every `ProxyJump` hop to the same
    options, SPEC-0121 v4, ADR-0025 v5): the post-quantum key exchange only — a host or a
    local client without one is refused before anything is sent, and the dialog says in plain words
    which side to update (OpenSSH 9.0 or later, ML-KEM from 9.9) — `BatchMode=yes` (no password or passphrase is
    ever asked for or kept; keys, the SSH agent and the config apply), `StrictHostKeyChecking=yes` (an
-   unknown or changed host key is refused with what to do, never accepted from inside IDECraft),
+   unknown or changed host key is refused with what to do, never accepted from inside Ferris IDEA),
    `ExitOnForwardFailure=yes`, no agent or X11 forwarding, no shared master connection — with a
    forward from a free port on `127.0.0.1` (never another interface) to the profile's host and port as
    the SSH host sees them. The tunnel counts as ready only when `ssh` reports that it listens on that
@@ -84,12 +84,12 @@ The user adds, changes, tests and removes database connections in the window ins
    page says so for others and the profile refuses a tunnel there. The test result names the tunnel
    ("SSH tunnel: bastion (local end 127.0.0.1)"). Host and user must not start with `-` or contain
    spaces, so `ssh` never reads them as options; the profile file holds no other `ssh` arguments. In
-   builds with debug assertions only, the environment variable `IDECRAFT_TEST_SSH_CONFIG` names an
+   builds with debug assertions only, the environment variable `FERRIS_IDEA_TEST_SSH_CONFIG` names an
    `ssh` config file for automated tests; release builds ignore it. [STD, SPEC-0121, ADR-0025]
 9. **v4 – Colour, comment, driver, URL (page General):** a Colour button cycles through red, orange,
    yellow, green, blue, violet, grey and none; the colour marks the connection in the Database tree. A
    Comment field keeps a note (shown in the connection's quick documentation, SPEC-0089 v6). A Driver
-   line names the client library of the chosen family ("tokio-postgres (built in)"): IDECraft brings
+   line names the client library of the chosen family ("tokio-postgres (built in)"): Ferris IDEA brings
    one driver per family and never downloads one (IMP-0371). A URL line shows the profile as a URL,
    never with a password (SPEC-0008 behaviour 9); the URL field takes a pasted URL and Enter fills
    system, host, port, database, user and SSL mode from it; a URL with a password is refused, changes
@@ -166,6 +166,23 @@ The user adds, changes, tests and removes database connections in the window ins
     product's name and the build's suffix appended (`12.3.3-MariaDB`, `10.11.6-MariaDB-0+deb12u1-log`).
     The test result (behaviour 6 v3, MCP `server_version`) gives the number before `-MariaDB`, so the
     line reads `Server: MariaDB 12.3.3` and no longer names the product twice. [STD, GEN]
+23. **v13 – Creating a database file (OBS-0083 L8):** testing and connecting never create a file
+    (SPEC-0011 behaviour 1: a mistyped name must not become an empty database). Creating is a separate
+    action:
+    - **Dialog:** for SQLite and DuckDB the General page offers *Create File* next to Test Connection.
+      It makes the file the File field names (relative: in the workspace), in a folder that exists —
+      no folder is made — and never over an existing file or link; the note says `Created <file>` or why
+      not. The user may create it anywhere the user can write.
+    - **MCP:** `save_connection` takes `create_file: true` for SQLite and DuckDB. It acts only with
+      `dry_run: false` and the `write` right, before the connection is saved; a connection that then
+      cannot be saved takes its new file with it. An agent creates files only inside the workspace: a
+      path with `..`, outside the root, or through a folder that is a link to a place outside is
+      refused — checked before the file is made and again after it, and a file made outside after all
+      is removed. A file outside the workspace is the user's to create in the dialog. The result names
+      the file as `created_file`. `create_file` for a server dialect is an error.
+    - **The file:** created empty and readable and writable by its owner only (Unix mode 600); SQLite
+      takes an empty file as an empty database, a DuckDB file is initialised by DuckDB (no extension
+      loaded). [GEN, STD: SQLite and DuckDB file formats; rule 12]
 
 ## Acceptance criteria
 - **AK-1** Form to profile and back; port, host and name checks; SQLite drops server fields and
@@ -184,7 +201,7 @@ The user adds, changes, tests and removes database connections in the window ins
   (`connection_form::tests::test_details_are_formatted_without_secrets`).
 - **AK-7** (v3) Testing a SQLite file names SQLite 3.x, the file and a measured round trip without a
   TLS line (`crates/database/tests/it/connection_form.rs`: `test_connection_reports_success_and_failure`);
-  live against the reference PostgreSQL and MySQL (`IDECRAFT_TEST_PG` / `IDECRAFT_TEST_MYSQL`, skipped
+  live against the reference PostgreSQL and MySQL (`FERRIS_IDEA_TEST_PG` / `FERRIS_IDEA_TEST_MYSQL`, skipped
   without them): version not empty, round trip measured, TLS known and "no" for `sslmode=disable`
   (`live_postgres_test_names_version_ping_and_tls`, `live_mysql_test_names_version_ping_and_tls`).
 - **AK-8** (v3) `test_connection` over MCP returns `product`, `server_version`, `ping_ms`, `tls`,
@@ -212,7 +229,7 @@ The user adds, changes, tests and removes database connections in the window ins
   refused and not kept, a query timeout that is not a number stops saving with the reason, options,
   comment and colour are saved; saving and removing finish in the background.
 - **AK-15a** (v5) The tunnel's command line comes from the start point: shared options first, the
-  route pinned (`ProxyCommand=none`) or a jump host through IDECraft's hop stand-in (`tunnel::tests`;
+  route pinned (`ProxyCommand=none`) or a jump host through Ferris IDEA's hop stand-in (`tunnel::tests`;
   jump hosts against test `sshd`s: SPEC-0121 AK-7).
 - **AK-16** (v4) In the window next to the reference: the three pages, a tunnel to a real SSH host, the
   redraw after a keychain prompt (OBS-0026 L26).
@@ -245,6 +262,20 @@ The user adds, changes, tests and removes database connections in the window ins
 - **AK-23 (v12, behaviour 22)** `connection_form::tests::a_refused_certificate_points_to_the_ca_file`:
   `12.3.3-MariaDB` and `10.11.6-MariaDB-0+deb12u1-log` give `12.3.3` and `10.11.6`, a MySQL version
   stays as it is; live headless against MariaDB 12.3 (OBS-0076): `Server: MariaDB 12.3.3`.
+- **AK-24 (v13, behaviour 23)** `connection_form::tests::a_database_file_is_created_only_where_allowed`:
+  a relative SQLite file made in the workspace opens and is mode 600, a second create leaves the
+  existing file and its table alone, a DuckDB file opens read-only, a missing folder is not made, a
+  server dialect and an empty name are refused; for agents an absolute path outside, `../`, and a link
+  to a folder outside are refused with nothing outside, a link to a folder inside works; the user's
+  scope may create outside.
+- **AK-25 (v13, behaviour 23)** Window test `crates/workbench/tests/it/db_create_file.rs`
+  (`create_file_makes_the_database_only_when_asked`): Create File is not offered for PostgreSQL and is
+  for SQLite and DuckDB; Test Connection on the missing file fails and creates nothing; Create File
+  makes it and says so; a second click says it already exists and leaves its content.
+- **AK-26 (v13, behaviour 23)** `protocol.rs::save_connection_creates_a_database_file_only_when_asked`:
+  a dry run creates nothing; with `create_file` SQLite and DuckDB files are made and named; an existing
+  file is refused and stays, the connection is not saved; outside the workspace and `../` are refused,
+  nothing appears outside; a server dialect is refused; without the `write` right nothing is created.
 
 ## Out of scope
 Driver properties, other database systems (F-060), importing data sources of the reference, a choice of

@@ -87,4 +87,4 @@ between plugins.
 
 ## Known deviations from the reference
 The reference installs from disk without a separate review of permissions (its plugins have none);
-IDECraft shows contributions and permissions before anything is copied (IMP-0090).
+Ferris IDEA shows contributions and permissions before anything is copied (IMP-0090).

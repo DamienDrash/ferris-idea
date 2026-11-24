@@ -137,7 +137,7 @@ impl UiError {
             ..Self::new(
                 ErrorCode::NotGranted,
                 format!("not granted: this needs the `{right}` right ({meaning})"),
-                "only the user grants rights: answer the question in the IDECraft window, or add the right to agent-permissions.toml in the user's settings folder",
+                "only the user grants rights: answer the question in the Ferris IDEA window, or add the right to agent-permissions.toml in the user's settings folder",
             )
         }
     }
@@ -155,7 +155,7 @@ impl UiError {
     pub fn driving_off() -> Self {
         Self::new(
             ErrorCode::Unavailable,
-            "unavailable: agents and scripts may not operate the IDECraft window",
+            "unavailable: agents and scripts may not operate the Ferris IDEA window",
             "only the user can switch it on: Settings › AI Assistant › \"Allow agents and scripts to operate the window\"",
         )
     }

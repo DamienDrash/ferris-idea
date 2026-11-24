@@ -21,7 +21,7 @@ pub struct KeyError(pub String);
 /// Which side of a paired channel a store belongs to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Side {
-    /// `idecraft serve --pair`.
+    /// `ferris-idea serve --pair`.
     Serve,
     /// The window.
     Window,
@@ -92,7 +92,17 @@ struct List {
 const LIST_KIND: &str = "remote-paired-keys";
 const KEY_KIND: &str = "remote-serve-key";
 const FORMAT: u32 = 1;
-const KEYCHAIN_SERVICE: &str = "idecraft-remote";
+const KEYCHAIN_SERVICE: &str = "ferris-idea-remote";
+
+/// The keychain service older versions used under the product's former name (`SPEC-0356`
+/// behaviour 11).
+const FORMER_KEYCHAIN_SERVICE: &str = "idecraft-remote"; // rebrand:keep
+
+/// The `application` attribute of the Secret Service items (Linux), today's and former.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+const APPLICATION: &str = "ferris-idea";
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+const FORMER_APPLICATION: &str = "idecraft"; // rebrand:keep
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -130,36 +140,118 @@ pub trait SecretStore: Send + Sync {
     fn describe(&self) -> String;
 }
 
-/// The system keychain through `keyring` (macOS, Windows).
-struct SystemKeychain;
+/// A store that still finds the secrets older versions kept under the product's former keychain
+/// service (`SPEC-0356` behaviour 11): `current` is read first; a secret found only in `former` is
+/// copied to `current`, and removed from `former` only after the copy reads back the same bytes.
+/// Writing goes to `current` (a former copy is removed once the write reads back), removing
+/// clears both. No secret is ever logged or put into an error.
+pub struct RenamedSecrets {
+    current: Box<dyn SecretStore>,
+    former: Box<dyn SecretStore>,
+}
+
+impl RenamedSecrets {
+    /// `current` over `former`.
+    pub fn new(current: Box<dyn SecretStore>, former: Box<dyn SecretStore>) -> Self {
+        Self { current, former }
+    }
+
+    fn holds(&self, name: &str, bytes: &[u8]) -> bool {
+        matches!(self.current.get(name), Ok(Some(found)) if found.as_slice() == bytes)
+    }
+}
+
+impl SecretStore for RenamedSecrets {
+    fn get(&self, name: &str) -> Result<Option<Zeroizing<Vec<u8>>>, KeyError> {
+        if let Some(secret) = self.current.get(name)? {
+            return Ok(Some(secret));
+        }
+        let Some(secret) = self.former.get(name)? else {
+            return Ok(None);
+        };
+        if self.current.set(name, &secret).is_ok() && self.holds(name, &secret) {
+            let _ = self.former.delete(name);
+        }
+        Ok(Some(secret))
+    }
+
+    fn set(&self, name: &str, bytes: &[u8]) -> Result<(), KeyError> {
+        self.current.set(name, bytes)?;
+        if self.holds(name, bytes) {
+            let _ = self.former.delete(name);
+        }
+        Ok(())
+    }
+
+    fn delete(&self, name: &str) -> Result<(), KeyError> {
+        self.current.delete(name)?;
+        self.former.delete(name)
+    }
+
+    fn describe(&self) -> String {
+        self.current.describe()
+    }
+}
+
+/// `current` over the store `former` gives for the product's former name; `current` alone while
+/// the names are the same.
+fn with_former(
+    current: Box<dyn SecretStore>,
+    former: impl FnOnce() -> Result<Box<dyn SecretStore>, KeyError>,
+) -> Result<Box<dyn SecretStore>, KeyError> {
+    if FORMER_KEYCHAIN_SERVICE == KEYCHAIN_SERVICE && FORMER_APPLICATION == APPLICATION {
+        Ok(current)
+    } else {
+        Ok(Box::new(RenamedSecrets::new(current, former()?)))
+    }
+}
+
+/// The system keychain through `keyring` (macOS, Windows), under `service`.
+struct SystemKeychain {
+    service: &'static str,
+}
 
 impl SystemKeychain {
-    fn entry(name: &str) -> Result<keyring::Entry, KeyError> {
-        keyring::Entry::new(KEYCHAIN_SERVICE, name)
+    /// Today's service, finding the secrets of the former one.
+    fn renamed() -> Result<Box<dyn SecretStore>, KeyError> {
+        with_former(
+            Box::new(Self {
+                service: KEYCHAIN_SERVICE,
+            }),
+            || {
+                Ok(Box::new(Self {
+                    service: FORMER_KEYCHAIN_SERVICE,
+                }))
+            },
+        )
+    }
+
+    fn entry(&self, name: &str) -> Result<keyring::Entry, KeyError> {
+        keyring::Entry::new(self.service, name)
             .map_err(|e| KeyError(format!("the system keychain is not available: {e}")))
     }
 }
 
 impl SecretStore for SystemKeychain {
     fn get(&self, name: &str) -> Result<Option<Zeroizing<Vec<u8>>>, KeyError> {
-        match Self::entry(name)?.get_secret() {
+        match self.entry(name)?.get_secret() {
             Ok(v) => Ok(Some(Zeroizing::new(v))),
             Err(keyring::Error::NoEntry) => Ok(None),
             Err(e) => Err(KeyError(format!(
-                "idecraft: refusing to start: the system keychain cannot be read ({e}); unlock it \
+                "ferris-idea: refusing to start: the system keychain cannot be read ({e}); unlock it \
                  and try again"
             ))),
         }
     }
 
     fn set(&self, name: &str, bytes: &[u8]) -> Result<(), KeyError> {
-        Self::entry(name)?
+        self.entry(name)?
             .set_secret(bytes)
             .map_err(|e| KeyError(format!("the system keychain refused the key: {e}")))
     }
 
     fn delete(&self, name: &str) -> Result<(), KeyError> {
-        match Self::entry(name)?.delete_credential() {
+        match self.entry(name)?.delete_credential() {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
             Err(e) => Err(KeyError(format!("the system keychain refused: {e}"))),
         }
@@ -204,7 +296,7 @@ const DEBUG_BUILD_KEEPS_KEYS_IN_FILES: bool = cfg!(all(
 ));
 
 const BECAUSE_NO_KEYCHAIN: &str = "no keychain on this host";
-const BECAUSE_CHOSEN: &str = "file store chosen with --key-file or IDECRAFT_KEY_FILE";
+const BECAUSE_CHOSEN: &str = "file store chosen with --key-file or FERRIS_IDEA_KEY_FILE";
 const BECAUSE_KEPT: &str = "kept from before; delete it and pair again to move to the keychain";
 const BECAUSE_DEBUG: &str = "debug build: never the system keychain";
 
@@ -225,7 +317,7 @@ impl Store {
             return Self::open_file_because(side, dir, BECAUSE_DEBUG);
         }
         if keychain_required() {
-            return Self::open_with(side, dir, Box::new(SystemKeychain));
+            return Self::open_with(side, dir, SystemKeychain::renamed()?);
         }
         if !has_session_bus() {
             return Self::open_file_because(side, dir, BECAUSE_NO_KEYCHAIN);
@@ -245,17 +337,24 @@ impl Store {
     /// default keyring is locked.
     #[cfg(target_os = "linux")]
     pub fn open_secret_service(side: Side, dir: &Path) -> Result<Self, KeyError> {
-        let secrets = secret_service::SecretService::connect(&dir.join(side.key_name()))?;
-        Self::open_with_checked_dir(side, dir, Box::new(secrets))
+        let key_file = dir.join(side.key_name());
+        let connect = |application, service| {
+            secret_service::SecretService::connect(&key_file, application, service)
+                .map(|s| Box::new(s) as Box<dyn SecretStore>)
+        };
+        let secrets = with_former(connect(APPLICATION, KEYCHAIN_SERVICE)?, || {
+            connect(FORMER_APPLICATION, FORMER_KEYCHAIN_SERVICE)
+        })?;
+        Self::open_with_checked_dir(side, dir, secrets)
     }
 
     /// This build has no Secret Service support (only Linux has it).
     #[cfg(not(target_os = "linux"))]
     pub fn open_secret_service(side: Side, dir: &Path) -> Result<Self, KeyError> {
         Err(KeyError(format!(
-            "idecraft: refusing to start: this machine has a session bus, so a keychain may \
-             exist, but this build has no Secret Service support. Run `idecraft serve` with \
-             --key-file (the window: IDECRAFT_KEY_FILE=1) to keep the key in the file {} \
+            "ferris-idea: refusing to start: this machine has a session bus, so a keychain may \
+             exist, but this build has no Secret Service support. Run `ferris-idea serve` with \
+             --key-file (the window: FERRIS_IDEA_KEY_FILE=1) to keep the key in the file {} \
              (mode 0600) instead.",
             dir.join(side.key_name()).display()
         )))
@@ -376,14 +475,14 @@ impl Store {
             let text = Zeroizing::new(text);
             let parsed: toml::Value = toml::from_str(&text).map_err(|_| {
                 KeyError(format!(
-                    "idecraft: refusing to start: the key file {} is damaged; delete it to create \
+                    "ferris-idea: refusing to start: the key file {} is damaged; delete it to create \
                      a new key (paired devices must pair again).",
                     path.display()
                 ))
             })?;
             let bad = || {
                 KeyError(format!(
-                    "idecraft: refusing to start: the key file {} has the wrong kind or length; \
+                    "ferris-idea: refusing to start: the key file {} has the wrong kind or length; \
                      delete it to create a new key (paired devices must pair again).",
                     path.display()
                 ))
@@ -438,13 +537,13 @@ impl Store {
         };
         let list: List = toml::from_str(&text).map_err(|e| {
             KeyError(format!(
-                "idecraft: refusing to start: {} is damaged: {e}",
+                "ferris-idea: refusing to start: {} is damaged: {e}",
                 path.display()
             ))
         })?;
         if list.kind != LIST_KIND {
             return Err(KeyError(format!(
-                "idecraft: refusing to start: {} is not a list of paired keys",
+                "ferris-idea: refusing to start: {} is not a list of paired keys",
                 path.display()
             )));
         }
@@ -668,37 +767,44 @@ mod secret_service {
     use oo7::dbus::{Collection, Service};
     use zeroize::Zeroizing;
 
-    use super::{KEYCHAIN_SERVICE, KeyError, SecretStore};
+    use super::{KeyError, SecretStore};
 
     pub struct SecretService {
         // Keeps the D-Bus connection and the encrypted session open for the collection.
         _service: Service<'static>,
         collection: Collection<'static>,
+        application: &'static str,
+        service: &'static str,
     }
 
     fn refused(what: &str, key_file: &Path) -> KeyError {
         KeyError(format!(
-            "idecraft: refusing to start: this machine has a session bus, but {what}. Unlock or \
+            "ferris-idea: refusing to start: this machine has a session bus, but {what}. Unlock or \
              start the keyring (for example by logging in to the desktop) and try again, or run \
-             `idecraft serve` with --key-file (the window: IDECRAFT_KEY_FILE=1) to keep the key \
+             `ferris-idea serve` with --key-file (the window: FERRIS_IDEA_KEY_FILE=1) to keep the key \
              in the file {} (mode 0600) instead.",
             key_file.display()
         ))
     }
 
-    fn attributes(name: &str) -> HashMap<&str, &str> {
-        HashMap::from([
-            ("application", "idecraft"),
-            ("service", KEYCHAIN_SERVICE),
-            ("name", name),
-        ])
-    }
-
     impl SecretService {
-        /// Connects and checks the default collection; `key_file` is named in a refusal.
-        pub fn connect(key_file: &Path) -> Result<Self, KeyError> {
+        fn attributes<'a>(&self, name: &'a str) -> HashMap<&'a str, &'a str> {
+            HashMap::from([
+                ("application", self.application),
+                ("service", self.service),
+                ("name", name),
+            ])
+        }
+
+        /// Connects and checks the default collection; `key_file` is named in a refusal. Items
+        /// carry `application` and `service` as attributes.
+        pub fn connect(
+            key_file: &Path,
+            application: &'static str,
+            service: &'static str,
+        ) -> Result<Self, KeyError> {
             block_on(async {
-                let service = Service::encrypted().await.map_err(|e| {
+                let secret_service = Service::encrypted().await.map_err(|e| {
                     refused(
                         &format!(
                             "no Secret Service could be reached over an encrypted session ({e})"
@@ -706,7 +812,7 @@ mod secret_service {
                         key_file,
                     )
                 })?;
-                let collection = service
+                let collection = secret_service
                     .with_alias(Service::DEFAULT_COLLECTION)
                     .await
                     .map_err(|e| refused(&format!("the Secret Service failed ({e})"), key_file))?
@@ -724,8 +830,10 @@ mod secret_service {
                     ));
                 }
                 Ok(Self {
-                    _service: service,
+                    _service: secret_service,
                     collection,
+                    application,
+                    service,
                 })
             })
         }
@@ -733,7 +841,7 @@ mod secret_service {
 
     fn failed(e: oo7::dbus::Error) -> KeyError {
         KeyError(format!(
-            "idecraft: refusing to start: the Secret Service cannot be read ({e}); unlock the \
+            "ferris-idea: refusing to start: the Secret Service cannot be read ({e}); unlock the \
              keyring and try again"
         ))
     }
@@ -743,7 +851,7 @@ mod secret_service {
             block_on(async {
                 let items = self
                     .collection
-                    .search_items(&attributes(name))
+                    .search_items(&self.attributes(name))
                     .await
                     .map_err(failed)?;
                 let Some(item) = items.first() else {
@@ -758,8 +866,8 @@ mod secret_service {
             block_on(async {
                 self.collection
                     .create_item(
-                        &format!("IDECraft remote key ({name})"),
-                        &attributes(name),
+                        &format!("Ferris IDEA remote key ({name})"),
+                        &self.attributes(name),
                         oo7::Secret::blob(bytes),
                         true,
                         None,
@@ -774,7 +882,7 @@ mod secret_service {
             block_on(async {
                 let items = self
                     .collection
-                    .search_items(&attributes(name))
+                    .search_items(&self.attributes(name))
                     .await
                     .map_err(failed)?;
                 for item in items {
@@ -809,7 +917,7 @@ mod unix_files {
     }
 
     fn refuse(what: String) -> KeyError {
-        KeyError(format!("idecraft serve: refusing to start: {what}"))
+        KeyError(format!("ferris-idea serve: refusing to start: {what}"))
     }
 
     fn describe_kind(meta: &std::fs::Metadata) -> &'static str {
@@ -978,7 +1086,7 @@ mod unix_files {
             ".{}.{}",
             path.file_name()
                 .and_then(|n| n.to_str())
-                .unwrap_or("idecraft"),
+                .unwrap_or("ferris-idea"),
             std::process::id()
         ));
         let mut f = File::options()
@@ -1229,6 +1337,62 @@ mod tests {
         fn describe(&self) -> String {
             "key stored in memory".into()
         }
+    }
+
+    /// SPEC-0356 AK-12 (behaviour 11): the remote key kept under the product's former keychain
+    /// service is found, copied to today's and removed from the former only after the copy reads
+    /// back; a failed copy keeps it; a host keeps its identity across the rename.
+    #[test]
+    fn a_key_under_the_former_service_moves_after_a_verified_copy() {
+        let today = Memory::default();
+        let former = Memory::default();
+        former.set("serve-key", &[7; 32]).unwrap();
+        let store = RenamedSecrets::new(Box::new(today.clone()), Box::new(former.clone()));
+        assert_eq!(
+            store.get("serve-key").unwrap().unwrap().as_slice(),
+            &[7; 32]
+        );
+        assert_eq!(
+            today.get("serve-key").unwrap().unwrap().as_slice(),
+            &[7; 32]
+        );
+        assert!(former.get("serve-key").unwrap().is_none());
+        assert_eq!(store.describe(), "key stored in memory");
+
+        // A copy that cannot be written keeps the former key and still gives it.
+        former.set("pins", &[1, 2]).unwrap();
+        let locked = Memory {
+            broken: true,
+            ..Memory::default()
+        };
+        let store = RenamedSecrets::new(Box::new(locked), Box::new(former.clone()));
+        assert!(
+            store.get("pins").is_err(),
+            "a locked keychain is an error, never no key"
+        );
+        assert_eq!(former.get("pins").unwrap().unwrap().as_slice(), &[1, 2]);
+
+        // Writing and removing cover both names.
+        let store = RenamedSecrets::new(Box::new(today.clone()), Box::new(former.clone()));
+        store.set("pins", &[3]).unwrap();
+        assert!(former.get("pins").unwrap().is_none());
+        former.set("pins", &[4]).unwrap();
+        store.delete("pins").unwrap();
+        assert!(today.get("pins").unwrap().is_none() && former.get("pins").unwrap().is_none());
+
+        // The identity of a store over the renamed keychain is the one kept before.
+        let (_t, dir) = root();
+        let old = Memory::default();
+        let first = Store::open_with(Side::Serve, &dir, Box::new(old.clone()))
+            .unwrap()
+            .identity()
+            .unwrap();
+        let renamed = RenamedSecrets::new(Box::new(Memory::default()), Box::new(old));
+        let again = Store::open_with(Side::Serve, &dir, Box::new(renamed))
+            .unwrap()
+            .identity()
+            .unwrap();
+        assert_eq!(first.public, again.public);
     }
 
     #[test]

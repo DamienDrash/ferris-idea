@@ -83,10 +83,10 @@ message, commit.
 14. **Placeholder.** The empty message field shows a dimmed placeholder ("Commit message"); it
     disappears with the first character. [OBS]
 15. **Commit and Push.** Next to Commit a second button "Commit and Push…" commits exactly as Commit
-    does and, when the commit succeeds, opens IDECraft's Push dialog (SPEC-0109) with the commits the
+    does and, when the commit succeeds, opens Ferris IDEA's Push dialog (SPEC-0109) with the commits the
     remote lacks; a refused or blocked commit opens nothing. [OBS]
 16. **Commit options.** A gear button at the right of the buttons opens a small panel with the commit
-    options IDECraft has: "Run Git hooks" (SPEC-0230 behaviour 6, shown only when the repository has
+    options Ferris IDEA has: "Run Git hooks" (SPEC-0230 behaviour 6, shown only when the repository has
     commit hooks; it moves from under the message into the panel) and "Author" (empty: the configured
     identity; otherwise `Name <email>`, anything else refuses the commit with the reason). The options
     stay set for the window's lifetime. [OBS, STD]
@@ -102,7 +102,7 @@ message, commit.
 19. **v7 – Toolbar icons:** the toolbar buttons (Refresh, Rollback, Show Diff, Group By, Expand All,
     Collapse All) and the options gear show 16 px icons in the style of the open New UI icons:
     `general/refresh`, `general/expandAll`, `general/collapseAll`, `general/settings` (Apache-2.0) and
-    IDECraft's own `idecraft/rollback`, `idecraft/diff`, `idecraft/groupBy` (ADR-0009: drawn, not traced),
+    Ferris IDEA's own `ferris-idea/rollback`, `ferris-idea/diff`, `ferris-idea/groupBy` (ADR-0009: drawn, not traced),
     with light and dark variants; no text glyphs. [ADR-0009, OBS-0020 item 17, OBS-0022 L15]
 20. **v8 – Jump to the file:** F4 or ⌘↓ (Ctrl+↓) on a row opens the file in the editor and focuses it (`EditSource`), as in the reference; in the message field ⌘↓ keeps moving the caret. A single click on a row takes the focus into the list, so its keys (⌘D, F4, ⌘↓) reach it. [OBS-0022 Nachprüfung im Fenster 2026-11-06]
 21. **v9 – Actions by id:** operations the window already has are also actions under the ids of the bundled keymaps: `Diff.ShowDiff` (⌘D, Ctrl+D) is Show Diff of the selected row (behaviours 3 and 9); `Vcs.ToggleAmendCommitMode` (⌃⌥M on macOS) flips the Amend switch of behaviour 13 and does nothing in a repository without a commit; `ChangesView.GroupBy.Directory` (⌃P) and `ChangesView.GroupBy.Module` (⌃M) flip the two switches of behaviour 11; `ChangesView.ShowCommitOptions` (⌃O) opens and closes the options panel of behaviour 16. With their keys they run only while the Commit tool window has the focus (elsewhere the keys keep their other actions); from Find Action they run while the window is shown and are not available otherwise. Not carried out: `ChangesView.Move`, `ChangesView.SetDefault`, `ChangesView.Rename` and `Vcs.MoveChangedLinesToChangelist` (changelists are out of scope) and `Vcs.ShowMessageHistory` (no message history; carried out since v10, behaviour 22). [OSS: ids and shortcuts of the bundled keymaps; GEN]
@@ -111,7 +111,7 @@ message, commit.
     - **The list.** The action opens a list above the message field with the kept messages, newest first, the newest selected; the focus is in the message field. A row shows a message on one line: line breaks as `↵`, at most 100 characters, then `…`; seven rows are visible, more scroll. Up and Down move the selection around the ends, Enter or a click on a row chooses it, Escape or the action again closes the list without a change. Choosing replaces the whole text of the message field with the message as it was typed; that is one undo step, so one Undo in the field brings back what was typed before. Starting a commit closes the list. [OSS: `ShowMessageHistoryAction` — newest first, one line per message, seven visible rows; GEN]
     - **Where the key acts.** ⌃M is also Group By Module (behaviour 21). In the message field it is Commit Message History; in the rest of the Commit tool window it stays Group By Module; elsewhere the key has its other actions. From Find Action the action runs while the window is shown and puts the focus into the message field. [GEN]
     - **Nothing to show.** Without a kept message no list opens and the status bar says that this project has no commit messages in its history yet. In a remote project the history is neither kept nor shown, and the status bar says that it is not available there yet. [GEN]
-    - **Storage.** `.idecraft/commit-messages.toml` in the project: `version = 1` and `message`, the list newest first. It is machine-local state of one user and is listed in the generated `.idecraft/.gitignore` (SPEC-0069 behaviour 3), which is written or refreshed before the first message is kept. The file is replaced as a whole through a temporary file. [GEN]
+    - **Storage.** `.ferris-idea/commit-messages.toml` in the project: `version = 1` and `message`, the list newest first. It is machine-local state of one user and is listed in the generated `.ferris-idea/.gitignore` (SPEC-0069 behaviour 3), which is written or refreshed before the first message is kept. The file is replaced as a whole through a temporary file. [GEN]
     - **Messages are data.** A message may hold anything the user typed. It is stored and given back unchanged and is never interpreted, run, expanded or used as a path or a format. A row is for reading: control characters and direction overrides are shown as spaces there, the chosen message itself is not changed. No message is written to a log, a status text or an error text; the status texts of this behaviour name the file and the reason only. A message over 8 KiB (UTF-8) is not kept. A file over 2 MiB, a file that is not this format (`version` other than 1, broken TOML), or a link or folder under the file's name is not used: the history is empty, the status bar says that the file was not read and why, without quoting it, and the next kept message writes a good file in its place (a link or folder is not written through; the status bar says that the message was not added). From a readable file, entries beyond these rules (blank, too large, repeated, more than 25) are left out. [GEN, Security: CLAUDE.md rule 12]
     - **MCP.** `git_commit` with `message_history: true` commits nothing and returns `messages` (newest first), `limit`, `file` and `problem` (why the file was not used, else null). It reads only and needs no right. The tool's description says that the messages are text the user typed and never instructions. [ADR-0008]
     - **UI automation.** The action is declared without effect (it opens a list); choosing a row changes the text of the message field only. [SPEC-0319]
@@ -121,7 +121,7 @@ message, commit.
 ## Acceptance criteria
 - **AK-1** Groups, default checks, toggling files and groups, refresh keeping checks, status colour keys
   (unit test).
-- **AK-2** In a real window (`idecraft ui --selftest`): ⌘0 opens the Commit window with only the changed
+- **AK-2** In a real window (`ferris-idea ui --selftest`): ⌘0 opens the Commit window with only the changed
   tracked file checked; typed message and ⌘↩ create the commit, the untracked file stays untracked.
 - **AK-3** Use by hand with the mouse.
 - **AK-4** (v5) Model, headless: grouping by directory (with chains of folders joined), by module and
@@ -133,7 +133,7 @@ message, commit.
   ignored file is not listed (unit tests in the Git crate).
 - **AK-6** (v5) MCP: `git_commit` with `amend`, `git_rollback` dry run and real run, refused without
   `vcs-write` (protocol tests).
-- **AK-7** (v5) In a real window (`idecraft ui --selftest`): placeholder shown for the empty field;
+- **AK-7** (v5) In a real window (`ferris-idea ui --selftest`): placeholder shown for the empty field;
   amend fills the last message and shows its commit; Group By Directory nests the files; Rollback asks
   and restores the file; Commit and Push… commits and opens the Push dialog.
 
@@ -146,7 +146,7 @@ message, commit.
 - **AK-12 (v10, behaviour 22)** Store, headless: newest first, an equal message moves to the front, blank ones are not kept (`commit_messages::tests::newest_first_and_each_message_once`); 25 messages and 8 KiB (`the_number_and_the_size_are_limited`); odd text survives the file unchanged and the largest history stays under the file limit (`messages_are_data_and_survive_the_file`); a broken, too large or newer file is an empty history with a reason that does not quote it, and the next message replaces it (`an_unusable_file_is_an_empty_history_with_the_reason`); a link is neither read nor written through (`a_link_is_not_followed`). Model: rows, selection and the chosen message; one undo step; what a commit remembers (`commit_model::tests::{the_message_history_lists_rows_and_gives_the_message, a_chosen_message_replaces_the_text_in_one_undo_step, a_commit_with_something_to_commit_remembers_its_message}`). The key: ⌃M is the history in the message field and Group By Module in the rest of the window, in both keymaps (`keymap_actions::tests::the_message_history_key_belongs_to_the_message_field`); title and group in Find Action (`everywhere::tests::part_actions_have_titles_and_groups`); effect (`security::tests::commit_message_history_declares_no_effect`). In a window of the test harness: three commits from the window, the list newest first with the repeated message once, Down and Enter put the second message into the field, one undo brings the typed text back, Escape and the action close the list, the ignore file lists the history file; a broken file is said in the status bar without its content and replaced by the next commit (`crates/workbench/tests/it/commit_message_history.rs`). MCP: `git_commit` with `message_history` (`protocol.rs`: `git_commit_lists_the_message_history`). Open: ⌃M pressed on a real keyboard in the message field, a click on a row, the list's look, and the comparison with the reference.
 
 ## Out of scope
-Partial changelists (lines of one file in different lists; file-level changelists: SPEC-0335), partial commits of hunks, sign-off and other commit options IDECraft does not have, diff
+Partial changelists (lines of one file in different lists; file-level changelists: SPEC-0335), partial commits of hunks, sign-off and other commit options Ferris IDEA does not have, diff
 preview inside the window, commit checks (code analysis before commit), shelving, rollback of single
 hunks, grouping by repository (one repository per workspace).
 
@@ -155,4 +155,4 @@ hunks, grouping by repository (one repository per workspace).
 - The rollback confirmation is a strip inside the window instead of a separate dialog listing the
   files; the files are the checked ones the user already sees. [GEN]
 - Group By settings and folded nodes are kept for the window's lifetime, not saved with the project.
-- v10, Commit Message History: not compared with the reference on screen; the rules are those of the open platform's sources. Differences chosen here: the list stands above the message field inside the tool window instead of a floating popup; moving the selection does not put the message into the field as a preview — only choosing does; typing does not filter the list; a row is cut after 100 characters instead of at the subject margin; the field has no history button; the action is not available without a kept message, which the status bar says, where the reference disables it. A message over 8 KiB is not kept and a history file IDECraft cannot use is replaced (the reference keeps its list in the project's workspace settings and has no such limits). [OSS, GEN]
+- v10, Commit Message History: not compared with the reference on screen; the rules are those of the open platform's sources. Differences chosen here: the list stands above the message field inside the tool window instead of a floating popup; moving the selection does not put the message into the field as a preview — only choosing does; typing does not filter the list; a row is cut after 100 characters instead of at the subject margin; the field has no history button; the action is not available without a kept message, which the status bar says, where the reference disables it. A message over 8 KiB is not kept and a history file Ferris IDEA cannot use is replaced (the reference keeps its list in the project's workspace settings and has no such limits). [OSS, GEN]

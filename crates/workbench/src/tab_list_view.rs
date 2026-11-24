@@ -250,7 +250,7 @@ impl TabListView {
         // held while the Switcher is used, does not count (`SPEC-0059` v9.4 behaviour 27e).
         if self.switcher {
             let m = &k.modifiers;
-            let split = idecraft_ui::keymap::Keystroke::from_platform(
+            let split = ferris_idea_ui::keymap::Keystroke::from_platform(
                 &k.key, false, m.alt, m.shift, m.platform,
             )
             .is_some_and(|stroke| {
@@ -267,7 +267,7 @@ impl TabListView {
             }
             // Iterate Recent Files (⌘E in the bundled macOS keymap, Ctrl+E in the default one)
             // moves the selection down as ⌃⇥ does (`SPEC-0059` v9.10 behaviour 27h).
-            let iterate = idecraft_ui::keymap::Keystroke::from_platform(
+            let iterate = ferris_idea_ui::keymap::Keystroke::from_platform(
                 &k.key, false, m.alt, m.shift, m.platform,
             )
             .is_some_and(|stroke| {

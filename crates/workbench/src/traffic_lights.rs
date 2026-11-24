@@ -7,7 +7,7 @@
 
 use std::sync::OnceLock;
 
-pub use idecraft_ui::metrics::{TRAFFIC_LIGHT_PITCH, TRAFFIC_LIGHT_POSITION};
+pub use ferris_idea_ui::metrics::{TRAFFIC_LIGHT_PITCH, TRAFFIC_LIGHT_POSITION};
 
 /// Places a window's buttons; set once by the application.
 pub type Spacer = fn(&gpui::Window, f32);

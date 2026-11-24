@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use idecraft_debugger::{
+use ferris_idea_debugger::{
     DapClient, DebugSession, Event, SourceBreakpoint, StopState, known_adapters, read_message,
     write_message,
 };
@@ -165,13 +165,13 @@ fn a_failed_condition_stops_and_is_told_with_debugpy() {
         .and_then(|a| a.command)
     else {
         assert!(
-            std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+            ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
             "required tool missing: debugpy"
         );
         eprintln!("skipped: debugpy is not installed");
         return;
     };
-    let dir = std::env::temp_dir().join(format!("idecraft-conderr-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-conderr-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let dir: PathBuf = dir.canonicalize().unwrap();

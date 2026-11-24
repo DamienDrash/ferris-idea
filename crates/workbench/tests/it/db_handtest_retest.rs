@@ -15,8 +15,8 @@
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_workbench::WorkbenchView;
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_workbench::WorkbenchView;
 
 const WIDTH: f32 = 1372.;
 const HEIGHT: f32 = 860.;
@@ -44,9 +44,10 @@ const INVENTORY: &str = "CREATE TABLE item (id INTEGER PRIMARY KEY, sku TEXT NOT
 /// A workspace with the connections `refdb` (the inventory) and `compare_b` (the inventory with
 /// `item.discontinued`, a table `extra` and the view `extra_v` on it). `None` without `sqlite3`.
 fn workspace(tag: &str) -> Option<PathBuf> {
-    let root = std::env::temp_dir().join(format!("idecraft-dbretest-{tag}-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-dbretest-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir_all(root.join(".idecraft")).unwrap();
+    std::fs::create_dir_all(root.join(".ferris-idea")).unwrap();
     let (a, b) = (root.join("refdb.db"), root.join("compare_b.db"));
     let made = sqlite(&a, INVENTORY)
         && sqlite(
@@ -61,7 +62,7 @@ fn workspace(tag: &str) -> Option<PathBuf> {
         return None;
     }
     std::fs::write(
-        root.join(".idecraft/connections.toml"),
+        root.join(".ferris-idea/connections.toml"),
         format!(
             "[[connection]]\nid = \"refdb\"\nname = \"refdb\"\ndialect = \"sqlite\"\npath = \"{}\"\n\n\
              [[connection]]\nid = \"compare_b\"\nname = \"compare_b\"\ndialect = \"sqlite\"\npath = \"{}\"\n",
@@ -177,7 +178,7 @@ fn compare_to(bench: &Entity<WorkbenchView>, cx: &mut VisualTestContext, target:
 fn choice(
     bench: &Entity<WorkbenchView>,
     cx: &mut VisualTestContext,
-) -> idecraft_workbench::db_compare_model::MigrationChoice {
+) -> ferris_idea_workbench::db_compare_model::MigrationChoice {
     bench.read_with(cx, |b, cx| {
         b.services_view()
             .and_then(|v| v.read(cx).schema_diff().and_then(|d| d.choice.clone()))
@@ -237,9 +238,9 @@ fn hand_test_37_plan_then_compare_asks_for_the_target(cx: &mut TestAppContext) {
         bench.read_with(cx, |b, _| b.active_path()),
         Some(script.clone())
     );
-    let profiles = idecraft_database::load_profiles(&root).unwrap();
+    let profiles = ferris_idea_database::load_profiles(&root).unwrap();
     assert_eq!(
-        idecraft_database::bound_connection(&root, &script, &profiles).as_deref(),
+        ferris_idea_database::bound_connection(&root, &script, &profiles).as_deref(),
         Some("compare_b"),
         "the script runs on the target"
     );
@@ -269,7 +270,7 @@ fn hand_test_120_boxes_hold_their_text_and_the_diagram_fits(cx: &mut TestAppCont
         er.read_with(cx, |v, _| {
             let (vw, vh) = v.viewport();
             let l = v.layout();
-            let fit = idecraft_database::er_layout::fit_zoom(l.width, l.height, vw, vh);
+            let fit = ferris_idea_database::er_layout::fit_zoom(l.width, l.height, vw, vh);
             (
                 v.zoom(),
                 fit,
@@ -300,7 +301,7 @@ fn hand_test_120_boxes_hold_their_text_and_the_diagram_fits(cx: &mut TestAppCont
     // Name and type side by side as the diagram font draws them: no name is shortened, and the
     // measured text ends one gap before the type (D43).
     let boxes = er.read_with(cx, |v, _| v.layout().boxes.clone());
-    let family = idecraft_workbench::fonts::editor_family();
+    let family = ferris_idea_workbench::fonts::editor_family();
     let measure = |cx: &mut VisualTestContext, s: &str| -> f32 {
         cx.update(|window, _| {
             let run = gpui::TextRun {
@@ -319,11 +320,11 @@ fn hand_test_120_boxes_hold_their_text_and_the_diagram_fits(cx: &mut TestAppCont
             )
         })
     };
-    use idecraft_database::er_layout::INSET;
+    use ferris_idea_database::er_layout::INSET;
     for b in &boxes {
         for (_, name, ty, _) in &b.lines {
             assert_eq!(
-                &idecraft_database::er_layout::fitted_name(b, name, ty),
+                &ferris_idea_database::er_layout::fitted_name(b, name, ty),
                 name,
                 "{name} is shortened in {}",
                 b.name
@@ -369,19 +370,19 @@ fn hand_test_120_boxes_hold_their_text_and_the_diagram_fits(cx: &mut TestAppCont
 
     // SVG and PNG with whole names and types.
     for export in [
-        idecraft_workbench::ErExport::Svg,
-        idecraft_workbench::ErExport::Png(1.),
+        ferris_idea_workbench::ErExport::Svg,
+        ferris_idea_workbench::ErExport::Png(1.),
     ] {
         let path = er
             .update(cx, |v, cx| v.export(export, cx))
             .expect("exported");
         assert!(
-            path.starts_with(root.join(".idecraft/diagrams")),
+            path.starts_with(root.join(".ferris-idea/diagrams")),
             "{path:?}"
         );
         assert!(std::fs::metadata(&path).is_ok_and(|m| m.len() > 0));
     }
-    let svg = std::fs::read_to_string(root.join(".idecraft/diagrams/refdb.svg")).unwrap();
+    let svg = std::fs::read_to_string(root.join(".ferris-idea/diagrams/refdb.svg")).unwrap();
     for text in [
         ">unit_price_cents<",
         ">moved_at<",
@@ -400,9 +401,9 @@ fn hand_test_121_views_and_the_data_loss_question(cx: &mut TestAppContext) {
         eprintln!("skipped: no sqlite3 program");
         return;
     };
-    idecraft_workbench::hit_targets::enable();
-    idecraft_workbench::semantics::set_consumer(
-        idecraft_workbench::semantics::Consumer::SelfTest,
+    ferris_idea_workbench::hit_targets::enable();
+    ferris_idea_workbench::semantics::set_consumer(
+        ferris_idea_workbench::semantics::Consumer::SelfTest,
         true,
     );
     let (bench, cx) = window(&root, cx);
@@ -450,7 +451,7 @@ fn hand_test_121_views_and_the_data_loss_question(cx: &mut TestAppContext) {
     assert!(services.read_with(cx, |v, _| v.confirming_migration()));
     cx.update(|window, cx| window.draw(cx).clear());
     let tree = cx.update(|window, _| {
-        idecraft_workbench::semantics::tree(idecraft_workbench::semantics::window_id(window))
+        ferris_idea_workbench::semantics::tree(ferris_idea_workbench::semantics::window_id(window))
             .expect("a tree is built")
     });
     let get = |name: &str| {

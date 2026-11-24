@@ -1,4 +1,4 @@
-//! IDECraft's own Markdown formatter (`SPEC-0043` v6 behaviour 12): one blank line between
+//! Ferris IDEA's own Markdown formatter (`SPEC-0043` v6 behaviour 12): one blank line between
 //! blocks (after a setext heading, around ATX headings, tables and fenced code blocks, between
 //! lists with different markers), the columns of pipe tables aligned with a delimiter row of
 //! dashes, and runs of spaces in top-level paragraphs reduced to one — nothing else. Code blocks,

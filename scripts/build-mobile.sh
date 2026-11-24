@@ -5,9 +5,13 @@
 #   scripts/build-mobile.sh android-test   the core's loopback tests as an arm64 Android program
 #   scripts/build-mobile.sh android-apk    the above, then the debug APK and an unsigned release APK
 #                                          (plus a copy signed with a throwaway key for emulators)
-#                                          into $IDECRAFT_APK_DIR (default mobile/android/build/apk)
+#                                          into $FERRIS_IDEA_APK_DIR (default mobile/android/build/apk)
 # Output goes to mobile/ios/Generated and mobile/android/generated (both ignored by Git).
 set -euo pipefail
+# Variables under the former name (IDECRAFT_*) still count while today's is not set. rebrand:keep
+for former in $(env | sed -n 's/^IDECRAFT_\([A-Za-z0-9_]*\)=.*/\1/p'); do # rebrand:keep
+  eval "[ -n \"\${FERRIS_IDEA_$former+x}\" ] || { FERRIS_IDEA_$former=\$IDECRAFT_$former; export FERRIS_IDEA_$former; }" # rebrand:keep
+done
 
 cd "$(dirname "$0")/.."
 target_dir="${CARGO_TARGET_DIR:-target}"
@@ -17,9 +21,9 @@ flag=()
 
 bindgen() {
   # $1 language, $2 output folder. The metadata comes from a host build of the library.
-  cargo build -p idecraft-mobile
-  cargo run -q -p idecraft-mobile --features bindgen --bin uniffi-bindgen -- generate \
-    --library "$target_dir/debug/libidecraft_mobile.dylib" --language "$1" --out-dir "$2"
+  cargo build -p ferris-idea-mobile
+  cargo run -q -p ferris-idea-mobile --features bindgen --bin uniffi-bindgen -- generate \
+    --library "$target_dir/debug/libferris_idea_mobile.dylib" --language "$1" --out-dir "$2"
 }
 
 ios() {
@@ -27,15 +31,15 @@ ios() {
   rm -rf "$out"
   mkdir -p "$out/headers"
   for t in aarch64-apple-ios aarch64-apple-ios-sim; do
-    cargo build -p idecraft-mobile "${flag[@]}" --target "$t"
+    cargo build -p ferris-idea-mobile "${flag[@]}" --target "$t"
   done
   bindgen swift "$out"
-  cp "$out"/idecraft_mobileFFI.h "$out/headers/"
-  cp "$out"/idecraft_mobileFFI.modulemap "$out/headers/module.modulemap"
+  cp "$out"/ferris_idea_mobileFFI.h "$out/headers/"
+  cp "$out"/ferris_idea_mobileFFI.modulemap "$out/headers/module.modulemap"
   xcodebuild -create-xcframework \
-    -library "$target_dir/aarch64-apple-ios/$profile/libidecraft_mobile.a" -headers "$out/headers" \
-    -library "$target_dir/aarch64-apple-ios-sim/$profile/libidecraft_mobile.a" -headers "$out/headers" \
-    -output "$out/IDECraftCore.xcframework"
+    -library "$target_dir/aarch64-apple-ios/$profile/libferris_idea_mobile.a" -headers "$out/headers" \
+    -library "$target_dir/aarch64-apple-ios-sim/$profile/libferris_idea_mobile.a" -headers "$out/headers" \
+    -output "$out/FerrisIDEACore.xcframework"
   echo "built: aarch64-apple-ios, aarch64-apple-ios-sim -> $out"
 }
 
@@ -53,7 +57,7 @@ android_env() {
 
 android_test() {
   android_env
-  cargo test -p idecraft-mobile --test paired --no-run --target aarch64-linux-android
+  cargo test -p ferris-idea-mobile --test paired --no-run --target aarch64-linux-android
 }
 
 android() {
@@ -61,8 +65,8 @@ android() {
   local out=mobile/android/generated
   rm -rf "$out"
   mkdir -p "$out/jniLibs/arm64-v8a"
-  cargo build -p idecraft-mobile "${flag[@]}" --target aarch64-linux-android "$@"
-  cp "$target_dir/aarch64-linux-android/$profile/libidecraft_mobile.so" "$out/jniLibs/arm64-v8a/"
+  cargo build -p ferris-idea-mobile "${flag[@]}" --target aarch64-linux-android "$@"
+  cp "$target_dir/aarch64-linux-android/$profile/libferris_idea_mobile.so" "$out/jniLibs/arm64-v8a/"
   bindgen kotlin "$out/kotlin"
   echo "built: aarch64-linux-android -> $out"
 }
@@ -75,29 +79,29 @@ android_apk() {
   local sdk="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
   local tools
   tools="$(ls -d "$sdk"/build-tools/* | sort -V | tail -1)"
-  local out="${IDECRAFT_APK_DIR:-mobile/android/build/apk}"
+  local out="${FERRIS_IDEA_APK_DIR:-mobile/android/build/apk}"
   # A throwaway signing key per build, in a private temp folder that is removed on exit: never the
   # shared ~/.android/debug.keystore, never a key in the repository.
   # Global, not local: the EXIT trap runs after this function has returned.
-  apk_keys="$(mktemp -d "${TMPDIR:-/tmp}/idecraft-apk-key.XXXXXX")"
+  apk_keys="$(mktemp -d "${TMPDIR:-/tmp}/ferris-idea-apk-key.XXXXXX")"
   chmod 700 "$apk_keys"
   trap 'rm -rf "$apk_keys"' EXIT
-  IDECRAFT_ANDROID_STORE="$apk_keys/throwaway.p12"
-  IDECRAFT_ANDROID_STORE_PASSWORD="$(openssl rand -hex 24)"
-  export IDECRAFT_ANDROID_STORE IDECRAFT_ANDROID_STORE_PASSWORD ANDROID_HOME="$sdk"
-  keytool -genkeypair -keystore "$IDECRAFT_ANDROID_STORE" -storetype PKCS12 \
-    -storepass:env IDECRAFT_ANDROID_STORE_PASSWORD -keypass:env IDECRAFT_ANDROID_STORE_PASSWORD \
-    -alias idecraft-throwaway -keyalg EC -groupname secp256r1 -validity 30 \
-    -dname "CN=IDECraft throwaway build key" >/dev/null 2>&1
+  FERRIS_IDEA_ANDROID_STORE="$apk_keys/throwaway.p12"
+  FERRIS_IDEA_ANDROID_STORE_PASSWORD="$(openssl rand -hex 24)"
+  export FERRIS_IDEA_ANDROID_STORE FERRIS_IDEA_ANDROID_STORE_PASSWORD ANDROID_HOME="$sdk"
+  keytool -genkeypair -keystore "$FERRIS_IDEA_ANDROID_STORE" -storetype PKCS12 \
+    -storepass:env FERRIS_IDEA_ANDROID_STORE_PASSWORD -keypass:env FERRIS_IDEA_ANDROID_STORE_PASSWORD \
+    -alias ferris-idea-throwaway -keyalg EC -groupname secp256r1 -validity 30 \
+    -dname "CN=Ferris IDEA throwaway build key" >/dev/null 2>&1
   "$gradle" -q -p mobile/android assembleDebug assembleRelease
   mkdir -p "$out"
-  cp mobile/android/app/build/outputs/apk/debug/app-debug.apk "$out/idecraft-debug.apk"
+  cp mobile/android/app/build/outputs/apk/debug/app-debug.apk "$out/ferris-idea-debug.apk"
   cp mobile/android/app/build/outputs/apk/release/app-release-unsigned.apk \
-    "$out/idecraft-release-unsigned.apk"
+    "$out/ferris-idea-release-unsigned.apk"
   # The same release, signed with the throwaway key only so that an emulator can install it.
-  "$tools/apksigner" sign --ks "$IDECRAFT_ANDROID_STORE" \
-    --ks-pass env:IDECRAFT_ANDROID_STORE_PASSWORD --ks-key-alias idecraft-throwaway \
-    --out "$out/idecraft-release-throwaway-signed.apk" "$out/idecraft-release-unsigned.apk"
+  "$tools/apksigner" sign --ks "$FERRIS_IDEA_ANDROID_STORE" \
+    --ks-pass env:FERRIS_IDEA_ANDROID_STORE_PASSWORD --ks-key-alias ferris-idea-throwaway \
+    --out "$out/ferris-idea-release-throwaway-signed.apk" "$out/ferris-idea-release-unsigned.apk"
   rm -f "$out"/*.idsig
   ls -l "$out"
 }

@@ -57,7 +57,7 @@ statement their database understands, and a column's type changes without writin
    The new name is written like the old one: in double quotes where the old part was quoted or the new
    name needs them, a `'` doubled. A literal written with another schema names another sequence and is
    neither changed nor listed. Listed with their line and left unchanged, as before: a literal without
-   a schema after the file set another search path (or one IDECraft cannot read), a literal with a
+   a schema after the file set another search path (or one Ferris IDEA cannot read), a literal with a
    schema while the sequence's schema is not known, an escape string (`E'…'`), and every other string
    that holds the name. The sequence's schema is the one the connection works in, where the Database
    tree lists the sequence; the dialog and `rename_sql_object` read it from the database. Literals in
@@ -81,7 +81,7 @@ statement their database understands, and a column's type changes without writin
 12. **v3 – What it risks, before it runs:** the preview lists notes under the statement. A type
     change is marked as one that may lose data: the database converts every stored value and
     refuses or changes values that do not fit. A rename says that views, triggers and routines
-    stored in the database that use the old name are not rewritten by IDECraft. Nothing runs
+    stored in the database that use the old name are not rewritten by Ferris IDEA. Nothing runs
     before Refactor (Enter) in the dialog; over MCP nothing without `apply`. [GEN]
 13. **v3 – Taking the file changes back:** an open file changes as one undo step of its editor
     (SPEC-0128 behaviour 3). A file no editor has open gets a revision in the local history
@@ -177,7 +177,7 @@ Compared with a connection (OBS-0070):
 - The dialogs work on the database's current state; the reference warned about objects changed in
   the database after its own rename until the refactoring was forced (IMP-0420).
 - Derived constraint and index names are offered; the reference keeps the old names (IMP-0056).
-- Undo takes back the files only (behaviour 13), as in the reference. v5: IDECraft says at once what
+- Undo takes back the files only (behaviour 13), as in the reference. v5: Ferris IDEA says at once what
   the database keeps and offers the inverse change through the dialog; the reference said it only
   after undoing and offered nothing (behaviour 16, IMP-0419).
 - v5: a sequence name inside `nextval('…')` or `'…'::regclass` changes like in the reference

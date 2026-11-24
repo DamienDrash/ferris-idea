@@ -1,27 +1,27 @@
 //! SPEC-0072 v9 AK-26 (OBS-0021): Python completion through pyright: signature and type from the
-//! resolved documentation, call parentheses, IDECraft's postfix and live templates and standard
+//! resolved documentation, call parentheses, Ferris IDEA's postfix and live templates and standard
 //! library imports the server does not offer. A test binary of its own, because the pool is
 //! switched on for the whole process. Skipped without a Python language server.
 
 use std::time::Duration;
 
-use idecraft_languages::insight::{CompletionItem, complete_in, resolve_details_in};
-use idecraft_languages::pool;
-use idecraft_languages::script_completion::detail_parts;
+use ferris_idea_languages::insight::{CompletionItem, complete_in, resolve_details_in};
+use ferris_idea_languages::pool;
+use ferris_idea_languages::script_completion::detail_parts;
 
 const MODEL: &str = "from dataclasses import dataclass\n\n\n@dataclass\nclass Item:\n    sku: str\n    qty: int\n\n    def total_cents(self) -> int:\n        return self.qty\n";
 
 #[tokio::test]
 async fn python_types_parentheses_templates_and_imports() {
-    if idecraft_languages::servers::resolve(idecraft_languages::LanguageId::Python).is_err() {
+    if ferris_idea_languages::servers::resolve(ferris_idea_languages::LanguageId::Python).is_err() {
         assert!(
-            std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+            ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
             "required tool missing: pyright-langserver"
         );
         eprintln!("skipped: no Python language server installed");
         return;
     }
-    let root = std::env::temp_dir().join(format!("idecraft-py-cmp-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-py-cmp-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     let root = root.canonicalize().unwrap();

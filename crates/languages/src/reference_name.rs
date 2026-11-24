@@ -263,7 +263,7 @@ pub fn qualified_name(
                 return None;
             }
             let mut types: Vec<&str> = Vec::new();
-            let package = idecraft_core::source_roots::declared_package(text);
+            let package = ferris_idea_core::source_roots::declared_package(text);
             if let Some(p) = package.as_deref() {
                 types.push(p);
             }
@@ -329,7 +329,7 @@ pub fn below(path: &Path, base: &Path) -> Option<String> {
 /// source folders `source_roots` that holds it, else below the project folder `root`, else its
 /// absolute path.
 pub fn file_name(path: &Path, root: &Path, source_roots: &[PathBuf]) -> String {
-    idecraft_core::source_roots::containing(source_roots, path)
+    ferris_idea_core::source_roots::containing(source_roots, path)
         .and_then(|source| below(path, source))
         .or_else(|| below(path, root))
         .unwrap_or_else(|| path.display().to_string())
@@ -402,7 +402,7 @@ pub fn module_of(
 ) -> Option<String> {
     match language? {
         LanguageId::Python => python_module(
-            &idecraft_core::source_roots::containing(source_roots, path)
+            &ferris_idea_core::source_roots::containing(source_roots, path)
                 .and_then(|source| below(path, source))
                 .or_else(|| below(path, root))?,
         ),
@@ -759,7 +759,7 @@ mod tests {
         assert_eq!(rust_module_below_src("bin/tool.rs"), "crate");
 
         let root =
-            std::env::temp_dir().join(format!("idecraft-reference-name-{}", std::process::id()));
+            std::env::temp_dir().join(format!("ferris-idea-reference-name-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("crates/shop/src/cart")).unwrap();
         std::fs::create_dir_all(root.join("crates/shop/tests")).unwrap();

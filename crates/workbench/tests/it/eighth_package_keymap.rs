@@ -13,10 +13,10 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use ferris_idea_languages::insight::{CompletionItem, Signature, SignatureHelp};
+use ferris_idea_workbench::WorkbenchView;
+use ferris_idea_workbench::problems_model::InspectScope;
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_languages::insight::{CompletionItem, Signature, SignatureHelp};
-use idecraft_workbench::WorkbenchView;
-use idecraft_workbench::problems_model::InspectScope;
 
 const JAVA: &str = "class Shop {
     void m(java.util.List<String> list) {
@@ -30,7 +30,8 @@ const JAVA: &str = "class Shop {
 ";
 
 fn workspace(tag: &str) -> PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-eighth-{tag}-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-eighth-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src")).unwrap();
     std::fs::write(
@@ -224,6 +225,59 @@ fn overloads_are_chosen_in_parameter_info(cx: &mut TestAppContext) {
         !e.read(cx).state.carets.primary().range().is_empty()
     });
     assert!(selected, "Extend Selection ran");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// SPEC-0080 v5 AK-7 (window check 2026-11-18 gap P1): parameter info with the twelve wide
+/// overloads of `List.of` at a caret far right stands over the editor at the caret's line, moved
+/// left only as far as needed, never over the project tree left of the editor.
+#[gpui::test]
+fn wide_parameter_info_stays_over_the_editor(cx: &mut TestAppContext) {
+    let root = workspace("wide-params");
+    let (bench, cx) = open(&root, "src/Shop.java", cx);
+    caret_at(&bench, 4, 22, cx);
+    let mut labels: Vec<String> = (0..=10)
+        .map(|n| {
+            let args: Vec<String> = (1..=n).map(|i| format!("E e{i}")).collect();
+            format!("<E> List<E> of({})", args.join(", "))
+        })
+        .collect();
+    labels.push("<E> List<E> of(E... elements)".into());
+    let help = SignatureHelp {
+        signatures: labels
+            .into_iter()
+            .map(|label| Signature {
+                label,
+                documentation: None,
+                parameters: Vec::new(),
+                active_parameter: None,
+            })
+            .collect(),
+        active_signature: 11,
+    };
+    assert!(bench.update_in(cx, |b, window, cx| b.show_param_info(help, window, cx)));
+    cx.run_until_parked();
+    let (spot, area) = bench.read_with(cx, |b, cx| {
+        let e = b.active_editor_entity().unwrap();
+        let e = e.read(cx);
+        e.caret_spot(e.caret()).expect("the editor was drawn")
+    });
+    let place = bench
+        .read_with(cx, |b, cx| b.params_placement(cx))
+        .expect("parameter info is placed");
+    assert!(
+        area.left > 0.,
+        "the project tree stands left of the editor: {area:?}"
+    );
+    assert!(
+        place.x >= area.left && place.x <= spot.x,
+        "at or left of the caret, inside the editor: {place:?} {spot:?} {area:?}"
+    );
+    let line = if place.above { spot.top } else { spot.bottom };
+    assert!(
+        (place.y - line).abs() <= 2.,
+        "at the caret's line: {place:?} {spot:?}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -451,8 +505,10 @@ fn recompile_builds_the_module_of_the_file(cx: &mut TestAppContext) {
     act(&bench, "Compile", cx);
     assert_eq!(status(&bench, cx), "Recompile: shop [build]");
     act(&bench, "Stop", cx);
-    let elsewhere =
-        std::env::temp_dir().join(format!("idecraft-eighth-loose-{}.txt", std::process::id()));
+    let elsewhere = std::env::temp_dir().join(format!(
+        "ferris-idea-eighth-loose-{}.txt",
+        std::process::id()
+    ));
     std::fs::write(&elsewhere, "x\n").unwrap();
     open_file(&bench, &elsewhere, cx);
     act(&bench, "Compile", cx);

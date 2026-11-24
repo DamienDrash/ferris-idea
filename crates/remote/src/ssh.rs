@@ -1,6 +1,6 @@
 //! Running commands on a host through the system `ssh` (behaviours 1–2).
 //!
-//! The user's `~/.ssh/config`, keys, agent and known hosts work unchanged. IDECraft never asks for
+//! The user's `~/.ssh/config`, keys, agent and known hosts work unchanged. Ferris IDEA never asks for
 //! a password or passphrase and never accepts an unknown or changed host key: `ssh` runs in batch
 //! mode with strict host key checking, and its refusals become [`RemoteError`]s that say what to do.
 
@@ -15,9 +15,13 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error, Serialize)]
 #[serde(tag = "kind", content = "message", rename_all = "snake_case")]
 pub enum RemoteError {
-    /// The host key is not in `known_hosts`; IDECraft does not accept it on its own.
+    /// The host key is not in `known_hosts`; Ferris IDEA does not accept it on its own. The text
+    /// names the terminal command that reaches the host as Ferris IDEA does
+    /// ([`crate::own_hosts::terminal_command`]: `ssh -F '<file>' <alias>` for one of Ferris IDEA's
+    /// own hosts, `SPEC-0121` v6 behaviour 2).
     #[error(
-        "{0}: the host key is not known yet. Connect once in a terminal (`ssh {0}`), check the fingerprint and accept it there"
+        "{0}: the host key is not known yet. Connect once in a terminal (`{cmd}`), check the fingerprint and accept it there",
+        cmd = crate::own_hosts::terminal_command(.0)
     )]
     HostKeyUnknown(String),
     /// The host key differs from the one in `known_hosts` — possibly another machine.
@@ -27,7 +31,7 @@ pub enum RemoteError {
     HostKeyChanged(String),
     /// No key or agent identity was accepted (passwords are never asked for).
     #[error(
-        "{0}: login refused. IDECraft uses your SSH keys and agent only; add a key (`ssh-add`) or an IdentityFile in ~/.ssh/config"
+        "{0}: login refused. Ferris IDEA uses your SSH keys and agent only; add a key (`ssh-add`) or an IdentityFile in ~/.ssh/config"
     )]
     AuthRequired(String),
     /// Name not found, connection refused or timed out.
@@ -39,34 +43,45 @@ pub enum RemoteError {
     /// `ssh` itself could not be started.
     #[error("ssh: {0}")]
     NoSsh(String),
-    /// The file changed on the host since it was read; nothing was written.
-    #[error("{0} changed on the host since it was opened; nothing was written")]
-    Changed(String),
+    /// The file changed on the host since it was read; nothing was written. Names the stamp the
+    /// write expected and the host's stamp now (`absent` when the file is gone; `SPEC-0121` v7
+    /// behaviour 7).
+    #[error(
+        "conflict: {path} changed on the host since it was read (expected stamp {expected}, host stamp {host}); nothing was written"
+    )]
+    Changed {
+        /// Path on the host.
+        path: String,
+        /// The stamp the write expected (`absent` for a new file).
+        expected: String,
+        /// The host's stamp now (`absent` when the file is gone).
+        host: String,
+    },
     /// The remote command failed.
     #[error("{0}")]
     Failed(String),
     /// The host offers no hybrid post-quantum key exchange (ADR-0025, PO-STATUS question 29).
     #[error(
-        "{0}: the host offers no post-quantum key exchange (OpenSSH 9.0 or later needed there, ML-KEM from 9.9). IDECraft connects only with post-quantum protection (ADR-0025); nothing was sent"
+        "{0}: the host offers no post-quantum key exchange (OpenSSH 9.0 or later needed there, ML-KEM from 9.9). Ferris IDEA connects only with post-quantum protection (ADR-0025); nothing was sent"
     )]
     NoPqKex(String),
     /// The local `ssh` knows no allowed post-quantum key exchange; the text names the version
     /// needed.
     #[error(
-        "the local ssh client offers no post-quantum key exchange; update OpenSSH ({0}). IDECraft does not fall back to a classical key exchange (ADR-0025)"
+        "the local ssh client offers no post-quantum key exchange; update OpenSSH ({0}). Ferris IDEA does not fall back to a classical key exchange (ADR-0025)"
     )]
     ClientWithoutPq(String),
     /// A jump host on the way offers no hybrid post-quantum key exchange (ADR-0025 v5): the hop,
     /// then the host.
     #[error(
-        "{1}: the jump host {0} offers no post-quantum key exchange (OpenSSH 9.0 or later needed there, ML-KEM from 9.9). IDECraft holds every hop to post-quantum protection (ADR-0025); nothing was sent to {1}"
+        "{1}: the jump host {0} offers no post-quantum key exchange (OpenSSH 9.0 or later needed there, ML-KEM from 9.9). Ferris IDEA holds every hop to post-quantum protection (ADR-0025); nothing was sent to {1}"
     )]
     HopNoPqKex(String, String),
-    /// The SSH configuration starts a `ProxyCommand` of the user's own, which IDECraft cannot hold
+    /// The SSH configuration starts a `ProxyCommand` of the user's own, which Ferris IDEA cannot hold
     /// to the post-quantum key exchange (ADR-0025 v5); refused unless the setting
     /// `ssh.allowOwnProxyCommand` allows it.
     #[error(
-        "{0}: the SSH configuration runs its own ProxyCommand, which IDECraft cannot hold to the post-quantum key exchange (ADR-0025); nothing was started. Use ProxyJump instead (IDECraft protects every hop), or allow it in Settings > Version Control (ssh.allowOwnProxyCommand)"
+        "{0}: the SSH configuration runs its own ProxyCommand, which Ferris IDEA cannot hold to the post-quantum key exchange (ADR-0025); nothing was started. Use ProxyJump instead (Ferris IDEA protects every hop), or allow it in Settings > Version Control (ssh.allowOwnProxyCommand)"
     )]
     ProxyCommandRefused(String),
 }
@@ -153,7 +168,7 @@ pub(crate) fn control_dir() -> PathBuf {
     }
     let user = std::env::var("USER").unwrap_or_else(|_| "user".into());
     // Short on purpose: Unix socket paths are limited to about 100 bytes.
-    PathBuf::from(format!("/tmp/idecraft-ssh-{user}"))
+    PathBuf::from(format!("/tmp/ferris-idea-ssh-{user}"))
 }
 
 /// Default time limit of one call.
@@ -447,7 +462,8 @@ impl Remote {
     }
 }
 
-/// Sets POSIX permission bits; other systems have none to set.
+/// Sets POSIX permission bits; other systems have none, so there it refuses rather than leave the
+/// file as it is (`SPEC-0321` v6 behaviour 8a).
 pub(crate) fn set_mode(path: &std::path::Path, mode: u32) -> std::io::Result<()> {
     #[cfg(unix)]
     {
@@ -457,7 +473,10 @@ pub(crate) fn set_mode(path: &std::path::Path, mode: u32) -> std::io::Result<()>
     #[cfg(not(unix))]
     {
         let _ = (path, mode);
-        Ok(())
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "file modes are not supported on this platform yet",
+        ))
     }
 }
 
@@ -490,6 +509,50 @@ mod tests {
         assert_eq!(quote(""), "''");
         assert_eq!(quote("$(rm -rf ~)"), "'$(rm -rf ~)'");
         assert_eq!(quote("-n"), "-n");
+    }
+
+    /// The unknown-key message names the command that reaches the host as Ferris IDEA does:
+    /// `ssh -F '<file>' <alias>` for an own alias (also `user@alias`), quoted for the shell, and
+    /// `ssh <host>` for any other host or without host files (`SPEC-0121` v6 behaviour 2).
+    #[test]
+    fn the_unknown_key_message_names_the_command_that_works() {
+        let _lock = crate::own_hosts::test_lock();
+        let dir = std::env::temp_dir().join(format!(
+            "ferris-idea-unknown-key-{}/it's a dir",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let files = crate::HostFiles::in_folders(&dir.join("settings"), &dir.join("home"));
+        let own = crate::OwnHost {
+            alias: "ferris-idea-own-key".into(),
+            hostname: "127.0.0.1".into(),
+            ..Default::default()
+        };
+        crate::add_host(&files, &own, false).unwrap();
+        crate::set_host_files(Some(files.clone()));
+        let quoted = format!(
+            "'{}'",
+            files.own.display().to_string().replace('\'', r"'\''")
+        );
+        assert!(quoted.contains(r"it'\''s a dir"), "{quoted}");
+        let text = RemoteError::HostKeyUnknown("ferris-idea-own-key".into()).to_string();
+        assert!(
+            text.contains(&format!("(`ssh -F {quoted} ferris-idea-own-key`)")),
+            "{text}"
+        );
+        let user_at = RemoteError::HostKeyUnknown("me@ferris-idea-own-key".into()).to_string();
+        assert!(
+            user_at.contains(&format!("(`ssh -F {quoted} me@ferris-idea-own-key`)")),
+            "{user_at}"
+        );
+        let other = RemoteError::HostKeyUnknown("build-box".into()).to_string();
+        assert!(other.contains("(`ssh build-box`)"), "{other}");
+        let odd = RemoteError::HostKeyUnknown("a b".into()).to_string();
+        assert!(odd.contains("(`ssh 'a b'`)"), "{odd}");
+        crate::set_host_files(None);
+        let off = RemoteError::HostKeyUnknown("ferris-idea-own-key".into()).to_string();
+        assert!(off.contains("(`ssh ferris-idea-own-key`)"), "{off}");
+        let _ = std::fs::remove_dir_all(dir.parent().unwrap());
     }
 
     #[test]
@@ -535,7 +598,7 @@ mod tests {
 
     #[test]
     fn batch_mode_strict_keys_and_terminal() {
-        let mut t = SshTarget::new("idecraft-dev.invalid");
+        let mut t = SshTarget::new("ferris-idea-dev.invalid");
         t.port = Some(2222);
         let r = Remote::new(t);
         let Ok(args) = r.ssh_args() else {
@@ -548,14 +611,14 @@ mod tests {
                 .any(|w| w == ["-o", "StrictHostKeyChecking=yes"])
         );
         assert!(args.windows(2).any(|w| w == ["-p", "2222"]));
-        assert_eq!(&args[args.len() - 2..], ["--", "idecraft-dev.invalid"]);
+        assert_eq!(&args[args.len() - 2..], ["--", "ferris-idea-dev.invalid"]);
         assert!(args.windows(2).any(|w| w == ["-o", "ProxyCommand=none"]));
         let shell = r.shell_command(Some("/srv/my app")).unwrap();
         assert_eq!(shell[0], "ssh");
         let t_at = shell.iter().position(|a| a == "-t").unwrap();
         let host_at = shell
             .iter()
-            .position(|a| a == "idecraft-dev.invalid")
+            .position(|a| a == "ferris-idea-dev.invalid")
             .unwrap();
         assert!(t_at < host_at);
         assert_eq!(

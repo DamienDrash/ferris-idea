@@ -6,11 +6,11 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
+use ferris_idea_core::{InstallPlan, Interpreter, PackageInfo, PythonEnvironments, pip_spec};
 use gpui::{
     Context, Entity, EventEmitter, FocusHandle, KeyDownEvent, Subscription, Window, div,
     prelude::*, px, rgb,
 };
-use idecraft_core::{InstallPlan, Interpreter, PackageInfo, PythonEnvironments, pip_spec};
 
 use crate::editor_view::EditorView;
 use crate::palette::Palette;
@@ -52,7 +52,7 @@ pub const FAILURE_LINES: usize = 12;
 impl InstallFailure {
     /// The failure of a command that ran: its command line and the last [`FAILURE_LINES`] lines
     /// of its output.
-    pub fn of_run(run: &idecraft_core::ToolRun) -> Self {
+    pub fn of_run(run: &ferris_idea_core::ToolRun) -> Self {
         let lines: Vec<&str> = run.output.lines().collect();
         Self {
             title: match run.exit_code {
@@ -256,7 +256,7 @@ impl PythonView {
 
     /// The version installed in the selected environment for `name`.
     fn installed_version(&self, name: &str) -> Option<&str> {
-        let norm = idecraft_core::normalize_name(name);
+        let norm = ferris_idea_core::normalize_name(name);
         self.installed
             .iter()
             .find(|(n, _)| *n == norm)
@@ -269,11 +269,11 @@ impl PythonView {
             return None;
         };
         let version = info.releases.get(*chosen).map(|r| r.version.as_str());
-        Some(idecraft_core::install_plan(
+        Some(ferris_idea_core::install_plan(
             &self.root,
             self.interpreter.as_ref(),
-            &idecraft_core::requirement(&info.name, version),
-            &|program| idecraft_core::find_tool(self.tool_path.as_deref(), program),
+            &ferris_idea_core::requirement(&info.name, version),
+            &|program| ferris_idea_core::find_tool(self.tool_path.as_deref(), program),
         ))
     }
 
@@ -497,7 +497,7 @@ impl PythonView {
     /// Installs what the field holds (behaviour 5); an empty field does nothing.
     pub fn install_typed(&mut self, cx: &mut Context<Self>) {
         let text = self.field.read(cx).state.buffer.text();
-        let specs = idecraft_core::parse_specs(&text);
+        let specs = ferris_idea_core::parse_specs(&text);
         if specs.is_empty() || self.busy.is_some() {
             return;
         }
@@ -792,7 +792,7 @@ impl Render for PythonView {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use idecraft_core::{Package, Unsatisfied};
+    use ferris_idea_core::{Package, Unsatisfied};
 
     #[test]
     fn a_single_name_searches_and_requirements_install() {
@@ -809,7 +809,7 @@ mod tests {
     #[test]
     fn a_failed_command_shows_its_command_and_output_tail() {
         let output: Vec<String> = (1..=30).map(|i| format!("line {i}")).collect();
-        let run = idecraft_core::ToolRun {
+        let run = ferris_idea_core::ToolRun {
             command: vec!["/v/bin/python".into(), "-m".into(), "pip".into()],
             ok: false,
             exit_code: Some(1),
@@ -821,7 +821,7 @@ mod tests {
         assert_eq!(texts.len(), 2 + FAILURE_LINES);
         assert_eq!(texts[2], "line 19");
         assert_eq!(texts.last().unwrap(), "line 30");
-        let unstarted = idecraft_core::ToolRun {
+        let unstarted = ferris_idea_core::ToolRun {
             exit_code: None,
             output: "uv: No such file".into(),
             ..run

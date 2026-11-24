@@ -45,9 +45,9 @@ variables, expressions — under the user's `debug` right.
    `debug_evaluate`, `debug_inspect` (it evaluates its expression too, also for a view),
    `debug_set_variable`, and the conditions and log messages of the breakpoints the agent set.
    Each `debug_evaluate`, `debug_inspect` and `debug_set_variable` is written to the agent log
-   before it runs. For the stack, the variables and their children IDECraft sends no `evaluate`
+   before it runs. For the stack, the variables and their children Ferris IDEA sends no `evaluate`
    (SPEC-0091 v16 behaviour 42). One thing still runs code of the program without being asked
-   for: java-debug calls an object's own `toString()` when IDECraft fetches the text of a Java
+   for: java-debug calls an object's own `toString()` when Ferris IDEA fetches the text of a Java
    row it marked lazy, for up to 30 rows of an answer (SPEC-0091 v11 behaviour 17); the state of
    a stop and `debug_variables` contain these texts. [GEN]
 9. **Go (v4):** `debug_start` debugs a `.go` file or a package folder (one with a `go.mod` or Go
@@ -67,14 +67,14 @@ variables, expressions — under the user's `debug` right.
     `debugpy`) and `attached` (attached to a program that ran before, SPEC-0147), plus `limit`,
     the number of sessions that may be open at once. It talks to no adapter, changes nothing and needs
     no right, so an agent that lost a session number can find it and stop it. A server knows only the
-    sessions started through it: over stdio each `idecraft call` is a server of its own, the window's
+    sessions started through it: over stdio each `ferris-idea call` is a server of its own, the window's
     HTTP server keeps them while it runs. [GEN; OBS-0071 G5]
 11. **Registers, memory and disassembly (v6):** three tools read what a native program holds while
     its session is stopped (lldb-dap, SPEC-0039). Each needs the `debug` right like the other debug
     tools, is refused with a reason while the program runs, after it ended and for an unknown
     session, and sends no request that writes memory, changes a value or moves the program.
     Addresses are hexadecimal: an agent writes them with `0x` (1 to 16 digits; decimal is refused),
-    IDECraft writes every address as `0x` and 16 lowercase digits. [STD: DAP; OBS-0071 O5]
+    Ferris IDEA writes every address as `0x` and 16 lowercase digits. [STD: DAP; OBS-0071 O5]
     a. **`debug_registers`:** the registers of the stopped thread's top frame from the frame's
        register scope (lldb-dap's `Registers`), by group as the adapter gives them (General Purpose
        Registers, Floating Point Registers, …), each register with name and value as shown; at
@@ -153,6 +153,6 @@ Not compared side by side; rights and logging per SPEC-0053 (IMP-0028).
 
 v5 (OBS-0071, without a session): the reference lists its open debug sessions like `debug_sessions`
 does. It listed four exception breakpoints under one and the same id, so none could be addressed on
-its own, and its error for a missing session named a tool its list does not have. In IDECraft saved
+its own, and its error for a missing session named a tool its list does not have. In Ferris IDEA saved
 line breakpoints are keyed by file and line and the exception settings per language, and messages name
 tools by the names `tools/list` gives (IMP-0446).

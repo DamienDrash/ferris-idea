@@ -1,6 +1,9 @@
 # SPEC-0322: Remote debugging — debug adapters on the host, attach, containers and pods
 
-- **Version:** 5 · **Date:** 2026-11-09 (v5: where a stop is shown in a remote project, behaviour
+- **Version:** 7 · **Date:** 2026-11-19 (v7: a headless Delve server is attached to directly and
+  only on the host's loopback, behaviour 10; java-debug's exit code is not shown, behaviour 8; real
+  Delve, lldb-dap and java-debug on a host with a break, AK-17–AK-20; v6: off Unix the socket adapters, Delve and java-debug are
+  refused instead of listening on a loopback port, behaviours 2–4, SPEC-0321 v6 behaviour 8a; v5: where a stop is shown in a remote project, behaviour
   14; v4: Java debugging back, on private listeners only; v3:
   refused until then; v2: Delve on a private Unix socket; an adapter's port is refused by
   `port.forward`)
@@ -34,20 +37,24 @@ port is opened on the window's machine, ever.
    path as its argument, Delve `--listen=unix:<path>`. When a path below the temporary folder would
    not fit a socket address (104 bytes on macOS), the folder is made in `/tmp`; it is created with
    mode 0700 and creating it fails on anything already there. It is removed with the session.
-   (Windows hosts of M6.14 have no such socket; there the adapter takes a free port on the host's
-   loopback.)
+   (Windows hosts of M6.14 have no such socket. **(v6)** There js-debug is refused with "not
+   supported on this platform yet" until a private channel exists (a named pipe with an
+   owner-only access list); before v6 it took a free port on the host's loopback, which every
+   local account can reach.)
    js-debug asks for one more connection per debugged process (SPEC-0168):
    `dap.connect {session}` opens a further stream to the same server. [OSS, ADR-0025 §6]
 3. **TCP adapters** bind to `127.0.0.1:0` on the host and print the port; the backend connects to
-   it on the host's loopback and relays. This remains for dlv on a Windows host, which keeps its
-   check that the connecting process belongs to the same user (`--only-same-user`, its default).
+   it on the host's loopback and relays. **(v6)** dlv off Unix is refused like js-debug: its
+   `--only-same-user` check is not available on Windows, so a loopback port would be open to
+   every local account.
    While an adapter's port is open, `port.forward` refuses it as a debug port, whatever its command
    line says and whether or not the port list has seen it; `dap.start` names it as `adapter_port`.
    [OSS, ADR-0025 §6]
 4. **java-debug** runs in a jdtls that the backend starts for the project (its own data folder, as
-   SPEC-0097), with IDECraft's small bundle beside it. java-debug's own listener is never started:
+   SPEC-0097), with Ferris IDEA's small bundle beside it. java-debug's own listener is never started:
    the bundle serves the debug protocol on a Unix socket in a new folder of mode 0700, removed with
-   the session, and on a host without such sockets (Windows, M6.14) on the loopback address. It also
+   the session; **(v6)** on a system without such sockets (Windows, M6.14) Java debugging is
+   refused with "not supported on this platform yet" (before v6: the loopback address). It also
    replaces the wait for the launched program, which the platform opens on every interface, by a
    port on the loopback address that closes as soon as the program has connected. No listener exists
    on another interface, locally or on a host, also during hot swap. Only the java-debug version the
@@ -74,7 +81,11 @@ port is opened on the window's machine, ever.
    amount came during the break) the session ends with a message instead of guessing. [SPEC-0317]
 8. **End.** `dap.stop {session}` ends the adapter, its socket folder, the forwards of the attach
    target and all connections of that adapter. So does the end of the session (the reattach
-   period is over); `dap.exited {session, code}` reports it. [SPEC-0318]
+   period is over); `dap.exited {session, code}` reports it. **(v7)** The program's exit code is
+   shown as the adapter reports it, except for java-debug: its `exited` event says 0 whenever the
+   JVM ends, whatever the process returned (`System.exit(3)` included), so a Java session ends
+   without a code ("Debugging stopped") instead of a wrong one; the same applies locally. [SPEC-0318,
+   OSS `microsoft/java-debug` `ConfigurationDoneRequestHandler`]
 9. **Host processes.** `dap.processes {}` lists the attachable processes of the host account
    (name, command's program only, runtime, debug port) as the local dialog does. [SPEC-0147, SEC-10]
 
@@ -85,10 +96,17 @@ port is opened on the window's machine, ever.
     `pid`) for the attach request, and `mappings: [[host_path, target_path]]` when known. The
     adapter runs on the host and connects from there, so JVM (java-debug), debugpy (a
     `debugpy --listen` program is talked to directly), lldb (`gdb-remote-port`) and Node.js
-    inspector targets need no port on the window's machine. [ADR-0025 §6, SPEC-0147]
+    inspector targets need no port on the window's machine. **(v7)** A headless Delve server
+    (`dlv … --headless --listen=127.0.0.1:<port>`) speaks DAP itself: for `dlv` with an address the
+    backend connects to it directly, as for `debugpy --listen` and as a local attach does
+    (SPEC-0147 v3 behaviour 7), and starts no `dlv dap` of its own (that one does not take
+    `mode: remote`; before v7 the attach failed with "no debugger found"). Its port is neither
+    encrypted nor authenticated, so an address outside the host's loopback is refused with
+    `denied` before anything connects; the console says what Stop does to the server.
+    [ADR-0025 §6, SPEC-0147]
 11. **Other addresses.** An address other than the host's loopback is the user's explicit entry
     only; the Debug console says that the traffic between the host and that address is not
-    protected by IDECraft. Agents may name only loopback addresses, as for forwards. [ADR-0025 §6]
+    protected by Ferris IDEA. Agents may name only loopback addresses, as for forwards. [ADR-0025 §6]
 12. **Containers.** For `docker` the backend reads `docker inspect` (or `podman inspect` when
     Docker is absent) on the host: a port published on the host's loopback is used, else the
     container's own address on the host's bridge network. A port published on all interfaces is
@@ -165,6 +183,16 @@ port is opened on the window's machine, ever.
 - **AK-16** A stop in a remote project shows without any local file: marked at once in an open
   editor, after arrival in a new one, not at all outside the project; its frames are project frames.
   Window: the line is highlighted and the caret moves (self-test step).
+- **AK-17** A real Delve on the host (`dlv dap`, launch as a Debug of `go run .` builds it): stop at a
+  breakpoint set in the stand-in path, frame in the stand-in path, a local variable, a break of the
+  session while paused, evaluation afterwards, Step Over, Resume, the program's exit code and output.
+- **AK-18** `host:port` attach to a real headless Delve server on the host's loopback: no adapter
+  port, stop at a breakpoint, a variable, a break while paused, Resume to the next stop; an address
+  outside the loopback is refused (`denied`) without a connection attempt.
+- **AK-19** A real lldb-dap on the host: breakpoint in the stand-in path, frame in the stand-in
+  path, a local, Step Into and Step Out, a break while paused, Step Over, Resume, exit code, output.
+- **AK-20** A real java-debug in jdtls on the host: breakpoint in the stand-in path, a local, a break
+  while paused, Step Over, Resume to the end; the end carries no exit code (behaviour 8).
 
 ## Out of scope
 Containers and pods as attach targets of a local project (the same resolution would run locally;
@@ -183,5 +211,4 @@ authentication, which is why its listeners are replaced (behaviour 4). What rema
 loopback address only: while a program starts (normally well under a second), another local account
 could connect to the port the debugger waits on and pose as the program; it would reach the
 debugger, not the program, and the handshake rejects anything that is not JDWP. On a Windows host
-the adapter's port is on the loopback address too, without the per-account protection of a socket
-folder.
+(v6) no adapter is started at all until it can listen privately.

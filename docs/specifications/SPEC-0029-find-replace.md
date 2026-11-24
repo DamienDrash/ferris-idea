@@ -54,17 +54,17 @@ as `.venv` and the other folders that are not the project's own sources, the sam
      nothing. [GEN; decision]
    - **The option "libraries and ignored files"** (MCP `include_non_project: true`, default off)
      searches every file below the project folder or the named directory, except version control
-     data (`.git`, `.hg`, `.svn`, `.jj`, `CVS`) and IDECraft's own data (`.idecraft`, which holds the
+     data (`.git`, `.hg`, `.svn`, `.jj`, `CVS`) and Ferris IDEA's own data (`.ferris-idea`, which holds the
      local history's copies); symbolic links are still not followed. [GEN; decision]
 9. **Replacing never leaves the own sources unasked:** a replacement changes a file that is not the
    project's own only with the option of behaviour 8; a named directory alone shows the matches
-   there but does not allow changing them. Version control data, `.idecraft`, files behind a
+   there but does not allow changing them. Version control data, `.ferris-idea`, files behind a
    symbolic link and files outside the project folder are never changed, with or without the
    option. The preview (`replace_in_files_preview`) lists only files a replacement would change and
    names the others with the reason (`not_changed`). [GEN; decision]
 10. **What was left out is said:** when the default search left folders or files out because they
    are not the project's own, the result carries them — the topmost folder or the single file each,
-   with the reason, sorted; version control data and `.idecraft` are not counted (the option would
+   with the reason, sorted; version control data and `.ferris-idea` are not counted (the option would
    not search them either), files the file mask does not match neither. One line names the count,
    e.g. `2 folders and 1 file not searched (libraries and ignored files)`. The MCP answer has
    `not_searched` (`folders`, `files`, up to 20 `paths` with `reason`, and `note` with that line and
@@ -92,7 +92,7 @@ here the search of a remote project).**
    takes its files from the same listing as the local search (`search_candidates`), so behaviours 7,
    8 and 10 hold on the host: the project's own sources by default; a named folder that is not the
    project's own is searched completely; `include_non_project: true` searches every file except
-   version control data and `.idecraft`; a list of files (the files open in editors) is searched
+   version control data and `.ferris-idea`; a list of files (the files open in editors) is searched
    whatever they are; a folder or file outside the project folder or behind a symbolic link finds
    nothing. The answer carries the line of behaviour 10 as `not_searched` when something was left
    out. Replace in Files stays unavailable for a remote project. [GEN; decision]
@@ -112,9 +112,9 @@ here the search of a remote project).**
   ignored by `.gitignore` and an own file, all holding the text searched: the default search finds only
   the own file and reports two folders and one file as not searched; with the option it finds all four
   and reports nothing left out; in directory `.venv/lib` it finds `x.py` without the option; `.git`
-  and `.idecraft` are searched in neither case; a directory outside the project finds nothing.
+  and `.ferris-idea` are searched in neither case; a directory outside the project finds nothing.
 - **AK-7 (v2)** A replacement is refused for a file that is not the project's own unless the option is
-  set, and for version control data, `.idecraft` and files behind a symbolic link even then.
+  set, and for version control data, `.ferris-idea` and files behind a symbolic link even then.
 - **AK-10 (v4)** A file that Git tracks although an ignore rule matches it is in the listing that Find
   in Files and Replace in Files search; its untracked neighbours are not (SPEC-0148 AK-9,
   `own_sources::tests::files_git_tracks_are_own_although_ignored`).
@@ -148,6 +148,6 @@ The regex dialect is the `regex` crate's (no look-around or back-references) —
 cannot hang on a pathological pattern; to be compared in the guided session.
 
 v6 (OBS-0071): the reference's text and regex search over MCP return only coordinates, without the
-line's text, and a pattern that does not parse returns an empty list as if nothing matched. IDECraft
+line's text, and a pattern that does not parse returns an empty list as if nothing matched. Ferris IDEA
 returns the line text with start and end of each match (IMP-0442) and refuses an invalid pattern with
 its reason (IMP-0443).

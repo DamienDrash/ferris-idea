@@ -9,10 +9,10 @@ use serde_json::{Value, json};
 use crate::LanguageId;
 use crate::lsp::LspClient;
 
-/// The java-debug plugin jar: `$IDECRAFT_JAVA_DEBUG`, else the newest
+/// The java-debug plugin jar: `$FERRIS_IDEA_JAVA_DEBUG`, else the newest
 /// `com.microsoft.java.debug.plugin-*.jar` in `~/.local/opt/java-debug`.
 pub fn java_debug_plugin() -> Option<PathBuf> {
-    if let Some(p) = std::env::var_os("IDECRAFT_JAVA_DEBUG").map(PathBuf::from) {
+    if let Some(p) = ferris_idea_core::product_var_os("FERRIS_IDEA_JAVA_DEBUG").map(PathBuf::from) {
         return p.is_file().then_some(p);
     }
     let dir = PathBuf::from(std::env::var_os("HOME")?).join(".local/opt/java-debug");
@@ -32,7 +32,7 @@ pub fn java_debug_plugin() -> Option<PathBuf> {
 /// Our bundle on top of the java-debug plugin: the debug protocol and the wait for the program on
 /// private listeners only (`SPEC-0322` behaviour 4). Built by `scripts/build-java-debug-private.sh`.
 const PRIVATE_BUNDLE: &[u8] =
-    include_bytes!("../java/debug-private/idecraft-java-debug-private.jar");
+    include_bytes!("../java/debug-private/ferris-idea-java-debug-private.jar");
 
 /// Whether `plugin` is a java-debug version the bundle was built for; it binds to that version
 /// only, and without it nothing may start.
@@ -50,7 +50,7 @@ pub fn java_debug_usable() -> bool {
 
 /// Where the bundle is kept: a folder only this account can enter, rewritten when it differs.
 fn private_bundle() -> Result<PathBuf, String> {
-    let folder = idecraft_core::user_cache_dir()
+    let folder = ferris_idea_core::user_cache_dir()
         .ok_or("Cannot debug Java: no cache folder")?
         .join("java-debug-private");
     std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
@@ -68,7 +68,7 @@ fn private_bundle() -> Result<PathBuf, String> {
             .map(|b| format!("{b:02x}"))
             .collect()
     };
-    let jar = folder.join(format!("idecraft-java-debug-private-{digest}.jar"));
+    let jar = folder.join(format!("ferris-idea-java-debug-private-{digest}.jar"));
     if std::fs::read(&jar).ok().as_deref() != Some(PRIVATE_BUNDLE) {
         let next = folder.join(format!("next-{}", std::process::id()));
         std::fs::write(&next, PRIVATE_BUNDLE).map_err(|e| e.to_string())?;
@@ -86,7 +86,7 @@ fn private_socket_folder() -> Result<PathBuf, String> {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or_default();
-    let name = format!("idecraft-jdap-{}-{nanos}", std::process::id());
+    let name = format!("ferris-idea-jdap-{}-{nanos}", std::process::id());
     let temporary = std::env::temp_dir();
     let parent = if temporary.as_os_str().len() + name.len() + "/dap.sock".len() + 1 < 104 {
         temporary
@@ -131,7 +131,7 @@ pub fn debug_settings(settings: &Value) -> Value {
 }
 
 /// The command of our bundle that opens the private listener.
-const START_PRIVATE: &str = "idecraft.java.startPrivateDebugSession";
+const START_PRIVATE: &str = "ferris-idea.java.startPrivateDebugSession";
 
 /// A jdtls process with the debug plugin; kept alive while a Java program is debugged.
 pub struct JavaDebugServer {
@@ -149,7 +149,7 @@ impl JavaDebugServer {
     /// Starts jdtls for `root` with the plugin and our bundle and asks for a private adapter.
     pub fn start(root: &Path) -> Result<Self, String> {
         // Debugging runs the project (`SPEC-0278` behaviour 5).
-        idecraft_core::trust::require_trusted(root)?;
+        ferris_idea_core::trust::require_trusted(root)?;
         let plugin = java_debug_plugin().ok_or(
             "Cannot debug Java: the java-debug plugin is missing (com.microsoft.java.debug.plugin jar in ~/.local/opt/java-debug)",
         )?;
@@ -207,15 +207,15 @@ impl JavaDebugServer {
         Ok(())
     }
 
+    /// Without Unix sockets the adapter could only listen on a loopback port every local account
+    /// can reach, so Java debugging is refused (`SPEC-0322` v6 behaviour 4).
     #[cfg(not(unix))]
     fn start_adapter(&mut self) -> Result<(), String> {
-        let port = self.command(START_PRIVATE, json!([]))?;
-        self.endpoint = DebugEndpoint::Loopback(
-            port.as_u64()
-                .and_then(|p| u16::try_from(p).ok())
-                .ok_or_else(|| format!("jdtls gave no debug port: {port}"))?,
-        );
-        Ok(())
+        Err(
+            "Java debugging is not supported on this platform yet: the debug adapter cannot \
+             listen privately"
+                .to_owned(),
+        )
     }
 
     /// The address for `DapClient::connect`.

@@ -17,19 +17,24 @@ marker of header buttons), from `platform/icons/src/expui/` at the same commit.
 They are read by `crates/ui/src/icons.rs` (own code, SPEC-0060). Do not edit them; update by copying a newer
 upstream revision and recording the commit here and in `docs/legal/PROVENANCE.md`.
 
-`idecraft/` holds IDECraft's own icons (under the project's licence, `LICENSE.md`) for areas whose reference icons are not open, such
+`ferris-idea/` holds Ferris IDEA's own icons (under the project's licence, `LICENSE.md`) for areas whose reference icons are not open, such
 as the Database tool window (keys and indexes) and the file types Rust, Go, Ruby, PHP, Svelte and Astro. `fileTypes/python*` and
 `fileTypes/kotlin*` come from the open Python and Kotlin plugins of the same repository (see `PROVENANCE.md`). They are drawn from scratch in the same 16 px stroke
-style, not traced from the reference. `idecraft/debug*.svg` (pause, run to cursor, rerun, mute and view breakpoints in the Debug
-window's toolbar, SPEC-0194 v3) are own drawings too, until the open platform icons for them are copied. `idecraft/gitTag.svg` (the tag
+style, not traced from the reference. `ferris-idea/debug*.svg` (pause, run to cursor, rerun, mute and view breakpoints in the Debug
+window's toolbar, SPEC-0194 v3) are own drawings too, until the open platform icons for them are copied. `ferris-idea/gitTag.svg` (the tag
 labels of the Git log, SPEC-0086 v7) is an own drawing as well, and so are the Git icons
-`idecraft/{vcsUpdate,vcsCommit,vcsPush,tag,rollback,diff,groupBy}*.svg` (branch popup, SPEC-0068 v5; Commit window
-toolbar, SPEC-0063 v7), and so are the favourite stars `idecraft/{star,starOutline}*.svg` (branch popup and the
-branches pane of the Git log, SPEC-0068 v8, SPEC-0086 v10). The search icons `idecraft/{filter,preview,openInFind,newLine,pin,history,preserveCase}*.svg`
-(Search Everywhere, find bar and Find in Files, SPEC-0067 v5, SPEC-0065 v4, SPEC-0066 v3) are own drawings as well. So are `idecraft/{execute,offline,skipTests}*.svg` (the build tools window's toolbar, SPEC-0100 v2), the folder roles
-`idecraft/{sourceRoot,testRoot,resourcesRoot,testResourcesRoot,excludedRoot}*.svg` and the POM icon `idecraft/maven*.svg`
-(project tree, SPEC-0048 v3), and `idecraft/{download,dependencyAnalyzer,diagram,remove}*.svg` (sources, dependency
-analyzer, diagram and unlink in the build tools window, SPEC-0100 v3). So are `idecraft/{record,annotation,object}*.svg`
+`ferris-idea/{vcsUpdate,vcsCommit,vcsPush,tag,rollback,diff,groupBy}*.svg` (branch popup, SPEC-0068 v5; Commit window
+toolbar, SPEC-0063 v7), and so are the favourite stars `ferris-idea/{star,starOutline}*.svg` (branch popup and the
+branches pane of the Git log, SPEC-0068 v8, SPEC-0086 v10). The search icons `ferris-idea/{filter,preview,openInFind,newLine,pin,history,preserveCase}*.svg`
+(Search Everywhere, find bar and Find in Files, SPEC-0067 v5, SPEC-0065 v4, SPEC-0066 v3) are own drawings as well. So are `ferris-idea/{execute,offline,skipTests}*.svg` (the build tools window's toolbar, SPEC-0100 v2), the folder roles
+`ferris-idea/{sourceRoot,testRoot,resourcesRoot,testResourcesRoot,excludedRoot}*.svg` and the POM icon `ferris-idea/maven*.svg`
+(project tree, SPEC-0048 v3), and `ferris-idea/{download,dependencyAnalyzer,diagram,remove}*.svg` (sources, dependency
+analyzer, diagram and unlink in the build tools window, SPEC-0100 v3). So are `ferris-idea/{record,annotation,object}*.svg`
 (the kinds of a Java or Kotlin file's primary declaration that have no bundled node icon, on tabs and in the project
-tree, SPEC-0131 v3): a circle badge with a stroked letter, in colours the bundled node icons already use. The override mark `idecraft/overrideMark*.svg` (a file whose type is overridden, project tree and tabs,
-SPEC-0004 v6) is an own drawing as well.
+tree, SPEC-0131 v3): a circle badge with a stroked letter, in colours the bundled node icons already use. The override mark `ferris-idea/overrideMark*.svg` (a file whose type is overridden, project tree and tabs,
+SPEC-0004 v6) is an own drawing as well, and so is the ignore-file icon `ferris-idea/ignore*.svg` (`.gitignore`,
+`.dockerignore` and the other ignore files, SPEC-0004 v12): lines of patterns and a crossed-out circle.
+
+`fileTypes/ideaModule*.svg` (the icon of `.iml` module files, SPEC-0004 v13) are unchanged copies from
+`platform/icons/src/expui/fileTypes/` at commit `d4018fb57c367e7b5d895bd8a0c84c382efd0e17`. A package row in a source folder
+of the Project tree uses the bundled `nodes/package` (SPEC-0275 v25); the own drawings used for both before were removed.

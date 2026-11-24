@@ -1,15 +1,15 @@
-//! Plugins for IDECraft (`SPEC-0104`, ADR-0016): WebAssembly modules run in a sandbox without access
+//! Plugins for Ferris IDEA (`SPEC-0104`, ADR-0016): WebAssembly modules run in a sandbox without access
 //! to files, network or the clock. A plugin describes itself with a JSON manifest and offers actions
 //! that turn the selected text into new text or a message.
 //!
-//! The module exports `memory`, `idecraft_alloc(len: i32) -> i32`, `idecraft_manifest() -> i64` and
-//! `idecraft_run(action_ptr, action_len, input_ptr, input_len: i32) -> i64`. A returned `i64` packs a
+//! The module exports `memory`, `ferris_idea_alloc(len: i32) -> i32`, `ferris_idea_manifest() -> i64` and
+//! `ferris_idea_run(action_ptr, action_len, input_ptr, input_len: i32) -> i64`. A returned `i64` packs a
 //! pointer (high 32 bits) and a length (low 32 bits) of UTF-8 in `memory`; a negative value is an
 //! error code.
 //!
 //! The plugin API (`SPEC-0156`): `edit` actions get the editor's context as JSON and answer with
 //! edits, a selection, a message or a file to open; a plugin may import the host functions
-//! `idecraft.list_files() -> i64` and `idecraft.read_file(path_ptr, path_len: i32) -> i64` of the
+//! `ferris-idea.list_files() -> i64` and `ferris-idea.read_file(path_ptr, path_len: i32) -> i64` of the
 //! open project, which answer only when its manifest asks for `project-read` and the user granted
 //! it (else `-1`). Both give only the project's own sources; `read_file` answers `-2` for anything
 //! else and for a missing file alike, `-5` for a name that commonly holds secrets, `-3` for a file
@@ -20,7 +20,7 @@
 //! commands for the user to confirm (`SPEC-0276`, permission `suggest-commands`).
 //!
 //! Connector plugins (`SPEC-0314`, ADR-0024, permission `profile-network`): host functions
-//! `idecraft.net_connect`, `net_connect_tls`, `net_send`, `net_recv` and `net_close` reach only the
+//! `ferris-idea.net_connect`, `net_connect_tls`, `net_send`, `net_recv` and `net_close` reach only the
 //! host and port of the connection the user picked, after a grant per plugin and host; every
 //! connection is logged locally. A connection without TLS only where the connection's SSL mode
 //! allows plain text, elsewhere TLS the host makes (`SPEC-0314` v2 behaviour 10).
@@ -79,7 +79,7 @@ pub enum PluginError {
     #[error("{0}: {1}")]
     Io(String, String),
     /// Not a valid module, or the exports are missing.
-    #[error("{0}: not an IDECraft plugin: {1}")]
+    #[error("{0}: not a Ferris IDEA plugin: {1}")]
     Invalid(String, String),
     /// The plugin trapped, ran out of fuel or memory.
     #[error("{0}: {1}")]
@@ -102,7 +102,7 @@ pub enum ActionKind {
     /// (`SPEC-0156`).
     Edit,
     /// An inspection (`SPEC-0166`): the input is an [`InspectContext`] as JSON, the output an
-    /// [`InspectResult`]; IDECraft runs it on the files it applies to after typing pauses.
+    /// [`InspectResult`]; Ferris IDEA runs it on the files it applies to after typing pauses.
     Inspect,
     /// A completion contributor (`SPEC-0210`): a [`CompleteContext`] in, [`CompleteResult`] out.
     Complete,
@@ -120,7 +120,7 @@ pub enum ActionKind {
 }
 
 impl ActionKind {
-    /// Whether IDECraft runs actions of this kind by itself instead of offering them as commands.
+    /// Whether Ferris IDEA runs actions of this kind by itself instead of offering them as commands.
     pub fn is_extension(self) -> bool {
         matches!(
             self,
@@ -204,7 +204,7 @@ pub const MAX_FINDINGS: usize = 500;
 pub enum Permission {
     /// List and read the files of the open project (never write them).
     ProjectRead,
-    /// Suggest commands that IDECraft shows and starts only after the user confirms them
+    /// Suggest commands that Ferris IDEA shows and starts only after the user confirms them
     /// (`SPEC-0276`).
     SuggestCommands,
     /// Connect to the host and port of a connection the user picks (`SPEC-0314`).
@@ -383,25 +383,46 @@ struct Host {
     access: Access,
     sockets: network::Sockets,
     /// The project's own sources, read once per call.
-    own: Option<idecraft_core::OwnSources>,
+    own: Option<ferris_idea_core::OwnSources>,
     refusals: files::Refusals,
 }
 
 impl Host {
     /// The own sources of the project at `root`.
-    fn own(&mut self, root: &Path) -> &idecraft_core::OwnSources {
+    fn own(&mut self, root: &Path) -> &ferris_idea_core::OwnSources {
         self.own
-            .get_or_insert_with(|| idecraft_core::OwnSources::new(root))
+            .get_or_insert_with(|| ferris_idea_core::OwnSources::new(root))
     }
 }
 
 /// Largest number of files `list_files` returns.
 pub const MAX_LISTED: usize = 50_000;
 
-/// Writes `bytes` into the calling plugin's memory through its `idecraft_alloc`; the packed result.
+/// The product's prefix of the functions a plugin exports.
+pub const EXPORT_PREFIX: &str = "ferris_idea_";
+
+/// The prefix under the product's former name (`SPEC-0356` behaviour 12).
+const FORMER_EXPORT_PREFIX: &str = "idecraft_"; // rebrand:keep
+
+/// The export `name`, or the name it had under the product's former name when the plugin exports
+/// only that one, so plugins built for older versions keep working (`SPEC-0356` behaviour 12).
+fn exported(name: &str, exports: impl Fn(&str) -> bool) -> String {
+    if !exports(name)
+        && let Some(rest) = name.strip_prefix(EXPORT_PREFIX)
+    {
+        let old = format!("{FORMER_EXPORT_PREFIX}{rest}");
+        if exports(&old) {
+            return old;
+        }
+    }
+    name.to_owned()
+}
+
+/// Writes `bytes` into the calling plugin's memory through its `ferris_idea_alloc`; the packed result.
 fn give(caller: &mut wasmi::Caller<'_, Host>, bytes: &[u8]) -> i64 {
+    let name = exported("ferris_idea_alloc", |n| caller.get_export(n).is_some());
     let Some(alloc) = caller
-        .get_export("idecraft_alloc")
+        .get_export(&name)
         .and_then(wasmi::Extern::into_func)
         .and_then(|f| f.typed::<i32, i32>(&*caller).ok())
     else {
@@ -428,10 +449,30 @@ fn give(caller: &mut wasmi::Caller<'_, Host>, bytes: &[u8]) -> i64 {
     (i64::from(ptr) << 32) | i64::from(len)
 }
 
-/// The host functions of module `idecraft` (`SPEC-0156` behaviour 4).
+/// The module plugins import the host functions from (`SPEC-0156` behaviour 4).
+pub const HOST_MODULE: &str = "ferris-idea";
+
+/// The module's name under the product's former name: plugins built for older versions keep
+/// linking (`SPEC-0356` behaviour 12).
+const FORMER_HOST_MODULE: &str = "idecraft"; // rebrand:keep
+
+/// The host functions of module [`HOST_MODULE`] (`SPEC-0156` behaviour 4), and the same functions
+/// under [`FORMER_HOST_MODULE`].
 fn host_functions(linker: &mut Linker<Host>) -> Result<(), wasmi::errors::LinkerError> {
+    host_functions_in(linker, HOST_MODULE)?;
+    if FORMER_HOST_MODULE != HOST_MODULE {
+        host_functions_in(linker, FORMER_HOST_MODULE)?;
+    }
+    Ok(())
+}
+
+/// The host functions, in `module`.
+fn host_functions_in(
+    linker: &mut Linker<Host>,
+    module: &'static str,
+) -> Result<(), wasmi::errors::LinkerError> {
     linker.func_wrap(
-        "idecraft",
+        module,
         "list_files",
         |mut caller: wasmi::Caller<'_, Host>| -> i64 {
             let access = caller.data().access.clone();
@@ -454,7 +495,7 @@ fn host_functions(linker: &mut Linker<Host>) -> Result<(), wasmi::errors::Linker
         },
     )?;
     linker.func_wrap(
-        "idecraft",
+        module,
         "read_file",
         |mut caller: wasmi::Caller<'_, Host>, ptr: i32, len: i32| -> i64 {
             let access = caller.data().access.clone();
@@ -484,7 +525,7 @@ fn host_functions(linker: &mut Linker<Host>) -> Result<(), wasmi::errors::Linker
             }
         },
     )?;
-    network_functions(linker)
+    network_functions(linker, module)
 }
 
 /// Reads `len` bytes at `ptr` of the calling plugin's memory.
@@ -501,10 +542,13 @@ fn bytes_of(caller: &wasmi::Caller<'_, Host>, ptr: i32, len: i32, max: usize) ->
     Some(buf)
 }
 
-/// The network host functions of module `idecraft` (`SPEC-0314` behaviour 3).
-fn network_functions(linker: &mut Linker<Host>) -> Result<(), wasmi::errors::LinkerError> {
+/// The network host functions, in `module` (`SPEC-0314` behaviour 3).
+fn network_functions(
+    linker: &mut Linker<Host>,
+    module: &'static str,
+) -> Result<(), wasmi::errors::LinkerError> {
     linker.func_wrap(
-        "idecraft",
+        module,
         "net_connect",
         |mut caller: wasmi::Caller<'_, Host>, ptr: i32, len: i32| -> i32 {
             if caller.data().access.network.is_none() {
@@ -519,7 +563,7 @@ fn network_functions(linker: &mut Linker<Host>) -> Result<(), wasmi::errors::Lin
         },
     )?;
     linker.func_wrap(
-        "idecraft",
+        module,
         "net_connect_tls",
         |mut caller: wasmi::Caller<'_, Host>, ptr: i32, len: i32| -> i32 {
             if caller.data().access.network.is_none() {
@@ -534,7 +578,7 @@ fn network_functions(linker: &mut Linker<Host>) -> Result<(), wasmi::errors::Lin
         },
     )?;
     linker.func_wrap(
-        "idecraft",
+        module,
         "net_send",
         |mut caller: wasmi::Caller<'_, Host>, handle: i32, ptr: i32, len: i32| -> i32 {
             if caller.data().access.network.is_none() {
@@ -547,7 +591,7 @@ fn network_functions(linker: &mut Linker<Host>) -> Result<(), wasmi::errors::Lin
         },
     )?;
     linker.func_wrap(
-        "idecraft",
+        module,
         "net_recv",
         |mut caller: wasmi::Caller<'_, Host>, handle: i32, max: i32| -> i64 {
             if caller.data().access.network.is_none() {
@@ -560,7 +604,7 @@ fn network_functions(linker: &mut Linker<Host>) -> Result<(), wasmi::errors::Lin
         },
     )?;
     linker.func_wrap(
-        "idecraft",
+        module,
         "net_close",
         |mut caller: wasmi::Caller<'_, Host>, handle: i32| -> i32 {
             if caller.data().access.network.is_none() {
@@ -619,7 +663,7 @@ impl Call {
         );
         store.limiter(|h| &mut h.limits);
         store.set_fuel(fuel).map_err(|e| fail(&e))?;
-        // Only the host functions of `idecraft`: a plugin that imports anything else does not link.
+        // Only the host functions of `ferris-idea`: a plugin that imports anything else does not link.
         let mut linker = Linker::<Host>::new(module.engine());
         host_functions(&mut linker).map_err(|e| fail(&e))?;
         let instance = linker
@@ -647,9 +691,12 @@ impl Call {
     }
 
     fn write(&mut self, bytes: &[u8]) -> Result<i32, PluginError> {
+        let name = exported("ferris_idea_alloc", |n| {
+            self.instance.get_export(&self.store, n).is_some()
+        });
         let alloc = self
             .instance
-            .get_typed_func::<i32, i32>(&self.store, "idecraft_alloc")
+            .get_typed_func::<i32, i32>(&self.store, &name)
             .map_err(|e| PluginError::Invalid(self.name.clone(), e.to_string()))?;
         let len = i32::try_from(bytes.len()).map_err(|e| self.failed(e))?;
         let ptr = alloc
@@ -704,9 +751,12 @@ impl Plugin {
         let module = Module::new(&engine(), bytes)
             .map_err(|e| PluginError::Invalid(name.clone(), module_problem(bytes, &e)))?;
         let mut call = Call::new(&name, "", &module, FUEL, Access::default())?;
+        let export = exported("ferris_idea_manifest", |n| {
+            call.instance.get_export(&call.store, n).is_some()
+        });
         let manifest_fn = call
             .instance
-            .get_typed_func::<(), i64>(&call.store, "idecraft_manifest")
+            .get_typed_func::<(), i64>(&call.store, &export)
             .map_err(|e| PluginError::Invalid(name.clone(), e.to_string()))?;
         let packed = manifest_fn
             .call(&mut call.store, ())
@@ -748,9 +798,12 @@ impl Plugin {
             return Err(PluginError::Failed(name, "the input is too large".into()));
         }
         let mut call = Call::new(&name, &self.file(), &self.module, fuel, access)?;
+        let export = exported("ferris_idea_run", |n| {
+            call.instance.get_export(&call.store, n).is_some()
+        });
         let run = call
             .instance
-            .get_typed_func::<(i32, i32, i32, i32), i64>(&call.store, "idecraft_run")
+            .get_typed_func::<(i32, i32, i32, i32), i64>(&call.store, &export)
             .map_err(|e| PluginError::Invalid(name.clone(), e.to_string()))?;
         let action_ptr = call.write(id.as_bytes())?;
         let input_ptr = call.write(input.as_bytes())?;
@@ -895,12 +948,12 @@ pub fn set_granted(
     std::fs::write(dir.join(GRANTS), text).map_err(io)
 }
 
-/// The folder user plugins are installed in: `IDECRAFT_PLUGINS`, else `plugins` in the user's
-/// IDECraft settings folder. Workspaces cannot bring plugins of their own (behaviour 2).
+/// The folder user plugins are installed in: `FERRIS_IDEA_PLUGINS`, else `plugins` in the user's
+/// Ferris IDEA settings folder. Workspaces cannot bring plugins of their own (behaviour 2).
 pub fn plugins_dir() -> Option<PathBuf> {
-    std::env::var_os("IDECRAFT_PLUGINS")
+    ferris_idea_core::product_var_os("FERRIS_IDEA_PLUGINS")
         .map(PathBuf::from)
-        .or_else(|| idecraft_core::user_config_dir().map(|d| d.join("plugins")))
+        .or_else(|| ferris_idea_core::user_config_dir().map(|d| d.join("plugins")))
 }
 
 /// The plugins in `dir` (`*.wasm`, sorted by file name) and the files that failed to load.
@@ -1114,7 +1167,7 @@ mod load_tests {
             .to_string();
         assert_eq!(
             err,
-            "broken.wasm: not an IDECraft plugin: the file is not a WebAssembly module (it does not start with the \\0asm header)"
+            "broken.wasm: not a Ferris IDEA plugin: the file is not a WebAssembly module (it does not start with the \\0asm header)"
         );
     }
 }

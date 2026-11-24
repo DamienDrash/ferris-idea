@@ -15,9 +15,9 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use ferris_idea_workbench::tool_windows::ToolWindow;
+use ferris_idea_workbench::{EverywhereEvent, WorkbenchView, semantics};
 use gpui::{Entity, Focusable, TestAppContext, VisualTestContext, px};
-use idecraft_workbench::tool_windows::ToolWindow;
-use idecraft_workbench::{EverywhereEvent, WorkbenchView, semantics};
 
 fn git(dir: &Path, args: &[&str]) {
     let out = Command::new("git")
@@ -34,7 +34,7 @@ fn git(dir: &Path, args: &[&str]) {
 
 /// A repository with `a.txt`, `b.txt` and `c.txt` committed and `b.txt` changed since.
 fn repo(tag: &str) -> PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-wcd2-{tag}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-wcd2-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     let root = root.canonicalize().unwrap();
@@ -240,7 +240,7 @@ fn the_connection_dialog_keeps_its_buttons_in_place(cx: &mut TestAppContext) {
     };
     let before = buttons(cx);
     let (_, result_y, _, result_h) = bounds("conn-result", cx);
-    assert_eq!(result_h, idecraft_workbench::CONNECTION_RESULT_HEIGHT);
+    assert_eq!(result_h, ferris_idea_workbench::CONNECTION_RESULT_HEIGHT);
     assert!(
         result_y + result_h <= before[0].1,
         "the result area is above the buttons"
@@ -285,11 +285,11 @@ fn the_connection_dialog_keeps_its_buttons_in_place(cx: &mut TestAppContext) {
 /// while Run, Cancel, Apply and OK stay inside the window.
 #[gpui::test]
 fn the_run_configuration_editor_shows_every_row(cx: &mut TestAppContext) {
-    idecraft_workbench::hit_targets::enable();
+    ferris_idea_workbench::hit_targets::enable();
     let root = repo("runcfg");
-    std::fs::create_dir_all(root.join(".idecraft")).unwrap();
+    std::fs::create_dir_all(root.join(".ferris-idea")).unwrap();
     std::fs::write(
-        root.join(".idecraft/run.toml"),
+        root.join(".ferris-idea/run.toml"),
         "[[run]]\nname = \"api\"\ncommand = [\"echo\", \"api\"]\n",
     )
     .unwrap();
@@ -316,7 +316,7 @@ fn the_run_configuration_editor_shows_every_row(cx: &mut TestAppContext) {
             assert!(overflow > 0., "the form scrolls in a low window");
         }
         for id in ["run-config-run", "run-config-cancel", "run-config-ok"] {
-            let r = idecraft_workbench::hit_targets::get(id)
+            let r = ferris_idea_workbench::hit_targets::get(id)
                 .unwrap_or_else(|| panic!("the button {id} is drawn"));
             assert!(
                 r.y >= 0. && r.y + r.h <= size.1,

@@ -1,11 +1,11 @@
 //! SPEC-0005 v3 AK-18: the engines agree with the splitter. Scripts that use escape strings,
 //! nested comments, SQLite brackets, MySQL's `--` rule and `DELIMITER` run statement by statement
 //! without an error: SQLite and DuckDB in the test process, PostgreSQL, MySQL and MariaDB where
-//! `IDECRAFT_TEST_PG`, `IDECRAFT_TEST_MYSQL` and `IDECRAFT_TEST_MARIADB` are set.
+//! `FERRIS_IDEA_TEST_PG`, `FERRIS_IDEA_TEST_MYSQL` and `FERRIS_IDEA_TEST_MARIADB` are set.
 
 use crate::common;
 
-use idecraft_database::{ConnectionProfile, Dialect, OnError, Outcome, Session};
+use ferris_idea_database::{ConnectionProfile, Dialect, OnError, Outcome, Session};
 
 async fn runs(url: &str, script: &str, statements: usize) {
     let profile = ConnectionProfile::from_url("reference", url).unwrap();
@@ -50,7 +50,7 @@ fn script_for(dialect: Dialect, tag: u32) -> (String, usize) {
 #[tokio::test]
 async fn engines_agree_with_the_splitter() {
     let tag = std::process::id();
-    let dir = std::env::temp_dir().join(format!("idecraft-split-live-{tag}"));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-split-live-{tag}"));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let lite = dir.join("s.sqlite");
@@ -62,9 +62,9 @@ async fn engines_agree_with_the_splitter() {
         (format!("duckdb:{}", duck.display()), Dialect::DuckDb),
     ];
     for (var, dialect) in [
-        ("IDECRAFT_TEST_PG", Dialect::PostgreSql),
-        ("IDECRAFT_TEST_MYSQL", Dialect::MySql),
-        ("IDECRAFT_TEST_MARIADB", Dialect::MariaDb),
+        ("FERRIS_IDEA_TEST_PG", Dialect::PostgreSql),
+        ("FERRIS_IDEA_TEST_MYSQL", Dialect::MySql),
+        ("FERRIS_IDEA_TEST_MARIADB", Dialect::MariaDb),
     ] {
         if let Ok(url) = std::env::var(var) {
             urls.push((url, dialect));
@@ -77,13 +77,13 @@ async fn engines_agree_with_the_splitter() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// SPEC-0005 v4 AK-19 (OBS-0051 L2): on MySQL and MariaDB, where `IDECRAFT_TEST_MYSQL` and
-/// `IDECRAFT_TEST_MARIADB` are set, one `CALL` of a procedure with two `SELECT`s gives both result
+/// SPEC-0005 v4 AK-19 (OBS-0051 L2): on MySQL and MariaDB, where `FERRIS_IDEA_TEST_MYSQL` and
+/// `FERRIS_IDEA_TEST_MARIADB` are set, one `CALL` of a procedure with two `SELECT`s gives both result
 /// sets in order, all with the statement's range; a procedure without one gives its update count.
 #[tokio::test]
 async fn a_call_returns_every_result_set() {
     let tag = std::process::id();
-    for var in ["IDECRAFT_TEST_MYSQL", "IDECRAFT_TEST_MARIADB"] {
+    for var in ["FERRIS_IDEA_TEST_MYSQL", "FERRIS_IDEA_TEST_MARIADB"] {
         let Ok(url) = std::env::var(var) else {
             eprintln!("skipped: {var} not set");
             continue;

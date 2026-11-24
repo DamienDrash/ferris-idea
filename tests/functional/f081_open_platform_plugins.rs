@@ -38,10 +38,10 @@ fn project_dictionary_lives_where_the_reference_keeps_it() {
     let mut ide = Ide::stdio(&p);
     ide.ok(
         "project_dictionary",
-        json!({"add": ["idecraft"], "dry_run": false}),
+        json!({"add": ["ferris-idea"], "dry_run": false}),
     );
     assert!(
         p.read(".idea/dictionaries/project.xml")
-            .contains("idecraft")
+            .contains("ferris-idea")
     );
 }

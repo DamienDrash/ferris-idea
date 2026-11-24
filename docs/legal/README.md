@@ -15,7 +15,7 @@ This page summarises them. It is not legal advice.
   [PROVENANCE.md](PROVENANCE.md) entry, `AND Apache-2.0` in the crate licence, upstream
   [NOTICE](../../NOTICE). The ported files and the copied assets stay under Apache-2.0.
   → [APACHE_PORTING.md](APACHE_PORTING.md)
-- **The project's own licence.** IDECraft is source-available under the PolyForm Shield License
+- **The project's own licence.** Ferris IDEA is source-available under the PolyForm Shield License
   1.0.0 ([LICENSE.md](../../LICENSE.md)); the earlier choice `MIT OR Apache-2.0` is superseded and
   was never used for a distribution. Plain-language notes: [LICENSING.md](../../LICENSING.md);
   decision and open questions for a lawyer: [ADR-0032](../adr/0032-source-available-licence.md).

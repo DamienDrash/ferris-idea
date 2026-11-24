@@ -124,11 +124,15 @@ and you may use them under those licences:
 - The font JetBrains Mono: SIL Open Font License 1.1.
 - The built-in English (United States) spelling dictionary: SCOWL and the licences of its sources,
   all permissive; their text is `crates/languages/dictionaries/README_en_US.txt`.
+- The built-in English (United Kingdom) spelling dictionary: SCOWL and the licences of its sources,
+  all permissive; their text is `crates/languages/dictionaries/README_en_GB-ise.txt`.
+- The word frequency classes made from SCOWL: SCOWL's licence, permissive; its text is
+  `crates/languages/dictionaries/SCOWL-Copyright.txt`.
 - Rust dependencies and the native libraries compiled into the binaries: mostly MIT, Apache-2.0
   and BSD-style licences, some MPL-2.0. Full list with licence texts:
   [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
 - A third-party Rust crate kept in a folder under `vendor/` with changes of Ferris IDEA: its own
-  licence, whose text is in that folder; the folder's `IDECRAFT.md` names the version it was taken
+  licence, whose text is in that folder; the folder's `FERRIS_IDEA.md` names the version it was taken
   from and every change.
 
 Licence texts: [`LICENSES/`](LICENSES/README.md). Upstream notices: [`NOTICE`](NOTICE).

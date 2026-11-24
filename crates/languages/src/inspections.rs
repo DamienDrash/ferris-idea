@@ -1,4 +1,4 @@
-//! IDECraft's own inspections on the syntax tree (`SPEC-0098`): rules the language servers do not
+//! Ferris IDEA's own inspections on the syntax tree (`SPEC-0098`): rules the language servers do not
 //! report, written as tree-sitter queries with a check, per language; their descriptions and
 //! catalogue (`SPEC-0098` v3 behaviour 6, `SPEC-0315`), the project's profile (`SPEC-0098` v3
 //! behaviour 9), Java suppression and "fix all" (`SPEC-0125` v2 behaviours 7, 8).
@@ -71,6 +71,10 @@ pub struct Fix {
     /// What the fix keeps in the project instead of editing (`SPEC-0155` v3 behaviour 10).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub keep: Option<Keep>,
+    /// A key the fix adds, with an empty value, to the other files of the resource bundle that
+    /// lack it, instead of editing this file (`SPEC-0163` v3 behaviour 3).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bundle_key: Option<String>,
 }
 
 /// What a fix keeps in the project instead of editing the file (`SPEC-0155` v3 behaviour 10).
@@ -78,7 +82,7 @@ pub struct Fix {
 #[serde(rename_all = "snake_case")]
 pub enum Keep {
     /// The finding of `rule` on `text` is no longer reported in the project
-    /// (`.idecraft/grammar-ignore.toml`).
+    /// (`.ferris-idea/grammar-ignore.toml`).
     Ignore {
         /// Rule id.
         rule: &'static str,
@@ -270,6 +274,14 @@ pub const TEXT_RULES: &[(&str, &str)] = &[
     ("grazie.repeated-word", "Repeated word"),
     ("grazie.article", "Article before a vowel or consonant"),
     ("grazie.typo", "Typo"),
+    (
+        crate::spelling_variants::OTHER_VARIANT,
+        "Spelling of the other English variant",
+    ),
+    (
+        crate::spelling_variants::MIXED_SPELLING,
+        "Mixed English spelling",
+    ),
     ("properties.duplicate-key", "Duplicate property key"),
     (
         "properties.missing-in-bundle",
@@ -284,7 +296,9 @@ pub const TEXT_RULES: &[(&str, &str)] = &[
 fn grazie_findings(text: &str, prose: &[std::ops::Range<usize>]) -> Vec<Finding> {
     let known = crate::grazie::code_words(text, prose);
     let dictionary = crate::grazie::Dictionary::current();
-    crate::grazie::check(text, prose, dictionary.as_deref(), &known)
+    // American and British spellings by the chosen dictionaries (SPEC-0155 v7 behaviour 7).
+    let variants = crate::grazie::variant_mode();
+    crate::grazie::check_with(text, prose, dictionary.as_deref(), &known, variants)
         .into_iter()
         .map(|i| Finding {
             id: i.rule,
@@ -303,6 +317,7 @@ fn grazie_findings(text: &str, prose: &[std::ops::Range<usize>]) -> Vec<Finding>
                 }],
                 learn: None,
                 keep: None,
+                bundle_key: None,
                 action: None,
             }),
             message: i.message,
@@ -312,48 +327,101 @@ fn grazie_findings(text: &str, prose: &[std::ops::Range<usize>]) -> Vec<Finding>
 
 /// Grammar and spelling of the comments of code and of Markdown prose (`SPEC-0155` behaviour 7).
 fn prose_findings(doc: &SyntaxDocument) -> Vec<Finding> {
+    // The scope of Settings › Grammar and Style (SPEC-0155 v8 behaviour 14).
+    let scope = crate::grazie::grammar_settings().scope(doc.language().title());
+    grazie_findings(doc.text(), &prose_ranges(doc, scope))
+}
+
+/// The byte ranges of `doc` the grammar and spelling checks read under `scope` (`SPEC-0155` v8
+/// behaviour 14): nothing for a file type turned off; Markdown prose; else the comments and
+/// documentation comments, the string literals and Python docstrings, each as its switch says.
+pub fn prose_ranges(
+    doc: &SyntaxDocument,
+    scope: ferris_idea_core::GrammarScope,
+) -> Vec<std::ops::Range<usize>> {
     let text = doc.text();
-    let prose: Vec<std::ops::Range<usize>> = if doc.language() == LanguageId::Markdown {
-        crate::grazie::markdown_prose(text)
-    } else {
-        doc.comment_ranges()
-    };
-    grazie_findings(text, &prose)
+    if !scope.enabled {
+        return Vec::new();
+    }
+    if doc.language() == LanguageId::Markdown {
+        return crate::grazie::markdown_prose(text);
+    }
+    let mut prose: Vec<std::ops::Range<usize>> = doc
+        .comment_ranges()
+        .into_iter()
+        .filter(|r| {
+            if crate::syntax::doc_comment(doc.language(), &text[r.clone()]) {
+                scope.documentation
+            } else {
+                scope.comments
+            }
+        })
+        .collect();
+    let docstrings = doc.language() == LanguageId::Python && scope.documentation;
+    if scope.string_literals || docstrings {
+        prose.extend(
+            doc.string_ranges()
+                .into_iter()
+                .filter_map(|(r, docstring)| {
+                    let on = if docstring {
+                        scope.documentation
+                    } else {
+                        scope.string_literals
+                    };
+                    on.then_some(r)
+                }),
+        );
+        prose.sort_by_key(|r| r.start);
+        prose.dedup_by(|b, a| b.start < a.end);
+    }
+    prose
 }
 
 /// Checks of files without a syntax tree: properties files (duplicate keys, trailing spaces, and
 /// the prose of their comments) and plain text (`SPEC-0155` behaviours 5, 7).
-fn text_file_findings(path: &Path, text: &str) -> Vec<Finding> {
+/// `absolute` is where the file lives, so the other files of its resource bundle are found (the
+/// rules see `path`, which may be relative to the project: `SPEC-0163` v3 behaviour 3).
+fn text_file_findings(path: &Path, absolute: &Path, text: &str) -> Vec<Finding> {
     let ext = path
         .extension()
         .and_then(|e| e.to_str())
         .map(str::to_ascii_lowercase);
+    // A file shown as Properties by an override or pattern is checked as one (SPEC-0004 v11).
+    let properties = LanguageId::detect(path) == Some(LanguageId::Properties);
     match ext.as_deref() {
-        Some("properties") => {
+        _ if properties => {
             let mut out: Vec<Finding> = crate::properties::check(text)
                 .into_iter()
-                .chain(crate::properties::missing_in_bundle(path, text))
+                .chain(crate::properties::missing_in_bundle(absolute, text))
                 .map(|i| Finding {
                     id: i.id,
                     start: i.range.start,
                     end: i.range.end,
-                    level: if i.id == "properties.duplicate-key" {
+                    // As the reference (SPEC-0155 v5 behaviour 5): a duplicate key and a key
+                    // missing in the bundle are errors, trailing spaces a warning.
+                    level: if i.id == "properties.trailing-spaces" {
                         Level::Warning
                     } else {
-                        Level::Weak
+                        Level::Error
                     },
                     message: i.message,
-                    // "Remove trailing spaces", "Remove property" (SPEC-0155 v2 behaviour 5).
-                    fix: i.fix.map(|(title, range, replacement)| Fix {
-                        learn: None,
-                        keep: None,
-                        action: None,
-                        title: title.into(),
-                        edits: vec![crate::jvm::TextEdit {
-                            range,
-                            text: replacement,
-                        }],
-                    }),
+                    // "Remove trailing spaces", "Remove property" (SPEC-0155 v2 behaviour 5);
+                    // "Add missing translation to <locales>" (SPEC-0163 v3 behaviour 3).
+                    fix: match (i.fix, i.missing) {
+                        (Some((title, range, replacement)), _) => Some(Fix {
+                            learn: None,
+                            keep: None,
+                            bundle_key: None,
+                            action: None,
+                            title: title.into(),
+                            edits: vec![crate::jvm::TextEdit {
+                                range,
+                                text: replacement,
+                            }],
+                        }),
+                        (None, Some((key, locales))) => Some(bundle_fix(&key, &locales)),
+                        (None, None) => None,
+                    },
                 })
                 .collect();
             let mut at = 0;
@@ -366,10 +434,33 @@ fn text_file_findings(path: &Path, text: &str) -> Vec<Finding> {
                     (t.starts_with('#') || t.starts_with('!')).then(|| start..start + l.len())
                 })
                 .collect();
-            out.extend(grazie_findings(text, &comments));
+            // The values of a translation in English are prose too; another language's are not
+            // checked with an English list (SPEC-0159 v6 behaviour 9, IMP-0535).
+            // The scope of the file type (SPEC-0155 v8 behaviour 14).
+            let scope = crate::grazie::grammar_settings().scope(LanguageId::Properties.title());
+            if !scope.enabled {
+                return out;
+            }
+            let mut prose = if scope.comments { comments } else { Vec::new() };
+            if crate::properties::values_in_english(absolute) {
+                prose.extend(
+                    crate::properties::parse(text)
+                        .into_iter()
+                        .map(|p| p.value_range)
+                        .filter(|r| !r.is_empty()),
+                );
+                prose.sort_by_key(|r| r.start);
+            }
+            out.extend(grazie_findings(text, &prose));
             out
         }
-        Some("txt") | None => grazie_findings(text, std::slice::from_ref(&(0..text.len()))),
+        Some("txt") | None
+            if crate::grazie::grammar_settings()
+                .scope(crate::grazie::PLAIN_TEXT)
+                .enabled =>
+        {
+            grazie_findings(text, std::slice::from_ref(&(0..text.len())))
+        }
         _ => Vec::new(),
     }
 }
@@ -430,6 +521,13 @@ pub struct Placed {
     /// Title of the quick fix, if the finding has one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fix: Option<String>,
+    /// For a spelling finding: `typo`, `other_variant` or `mixed_spelling` (`SPEC-0155` v7
+    /// behaviour 9).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kind: Option<&'static str>,
+    /// For a spelling finding: the text its quick fix writes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub replacement: Option<String>,
 }
 
 /// Files larger than this are skipped by [`inspect_project`].
@@ -472,7 +570,7 @@ fn inspect_text_unfiltered_in(path: &Path, absolute: &Path, text: &str) -> Vec<F
     match language.and_then(|l| SyntaxDocument::new(l, tsx, text).ok()) {
         Some(doc) if doc.language() == LanguageId::Python => {
             let mut out = inspect(&doc);
-            // SPEC-0098 v9 behaviours 17–19: the places of IDECraft's own quick fixes.
+            // SPEC-0098 v9 behaviours 17–19: the places of Ferris IDEA's own quick fixes.
             out.extend(crate::python_quick_fixes::analyze_in(
                 path,
                 absolute,
@@ -484,7 +582,7 @@ fn inspect_text_unfiltered_in(path: &Path, absolute: &Path, text: &str) -> Vec<F
         }
         Some(doc) => inspect(&doc),
         None => {
-            let mut out = text_file_findings(path, text);
+            let mut out = text_file_findings(path, absolute, text);
             out.extend(conflict_markers(text));
             out.sort_by_key(|f| (f.start, f.end));
             out
@@ -508,11 +606,11 @@ pub struct InspectionFiles {
 /// own, else the own files below it. A path outside the project folder or behind a symbolic link
 /// is not read: no files, and the line says why.
 pub fn inspection_files(root: &Path, below: Option<&Path>) -> InspectionFiles {
-    match idecraft_core::OwnSources::new(root).chosen(below, false) {
+    match ferris_idea_core::OwnSources::new(root).chosen(below, false) {
         Ok(listing) => {
             let (folders, files) = listing.left_out_counts();
             InspectionFiles {
-                not_inspected: idecraft_core::left_out_line(folders, files, "not inspected"),
+                not_inspected: ferris_idea_core::left_out_line(folders, files, "not inspected"),
                 files: listing.files,
             }
         }
@@ -631,7 +729,7 @@ fn known(id: &str) -> Option<(&'static str, &'static str)> {
         .find(|(i, _)| *i == id)
 }
 
-/// The static id equal to `id`, if it names one of IDECraft's inspections.
+/// The static id equal to `id`, if it names one of Ferris IDEA's inspections.
 pub fn known_id(id: &str) -> Option<&'static str> {
     known(id).map(|(i, _)| i)
 }
@@ -721,7 +819,7 @@ pub fn suppression_matches(name: &str, id: &str) -> bool {
         || short_names(id).any(|n| n == name)
 }
 
-/// The description of an inspection in IDECraft's own words (`SPEC-0098` v3 behaviour 6).
+/// The description of an inspection in Ferris IDEA's own words (`SPEC-0098` v3 behaviour 6).
 pub fn description(id: &str) -> Option<&'static str> {
     crate::inspection_catalogue::of(id).map(|m| m.description)
 }
@@ -783,7 +881,67 @@ fn overlaps(a: &std::ops::Range<usize>, b: &std::ops::Range<usize>) -> bool {
 /// Whether inspection `id` has "Fix all in file": not a duplicate property key, whose places are
 /// removed one by one because which to keep is the user's choice (`SPEC-0155` v2 behaviour 5).
 pub fn fix_all_applies(id: &str) -> bool {
-    id != "properties.duplicate-key"
+    id != "properties.duplicate-key" && id != "properties.missing-in-bundle"
+}
+
+/// The fix of a key that other files of its bundle lack (`SPEC-0163` v3 behaviour 3): "Add
+/// '<key>' to default, de", carried out by whoever applies it from [`Fix::bundle_key`].
+pub fn bundle_fix(key: &str, locales: &[String]) -> Fix {
+    Fix {
+        title: format!("Add missing translation to {}", locales.join(", ")),
+        edits: Vec::new(),
+        learn: None,
+        action: None,
+        keep: None,
+        bundle_key: Some(key.to_owned()),
+    }
+}
+
+/// The grammar and spelling rules whose fixes "Apply all writing suggestions in file" applies
+/// (`SPEC-0155` v8 behaviour 13).
+pub const WRITING_RULES: &[&str] = &[
+    "grazie.repeated-word",
+    "grazie.article",
+    "grazie.typo",
+    crate::spelling_variants::OTHER_VARIANT,
+    crate::spelling_variants::MIXED_SPELLING,
+];
+
+/// The title of the ⌥↩ entry of [`writing_fix_all`].
+pub const APPLY_ALL_WRITING: &str = "Apply all writing suggestions in file";
+
+/// "Apply all writing suggestions in file" (`SPEC-0155` v8 behaviour 13, OBS-0117 G5): the first
+/// suggestion of every grammar and spelling finding of `text` in `path` (as [`inspect_text`]
+/// reports them, so the project dictionary, the ignored texts and the profile apply), ascending,
+/// a fix overlapping an earlier one skipped. `None` when fewer than two findings have a fix: one
+/// alone is its own entry already.
+pub fn writing_fix_all(path: &Path, text: &str) -> Option<Fix> {
+    let mut fixes: Vec<Fix> = inspect_text(path, text)
+        .into_iter()
+        .filter(|f| WRITING_RULES.contains(&f.id))
+        .filter_map(|f| f.fix)
+        .filter(|f| !f.edits.is_empty())
+        .collect();
+    fixes.sort_by_key(|f| f.edits.first().map(|e| (e.range.start, e.range.end)));
+    let mut edits: Vec<crate::jvm::TextEdit> = Vec::new();
+    for fix in fixes {
+        let clash = fix
+            .edits
+            .iter()
+            .any(|e| edits.iter().any(|o| overlaps(&o.range, &e.range)));
+        if !clash {
+            edits.extend(fix.edits);
+        }
+    }
+    edits.sort_by_key(|e| (e.range.start, e.range.end));
+    (edits.len() >= 2).then(|| Fix {
+        title: APPLY_ALL_WRITING.to_owned(),
+        edits,
+        learn: None,
+        action: None,
+        keep: None,
+        bundle_key: None,
+    })
 }
 
 /// The edits of every fix of inspection `id` in `text` of `path` (`SPEC-0125` v2 behaviour 8:
@@ -879,6 +1037,46 @@ pub fn fixes_of(text: &str, f: &Finding) -> Vec<Fix> {
     if f.id == "grazie.typo"
         && let Some(word) = text.get(f.start..f.end)
     {
+        // Up to five replacements, the common word first (SPEC-0155 v5 behaviour 7).
+        // A word with a capital first letter is looked up lowercase and its replacements keep
+        // the capital (SPEC-0155 v8 behaviour 7).
+        let capital = word.chars().next().is_some_and(char::is_uppercase);
+        let more = crate::grazie::Dictionary::current()
+            .map(|d| d.suggestions(&word.to_lowercase(), crate::grazie::MAX_SUGGESTIONS))
+            .unwrap_or_default()
+            .into_iter()
+            .map(|s| {
+                if capital {
+                    crate::grazie::capitalised(&s)
+                } else {
+                    s
+                }
+            });
+        for s in more {
+            if out.len() >= crate::grazie::MAX_SUGGESTIONS {
+                break;
+            }
+            let title = format!("Replace with '{s}'");
+            if out.iter().all(|o| o.title != title) {
+                out.push(Fix {
+                    title,
+                    edits: vec![crate::jvm::TextEdit {
+                        range: f.start..f.end,
+                        text: s,
+                    }],
+                    learn: None,
+                    keep: None,
+                    bundle_key: None,
+                    action: None,
+                });
+            }
+        }
+        out.push(crate::project_dictionary::learn_fix(word));
+    }
+    // The chosen spelling, then keeping the word (SPEC-0155 v7 behaviour 7).
+    if f.id == crate::spelling_variants::OTHER_VARIANT
+        && let Some(word) = text.get(f.start..f.end)
+    {
         out.push(crate::project_dictionary::learn_fix(word));
     }
     if crate::grammar_ignore::RULES.contains(&f.id)
@@ -890,6 +1088,7 @@ pub fn fixes_of(text: &str, f: &Finding) -> Vec<Fix> {
             learn: None,
             action: None,
             keep: Some(keep),
+            bundle_key: None,
         };
         out.push(keep(
             format!("Ignore '{phrase}'"),
@@ -910,21 +1109,28 @@ pub fn fixes_of(text: &str, f: &Finding) -> Vec<Fix> {
 /// each finding's as [`fixes_of`] lists them; a fix that keeps something is listed once.
 pub fn fixes_at(path: &Path, text: &str, at: usize) -> Vec<Fix> {
     let mut out: Vec<Fix> = Vec::new();
+    let mut writing = false;
     for f in inspect_text(path, text)
         .into_iter()
         .filter(|f| f.start <= at && at <= f.end)
     {
+        writing |= WRITING_RULES.contains(&f.id);
         for fix in fixes_of(text, &f) {
             if fix.keep.is_none() || out.iter().all(|o| o.title != fix.title) {
                 out.push(fix);
             }
         }
     }
+    // On a grammar or spelling finding, the fixes of all of them in the file (SPEC-0155 v8
+    // behaviour 13), after the finding's own.
+    if writing && let Some(all) = writing_fix_all(path, text) {
+        out.push(all);
+    }
     out
 }
 
 /// `findings` of `text` as diagnostics next to the language server's (`SPEC-0098` v5 behaviour
-/// 13): source `IDECraft`, the inspection id as code, a weak warning as `information`, lines and
+/// 13): source `Ferris IDEA`, the inspection id as code, a weak warning as `information`, lines and
 /// characters 0-based in Unicode scalar values. Findings of the level "no highlighting" are left
 /// out, as in the editor.
 pub fn as_diagnostics(text: &str, mut findings: Vec<Finding>) -> Vec<crate::lsp::Diagnostic> {
@@ -955,7 +1161,7 @@ pub fn as_diagnostics(text: &str, mut findings: Vec<Finding>) -> Vec<crate::lsp:
                 end_line,
                 end_character,
                 message: f.message,
-                source: Some("IDECraft".to_owned()),
+                source: Some("Ferris IDEA".to_owned()),
                 code: Some(f.id.to_owned()),
                 unnecessary: is_unused(f.id),
             }
@@ -963,7 +1169,7 @@ pub fn as_diagnostics(text: &str, mut findings: Vec<Finding>) -> Vec<crate::lsp:
         .collect()
 }
 
-/// IDECraft's own findings of the absolute `file` as diagnostics ([`as_diagnostics`]), after the
+/// Ferris IDEA's own findings of the absolute `file` as diagnostics ([`as_diagnostics`]), after the
 /// profile, the suppressions and the project dictionary; none for an unreadable file or one over
 /// [`MAX_FILE_BYTES`].
 pub fn file_findings_as_diagnostics(file: &Path) -> Vec<crate::lsp::Diagnostic> {
@@ -992,6 +1198,11 @@ pub fn place(rel: &Path, text: &str, mut findings: Vec<Finding>) -> Vec<Placed> 
             }
             chars += text[last..f.start].chars().count();
             last = f.start;
+            let kind = crate::spelling_variants::kind_of(f.id);
+            let replacement = kind
+                .and(f.fix.as_ref())
+                .and_then(|x| x.edits.first())
+                .map(|e| e.text.clone());
             Placed {
                 path: rel.to_path_buf(),
                 line,
@@ -1002,6 +1213,8 @@ pub fn place(rel: &Path, text: &str, mut findings: Vec<Finding>) -> Vec<Placed> 
                 level: f.level,
                 fix: f.fix.map(|x| x.title),
                 message: f.message,
+                kind,
+                replacement,
             }
         })
         .collect()
@@ -1051,7 +1264,7 @@ mod tests {
 
     #[test]
     fn project_run_places_findings() {
-        let dir = std::env::temp_dir().join(format!("idecraft-inspect-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-inspect-{}", std::process::id()));
         std::fs::create_dir_all(dir.join("src")).unwrap();
         std::fs::write(
             dir.join("src/A.java"),
@@ -1155,7 +1368,7 @@ mod tests {
     #[test]
     fn profile_disables_and_raises() {
         let dir =
-            std::env::temp_dir().join(format!("idecraft-inspect-prof-{}", std::process::id()));
+            std::env::temp_dir().join(format!("ferris-idea-inspect-prof-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("src")).unwrap();
         std::fs::create_dir_all(dir.join(".idea/inspectionProfiles")).unwrap();
@@ -1335,7 +1548,7 @@ mod tests {
                 ("information", "python.bare-except", (6, 4, 7, 12), false),
             ]
         );
-        assert!(d.iter().all(|d| d.source.as_deref() == Some("IDECraft")));
+        assert!(d.iter().all(|d| d.source.as_deref() == Some("Ferris IDEA")));
         assert_eq!(
             d[1].message,
             "Parameter 'größe' shadows the name 'größe' of the module (line 1)"
@@ -1347,7 +1560,8 @@ mod tests {
     // SPEC-0098/AK-11 (v8, behaviour 16).
     #[test]
     fn a_project_run_inspects_the_own_sources() {
-        let dir = std::env::temp_dir().join(format!("idecraft-inspect-own-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("ferris-idea-inspect-own-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let bare = "try:\n    pass\nexcept:\n    pass\n";
         for (file, text) in [
@@ -1425,7 +1639,7 @@ mod tests {
 
     #[test]
     fn one_inspection_on_a_scope() {
-        let dir = std::env::temp_dir().join(format!("idecraft-only-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-only-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("src")).unwrap();
         std::fs::write(
@@ -1463,7 +1677,7 @@ mod tests {
     // SPEC-0125/AK-8, SPEC-0315/AK-6: a finding at "no highlighting, only fix" keeps its fix.
     #[test]
     fn fix_only_keeps_the_fix() {
-        let dir = std::env::temp_dir().join(format!("idecraft-fixonly-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-fixonly-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let mut profile = crate::inspection_profile::Profile::default();
@@ -1499,12 +1713,12 @@ mod tests {
             [
                 (
                     0,
-                    Level::Warning,
+                    Level::Error,
                     "Duplicate property key `greeting` (also on line 2)".into()
                 ),
                 (
                     15,
-                    Level::Warning,
+                    Level::Error,
                     "Duplicate property key `greeting` (also on line 1)".into()
                 ),
             ]
@@ -1525,6 +1739,244 @@ mod tests {
         assert!(fix_all_applies("properties.trailing-spaces"));
     }
 
+    /// SPEC-0155/AK-10 (v5): a duplicate key and a key missing in the bundle are errors, trailing
+    /// spaces a warning, as in the reference (OBS-0091 P1).
+    #[test]
+    fn properties_severities_as_the_reference() {
+        let dir = std::env::temp_dir().join(format!("ferris-idea-psev-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let text = "greeting=Hello\nfarewell=Bye  \ngreeting=Hi\numlaut=\\u00fc\n";
+        std::fs::write(dir.join("messages.properties"), text).unwrap();
+        std::fs::write(
+            dir.join("messages_de.properties"),
+            "greeting=Hallo\nfarewell=Tschüss\n",
+        )
+        .unwrap();
+        let mut found: Vec<(&str, Level)> = inspect_text(&dir.join("messages.properties"), text)
+            .into_iter()
+            .filter(|f| f.id.starts_with("properties."))
+            .map(|f| (f.id, f.level))
+            .collect();
+        found.sort_by_key(|(id, _)| *id);
+        found.dedup();
+        assert_eq!(
+            found,
+            [
+                ("properties.duplicate-key", Level::Error),
+                ("properties.missing-in-bundle", Level::Error),
+                ("properties.trailing-spaces", Level::Warning),
+            ]
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// SPEC-0163/AK-7 (v3, OBS-0117 G3): a missing key is found by Inspect Code too (the project
+    /// run reads files by their relative path), with "Add missing translation to …" carrying the key; the
+    /// values of the English base file are spell-checked, the German ones not (IMP-0535).
+    #[test]
+    fn missing_bundle_keys_in_inspect_code_with_their_fix() {
+        let dir = std::env::temp_dir().join(format!("ferris-idea-bkeys-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("res")).unwrap();
+        std::fs::write(
+            dir.join("res/messages.properties"),
+            "greeting=Hello\nfarewell=Goodbye recieve\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("res/messages_de.properties"),
+            "greeting=Hallo\nfarewell=Auf Wiedersehen\nlesen=Lesen fehlgeschlagen\n",
+        )
+        .unwrap();
+        let rel = [
+            PathBuf::from("res/messages.properties"),
+            PathBuf::from("res/messages_de.properties"),
+        ];
+        let found = inspect_project(&dir, &rel);
+        let missing: Vec<(String, usize, &str, Level, Option<&str>)> = found
+            .iter()
+            .filter(|p| p.id == "properties.missing-in-bundle")
+            .map(|p| {
+                (
+                    p.path.display().to_string(),
+                    p.line,
+                    p.message.as_str(),
+                    p.level,
+                    p.fix.as_deref(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            missing,
+            [(
+                "res/messages_de.properties".to_owned(),
+                2,
+                "`lesen` is missing in the bundle's default",
+                Level::Error,
+                Some("Add missing translation to default"),
+            )]
+        );
+        let typos: Vec<(String, &str)> = found
+            .iter()
+            .filter(|p| p.id == "grazie.typo")
+            .map(|p| (p.path.display().to_string(), p.message.as_str()))
+            .collect();
+        assert_eq!(typos.len(), 1, "{typos:?}");
+        assert_eq!(typos[0].0, "res/messages.properties");
+        let de = dir.join("res/messages_de.properties");
+        let text = std::fs::read_to_string(&de).unwrap();
+        let fixes = fixes_at(&de, &text, text.find("lesen").unwrap());
+        assert_eq!(fixes.len(), 1, "{fixes:?}");
+        assert_eq!(fixes[0].bundle_key.as_deref(), Some("lesen"));
+        assert!(fixes[0].edits.is_empty());
+        assert!(!fix_all_applies("properties.missing-in-bundle"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// SPEC-0155/AK-16 (v8, OBS-0117 G5): "Apply all writing suggestions in file" takes the first
+    /// suggestion of every grammar and spelling finding, offered on any of them when there are at
+    /// least two, and not on other findings.
+    #[test]
+    fn apply_all_writing_suggestions() {
+        let text = "Open the the file as an user. We recieve it.\n";
+        let path = Path::new("notes.txt");
+        let all = writing_fix_all(path, text).expect("three findings");
+        assert_eq!(all.title, APPLY_ALL_WRITING);
+        assert_eq!(
+            crate::jvm::apply(text, &all.edits),
+            "Open the file as a user. We receive it.\n"
+        );
+        // A capitalised typo's replacements keep the capital.
+        let capital = fixes_at(path, "Recieve it.\n", 0);
+        assert_eq!(
+            capital.first().map(|f| f.title.as_str()),
+            Some("Replace with 'Receive'"),
+            "{capital:?}"
+        );
+        let at_typo = fixes_at(path, text, text.find("recieve").unwrap());
+        assert_eq!(
+            at_typo.last().map(|f| f.title.as_str()),
+            Some(APPLY_ALL_WRITING)
+        );
+        // One finding: its own fix is enough.
+        assert!(writing_fix_all(path, "Open the the file.\n").is_none());
+        let one = fixes_at(path, "Open the the file.\n", 6);
+        assert!(one.iter().all(|f| f.title != APPLY_ALL_WRITING));
+    }
+
+    /// SPEC-0155/AK-19 (v8, OBS-0117 G6): the scope picks comments, documentation, string
+    /// literals and Python docstrings by their switches; a file type turned off has none.
+    #[test]
+    fn grammar_scope_picks_the_contexts() {
+        use ferris_idea_core::GrammarScope;
+        let java =
+            "/** Docs here. */\nclass A {\n  // A comment.\n  String s = \"Some text\";\n}\n";
+        let doc = SyntaxDocument::new(LanguageId::Java, false, java).unwrap();
+        let picked = |scope: GrammarScope| -> Vec<&str> {
+            prose_ranges(&doc, scope)
+                .into_iter()
+                .map(|r| &java[r])
+                .collect()
+        };
+        let default = GrammarScope::default();
+        assert!(
+            !default.string_literals,
+            "string literals are off by default"
+        );
+        assert_eq!(picked(default), ["/** Docs here. */", "// A comment."]);
+        assert_eq!(
+            picked(GrammarScope {
+                documentation: false,
+                string_literals: true,
+                ..default
+            }),
+            ["// A comment.", "\"Some text\""]
+        );
+        assert!(
+            picked(GrammarScope {
+                enabled: false,
+                ..default
+            })
+            .is_empty()
+        );
+        let python = "def f():\n    \"\"\"Docstring here.\"\"\"\n    return \"value\"\n";
+        let doc = SyntaxDocument::new(LanguageId::Python, false, python).unwrap();
+        let ranges: Vec<&str> = prose_ranges(&doc, default)
+            .into_iter()
+            .map(|r| &python[r])
+            .collect();
+        assert_eq!(ranges, ["\"\"\"Docstring here.\"\"\""]);
+        let settings = ferris_idea_core::GrammarSettings::default();
+        assert_eq!(settings.scope("Java"), default);
+        assert!(crate::grazie::grammar_file_types().contains(&"Plain text"));
+        assert!(crate::grazie::grammar_file_types().contains(&"Java"));
+    }
+
+    /// SPEC-0155/AK-11 (v5): ⌥↩ on `mesage` lists `message` first, at most five replacements, then
+    /// "Save to project dictionary".
+    #[test]
+    fn typos_offer_up_to_five_suggestions() {
+        let text = "A mesage arrived.\n";
+        let fixes = fixes_at(Path::new("notes.txt"), text, text.find("mesage").unwrap());
+        let replace: Vec<&str> = fixes
+            .iter()
+            .filter_map(|f| f.title.strip_prefix("Replace with "))
+            .collect();
+        assert_eq!(replace.first(), Some(&"'message'"), "{fixes:?}");
+        assert!(replace.len() >= 2 && replace.len() <= 5, "{replace:?}");
+        assert!(replace.contains(&"'menage'"), "{replace:?}");
+        assert_eq!(fixes.len(), replace.len() + 1);
+        assert_eq!(
+            fixes.last().and_then(|f| f.learn.as_deref()),
+            Some("mesage")
+        );
+    }
+
+    /// SPEC-0155/AK-14 (v7): with the default en_US a British spelling is an other-variant
+    /// finding whose fixes are the American spelling and "Save to project dictionary"; Inspect
+    /// Code gives its kind and replacement; a word of the project dictionary is not reported.
+    #[test]
+    fn variant_findings_and_their_fixes() {
+        let text = "Pick a colour for the files.\n";
+        let at = text.find("colour").unwrap();
+        let found = findings_at(Path::new("notes.txt"), text, at);
+        assert_eq!(
+            found.iter().map(|f| f.id).collect::<Vec<_>>(),
+            [crate::spelling_variants::OTHER_VARIANT],
+            "{found:?}"
+        );
+        let titles: Vec<String> = fixes_at(Path::new("notes.txt"), text, at)
+            .into_iter()
+            .map(|f| f.title)
+            .collect();
+        assert_eq!(
+            titles,
+            [
+                "Replace with 'color'",
+                "Save 'colour' to project dictionary"
+            ]
+        );
+        let placed = place(Path::new("notes.txt"), text, found);
+        assert_eq!(placed[0].kind, Some("other_variant"));
+        assert_eq!(placed[0].replacement.as_deref(), Some("color"));
+        let json = serde_json::to_value(&placed[0]).unwrap();
+        assert_eq!(json["kind"], "other_variant");
+        // Saved to the project dictionary: no longer reported.
+        let dir = std::env::temp_dir().join(format!("ferris-idea-variants-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join(".git")).unwrap();
+        let file = dir.join("notes.txt");
+        std::fs::write(&file, text).unwrap();
+        crate::project_dictionary::learn(&file, "colour").unwrap();
+        assert!(
+            inspect_text(&file, text)
+                .iter()
+                .all(|f| f.id != crate::spelling_variants::OTHER_VARIANT)
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// SPEC-0155/AK-7 (v3): ⌥↩ on a wrong article lists the correction, "Ignore" and "Disable
     /// rule"; a typo has no "Ignore"; an ignored text of the project is not reported again.
     #[test]
@@ -1538,7 +1990,9 @@ mod tests {
             [
                 "Replace with 'a'",
                 "Ignore 'an user'",
-                "Disable rule 'Article before a vowel or consonant'"
+                "Disable rule 'Article before a vowel or consonant'",
+                // SPEC-0155 v8 behaviour 13: the file has more than one writing finding.
+                APPLY_ALL_WRITING,
             ]
         );
         assert_eq!(
@@ -1563,7 +2017,8 @@ mod tests {
             [
                 "Remove the repeated word",
                 "Ignore 'the the'",
-                "Disable rule 'Repeated word'"
+                "Disable rule 'Repeated word'",
+                APPLY_ALL_WRITING,
             ]
         );
         // A typo (with the built-in or the chosen word list) keeps its own entries.
@@ -1573,7 +2028,7 @@ mod tests {
             "{typo:?}"
         );
         // Ignored in the project: the article goes, the repeated word stays.
-        let dir = std::env::temp_dir().join(format!("idecraft-gfix-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-gfix-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("notes.txt");

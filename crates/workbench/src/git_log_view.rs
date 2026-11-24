@@ -10,12 +10,12 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 
+use ferris_idea_vcs::{
+    ActionState, CommitAction, CommitDetails, CommitInfo, Repo, ResetMode, commit_actions,
+};
 use gpui::{
     Context, EventEmitter, FocusHandle, KeyDownEvent, PathBuilder, Pixels, Point, Window, canvas,
     div, point, prelude::*, px, rgb, uniform_list,
-};
-use idecraft_vcs::{
-    ActionState, CommitAction, CommitDetails, CommitInfo, Repo, ResetMode, commit_actions,
 };
 
 use crate::BranchesEvent;
@@ -270,7 +270,7 @@ pub struct GitLogView {
     /// The name typed for a new branch from the branches pane, while its field is open.
     tree_new: Option<String>,
     /// Favourite branches of the repository (`SPEC-0086` v10 behaviour 19).
-    favorites: idecraft_core::RepoFavorites,
+    favorites: ferris_idea_core::RepoFavorites,
     /// The branches pane lists only the favourites (v10 behaviour 19).
     only_favorites: bool,
     focus: FocusHandle,
@@ -289,7 +289,7 @@ type HostLog = (
     Vec<CommitInfo>,
     BTreeMap<String, Vec<String>>,
     Option<String>,
-    idecraft_vcs::Branches,
+    ferris_idea_vcs::Branches,
 );
 
 /// The commits of `ids` that change one of `paths` in the host repository.
@@ -297,12 +297,12 @@ fn host_touching(
     host: &crate::workbench_view::HostCall,
     ids: &[String],
     paths: &[String],
-) -> Result<HashSet<String>, idecraft_vcs::GitError> {
+) -> Result<HashSet<String>, ferris_idea_vcs::GitError> {
     let v = host(
         "git.commits_touching",
         serde_json::json!({ "ids": ids, "paths": paths }),
     )
-    .map_err(idecraft_vcs::GitError::Git)?;
+    .map_err(ferris_idea_vcs::GitError::Git)?;
     Ok(v["ids"]
         .as_array()
         .map(|a| {
@@ -317,7 +317,7 @@ fn host_log(host: &crate::workbench_view::HostCall) -> Result<HostLog, String> {
     let log = host("git.log", serde_json::json!({ "limit": LIMIT }))?;
     let commits: Vec<CommitInfo> =
         serde_json::from_value(log["commits"].clone()).map_err(|e| e.to_string())?;
-    let branches: idecraft_vcs::Branches =
+    let branches: ferris_idea_vcs::Branches =
         serde_json::from_value(host("git.branches", serde_json::json!({}))?)
             .map_err(|e| e.to_string())?;
     let current = host("git.status", serde_json::json!({}))
@@ -410,7 +410,7 @@ impl GitLogView {
             commit_menu: None,
             tracking: HashMap::new(),
             tree_new: None,
-            favorites: idecraft_core::RepoFavorites::default(),
+            favorites: ferris_idea_core::RepoFavorites::default(),
             only_favorites: false,
             focus: cx.focus_handle(),
             remote: None,
@@ -463,7 +463,7 @@ impl GitLogView {
                             (
                                 branches,
                                 Vec::new(),
-                                idecraft_core::RepoFavorites::default(),
+                                ferris_idea_core::RepoFavorites::default(),
                             ),
                             LocalZone::system(),
                             local_date_style(),
@@ -1118,7 +1118,7 @@ impl GitLogView {
                         // `git.show` (`SPEC-0318` v2 protocol detail 7).
                         Some(host) => host("git.show", serde_json::json!({ "id": id }))
                             .and_then(|v| serde_json::from_value(v).map_err(|e| e.to_string()))
-                            .map_err(idecraft_vcs::GitError::Git),
+                            .map_err(ferris_idea_vcs::GitError::Git),
                         None => Repo::discover(&root).and_then(|r| r.commit_details(&id)),
                     }
                 })
@@ -1730,13 +1730,13 @@ impl GitLogView {
                                         .id(("git-log-branch-star", i))
                                         .w(px(16.))
                                         .flex_none()
-                                        .when(!head && star, |d| d.child(icon("idecraft/star")))
+                                        .when(!head && star, |d| d.child(icon("ferris-idea/star")))
                                         .when(!head && !star, |d| {
                                             d.when(!lit, |d| {
                                                 d.opacity(0.)
                                                     .group_hover(group, |s| s.opacity(1.))
                                             })
-                                            .child(icon("idecraft/starOutline"))
+                                            .child(icon("ferris-idea/starOutline"))
                                         })
                                         .on_click(cx.listener(
                                             move |this, _: &gpui::ClickEvent, _, cx| {
@@ -1785,7 +1785,7 @@ impl GitLogView {
     /// A switch at the end of the text field (`SPEC-0086` v5 behaviour 3).
     fn toggle(
         &self,
-        control: &'static idecraft_ui::tooltip::Control,
+        control: &'static ferris_idea_ui::tooltip::Control,
         text: &'static str,
         on: bool,
         flip: fn(&mut LogFilter),
@@ -1843,9 +1843,9 @@ impl GitLogView {
         };
         // The whole choice, also when the button cuts it short (`SPEC-0294` behaviour 1).
         let tip = match &choice {
-            Some(_) => idecraft_ui::tooltip::Tip::plain(label.clone())
+            Some(_) => ferris_idea_ui::tooltip::Tip::plain(label.clone())
                 .with_detail("Click to change; × removes this filter"),
-            None => idecraft_ui::tooltip::Tip::plain(format!("Filter by {}", name_lower(name))),
+            None => ferris_idea_ui::tooltip::Tip::plain(format!("Filter by {}", name_lower(name))),
         };
         div()
             .id(name)
@@ -2328,7 +2328,7 @@ impl GitLogView {
         } else {
             branches.contains(&name)
         };
-        if !idecraft_vcs::valid_branch_name(&name) {
+        if !ferris_idea_vcs::valid_branch_name(&name) {
             *error = Some(format!("\"{name}\" is not a valid {kind} name"));
         } else if exists {
             *error = Some(format!("the {kind} {name} already exists"));
@@ -2740,7 +2740,7 @@ impl GitLogView {
         let Some(name) = self.tree_new.clone().map(|n| n.trim().to_owned()) else {
             return;
         };
-        if !idecraft_vcs::valid_branch_name(&name) || self.names_of(false).contains(&name) {
+        if !ferris_idea_vcs::valid_branch_name(&name) || self.names_of(false).contains(&name) {
             return;
         }
         let from = self.highlighted_branch();
@@ -2813,12 +2813,12 @@ impl GitLogView {
             (
                 BranchAction::Favorite,
                 declared!(GIT_LOG_TOOLBAR, "git-log-branch-favorite"),
-                "idecraft/starOutline",
+                "ferris-idea/starOutline",
             ),
             (
                 BranchAction::OnlyFavorites,
                 declared!(GIT_LOG_TOOLBAR, "git-log-branch-only-favorites"),
-                "idecraft/star",
+                "ferris-idea/star",
             ),
         ];
         let only = self.only_favorites;
@@ -2898,7 +2898,7 @@ fn label_chip(label: &Label, p: &Palette) -> gpui::AnyElement {
             ))
         })
         .when(label.kind == LabelKind::Tag, |d| {
-            d.child(icon("idecraft/gitTag"))
+            d.child(icon("ferris-idea/gitTag"))
         })
         .child(
             div()
@@ -3085,7 +3085,7 @@ fn page_actions(
     current: Option<&str>,
     favorite: bool,
 ) -> Vec<(PopupBranchAction, String)> {
-    let row = BranchRow::Branch(idecraft_vcs::Branch {
+    let row = BranchRow::Branch(ferris_idea_vcs::Branch {
         name: name.to_owned(),
         remote,
         current: false,
@@ -3104,11 +3104,11 @@ fn row_is_remote(rows: &[TreeRow], i: usize) -> bool {
 }
 
 /// The favourites of the repository `repo` found from the workspace at `root`.
-fn favorites_of(root: &Path, repo: &Repo) -> idecraft_core::RepoFavorites {
+fn favorites_of(root: &Path, repo: &Repo) -> ferris_idea_core::RepoFavorites {
     let key = repo
         .workdir()
-        .map_or_else(|| ".".to_owned(), |w| idecraft_core::repo_key(root, w));
-    idecraft_core::BranchFavorites::load(root).of(&key)
+        .map_or_else(|| ".".to_owned(), |w| ferris_idea_core::repo_key(root, w));
+    ferris_idea_core::BranchFavorites::load(root).of(&key)
 }
 
 fn lane_colors(p: &Palette) -> std::rc::Rc<[u32]> {
@@ -3174,7 +3174,7 @@ mod tests {
     #[test]
     fn menu_rows_put_branch_pages_before_new_branch() {
         // SPEC-0086 v8 AK-28.
-        let facts = idecraft_vcs::CommitFacts {
+        let facts = ferris_idea_vcs::CommitFacts {
             on_current_branch: true,
             ..Default::default()
         };

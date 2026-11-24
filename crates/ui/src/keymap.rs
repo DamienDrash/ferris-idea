@@ -24,7 +24,7 @@ pub const MACOS_DEVIATIONS_JSON: &str = include_str!("../keymaps/macos-deviation
 pub struct Deviation {
     /// Action id.
     pub action: String,
-    /// `add`: IDECraft binds it and upstream does not; `remove`: the other way round.
+    /// `add`: Ferris IDEA binds it and upstream does not; `remove`: the other way round.
     pub change: String,
     /// The shortcut as [`Shortcut::to_entry`] writes it.
     pub shortcut: String,
@@ -572,10 +572,16 @@ impl KeymapFile {
             if f.exists() {
                 read(f)
             } else {
-                read(&idecraft_core::legacy_keymap_file(f))
+                read(&ferris_idea_core::legacy_keymap_file(f))
             }
         })
-        .unwrap_or_else(|| Self::user("IDECraft", platform_parent()))
+        .map(|mut k| {
+            // A keymap saved under the product's former name keeps its content (`SPEC-0356`
+            // behaviour 8).
+            k.name = ferris_idea_core::takeover::current_keymap_name(&k.name).to_owned();
+            k
+        })
+        .unwrap_or_else(|| Self::user("Ferris IDEA", platform_parent()))
     }
 
     /// Gives `action` exactly `shortcuts` (an empty list removes its shortcuts), or with `None`
@@ -598,11 +604,11 @@ impl KeymapFile {
         if let Some(dir) = file.parent() {
             std::fs::create_dir_all(dir)?;
         }
-        idecraft_core::format::prepare_write(file, "keymap")?;
+        ferris_idea_core::format::prepare_write(file, "keymap")?;
         write_atomic(file, self.to_toml_text())?;
-        let legacy = idecraft_core::legacy_keymap_file(file);
+        let legacy = ferris_idea_core::legacy_keymap_file(file);
         if legacy != file {
-            idecraft_core::format::retire(&legacy)?;
+            ferris_idea_core::format::retire(&legacy)?;
         }
         Ok(())
     }
@@ -745,8 +751,8 @@ impl KeymapFile {
     pub fn from_toml(
         table: &toml::Table,
         prefix: &str,
-    ) -> Result<Self, Vec<idecraft_core::format::Problem>> {
-        use idecraft_core::format::Problem;
+    ) -> Result<Self, Vec<ferris_idea_core::format::Problem>> {
+        use ferris_idea_core::format::Problem;
         let mut problems = Vec::new();
         let mut file = KeymapFile {
             name: table
@@ -790,14 +796,20 @@ impl KeymapFile {
     pub fn to_toml_text(&self) -> String {
         let mut body = toml::Table::new();
         body.insert("keymap".into(), toml::Value::Table(self.to_toml()));
-        idecraft_core::format::write(&idecraft_core::format::Envelope::current("keymap"), &body)
-            .unwrap_or_default()
+        ferris_idea_core::format::write(
+            &ferris_idea_core::format::Envelope::current("keymap"),
+            &body,
+        )
+        .unwrap_or_default()
     }
 
     /// Reads a keymap file of kind `keymap`.
-    pub fn parse_toml(text: &str) -> Result<Self, Vec<idecraft_core::format::Problem>> {
-        let doc =
-            idecraft_core::format::read(text, Some("keymap"), idecraft_core::format::Use::Project)?;
+    pub fn parse_toml(text: &str) -> Result<Self, Vec<ferris_idea_core::format::Problem>> {
+        let doc = ferris_idea_core::format::read(
+            text,
+            Some("keymap"),
+            ferris_idea_core::format::Use::Project,
+        )?;
         let table = doc
             .body
             .get("keymap")
@@ -899,12 +911,12 @@ impl Keymap {
         // its keymap (SPEC-0100 v2 behaviour 9, OBS-0024).
         keymap.add_if_free("ExternalSystem.ProjectRefreshAction", "control shift O");
         // Step Out of Code Block and Reload Changed Classes have no shortcut in the reference's
-        // keymaps; IDECraft gives them free ones (SPEC-0091 v12 behaviours 25, 37).
+        // keymaps; Ferris IDEA gives them free ones (SPEC-0091 v12 behaviours 25, 37).
         keymap.add_if_free("StepOutOfBlock", "control alt shift F10");
         keymap.add_if_free("Hotswap", "control alt shift F9");
         // Show DDL of the Database tool window's table or view; the reference's Edit Source key
         // already opens Properties there (SPEC-0089 v5 behaviour 11).
-        keymap.add_if_free("IDECraft.Database.ShowDdl", "control alt shift D");
+        keymap.add_if_free("FerrisIDEA.Database.ShowDdl", "control alt shift D");
         keymap.add_inline_suggestion_keys("alt PERIOD", "alt COMMA");
         // Editor tabs (SPEC-0059 v9 behaviour 19, v9.9 behaviour 22b): Reopen Closed Tab has no
         // shortcut here (Ctrl+Shift+T is Go to Test, Ctrl+Alt+Shift+T Refactor This); Maximize
@@ -917,7 +929,7 @@ impl Keymap {
         keymap
     }
 
-    /// The macOS keymap exactly as the upstream files give it, without IDECraft's own shortcuts:
+    /// The macOS keymap exactly as the upstream files give it, without Ferris IDEA's own shortcuts:
     /// what the bundled keymap is measured against (`SPEC-0028` v4 behaviour 7). Shortcuts
     /// inherited from `$default` swap Control and Meta, as the reference does for its macOS
     /// default keymaps (behaviour 3a).
@@ -932,7 +944,7 @@ impl Keymap {
         Self::resolve(&parent, Some(&child), true)
     }
 
-    /// The bundled macOS keymap: the upstream one ([`Keymap::upstream_macos`]) with IDECraft's own
+    /// The bundled macOS keymap: the upstream one ([`Keymap::upstream_macos`]) with Ferris IDEA's own
     /// shortcuts, each of them listed in [`MACOS_DEVIATIONS_JSON`].
     pub fn bundled_macos() -> Self {
         let mut keymap = Self::upstream_macos();
@@ -951,7 +963,7 @@ impl Keymap {
         keymap.add_if_free("StepOutOfBlock", "control alt shift F10");
         keymap.add_if_free("Hotswap", "control alt shift F9");
         // Show DDL (see `bundled_default`).
-        keymap.add_if_free("IDECraft.Database.ShowDdl", "alt shift meta D");
+        keymap.add_if_free("FerrisIDEA.Database.ShowDdl", "alt shift meta D");
         keymap.add_inline_suggestion_keys("control alt PERIOD", "control alt COMMA");
         // Editor tabs (SPEC-0059 v9 behaviour 19, v9.1 behaviour 22b): ⇧⌘T reopens a closed tab
         // (the bundled keymap's other users of it are not carried out), ⇧⌘' maximizes the editor
@@ -977,7 +989,7 @@ impl Keymap {
         keymap
     }
 
-    /// The bundled keymap of the platform IDECraft runs on.
+    /// The bundled keymap of the platform Ferris IDEA runs on.
     pub fn bundled_for_platform() -> Self {
         if cfg!(target_os = "macos") {
             Self::bundled_macos()
@@ -1140,7 +1152,7 @@ fn mouse_click(keystroke: &str) -> Option<(u8, bool, MouseModifiers)> {
     Some((button?, double, held))
 }
 
-/// The action that keeps a chord `action` is bound to as well: IDECraft's keymap gives ⇧⌘T to
+/// The action that keeps a chord `action` is bound to as well: Ferris IDEA's keymap gives ⇧⌘T to
 /// `ReopenClosedTab` as a named deviation, and the bundled keymap's `GotoTest` on the same chord
 /// neither runs from it nor shows it (`SPEC-0071` v10 behaviour 16, `SPEC-0028` behaviour 7). No
 /// shortcut is removed from the keymap: a chord without the other action runs `action`.
@@ -1380,11 +1392,11 @@ mod tests {
         };
         assert_eq!(
             on(&Keymap::bundled_macos(), "alt shift meta D"),
-            ["IDECraft.Database.ShowDdl"]
+            ["FerrisIDEA.Database.ShowDdl"]
         );
         assert_eq!(
             on(&Keymap::bundled_default(), "control alt shift D"),
-            ["IDECraft.Database.ShowDdl"]
+            ["FerrisIDEA.Database.ShowDdl"]
         );
     }
 
@@ -2061,7 +2073,7 @@ mod tests {
             let k = Keystroke::parse(text).unwrap();
             assert_eq!(Keystroke::parse(&k.to_text()).unwrap(), k);
         }
-        let mut user = KeymapFile::user("IDECraft", "$default");
+        let mut user = KeymapFile::user("Ferris IDEA", "$default");
         user.actions.insert(
             "SaveAll".into(),
             vec![Shortcut::Keyboard {
@@ -2100,37 +2112,60 @@ mod tests {
         let custom = keymap.with_overrides(&user);
         assert!(custom.shortcuts("ShowSettings").is_empty(), "removed");
         assert_eq!(custom.shortcuts("SaveAll").len(), 1);
-        assert_eq!(custom.name, "IDECraft");
+        assert_eq!(custom.name, "Ferris IDEA");
         let ctrl_alt_s = Keystroke::parse("control alt S").unwrap();
         assert!(custom.actions_for(&ctrl_alt_s, None).contains(&"SaveAll"));
     }
 
-    /// SPEC-0303 AK-5: the XML keymap of older versions is read until the TOML keymap is saved,
-    /// then kept once as `IDECraft.xml.bak`.
+    /// SPEC-0356 AK-6 (behaviour 8): a user keymap saved under the product's former name keeps
+    /// its shortcuts and reads with today's name.
     #[test]
-    fn xml_keymaps_migrate_to_toml() {
-        let dir = std::env::temp_dir().join(format!("idecraft-keymap-mig-{}", std::process::id()));
+    fn a_keymap_saved_under_the_former_name_reads_with_todays_name() {
+        let dir = std::env::temp_dir().join(format!("keymap-former-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(dir.join("keymaps")).unwrap();
-        let file = dir.join("keymaps/IDECraft.toml");
-        let mut old = KeymapFile::user("IDECraft", "$default");
+        let file = dir.join("keymaps/user.toml");
+        let former = "IDECraft"; // rebrand:keep
+        let mut old = KeymapFile::user(former, "$default");
         old.set_action(
             "SaveAll",
             Some(vec![Shortcut::parse_keyboard("control alt S").unwrap()]),
         );
-        std::fs::write(dir.join("keymaps/IDECraft.xml"), old.to_xml()).unwrap();
+        old.write(&file).unwrap();
+        let read = KeymapFile::read_user(Some(&file));
+        assert_eq!(read.name, ferris_idea_core::takeover::USER_KEYMAP_NAME);
+        assert_eq!(read.actions, old.actions);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// SPEC-0303 AK-5: the XML keymap of older versions is read until the TOML keymap is saved,
+    /// then kept once as `FerrisIDEA.xml.bak`.
+    #[test]
+    fn xml_keymaps_migrate_to_toml() {
+        let dir =
+            std::env::temp_dir().join(format!("ferris-idea-keymap-mig-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("keymaps")).unwrap();
+        let file = dir.join("keymaps/FerrisIDEA.toml");
+        let mut old = KeymapFile::user("Ferris IDEA", "$default");
+        old.set_action(
+            "SaveAll",
+            Some(vec![Shortcut::parse_keyboard("control alt S").unwrap()]),
+        );
+        std::fs::write(dir.join("keymaps/FerrisIDEA.xml"), old.to_xml()).unwrap();
         let mut read = KeymapFile::read_user(Some(&file));
+        // The keymap of an older version is read under the current name (takeover, rename step 2).
         assert_eq!(
-            read, old,
+            read.actions, old.actions,
             "the XML file is read while there is no TOML file"
         );
+        assert_eq!(read.name, ferris_idea_core::takeover::USER_KEYMAP_NAME);
         read.set_action("ShowSettings", Some(vec![]));
         read.write(&file).unwrap();
-        assert!(!dir.join("keymaps/IDECraft.xml").exists());
-        assert!(dir.join("keymaps/IDECraft.xml.bak").exists());
+        assert!(!dir.join("keymaps/FerrisIDEA.xml").exists());
+        assert!(dir.join("keymaps/FerrisIDEA.xml.bak").exists());
         let text = std::fs::read_to_string(&file).unwrap();
         assert!(
-            text.starts_with("[idecraft]\nkind = \"keymap\"\nformat = 1\n"),
+            text.starts_with("[ferris-idea]\nkind = \"keymap\"\nformat = 1\n"),
             "{text}"
         );
         assert!(text.contains("SaveAll = [\"control alt S\"]"), "{text}");

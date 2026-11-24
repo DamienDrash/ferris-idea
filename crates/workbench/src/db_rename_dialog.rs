@@ -6,11 +6,11 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-use gpui::{Context, Entity, EventEmitter, FocusHandle, KeyDownEvent, Window, div, prelude::*, px};
-use idecraft_database::{
+use ferris_idea_database::{
     ConstraintName, DerivedRename, Dialect, Refactoring, RenameError, TextEdit, derived_name_edits,
     derived_renames, file_dialect, refactor, rename_sequence_in,
 };
+use gpui::{Context, Entity, EventEmitter, FocusHandle, KeyDownEvent, Window, div, prelude::*, px};
 
 use crate::database_view::RenameTarget;
 use crate::editor_view::EditorView;
@@ -28,7 +28,7 @@ pub struct SqlFile {
     pub text: String,
     /// Why the file is not one of the project's own sources (`SPEC-0128` v3 behaviour 6); `None`
     /// when it is.
-    pub outside: Option<idecraft_core::NotOwn>,
+    pub outside: Option<ferris_idea_core::NotOwn>,
     /// The connection the file is bound to (`SPEC-0093`): id, name and dialect; `None` when
     /// unbound.
     pub bound: Option<(String, String, Dialect)>,
@@ -65,7 +65,7 @@ pub struct Preview {
     /// Constraint and index names that embed the old name, and whether each is renamed too.
     pub derived: Vec<(DerivedRename, bool)>,
     /// What it risks and how it runs, said before it runs (`SPEC-0164` v3 behaviour 12).
-    pub notes: Vec<idecraft_database::RefactorNote>,
+    pub notes: Vec<ferris_idea_database::RefactorNote>,
     /// Whether the statements run in one transaction (`SPEC-0164` v3 behaviour 11).
     pub transaction: bool,
 }
@@ -196,8 +196,8 @@ pub fn preview(
         ddl,
         files: changes,
         derived,
-        notes: idecraft_database::refactoring_notes(&target.what, own),
-        transaction: idecraft_database::ddl_in_transaction(own),
+        notes: ferris_idea_database::refactoring_notes(&target.what, own),
+        transaction: ferris_idea_database::ddl_in_transaction(own),
     })
 }
 
@@ -210,9 +210,9 @@ pub const KEEP_DATABASE: &str = "Keep the database as it is";
 #[derive(Debug, Clone)]
 pub struct DbUndo {
     /// The connection the refactoring ran on.
-    pub profile: idecraft_database::ConnectionProfile,
+    pub profile: ferris_idea_database::ConnectionProfile,
     /// The refactoring that takes the database change back.
-    pub back: idecraft_database::WayBack,
+    pub back: ferris_idea_database::WayBack,
     /// What the database keeps, e.g. `the column is still pd_note.qty`.
     pub keeps: String,
     /// The second answer, which opens the dialog for the way back.
@@ -234,8 +234,8 @@ impl DbUndo {
 /// The undo record of `target` run with `input` (the new name or type); `None` when there is no way
 /// back (a type change of a column not in the schema read).
 pub fn db_undo(target: &RenameTarget, input: &str) -> Option<DbUndo> {
-    use idecraft_database::Refactoring as R;
-    let back = idecraft_database::way_back(
+    use ferris_idea_database::Refactoring as R;
+    let back = ferris_idea_database::way_back(
         &target.tables,
         &target.table,
         target.column.as_deref(),
@@ -676,8 +676,8 @@ impl Render for DbRenameDialog {
 /// Why a run of the dialog's statement did not change the database, or `None` when it did
 /// (`SPEC-0164`, hand test 90 / D32): the database's refusal of a statement, or that no statement
 /// ran at all — never a success message for a change that did not happen.
-pub fn run_failure(run: &idecraft_database::ScriptRun) -> Option<String> {
-    idecraft_database::run_failure(run)
+pub fn run_failure(run: &ferris_idea_database::ScriptRun) -> Option<String> {
+    ferris_idea_database::run_failure(run)
 }
 
 /// Writes `edits` into `path`, a file no editor has open, if it still holds `text`, with a local
@@ -688,7 +688,7 @@ pub fn write_closed_file(
     path: &Path,
     text: &str,
     edits: &[TextEdit],
-    history: Option<&mut idecraft_core::LocalHistory>,
+    history: Option<&mut ferris_idea_core::LocalHistory>,
 ) -> std::io::Result<bool> {
     if std::fs::read_to_string(path).ok().as_deref() != Some(text) {
         return Ok(false);
@@ -702,7 +702,7 @@ pub fn write_closed_file(
     if let Some(h) = history.as_deref_mut() {
         let _ = h.record(&relative);
     }
-    std::fs::write(path, idecraft_database::apply_edits(text, edits))?;
+    std::fs::write(path, ferris_idea_database::apply_edits(text, edits))?;
     if let Some(h) = history {
         let _ = h.record(&relative);
     }
@@ -712,13 +712,13 @@ pub fn write_closed_file(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use idecraft_database::{Column, Index, Table};
+    use ferris_idea_database::{Column, Index, Table};
 
     /// Hand test 90 (D32): a refusal of the database is reported, and a run in which no statement
     /// ran is not taken for a change; a statement that ran is.
     #[test]
     fn a_refused_or_empty_run_is_no_change() {
-        use idecraft_database::{DbError, Outcome, ScriptRun, StatementOutcome};
+        use ferris_idea_database::{DbError, Outcome, ScriptRun, StatementOutcome};
         let one = |outcome| ScriptRun {
             outcomes: vec![StatementOutcome {
                 range: 0..10,
@@ -810,7 +810,7 @@ mod tests {
         let p = preview(&target(), "anzahl", &files, &none, &none).unwrap();
         assert_eq!(p.derived.len(), 2);
         let f = &p.files[0];
-        let out = idecraft_database::apply_edits(text, &f.edits);
+        let out = ferris_idea_database::apply_edits(text, &f.edits);
         assert!(
             out.contains("anzahl integer constraint ht_b_anzahl_check check (anzahl > 0)"),
             "{out}"
@@ -823,7 +823,7 @@ mod tests {
         // A derived name left out stays in the file too.
         let leave: BTreeSet<String> = ["ht_b_menge_idx".to_owned()].into();
         let p = preview(&target(), "anzahl", &files, &none, &leave).unwrap();
-        let out = idecraft_database::apply_edits(text, &p.files[0].edits);
+        let out = ferris_idea_database::apply_edits(text, &p.files[0].edits);
         assert!(out.contains("create index ht_b_menge_idx on"), "{out}");
     }
 
@@ -841,10 +841,10 @@ mod tests {
         let files = [
             file(
                 ".venv/lib/python3.12/site-packages/x.sql",
-                Some(idecraft_core::NotOwn::VirtualEnvironment),
+                Some(ferris_idea_core::NotOwn::VirtualEnvironment),
             ),
             file("a.sql", None),
-            file("local.sql", Some(idecraft_core::NotOwn::Ignored)),
+            file("local.sql", Some(ferris_idea_core::NotOwn::Ignored)),
             file("z.sql", None),
         ];
         let none = BTreeSet::new();
@@ -937,7 +937,8 @@ mod tests {
     /// one that changed since the preview is left alone.
     #[test]
     fn closed_files_get_history_revisions() {
-        let root = std::env::temp_dir().join(format!("idecraft-dbr-hist-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("ferris-idea-dbr-hist-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         let path = root.join("q.sql");
@@ -948,7 +949,7 @@ mod tests {
             end: 12,
             replacement: "anzahl".into(),
         }];
-        let mut history = idecraft_core::LocalHistory::open(&root).unwrap();
+        let mut history = ferris_idea_core::LocalHistory::open(&root).unwrap();
         assert!(write_closed_file(&root, &path, text, &edits, Some(&mut history)).unwrap());
         assert_eq!(
             std::fs::read_to_string(&path).unwrap(),
@@ -991,7 +992,7 @@ mod tests {
         let p = preview(&t, "pd_seq2", &files, &none, &none).unwrap();
         assert_eq!((p.edit_count(), p.ambiguous_count()), (2, 0));
         assert_eq!(
-            idecraft_database::apply_edits(text, &p.files[0].edits),
+            ferris_idea_database::apply_edits(text, &p.files[0].edits),
             "insert into pd_note values (nextval('pd_seq2'));\n\
              select currval('public.pd_seq2'), nextval('pd_b.pd_seq');"
         );

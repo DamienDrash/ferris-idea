@@ -1,0 +1,54 @@
+#!/bin/sh
+# Work-in-progress limit (AGENTS.md rule 14, decision of 2026-11-18): while FERRIS_IDEA_WIP_LIMIT
+# (default 6) code pull requests are open, the first push of a new code branch is refused. Free
+# agents take repair work instead: conflicts, red checks, review fix-ups of the open pull requests.
+#
+# Not limited: a branch that has an open pull request already (fixes go on), a branch whose change
+# against main is documents only (docs/, changelog.d/, Markdown in the root), queue/* and schleuse/probe/* branches,
+# deleting a branch. A code pull request is an open one that is no draft and changes more than
+# documents. Without `gh` or network the push goes through with a warning.
+# FERRIS_IDEA_WIP_OVERRIDE=1 lets a push through (a fix of red main, work the Project Owner asked for).
+# Installed by scripts/install-hooks.sh.
+[ "${FERRIS_IDEA_WIP_OVERRIDE:-0}" = 1 ] && exit 0
+limit=${FERRIS_IDEA_WIP_LIMIT:-6}
+docs='^(docs/|changelog\.d/|[^/]+\.md$)'
+zero=0000000000000000000000000000000000000000
+open_json=""
+while read -r local_ref local_sha remote_ref _remote_sha; do
+  case "$remote_ref" in refs/heads/*) ;; *) continue ;; esac
+  branch=${remote_ref#refs/heads/}
+  case "$branch" in main|queue/*|schleuse/probe/*) continue ;; esac
+  [ "$local_sha" != "$zero" ] || continue
+  # Documents only against main: not limited.
+  base=$(git merge-base refs/remotes/origin/main "$local_sha" 2>/dev/null) || continue
+  if ! git diff --name-only "$base" "$local_sha" | grep -qvE "$docs"; then continue; fi
+  if [ -z "$open_json" ]; then
+    open_json=$(gh pr list --state open --limit 200 --json number,headRefName,isDraft,files 2>/dev/null) || {
+      echo "pre-push: could not read the open pull requests (gh); work-in-progress limit not checked" >&2
+      exit 0
+    }
+  fi
+  verdict=$(printf '%s' "$open_json" | python3 -I -c '
+import json, re, sys
+branch, limit, docs = sys.argv[1], int(sys.argv[2]), re.compile(sys.argv[3])
+prs = json.load(sys.stdin)
+if any(p["headRefName"] == branch for p in prs):
+    print("open"); sys.exit()
+code = [p["number"] for p in prs if not p["isDraft"]
+        and any(not docs.match(f["path"]) for f in p.get("files") or [])]
+print(("full " if len(code) >= limit else "ok ") + str(len(code)) + " " + ",".join(f"#{n}" for n in sorted(code)))
+' "$branch" "$limit" "$docs") || continue
+  case "$verdict" in
+    full*)
+      set -- $verdict
+      cat >&2 <<MSG
+pre-push: $2 code pull requests are open ($3), the limit is $limit (AGENTS.md rule 14).
+
+A new code branch ($branch) waits until one of them is merged. Meanwhile take repair work: a
+conflict, a red check or a review fix-up of an open pull request. A fix of red main, or work the Project Owner
+asked for: FERRIS_IDEA_WIP_OVERRIDE=1 git push …
+MSG
+      exit 1 ;;
+  esac
+done
+exit 0

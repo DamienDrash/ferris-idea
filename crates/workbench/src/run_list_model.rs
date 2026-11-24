@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use idecraft_core::RunConfig;
+use ferris_idea_core::RunConfig;
 
 /// The row that opens the configuration editor (behaviour 9, `SPEC-0327`).
 pub const EDIT_CONFIGURATIONS: &str = "Edit Configurations…";
@@ -165,7 +165,7 @@ pub fn rows(input: &ListInput) -> Vec<ListRow> {
         command: if c.command.is_empty() {
             c.url.clone().unwrap_or_default()
         } else {
-            idecraft_core::join_command_line(&c.command)
+            ferris_idea_core::join_command_line(&c.command)
         },
         warning: input.blockers.and_then(|b| b.get(&c.name).cloned()),
         folder: None,
@@ -420,14 +420,14 @@ pub fn delete_question(name: &str, temporary: bool) -> (String, String) {
         if temporary {
             "The temporary configuration is removed from this session.".into()
         } else {
-            format!("It is removed from {}.", idecraft_core::RUN_FILE)
+            format!("It is removed from {}.", ferris_idea_core::RUN_FILE)
         },
     )
 }
 
 /// Where the pins of a project are kept: its workspace state, not `run.toml` (behaviour 10).
 pub fn pins_file(root: &Path) -> PathBuf {
-    root.join(".idecraft").join("run-pins.json")
+    root.join(".ferris-idea").join("run-pins.json")
 }
 
 /// The pinned configuration names of the project at `root`.
@@ -448,8 +448,8 @@ pub fn toggle_pin(root: &Path, name: &str) -> std::io::Result<Vec<String>> {
     }
     let text = serde_json::to_string_pretty(&pins).map_err(std::io::Error::other)?;
     // The pins are state of one user (`SPEC-0069` behaviour 3a).
-    idecraft_core::local_state::refresh_local_state_ignore(root);
-    idecraft_core::write_atomic(&pins_file(root), text)?;
+    ferris_idea_core::local_state::refresh_local_state_ignore(root);
+    ferris_idea_core::write_atomic(&pins_file(root), text)?;
     Ok(pins)
 }
 
@@ -463,7 +463,7 @@ mod tests {
             command: command.iter().map(|s| (*s).to_owned()).collect(),
             cwd: None,
             env: Default::default(),
-            kind: idecraft_core::RunKind::Run,
+            kind: ferris_idea_core::RunKind::Run,
             report: None,
             report_file: None,
             before: Vec::new(),
@@ -473,6 +473,7 @@ mod tests {
             allow_multiple: false,
             before_launch: Vec::new(),
             verbatim: false,
+            http: None,
         }
     }
 
@@ -554,7 +555,7 @@ mod tests {
         assert!(menu(&rows[4]).is_empty() && menu(&rows[5]).is_empty());
         let (q, detail) = delete_question("app", false);
         assert_eq!(q, "Delete run configuration \"app\"?");
-        assert_eq!(detail, "It is removed from .idecraft/run.toml.");
+        assert_eq!(detail, "It is removed from .ferris-idea/run.toml.");
     }
 
     /// Window check of PR #485 (D1): "Edit Configurations…" and digit 0 open the editor from the
@@ -682,7 +683,7 @@ mod tests {
         assert_eq!(footer(true), "Hold ⇧ to run the chosen configuration");
     }
 
-    /// SPEC-0087 v7 AK-9: typing narrows the rows by name, headings stay above what is left of
+    /// SPEC-0087 v7 AK-11: typing narrows the rows by name, headings stay above what is left of
     /// their group and go when it is empty, the fixed rows are found by their text.
     #[test]
     fn typing_filters_rows_and_keeps_headings_above_them() {
@@ -751,7 +752,7 @@ mod tests {
         );
     }
 
-    /// SPEC-0087 v7 AK-9: digits pick rows only while nothing is typed; Backspace and Escape.
+    /// SPEC-0087 v7 AK-11: digits pick rows only while nothing is typed; Backspace and Escape.
     #[test]
     fn keys_of_the_filter() {
         assert_eq!(typed("", "3"), FilterKey::Digit(3));
@@ -785,7 +786,7 @@ mod tests {
 
     #[test]
     fn pins_live_in_the_workspace_state() {
-        let root = std::env::temp_dir().join(format!("idecraft-pins-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("ferris-idea-pins-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         assert!(load_pins(&root).is_empty());
@@ -793,7 +794,7 @@ mod tests {
         assert_eq!(toggle_pin(&root, "b").unwrap(), ["a", "b"]);
         assert_eq!(toggle_pin(&root, "a").unwrap(), ["b"]);
         assert_eq!(load_pins(&root), ["b"]);
-        assert!(!root.join(".idecraft/run.toml").exists());
+        assert!(!root.join(".ferris-idea/run.toml").exists());
         let _ = std::fs::remove_dir_all(&root);
     }
 }

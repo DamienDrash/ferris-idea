@@ -1,5 +1,5 @@
 //! SPEC-0263 AK-1: a language server that ignores `exit` and outlives its closed input is still gone
-//! within 3 s after the MCP client of `idecraft mcp` disconnects, and it was told IDECraft's process
+//! within 3 s after the MCP client of `ferris-idea mcp` disconnects, and it was told Ferris IDEA's process
 //! id. The server is a small script standing in for `clangd` on the `PATH`.
 #![cfg(unix)]
 
@@ -75,7 +75,7 @@ fn language_server_ends_with_the_mcp_session() {
         eprintln!("skipped: no python3");
         return;
     }
-    let base = std::env::temp_dir().join(format!("idecraft-helpers-{}", std::process::id()));
+    let base = std::env::temp_dir().join(format!("ferris-idea-helpers-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
     let bin = base.join("bin");
     let project = base.join("project");
@@ -92,13 +92,13 @@ fn language_server_ends_with_the_mcp_session() {
         std::env::var("PATH").unwrap_or_default()
     );
 
-    let mut mcp = Command::new(env!("CARGO_BIN_EXE_idecraft"))
+    let mut mcp = Command::new(env!("CARGO_BIN_EXE_ferris-idea"))
         .arg("mcp")
         .arg(&project)
         .env("PATH", path)
         .env("STUBBORN_PIDS", &pids)
         // The test project is trusted: its servers start as in everyday use (SPEC-0278).
-        .env("IDECRAFT_TRUST_PROJECTS", "all")
+        .env("FERRIS_IDEA_TRUST_PROJECTS", "all")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())

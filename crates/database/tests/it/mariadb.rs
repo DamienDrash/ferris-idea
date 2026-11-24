@@ -1,15 +1,15 @@
-//! SPEC-0116 against a real MariaDB. Set `IDECRAFT_TEST_MARIADB` to a SPEC-0008 URL of the
+//! SPEC-0116 against a real MariaDB. Set `FERRIS_IDEA_TEST_MARIADB` to a SPEC-0008 URL of the
 //! reference database (e.g. `mariadb://idecraft@127.0.0.1:33079/inventory?ssl-mode=DISABLED`); without
 //! it these tests pass without doing anything. The password comes from
-//! `IDECRAFT_TEST_MARIADB_PASSWORD` or the file named by `IDECRAFT_TEST_MARIADB_PASSWORD_FILE`
+//! `FERRIS_IDEA_TEST_MARIADB_PASSWORD` or the file named by `FERRIS_IDEA_TEST_MARIADB_PASSWORD_FILE`
 //! (`tests/common`).
 
 use crate::common;
 
-use idecraft_database::{ConnectionProfile, Dialect, OnError, Outcome, Session};
+use ferris_idea_database::{ConnectionProfile, Dialect, OnError, Outcome, Session};
 
 async fn session(read_only: bool) -> Option<Session> {
-    let url = std::env::var("IDECRAFT_TEST_MARIADB").ok()?;
+    let url = ferris_idea_core::product_var("FERRIS_IDEA_TEST_MARIADB").ok()?;
     let mut profile = ConnectionProfile::from_url("reference", &url).unwrap();
     profile.read_only = read_only;
     Some(

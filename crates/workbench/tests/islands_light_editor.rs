@@ -11,12 +11,12 @@
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_languages::inlay::ParameterHint;
+use ferris_idea_languages::semantic::SemanticToken;
+use ferris_idea_ui::theme::{KeyFamily, semantic_key_in};
+use ferris_idea_workbench::palette::{Palette, ThemeId, set_current_theme};
+use ferris_idea_workbench::{EditorView, WorkbenchView};
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_languages::inlay::ParameterHint;
-use idecraft_languages::semantic::SemanticToken;
-use idecraft_ui::theme::{KeyFamily, semantic_key_in};
-use idecraft_workbench::palette::{Palette, ThemeId, set_current_theme};
-use idecraft_workbench::{EditorView, WorkbenchView};
 
 /// The test project's file of OBS-0079.
 const INVENTORY: &str = "package lab.inventory;
@@ -41,7 +41,8 @@ public final class Inventory {
 ";
 
 fn workspace() -> PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-islands-light-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-islands-light-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src")).unwrap();
     std::fs::write(root.join("src/Inventory.java"), INVENTORY).unwrap();
@@ -188,8 +189,8 @@ fn islands_light_draws_the_editor_like_the_reference(cx: &mut TestAppContext) {
     settle(cx);
     assert!(!bench.read_with(cx, |b, _| b.editor_tabs_active()));
     let (active, inactive) = (
-        idecraft_workbench::metrics::pill_colours(p, true),
-        idecraft_workbench::metrics::pill_colours(p, false),
+        ferris_idea_workbench::metrics::pill_colours(p, true),
+        ferris_idea_workbench::metrics::pill_colours(p, false),
     );
     assert_eq!((active.0.rgb, active.1.rgb), (0xe3ebfe, 0xa7c5ff));
     assert_eq!((inactive.0.rgb, inactive.1.rgb), (0xe9eaee, 0xd1d3d9));

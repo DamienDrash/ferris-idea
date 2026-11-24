@@ -41,7 +41,7 @@ fn script_separators_of_sql_server_and_oracle() {
 #[test]
 fn mariadb_reference_schema() {
     let p = Project::empty();
-    if !live_connection(&p, "maria", "IDECRAFT_TEST_MARIADB") {
+    if !live_connection(&p, "maria", "FERRIS_IDEA_TEST_MARIADB") {
         return;
     }
     let mut ide = Ide::stdio(&p);

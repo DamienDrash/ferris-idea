@@ -1,6 +1,6 @@
 # SPEC-0075: Reformat Code from the editor
 
-- **Version:** 7 · **Date:** 2026-11-17 (v7: through a language server every caret and the selection stay on their text and a text changed meanwhile is left alone, behaviour 2, AK-8; a selection in a Go, Rust, TOML, YAML, Svelte or Kotlin file goes through the whole file, SPEC-0043 v8 behaviour 15; headless pre-check OBS-0074); 2026-11-14 (v6: Reformat File… with its options, behaviour 8, AK-6 and AK-7; ninth package of docs/research/KEYMAP_COVERAGE.md); 2026-11-13 (v5: the layout of both formatters follows the second comparison, SPEC-0043 v6, OBS-0036 FM5b and FM6b, and the Markdown formatter can refuse a file, behaviour 7); 2026-11-13 (v4: SQL and Markdown files are formatted by IDECraft itself, behaviour 7, SPEC-0043 v5, OBS-0036 FM5 and FM6; SCSS and Less indent with two spaces, behaviour 1, OBS-0036 FM1); 2026-11-13 (v3: a file nothing can format says so in the status bar instead of doing nothing, behaviour 6, with the sentences of SPEC-0043 v4; headless run for F-039); 2026-11-12 (v2: Python files are formatted with the project's ruff or black, SPEC-0329; OBS-0034 L9)
+- **Version:** 7 · **Date:** 2026-11-17 (v7: through a language server every caret and the selection stay on their text and a text changed meanwhile is left alone, behaviour 2, AK-8; a selection in a Go, Rust, TOML, YAML, Svelte or Kotlin file goes through the whole file, SPEC-0043 v8 behaviour 15; headless pre-check OBS-0074); 2026-11-14 (v6: Reformat File… with its options, behaviour 8, AK-6 and AK-7; ninth package of docs/research/KEYMAP_COVERAGE.md); 2026-11-13 (v5: the layout of both formatters follows the second comparison, SPEC-0043 v6, OBS-0036 FM5b and FM6b, and the Markdown formatter can refuse a file, behaviour 7); 2026-11-13 (v4: SQL and Markdown files are formatted by Ferris IDEA itself, behaviour 7, SPEC-0043 v5, OBS-0036 FM5 and FM6; SCSS and Less indent with two spaces, behaviour 1, OBS-0036 FM1); 2026-11-13 (v3: a file nothing can format says so in the status bar instead of doing nothing, behaviour 6, with the sentences of SPEC-0043 v4; headless run for F-039); 2026-11-12 (v2: Python files are formatted with the project's ruff or black, SPEC-0329; OBS-0034 L9)
 - **Sources:** GEN (reformat the file or the selection by shortcut; F-039), OSS (action id `ReformatCode`
   with ⌥⌘L / Ctrl+Alt+L in the ported keymaps), SPEC-0043 (formatting through the language server),
   SPEC-0072 (requests on unsaved text)
@@ -21,7 +21,7 @@ Lay out code according to the language's formatter without leaving the editor.
    says how many changes were made, "Already formatted." when there were none, or why formatting failed
    (e.g. the server cannot format ranges). [GEN]
    (v7, OBS-0074) Kept in place means: every caret and every selection stays on its text, as with
-   IDECraft's own formatters (behaviour 7) and Reformat File (behaviour 8) — a selection that was
+   Ferris IDEA's own formatters (behaviour 7) and Reformat File (behaviour 8) — a selection that was
    formatted is still selected over the same text, and with several carets each stays before the
    same visible character. Before v7 the result of a language server left a single caret at the
    end of the selection. When the editor's text changed while the server was formatting, nothing
@@ -39,7 +39,7 @@ Lay out code according to the language's formatter without leaving the editor.
    behaviours 1 and 2 hold otherwise, except that the editor's indentation options are not passed
    on. Without a formatter the status bar says what to install. [OBS-0034 item 41, SPEC-0329]
 6. **Nothing to format with (v3):** the action never ends without a word. In a file whose type
-   IDECraft knows no language for, and in a file of a language it serves itself without a
+   Ferris IDEA knows no language for, and in a file of a language it serves itself without a
    formatter (SQL), the status bar shows the sentence of SPEC-0043 v4 behaviour 8 at once and no
    server is started; before v3 the action did nothing in a file of unknown type. In the other
    cases of SPEC-0043 behaviours 8 and 9 — no usable server, a server without a formatter, a
@@ -50,13 +50,13 @@ Lay out code according to the language's formatter without leaving the editor.
    way before any of this. [GEN, SPEC-0043]
 
 7. **SQL and Markdown (v4):** in an SQL file, and in a Markdown file of a project without
-   Prettier, the action formats the editor's text with IDECraft's own formatter (SPEC-0043 v5
+   Prettier, the action formats the editor's text with Ferris IDEA's own formatter (SPEC-0043 v5
    behaviours 11 and 12) at once, without a language server, as one undo step with every caret
    kept on its text (as SPEC-0329 v3 behaviour 7). The status bar says "Reformatted with
-   IDECraft's SQL formatter." (or Markdown), "Already formatted.", or, when the SQL formatter
-   refuses the text, "Reformat failed: IDECraft's SQL formatter changed nothing: line `<n>`: …".
+   Ferris IDEA's SQL formatter." (or Markdown), "Already formatted.", or, when the SQL formatter
+   refuses the text, "Reformat failed: Ferris IDEA's SQL formatter changed nothing: line `<n>`: …".
    (v5) The layout is that of SPEC-0043 v6 (OBS-0036 FM5b and FM6b), and the Markdown formatter
-   refuses in the same way, "Reformat failed: IDECraft's Markdown formatter changed nothing: …",
+   refuses in the same way, "Reformat failed: Ferris IDEA's Markdown formatter changed nothing: …",
    when its own check finds that it would have changed more than whitespace.
    With a selection nothing is changed and the status bar says that these formatters format
    whole files only. Before v4 both files only got the sentence of behaviour 6. [OBS-0036 FM5,
@@ -64,7 +64,7 @@ Lay out code according to the language's formatter without leaving the editor.
 
 8. **Reformat File… with options (v6):** `ShowReformatFileDialog` (⌥⇧⌘L in the bundled macOS
    keymap, Ctrl+Alt+Shift+L in the default one; Code › Reformat File…) opens a list of options
-   with check boxes for the active file, titled "Reformat File: `name`". Only options IDECraft
+   with check boxes for the active file, titled "Reformat File: `name`". Only options Ferris IDEA
    can carry out are offered:
    a. **Selected text only** — only with a selection, checked at first: the selection is
       formatted, as `ReformatCode` does with a selection.
@@ -75,19 +75,19 @@ Lay out code according to the language's formatter without leaving the editor.
       inside the selection. Without changed lines nothing is formatted (c still runs) and
       the status bar says so.
    c. **Optimize imports** — after formatting, the imports are optimized as `OptimizeImports`
-      does (Java and Kotlin by IDECraft, Python by ruff or the language server, SPEC-0329;
+      does (Java and Kotlin by Ferris IDEA, Python by ruff or the language server, SPEC-0329;
       JavaScript, TypeScript, Vue and Svelte by the language server, SPEC-0123 v4). In a file
       of another language the status bar says that imports were not optimized there.
    The list shows the options' last choice in this window (Optimize imports unchecked at
    first). Space toggles the selected row, Enter runs with the checked ones (none checked:
    the whole file without imports), Escape changes nothing. The formatter is the one of
    behaviours 1 and 5–7; formatting ranges goes through the language server or, for Python,
-   ruff or black, and a formatter of whole files only (IDECraft's SQL and Markdown formatters,
+   ruff or black, and a formatter of whole files only (Ferris IDEA's SQL and Markdown formatters,
    behaviour 7) refuses a) and b) with its sentence. Formatting and optimizing are computed on
    the editor's text in the background and applied together as **one undo step** with the
    carets kept on their text; if the text changed meanwhile nothing is applied and the status
    bar says so. The status bar names what was done ("Reformatted 2 changed ranges; removed 1
-   import", "Already formatted."). Not offered, because IDECraft has no such function:
+   import", "Already formatted."). Not offered, because Ferris IDEA has no such function:
    rearranging the members of a class and code cleanup. MCP: the steps exist as tools —
    `git_diff` gives the changed lines, `format_file` with `range` formats them, and
    `optimize_imports` follows. [OSS: id, keys and the title "Reformat File…" of the open
@@ -96,7 +96,7 @@ Lay out code according to the language's formatter without leaving the editor.
 ## Acceptance criteria
 - **AK-1** Formatting and rename plans on unsaved text, with the replaced texts taken from that text
   (integration test with clangd).
-- **AK-2** In a real window (`idecraft ui --selftest`, with clangd): ⌥⌘L lays out a function with two
+- **AK-2** In a real window (`ferris-idea ui --selftest`, with clangd): ⌥⌘L lays out a function with two
   statements over several lines.
 - **AK-3** Use by hand: selection only, other languages, undo.
 - **AK-4 (v3, behaviour 6)** The sentences are those of SPEC-0043/AK-5, from the same functions
@@ -132,7 +132,7 @@ code cleanup, code style settings dialog, formatting on save, a preview of wide
 changes.
 
 ## Known deviations from the reference
-The reference uses its own formatter and code style settings; IDECraft uses the language server's
+The reference uses its own formatter and code style settings; Ferris IDEA uses the language server's
 formatter (e.g. clang-format through clangd), and formatters of its own for SQL and Markdown. Compared
 side by side per language on 2026-11-13 (OBS-0036); the differences that stay are D1 to D9 of
 SPEC-0043 v6. A selection in an SQL or Markdown file is not formatted alone (not observed in the

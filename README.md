@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/design/assets/idecraft-symbol.svg">
-    <img src="docs/design/assets/idecraft-symbol-light.svg" width="72" height="72" alt="Ferris IDEA symbol: a pixel crab">
+    <img src="docs/design/assets/idecraft-symbol-light.svg" width="72" height="72" alt="Ferris IDEA symbol: a square bracket open to the right around a small upright rectangle">
   </picture>
 </p>
 
@@ -32,14 +32,14 @@
   <img src="docs/images/shot-1-hero-dark.png" width="100%" alt="Ferris IDEA window on a small Java project: the Project tree on the left, the editor paused at a breakpoint in Warehouse.java with variable values shown beside the code, and below it the Debug tool window with two stack frames and the variables batch, ordered, item, fresh, this and items">
 </p>
 
-<p align="center"><sub>A Java program paused at a breakpoint, with inline values and the Debug tool window · demo project · theme IDECraft Dark · debug build of commit <code>970f18e3</code>, 2026-11-14</sub></p>
+<p align="center"><sub>A Java program paused at a breakpoint, with inline values and the Debug tool window · demo project · theme Ferris IDEA Dark · debug build of commit <code>970f18e3</code>, 2026-11-14</sub></p>
 
-<!-- SCREENSHOT (missing, hero light): the same window, project and state in theme IDECraft Light, 1440×900 at 2×, as docs/images/shot-1-hero-light.png; then wrap both in one <picture> with a prefers-color-scheme source. Until it exists the dark image is shown in both modes. -->
+<!-- SCREENSHOT (missing, hero light): the same window, project and state in theme Ferris IDEA Light, 1440×900 at 2×, as docs/images/shot-1-hero-light.png; then wrap both in one <picture> with a prefers-color-scheme source. Until it exists the dark image is shown in both modes. -->
 
 Ferris IDEA is a desktop IDE written in Rust: editor, code insight through language servers,
 debugger, Git, database tools, HTTP client and terminal in one window. It is also what we call an
-**IDE AI harness**: 327 of its operations are typed MCP tools, so an agent you bring can rename a
-symbol, stop at a breakpoint or run SQL through the IDE instead of through a shell, and every tool
+**IDE AI harness**: more than 300 of its operations are typed MCP tools, so an agent you bring can
+rename a symbol, stop at a breakpoint or run SQL through the IDE instead of through a shell, and every tool
 that changes something checks one of 15 rights you grant per workspace, or a database permission
 you grant per connection. The first commit
 is from 2026-10-30; the code was written almost entirely by AI agents, and no person has read all
@@ -99,7 +99,7 @@ previews first by default, and every call that changes something leaves a line i
 loop and its model stay outside: Ferris IDEA ships no agent and no model. It supplies the tools, the
 checks and their limits, and the window in which you watch and verify.
 
-<!-- SCREENSHOT (missing, permission alert): the window while an MCP client over HTTP calls a tool without the needed right: the native alert naming the client, the right, the action and the workspace, with the buttons Deny, Allow Once, Always for This Workspace. Demo project, theme IDECraft Dark, 1440×900 at 2×, as docs/images/shot-5-permission-alert.png. Visible, directly here. -->
+<!-- SCREENSHOT (missing, permission alert): the window while an MCP client over HTTP calls a tool without the needed right: the native alert naming the client, the right, the action and the workspace, with the buttons Deny, Allow Once, Always for This Workspace. Demo project, theme Ferris IDEA Dark, 1440×900 at 2×, as docs/images/shot-5-permission-alert.png. Visible, directly here. -->
 
 ```mermaid
 flowchart TB
@@ -110,7 +110,7 @@ flowchart TB
         gate{"Right or database<br/>permission granted?<br/>Project trusted?"}
         svc["IDE services<br/>code insight · refactoring · debugger<br/>databases · Git · run · terminal"]
         win["Window<br/>editors and tool windows"]
-        log[("Log of changing calls<br/>.idecraft/agent-log.jsonl")]
+        log[("Log of changing calls<br/>.ferris-idea/agent-log.jsonl")]
     end
     agent <-->|"tool call, result or refusal"| mcp
     mcp --> gate
@@ -127,8 +127,8 @@ flowchart TB
 ### Try It in Five Minutes
 
 ```sh
-cargo build -p idecraft
-claude mcp add idecraft -- "$PWD/target/debug/idecraft" mcp /path/to/project
+cargo build -p ferris-idea
+claude mcp add ferris-idea -- "$PWD/target/debug/ferris-idea" mcp /path/to/project
 ```
 
 For any other MCP client, the same server as a configuration entry:
@@ -136,8 +136,8 @@ For any other MCP client, the same server as a configuration entry:
 ```json
 {
   "mcpServers": {
-    "idecraft": {
-      "command": "/absolute/path/to/idecraft",
+    "ferris-idea": {
+      "command": "/absolute/path/to/ferris-idea",
       "args": ["mcp", "/absolute/path/to/project"]
     }
   }
@@ -150,10 +150,11 @@ For any other MCP client, the same server as a configuration entry:
 
 | Way in | Command or address | Status |
 |---|---|---|
-| MCP over stdio, no window | `idecraft mcp <directory> [--trust]` | Works |
-| One tool call from a shell | `idecraft call <directory> <tool> ['<json>']` | Works |
+| MCP over stdio, no window | `ferris-idea mcp <directory> [--trust]` | Works |
+| One tool call from a shell | `ferris-idea call <directory> <tool> ['<json>']` | Works |
+| Agent benchmark of recorded tool scripts, report as JSON | `ferris-idea agent-bench [<tasks folder>] [--out <file>]` | Experimental |
 | MCP over HTTP from the running window, with your unsaved editor text | `http://127.0.0.1:<port>/mcp`, bearer token per start | Experimental |
-| Drive the window from a shell | `idecraft drive <verb> …` | In progress |
+| Drive the window from a shell | `ferris-idea drive <verb> …` | In progress |
 
 MCP over HTTP is off by default. Switch it on in Settings › AI Assistant › "Serve MCP to local
 agents over HTTP"; it starts at once, without a restart. The running window then writes the HTTP
@@ -161,17 +162,17 @@ address and token to `mcp-http/<pid>.json` in your settings folder. Do not paste
 resources, prompts, sampling or elicitation.
 
 What an agent does with it, in five steps. Every tool can be tried from a shell with
-`idecraft call`.
+`ferris-idea call`.
 
 1. **A semantic preview.** `rename_symbol` answers with the edits it would make across files; a
    dry run is its default.
 
-<!-- CAPTURE A (console): `idecraft call tests/reference-projects/python-basic rename_symbol '<arguments per the tool's inputSchema>'` with the default dry run, on a symbol used in at least two files. Needs pyright on the PATH; name its version in the caption. Paste the real output in a console block here; mark every cut with … and say so in the caption. -->
+<!-- CAPTURE A (console): `ferris-idea call tests/reference-projects/python-basic rename_symbol '<arguments per the tool's inputSchema>'` with the default dry run, on a symbol used in at least two files. Needs pyright on the PATH; name its version in the caption. Paste the real output in a console block here; mark every cut with … and say so in the caption. -->
 
 2. **The gate.** The same call with `"dry_run":false` and no `write` right is refused, and the
    refusal names the entry to add.
 
-<!-- CAPTURE B (console): the same rename_symbol call with "dry_run":false and an empty grant file (isolated IDECRAFT_CONFIG_DIR). Paste the real refusal, including the TOML entry it names. Then the same call after the grant, showing the applied result. -->
+<!-- CAPTURE B (console): the same rename_symbol call with "dry_run":false and an empty grant file (isolated FERRIS_IDEA_CONFIG_DIR). Paste the real refusal, including the TOML entry it names. Then the same call after the grant, showing the applied result. -->
 
 3. **The debugger.** `set_breakpoint`, `debug_start` and `debug_evaluate` stop a program at a line
    and return a variable's value.
@@ -179,12 +180,12 @@ What an agent does with it, in five steps. Every tool can be tried from a shell 
 <!-- CAPTURE C (console): on the same sample project, three calls: set_breakpoint (dry_run false, needs `write`), debug_start (needs `debug` and a trusted project), debug_evaluate at the stop returning one variable's value; then debug_stop. Needs debugpy. Paste real output, cuts marked. -->
 
 4. **A database.** A connection the project describes gives an agent nothing until you grant it.
-   In a project you have not trusted (`idecraft trust add ~/shop`) the connection is not even
+   In a project you have not trusted (`ferris-idea trust add ~/shop`) the connection is not even
    opened. In a trusted one, the refusal names the entry to add:
 
 ```console
-$ idecraft call ~/shop run_sql '{"connection":"shop","sql":"select name, city from customer order by name"}'
-error: not granted: nothing was run: connection `shop` does not grant everything the SQL needs: statement 1 (read data) needs permission `read-data`; nobody was asked. What a project file says about agents grants nothing: only the user can grant it, by answering "Always for This Connection" when the Ferris IDEA window asks a client of its MCP server over HTTP, or by adding to ~/.config/idecraft/agent-permissions.toml:
+$ ferris-idea call ~/shop run_sql '{"connection":"shop","sql":"select name, city from customer order by name"}'
+error: not granted: nothing was run: connection `shop` does not grant everything the SQL needs: statement 1 (read data) needs permission `read-data`; nobody was asked. What a project file says about agents grants nothing: only the user can grant it, by answering "Always for This Connection" when the Ferris IDEA window asks a client of its MCP server over HTTP, or by adding to ~/.config/ferris-idea/agent-permissions.toml:
 
 [[connection]]
 workspace = "~/shop"
@@ -200,7 +201,7 @@ The grant holds while the connection keeps this target.
    project's connection file allows no more:
 
 ```console
-$ idecraft call ~/shop run_sql '{"connection":"shop","sql":"select name, city from customer order by name"}'
+$ ferris-idea call ~/shop run_sql '{"connection":"shop","sql":"select name, city from customer order by name"}'
 {
   "results": [
     {
@@ -231,7 +232,7 @@ $ idecraft call ~/shop run_sql '{"connection":"shop","sql":"select name, city fr
   ],
   "not_run": 0
 }
-$ idecraft call ~/shop run_sql '{"connection":"shop","sql":"insert into customer (name, city) values ('\''Edsger Dijkstra'\'', '\''Rotterdam'\'')"}'
+$ ferris-idea call ~/shop run_sql '{"connection":"shop","sql":"insert into customer (name, city) values ('\''Edsger Dijkstra'\'', '\''Rotterdam'\'')"}'
 {
   "applied": false,
   "connection": "shop",
@@ -247,15 +248,15 @@ $ idecraft call ~/shop run_sql '{"connection":"shop","sql":"insert into customer
   ],
   "note": "nothing was run: a script with a statement that can change data or schema runs only with apply: true"
 }
-$ idecraft call ~/shop run_sql '{"connection":"shop","sql":"insert into customer (name, city) values ('\''Edsger Dijkstra'\'', '\''Rotterdam'\'')","apply":true}'
-error: not granted: nothing was run: the project file .idecraft/connections.toml allows agents at most `read-schema`, `read-data` on connection `shop` (its `ai` line; without one, reading only), so `modify-data` cannot be given; nobody was asked. Only the user can change that line, and the permission then still has to be granted by the user. The connection does not grant everything the SQL needs: statement 1 (modify data) needs permission `modify-data`.
+$ ferris-idea call ~/shop run_sql '{"connection":"shop","sql":"insert into customer (name, city) values ('\''Edsger Dijkstra'\'', '\''Rotterdam'\'')","apply":true}'
+error: not granted: nothing was run: the project file .ferris-idea/connections.toml allows agents at most `read-schema`, `read-data` on connection `shop` (its `ai` line; without one, reading only), so `modify-data` cannot be given; nobody was asked. Only the user can change that line, and the permission then still has to be granted by the user. The connection does not grant everything the SQL needs: statement 1 (modify data) needs permission `modify-data`.
 ```
 
 5. **The record.** Each of those calls left one line in the workspace's log, the refused ones
    too. The line holds lengths and classes, never the statement:
 
 ```console
-$ tail -n 2 ~/shop/.idecraft/agent-log.jsonl
+$ tail -n 2 ~/shop/.ferris-idea/agent-log.jsonl
 {"time":1794642664,"tool":"run_sql","call":true,"changes":["database"],"dry_run":true,"rights":[],"database":[{"connection":"shop","permissions":["modify-data"],"dry_run":true,"ok":true,"chars":73,"kinds":["modify-data"]}],"targets":{"connection":"shop"},"lengths":{"sql":73},"result":"ok"}
 {"time":1794642664,"tool":"run_sql","call":true,"changes":["database"],"dry_run":false,"rights":[],"database":[{"connection":"shop","permissions":["modify-data"],"dry_run":false,"ok":false,"refused":"project-file","chars":73,"kinds":["modify-data"]}],"targets":{"connection":"shop","apply":true},"lengths":{"sql":73},"result":"refused"}
 ```
@@ -266,7 +267,7 @@ $ tail -n 2 ~/shop/.idecraft/agent-log.jsonl
 Reading, without a window:
 
 ```console
-$ idecraft call ~/demo workspace_info
+$ ferris-idea call ~/demo workspace_info
 {
   "name": "demo",
   "root": "~/demo",
@@ -276,14 +277,14 @@ $ idecraft call ~/demo workspace_info
     "python": 1
   }
 }
-$ idecraft call ~/demo read_file '{"path":"app.py","start_line":1,"end_line":1}'
+$ ferris-idea call ~/demo read_file '{"path":"app.py","start_line":1,"end_line":1}'
 "def greet(name):"
 ```
 
 A change previews first. Applying it needs a right:
 
 ```console
-$ idecraft call ~/demo copy_file '{"path":"app.py","target_dir":".","new_name":"app_copy.py"}'
+$ ferris-idea call ~/demo copy_file '{"path":"app.py","target_dir":".","new_name":"app_copy.py"}'
 {
   "applied": false,
   "mode": "copy",
@@ -295,8 +296,8 @@ $ idecraft call ~/demo copy_file '{"path":"app.py","target_dir":".","new_name":"
   "free_name": "app_copy.py",
   "summary": "Copied app.py to app_copy.py"
 }
-$ idecraft call ~/demo copy_file '{"path":"app.py","target_dir":".","new_name":"app_copy.py","dry_run":false}'
-error: not granted: this workspace does not grant agents the `write` right (create, change, move or delete files of the workspace); nobody was asked. Only the user can grant it: answer "Always for This Workspace" when the Ferris IDEA window asks a client of its MCP server over HTTP, or add to ~/.config/idecraft/agent-permissions.toml:
+$ ferris-idea call ~/demo copy_file '{"path":"app.py","target_dir":".","new_name":"app_copy.py","dry_run":false}'
+error: not granted: this workspace does not grant agents the `write` right (create, change, move or delete files of the workspace); nobody was asked. Only the user can grant it: answer "Always for This Workspace" when the Ferris IDEA window asks a client of its MCP server over HTTP, or add to ~/.config/ferris-idea/agent-permissions.toml:
 
 [[workspace]]
 path = "~/demo"
@@ -309,7 +310,7 @@ A program runs only when the call says `dry_run:false`, the workspace grants `ru
 is trusted. With the right but without trust:
 
 ```console
-$ idecraft call ~/demo run_command '{"command":["python3","-c","print(6*7)"]}'
+$ ferris-idea call ~/demo run_command '{"command":["python3","-c","print(6*7)"]}'
 {
   "dry_run": true,
   "would_run": {
@@ -322,14 +323,14 @@ $ idecraft call ~/demo run_command '{"command":["python3","-c","print(6*7)"]}'
     "timeout": 120
   }
 }
-$ idecraft call ~/demo run_command '{"command":["python3","-c","print(6*7)"],"dry_run":false}'
-error: Safe mode: ~/demo is not trusted, so Ferris IDEA runs none of its code (build scripts, build-tool sync, run configurations, tests, tasks). Trust it with "Trust Project…" in the banner, `idecraft trust add <folder>`, or the MCP tool trust_project.
+$ ferris-idea call ~/demo run_command '{"command":["python3","-c","print(6*7)"],"dry_run":false}'
+error: Safe mode: ~/demo is not trusted, so Ferris IDEA runs none of its code (build scripts, build-tool sync, run configurations, tests, tasks). Trust it with "Trust Project…" in the banner, `ferris-idea trust add <folder>`, or the MCP tool trust_project.
 ```
 
-After `idecraft trust add ~/demo`:
+After `ferris-idea trust add ~/demo`:
 
 ```console
-$ idecraft call ~/demo run_command '{"command":["python3","-c","print(6*7)"],"dry_run":false}'
+$ ferris-idea call ~/demo run_command '{"command":["python3","-c","print(6*7)"],"dry_run":false}'
 {
   "name": "run_command",
   "exit_code": 0,
@@ -350,13 +351,13 @@ $ idecraft call ~/demo run_command '{"command":["python3","-c","print(6*7)"],"dr
 A file whose name commonly holds secrets is withheld:
 
 ```console
-$ idecraft call ~/demo read_file '{"path":".env"}'
+$ ferris-idea call ~/demo read_file '{"path":".env"}'
 error: withheld: `.env` is on the list of files whose names commonly hold secrets (environment file); its text is given only with the `secret-read` right. not granted: …
 ```
 
 </details>
 
-<sub>Console blocks on this page: real output of a debug build of commit <code>1e57cd9f</code>, run on 2026-11-14 with an isolated settings folder on two small folders (a SQLite file with one table; two files). Edited for the page in two ways only: the long paths of the test folders are written as <code>~/shop</code>, <code>~/demo</code> and <code>~/.config/idecraft</code> (in the output the paths are absolute), and the last block is cut at <code>…</code>. The summary line of the dry run of <code>copy_file</code> says "Copied" although nothing was copied; that is the tool's wording today.</sub>
+<sub>Console blocks on this page: real output of a debug build of commit <code>1e57cd9f</code>, run on 2026-11-14 with an isolated settings folder on two small folders (a SQLite file with one table; two files). Edited for the page in two ways only: the long paths of the test folders are written as <code>~/shop</code>, <code>~/demo</code> and <code>~/.config/ferris-idea</code> (in the output the paths are absolute), and the last block is cut at <code>…</code>. The summary line of the dry run of <code>copy_file</code> says "Copied" although nothing was copied; that is the tool's wording today.</sub>
 
 ### How It Differs
 
@@ -380,8 +381,8 @@ only.
 <details>
 <summary><b>Tools by area</b></summary>
 
-Grouped by tool name; each tool is counted in one group, and the groups add up to all 327 tools. A
-count says nothing about depth.
+Grouped by tool name; each tool is counted in one group, and the groups add up to the tools counted
+in [Development Status](#development-status) on that date. A count says nothing about depth.
 
 | Area | Tools |
 |---|---|
@@ -404,9 +405,10 @@ count says nothing about depth.
 
 - **Rights per workspace.** Reading files of the workspace and previews are free. Every tool that
   changes something (project files, the repository, your settings, the state of the window, a
-  process, a database) checks one of 15 rights: `write`, `vcs-write`, `run`, `http`, `debug`,
+  process, a database) checks one of 16 rights: `write`, `vcs-write`, `run`, `http`, `debug`,
   `remote`, `ssh`, `trust`, `quit`, `terminal-read`, `ports`, `ui`, `secret-read`, `settings`,
-  `recent-projects` (reading the folders of your other recent projects). One
+  `recent-projects` (reading the folders of your other recent projects), `agents` (starting
+  and steering the coding agents you configured for the agent host). One
   table has a row per tool that names what it changes and which rights it checks, and tests fail
   for a tool without a row and for a change without a right
   ([SPEC-0053](docs/specifications/SPEC-0053-agent-permissions.md)).
@@ -433,7 +435,7 @@ count says nothing about depth.
 - **Secrets by file name.** `.env` files, keys, key stores and similar are withheld without
   `secret-read`. Database passwords and API keys stay in the OS keychain and are never returned.
 - **A local log of every changing call.** Each call of a tool that changes something appends one
-  line to `.idecraft/agent-log.jsonl`, refused calls and dry runs included, and so does each call
+  line to `.ferris-idea/agent-log.jsonl`, refused calls and dry runs included, and so does each call
   that uses a database connection, also when it only reads. The line names the tool, what it
   changes, the rights checked and the result. It never holds file contents, statements, commands
   or values.
@@ -525,7 +527,7 @@ per version: [CHANGELOG.md](CHANGELOG.md). Evidence per row:
   <img src="docs/images/shot-2-database.png" width="100%" alt="Ferris IDEA window with a SQL console that joins orders and customers, the result grid below it with four rows of customer, orders and spent, and the Database tool window on the right showing a SQLite schema tree with tables, columns, keys, one index and views">
 </p>
 
-<p align="center"><sub>SQL console, result grid and schema tree on a SQLite sample database · demo project · theme IDECraft Dark · debug build of commit <code>970f18e3</code>, 2026-11-14</sub></p>
+<p align="center"><sub>SQL console, result grid and schema tree on a SQLite sample database · demo project · theme Ferris IDEA Dark · debug build of commit <code>970f18e3</code>, 2026-11-14</sub></p>
 
 <details>
 <summary><b>Workspace, window, settings, keymaps, themes</b></summary>
@@ -538,7 +540,7 @@ per version: [CHANGELOG.md](CHANGELOG.md). Evidence per row:
 | Open a folder as a project, recent projects, one window per project, Close Project with an unsaved-work question | Experimental | |
 | Layered settings (defaults, user, workspace) and a Settings dialog with search | Experimental | part of its hand tests open |
 | Keymap: the open macOS keymap bundled, Keymap page with search, recording and conflicts | Experimental | only the macOS keymap is measured |
-| Themes: IDECraft Dark (default), IDECraft Light, a dark theme from the open platform files; compact mode | Experimental | hand test failed in part, retested in part |
+| Themes: Ferris IDEA Dark (default), Ferris IDEA Light, a dark theme from the open platform files; compact mode | Experimental | hand test failed in part, retested in part |
 | Project trust and safe mode | Experimental | |
 | Own file formats with JSON Schemas | Works | [docs/formats](docs/formats/README.md) |
 | Read `.idea` project files | In progress | logic only, no window part |
@@ -553,7 +555,7 @@ per version: [CHANGELOG.md](CHANGELOG.md). Evidence per row:
   <img src="docs/images/shot-3-editor-completion.png" width="100%" alt="Ferris IDEA editor on a Java controller of a Spring sample project: the completion popup lists the methods of a repository after orders-dot, with the documentation of the selected method beside it; inspections are underlined in the code and counted at the top right; the Commit tool window is open on the left">
 </p>
 
-<p align="center"><sub>Member completion with documentation in a Java file, inspections in the editor · demo project · theme IDECraft Dark · debug build of commit <code>970f18e3</code>, 2026-11-14</sub></p>
+<p align="center"><sub>Member completion with documentation in a Java file, inspections in the editor · demo project · theme Ferris IDEA Dark · debug build of commit <code>970f18e3</code>, 2026-11-14</sub></p>
 
 | Feature | Status | Notes |
 |---|---|---|
@@ -623,7 +625,7 @@ per version: [CHANGELOG.md](CHANGELOG.md). Evidence per row:
   <img src="docs/images/shot-4-commit.png" width="100%" alt="Ferris IDEA Commit tool window listing two changed files and one unversioned file with a commit message, and beside it the side-by-side diff of ProductService.java between HEAD and the working copy with one changed block highlighted">
 </p>
 
-<p align="center"><sub>Commit tool window with a side-by-side diff · demo project · theme IDECraft Dark · debug build of commit <code>970f18e3</code>, 2026-11-14</sub></p>
+<p align="center"><sub>Commit tool window with a side-by-side diff · demo project · theme Ferris IDEA Dark · debug build of commit <code>970f18e3</code>, 2026-11-14</sub></p>
 
 | Feature | Status | Notes |
 |---|---|---|
@@ -692,7 +694,7 @@ you switch it on and name an endpoint.
 
 | Feature | Status | Notes |
 |---|---|---|
-| Project rooms on `idecraft serve`: one ordered journal, per-person undo, roles | In progress | server half only, no window part |
+| Project rooms on `ferris-idea serve`: one ordered journal, per-person undo, roles | In progress | server half only, no window part |
 | Mobile companion for iOS and Android: pair, browse, read a file | In progress | simulator and emulator only |
 | WebSocket endpoint over TLS 1.3 for a browser client | In progress | never run in a real browser |
 | Web IDE in the browser | Planned | |
@@ -704,7 +706,7 @@ you switch it on and name an endpoint.
 | Feature | Status |
 |---|---|
 | Remote Host tool window over the system `ssh`: browse, edit with upload on save, SSH terminal | Experimental |
-| Remote projects: a folder on an SSH host as a project window; `idecraft serve` on the host owns the documents, the window reconnects with replay | Experimental |
+| Remote projects: a folder on an SSH host as a project window; `ferris-idea serve` on the host owns the documents, the window reconnects with replay | Experimental |
 | Remote debugging on the host | In progress |
 | Containers, Kubernetes pods, WSL and hosts without SSH as project hosts | In progress |
 | Paired devices: pairing by QR or short code, rights per device, revoke | In progress |
@@ -718,12 +720,12 @@ you switch it on and name an endpoint.
 <details>
 <summary><b>What the code is written to enforce, and where to read it</b></summary>
 
-<!-- SCREENSHOT (missing, remote project): a remote project window: Project tree of a folder on an SSH host, editor, and the host-side terminal. Neutral example host name. Theme IDECraft Dark, 1440×900 at 2×, as docs/images/shot-6-remote.png. -->
+<!-- SCREENSHOT (missing, remote project): a remote project window: Project tree of a folder on an SSH host, editor, and the host-side terminal. Neutral example host name. Theme Ferris IDEA Dark, 1440×900 at 2×, as docs/images/shot-6-remote.png. -->
 
 **Every `ssh` Ferris IDEA starts.** Key exchange is limited to hybrid post-quantum methods
 (`mlkem768x25519-sha256` preferred, `sntrup761x25519-sha512` for OpenSSH 9.0 to 9.8), with strict
 host keys and batch mode. A host that offers neither is refused with a message;
-`IDECRAFT_SSH_KEX=mlkem` allows ML-KEM only. Code: `crates/remote/src/pq.rs`. One exception is on
+`FERRIS_IDEA_SSH_KEX=mlkem` allows ML-KEM only. Code: `crates/remote/src/pq.rs`. One exception is on
 by default: Git over SSH to Azure DevOps hosts may fall back to two classical Diffie-Hellman groups
 after the post-quantum methods (setting `git.ssh.allowClassicKexForAzureDevOps`,
 `crates/remote/src/pq_git.rs`).
@@ -775,7 +777,7 @@ project chose a different behavior
 ([180 recorded entries](docs/specifications/IMPROVEMENTS.md), the project's own assessment).
 
 This direction is written down in
-[ADR-0023](docs/adr/0023-idecraft-as-agent-harness.md), accepted on 2026-11-17. The
+[ADR-0023](docs/adr/0023-ferris-idea-as-agent-harness.md), accepted on 2026-11-17. The
 larger steps waited for a quality gate ([ADR-0015](docs/adr/0015-quality-gate-ai-native.md)),
 which the repository records as reached on 2026-11-16, with named limits
 ([gate report](docs/quality/QG-1-REPORT.md)). The database tools come first.
@@ -794,7 +796,7 @@ which the repository records as reached on 2026-11-16, with named limits
 | 2026-11-01 to 11-03 | v0.3.0 to v0.5.0 | Language server pool, run and debug, Java and Kotlin, profiler, remote hosts, containers; performance budgets, fuzz and soak tests |
 | 2026-11-04 | v0.6.0 | Own themes, project trust. Score 54.5 % |
 | 2026-11-05 | v0.7.0 | Side-by-side comparisons with the reference, operated by agents; MongoDB, Redis, connector catalogue. ADR-0023 proposed |
-| 2026-11-07 | v0.10.0 | Remote projects on `idecraft serve`; hybrid post-quantum key exchange on the remote paths (ADR-0025); UI driver |
+| 2026-11-07 | v0.10.0 | Remote projects on `ferris-idea serve`; hybrid post-quantum key exchange on the remote paths (ADR-0025); UI driver |
 | 2026-11-09 to 11-10 | v0.11.0 to v0.14.0 | Paired devices, more host types, project rooms (server half), first mobile apps, WebSocket endpoint over TLS 1.3 |
 | 2026-11-13 | v0.17.0 | Keymap coverage 46.5 % to 73.7 %; JavaScript and TypeScript compared against the reference |
 | 2026-11-14 | Unreleased | Changelists, file properties, TODO window, window layouts. After a security review: database permissions moved out of the project to the user, and every changing tool checks a right ([ADR-0031](docs/adr/0031-project-files-never-grant-agents.md)) |
@@ -930,7 +932,7 @@ named in the [gate report](docs/quality/QG-1-REPORT.md). The gate is not a stage
 | Version and stage | v1.0.0, 1.0 (`stable`) |
 | Age | first commit 2026-10-30; 20 tagged versions on 16 days |
 | Size | 29 crates, about 624,000 lines of Rust in 997 files |
-| For agents | 327 MCP tools, 15 workspace rights, 4 permissions per database connection |
+| For agents | 327 MCP tools, 16 workspace rights, 4 permissions per database connection |
 | Tests | 3,703 passed and 32 skipped in the Linux run of the workspace on 2026-11-15, including tests that return early without their external tool |
 | Feature rows compared side by side | 44 of 57; 12 more usable in the window or over MCP, 1 open |
 | Feature-presence score (own weighted measure, not a quality claim) | 94.2 %; 83.4 % of the weight compared side by side (the quality gate asks for 85 % and 50 %) |
@@ -945,7 +947,7 @@ Measured on `main` at commit `110652ee`, 2026-11-17, unless a date is given.
 - Age and versions: `git log --reverse`, `git tag`, the headings of CHANGELOG.md.
 - Size: `git ls-files '*.rs' ':!vendor' | xargs cat | wc -l`. Raw lines; tests, comments and blank
   lines included; the UI toolkit kept under `vendor/` is not counted.
-- Tools: `tools/list` of `idecraft mcp` on an empty folder, debug build. Rights:
+- Tools: `tools/list` of `ferris-idea mcp` on an empty folder, debug build. Rights:
   `crates/core/src/permissions.rs`.
 - Tests: the build server's run of `cargo test --workspace` on Linux at commit `c92f957c`, cited
   from the [gate report](docs/quality/QG-1-REPORT.md); the 32 skipped need a tool the build server
@@ -1002,14 +1004,14 @@ notarized DMG for macOS on Apple Silicon. On every other platform, build from so
 | Desktop window, macOS on Apple Silicon | Experimental: built, self-tested, hand-tested |
 | Desktop window, Linux (X11, Wayland) | In progress: headless tests run; window self-test passed once on a virtual X display; not checked on a real desktop |
 | Desktop window, Windows | Planned |
-| Headless backend `idecraft serve`, macOS, Linux, Windows | In progress: build script exists; not every target was run |
+| Headless backend `ferris-idea serve`, macOS, Linux, Windows | In progress: build script exists; not every target was run |
 | macOS app bundle | Experimental: local, ad-hoc signed, for the machine that built it |
 | iOS and Android apps | In progress: simulator and emulator only |
 
 Verified on one machine: an Apple Silicon Mac with macOS 27. External programs Ferris IDEA calls when
 you use the feature: `git`, `ssh`, `kubectl`, and per language a server and a debug adapter.
 
-<!-- CAPTURE E (measurement): on the build Mac, for the tagged version: size of target/ after `cargo build -p idecraft`, resident memory of the window idle on a sample project, minimum macOS version the binary starts on. Add as a three-row table here, labelled "measured on one machine". -->
+<!-- CAPTURE E (measurement): on the build Mac, for the tagged version: size of target/ after `cargo build -p ferris-idea`, resident memory of the window idle on a sample project, minimum macOS version the binary starts on. Add as a three-row table here, labelled "measured on one machine". -->
 
 | Language | Language server | Debug adapter |
 |---|---|---|
@@ -1045,32 +1047,32 @@ driver; without a graphics driver that brings one, Mesa's software driver works
 Clone the repository with `git clone` and the URL GitHub shows under **Code**, then `cd` into the
 new folder. In that checkout:
 
-1. Build: `cargo build -p idecraft` (a cold debug build of a fresh clone took 7 min 7 s on an
+1. Build: `cargo build -p ferris-idea` (a cold debug build of a fresh clone took 7 min 7 s on an
    Apple Silicon Mac, measured once).
-2. Check: `target/debug/idecraft --version`
-3. Open the window: `target/debug/idecraft ui /path/to/project`
-4. Or call a tool without a window: `target/debug/idecraft call /path/to/project workspace_info`
+2. Check: `target/debug/ferris-idea --version`
+3. Open the window: `target/debug/ferris-idea ui /path/to/project`
+4. Or call a tool without a window: `target/debug/ferris-idea call /path/to/project workspace_info`
 5. Or connect an agent: [Try It in Five Minutes](#try-it-in-five-minutes)
 
 Notes:
 
-- `idecraft` has no `--help` yet; an unknown argument prints one usage line.
-- On macOS, `scripts/bundle-macos.sh` makes a release build (`cargo build --release -p idecraft`)
-  and puts a local, ad-hoc signed `IDECraft.app` into `target/bundle/macos/`; start it with
-  `open target/bundle/macos/IDECraft.app`. It is not notarized and runs on the Mac that built it.
-- `idecraft ui --selftest` opens a window on a temporary folder and checks it with key presses
+- `ferris-idea` has no `--help` yet; an unknown argument prints one usage line.
+- On macOS, `scripts/bundle-macos.sh` makes a release build (`cargo build --release -p ferris-idea`)
+  and puts a local, ad-hoc signed `FerrisIDEA.app` into `target/bundle/macos/`; start it with
+  `open target/bundle/macos/FerrisIDEA.app`. It is not notarized and runs on the Mac that built it.
+- `ferris-idea ui --selftest` opens a window on a temporary folder and checks it with key presses
   and clicks. It takes over the screen for a few minutes; do not type or click while it runs. Its
   last line is the result, such as `{"checks":1063,"failed":[],"skipped":[]}`.
 - `cargo test --workspace` is heavy and many tests need external tools; for a change, run
   `scripts/check-pr.sh` ([CONTRIBUTING.md](CONTRIBUTING.md)).
 
 Verified for this page on 2026-11-16, in a fresh clone on macOS 27 (Apple Silicon): `cargo build
--p idecraft`, `idecraft --version`, `idecraft ui`, `idecraft mcp`, `idecraft call` and
+-p ferris-idea`, `ferris-idea --version`, `ferris-idea ui`, `ferris-idea mcp`, `ferris-idea call` and
 `scripts/bundle-macos.sh`; the window self-test of the bundle passed 1063 of 1063 checks. The
 Linux packages are the ones the build scripts of the bundled C libraries and the window toolkit
 need, as the Linux self-test machine installs them (`scripts/linux-ui-selftest-lima.sh`). On
-Ubuntu 24.04 (x86_64, gcc 13) on the same day: `cargo build -p idecraft`, `idecraft --version`, `idecraft call`, `idecraft mcp` and the database steps of Try It
-in Five Minutes; `idecraft ui` and its self-test were not re-run there, because that machine has
+Ubuntu 24.04 (x86_64, gcc 13) on the same day: `cargo build -p ferris-idea`, `ferris-idea --version`, `ferris-idea call`, `ferris-idea mcp` and the database steps of Try It
+in Five Minutes; `ferris-idea ui` and its self-test were not re-run there, because that machine has
 no display.
 
 ## Configuration and Files
@@ -1078,24 +1080,24 @@ no display.
 <details>
 <summary><b>Where Ferris IDEA keeps things, and how to remove them</b></summary>
 
-Your settings folder is `$IDECRAFT_CONFIG_DIR`, else `$XDG_CONFIG_HOME/idecraft`, else
-`~/.config/idecraft`.
+Your settings folder is `$FERRIS_IDEA_CONFIG_DIR`, else `$XDG_CONFIG_HOME/ferris-idea`, else
+`~/.config/ferris-idea`.
 
 | File | Place | Holds |
 |---|---|---|
 | `settings.toml` | settings folder | your IDE settings |
 | `agent-permissions.toml` | settings folder | the rights you granted agents, per workspace |
 | `trusted-projects.toml` | settings folder | the projects and folders you trust |
-| `keymaps/IDECraft.toml` | settings folder | your own shortcuts |
+| `keymaps/FerrisIDEA.toml` | settings folder | your own shortcuts |
 | `window-layouts.json` | settings folder | named window layouts |
 | `mcp-http/<pid>.json` | settings folder | address and token of a running window's MCP server; mode 0600 |
-| `.idecraft/run.toml`, `breakpoints.toml`, `bookmarks.toml`, `changelists.toml` | workspace | run configurations and per-project state |
-| `.idecraft/connections.toml`, `stores.toml` | workspace | database and store profiles, without passwords |
-| `.idecraft/agent-log.jsonl` | workspace | the log of runs and requests by agents |
+| `.ferris-idea/run.toml`, `breakpoints.toml`, `bookmarks.toml`, `changelists.toml` | workspace | run configurations and per-project state |
+| `.ferris-idea/connections.toml`, `stores.toml` | workspace | database and store profiles, without passwords |
+| `.ferris-idea/agent-log.jsonl` | workspace | the log of runs and requests by agents |
 
 Passwords and API keys are in the OS keychain, not in these files. Formats and schemas:
 [docs/formats](docs/formats/README.md). To remove Ferris IDEA's data, delete the settings folder and
-the `.idecraft` folder of each project, and remove its entries from the keychain.
+the `.ferris-idea` folder of each project, and remove its entries from the keychain.
 
 </details>
 
@@ -1111,7 +1113,7 @@ the `.idecraft` folder of each project, and remove its entries from the keychain
 | Decisions | [docs/adr](docs/adr/README.md) |
 | Specifications and traceability | [docs/specifications](docs/specifications/README.md) |
 | Agent side: rights, HTTP transport, trust, UI driver | [SPEC-0053](docs/specifications/SPEC-0053-agent-permissions.md), [SPEC-0221](docs/specifications/SPEC-0221-mcp-http-transport.md), [SPEC-0278](docs/specifications/SPEC-0278-project-trust-and-safe-mode.md), [SPEC-0319](docs/specifications/SPEC-0319-ui-driver.md) |
-| Direction: agent harness, later phase | [ADR-0023](docs/adr/0023-idecraft-as-agent-harness.md), [vision](docs/architecture/AI_NATIVE_VISION.md) |
+| Direction: agent harness, later phase | [ADR-0023](docs/adr/0023-ferris-idea-as-agent-harness.md), [vision](docs/architecture/AI_NATIVE_VISION.md) |
 | Remote, mobile, web | [REMOTE_AND_MOBILE.md](docs/architecture/REMOTE_AND_MOBILE.md), [ADR-0025](docs/adr/0025-network-security-for-remote-connections.md) |
 | Feature matrix and score | [FEATURE_MATRIX.md](docs/research/FEATURE_MATRIX.md), [PARITY.md](docs/research/PARITY.md) |
 | Database connectors | [docs/connectors](docs/connectors/README.md) |

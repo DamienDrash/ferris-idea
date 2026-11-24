@@ -1,6 +1,6 @@
 # SPEC-0294: Tooltips in the application window
 
-- **Version:** 5 · **Date:** 2026-11-14 (v5: the tooltips of the caret line's gutter icons from the keyboard, behaviour 12, AK-12; eighth package of docs/research/KEYMAP_COVERAGE.md; v4: no tooltip next to a menu a tool window opens itself, a press on the control hides its tooltip — window check, the "More" tooltip beside the Run window's ⋮ menu; v3: no tooltip or problem card over any popup; v2: no tooltip over an open menu, popup or change bar, behaviour 11)
+- **Version:** 6 · **Date:** 2026-11-18 (v6: a tooltip goes when the pointer leaves its control, also a control drawn without a hover change such as the active editor tab, and when the pointer leaves the window, behaviour 13, AK-13; window check OBS-0096 TT1); 2026-11-14 (v5: the tooltips of the caret line's gutter icons from the keyboard, behaviour 12, AK-12; eighth package of docs/research/KEYMAP_COVERAGE.md; v4: no tooltip next to a menu a tool window opens itself, a press on the control hides its tooltip — window check, the "More" tooltip beside the Run window's ⋮ menu; v3: no tooltip or problem card over any popup; v2: no tooltip over an open menu, popup or change bar, behaviour 11)
 - **Sources:** GEN (desktop applications explain icon-only controls with a small text that appears
   when the pointer rests on the control for a moment and goes away when it leaves; the text names the
   command and, when one is bound, its keyboard shortcut), DOC (the reference's help describes that
@@ -68,7 +68,7 @@ without the menus and compared control by control with the reference.
    by 4 px padding, 12 px text, at most 400 px wide, each line on one line (a longer one ends in …,
    detail lines are cut to 120 characters); the shortcut follows the name in the theme's shortcut
    colour; detail lines below in the same muted colour. It follows the
-   theme chosen (IDECraft Dark/Light, Islands, Darcula/Light; ADR-0009, ADR-0018). [OSS]
+   theme chosen (Ferris IDEA Dark/Light, Islands, Darcula/Light; ADR-0009, ADR-0018). [OSS]
 9. **One registry.** The icon-only controls of the toolbars, the main toolbar, the find bar, editor
    tabs and status bar are declared in one table per area with their name, title and action. A
    toolbar button cannot be built without a declared entry (a missing entry is a build error), so
@@ -90,6 +90,15 @@ without the menus and compared control by control with the reference.
     the other in the order they are drawn, title first, then the shortcut in brackets and the
     detail lines. A line without icons says "No gutter icons on this line" in the status bar.
     [OSS: id and key of the bundled keymaps; GEN]
+
+13. **v6 – Leaving the control or the window:** behaviour 6's "disappears when the pointer
+    leaves the control" holds for every control, also one that does not change its look when
+    the pointer enters or leaves it (the active editor tab, whose tooltip is its path): while a
+    tooltip is shown, each pointer move checks whether its control is still under the pointer.
+    When the pointer leaves the window, the shown tooltip goes at once, also when it left
+    straight from the control; it comes back when the pointer rests on a control again. Before
+    v6 the active tab's path stayed shown after the pointer had left the tab and the window
+    (OBS-0096 TT1). [GEN]
 
 ## Acceptance criteria
 - **AK-1** Given the macOS keymap, the label of Rerun is `Rerun ⌘R`; given the default keymap,
@@ -122,13 +131,17 @@ without the menus and compared control by control with the reference.
   line, the hint shows the bookmark's tooltip; on a line without icons the status bar says so
   (`eighth_package_keymap.rs::the_gutter_tooltip_is_shown_from_the_keyboard`).
 
+- **AK-13 (v6, behaviour 13)** In a window of the test harness: resting on the active editor tab
+  shows its path; moving the pointer to the editor below hides it; resting on the tab again and
+  the pointer leaving the window hide it; resting once more shows it again
+  (`file_watch_fw1.rs::the_tab_tooltip_goes_with_the_pointer`). On screen: not checked.
 ## Out of scope
 Rich tooltips with links or actions (the reference's help tooltips and "Got It" hints), tooltips of
 tree rows and table cells, error and warning tooltips on the editor text (SPEC-0070 shows those on
 hover in the editor), the delay setting, tooltips in the native macOS menu bar (the system draws them). v5: `EditorFocusGutter` (the keyboard focus in the gutter, moving from icon to icon): the gutter has no focus of its own yet.
 
 ## Known deviations from the reference
-Texts are IDECraft's own wording: action names come from the main menus or the action table, other
+Texts are Ferris IDEA's own wording: action names come from the main menus or the action table, other
 texts are written here. The shown delay is fixed at 500 ms. A key press always hides the tooltip.
 Placement follows the toolkit's rule (below right of the pointer, flipped at the window edges) with
 a gap below the pointer, so the pointer never covers the text.

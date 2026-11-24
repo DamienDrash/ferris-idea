@@ -68,7 +68,7 @@ markers.
 ## Acceptance criteria
 - **AK-1** Visible markers clipped to the visible lines, deletion on the boundary (unit test);
   `Repo::head_text` (via the existing diff tests of SPEC-0032).
-- **AK-2** In a real window (`idecraft ui --selftest`): the changed line of a committed file opened from
+- **AK-2** In a real window (`ferris-idea ui --selftest`): the changed line of a committed file opened from
   the Git fixture shows one modified marker; after deleting a line by key, the editor shows a deletion
   marker without saving.
 - **AK-3** Look by hand next to the reference.
@@ -95,5 +95,5 @@ window (partial commit of several chosen changes), resizing the bar.
 
 ## Known deviations from the reference
 Not compared side by side yet; the shape of the deletion mark is our own. (v3) The bar's buttons use
-IDECraft's own icons and labels; the commit field commits at once instead of opening the commit
+Ferris IDEA's own icons and labels; the commit field commits at once instead of opening the commit
 window with the change preselected.

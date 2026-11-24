@@ -1,4 +1,4 @@
-// The IDECraft Android app (ADR-0029, SPEC-0326): Jetpack Compose over the Rust core.
+// The Ferris IDEA Android app (ADR-0029, SPEC-0326): Jetpack Compose over the Rust core.
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -14,15 +14,15 @@ val workspaceVersion: String =
 
 // A debug build is signed only with a throwaway key that scripts/build-mobile.sh makes in a temp
 // folder, never with the shared ~/.android/debug.keystore. The release APK stays unsigned.
-val throwawayStore: String? = providers.environmentVariable("IDECRAFT_ANDROID_STORE").orNull
-val throwawayPassword: String? = providers.environmentVariable("IDECRAFT_ANDROID_STORE_PASSWORD").orNull
+val throwawayStore: String? = providers.environmentVariable("FERRIS_IDEA_ANDROID_STORE").orNull
+val throwawayPassword: String? = providers.environmentVariable("FERRIS_IDEA_ANDROID_STORE_PASSWORD").orNull
 
 android {
-    namespace = "dev.idecraft.mobile"
+    namespace = "dev.ferrisidea.mobile"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "dev.idecraft.mobile"
+        applicationId = "dev.ferrisidea.mobile"
         // 28: Keystore keys that need an unlocked device (KeystoreVault).
         minSdk = 28
         targetSdk = 35
@@ -36,7 +36,7 @@ android {
             if (throwawayStore != null && throwawayPassword != null) {
                 storeFile = file(throwawayStore)
                 storePassword = throwawayPassword
-                keyAlias = "idecraft-throwaway"
+                keyAlias = "ferris-idea-throwaway"
                 keyPassword = throwawayPassword
             } else {
                 // Points nowhere, so a build outside the script fails instead of using a shared key.

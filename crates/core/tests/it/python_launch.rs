@@ -1,11 +1,11 @@
-//! SPEC-0050 v2 AK-5: every Python launch IDECraft builds uses the workspace's selected
+//! SPEC-0050 v2 AK-5: every Python launch Ferris IDEA builds uses the workspace's selected
 //! interpreter; explicit paths stay as written; without any interpreter the start says why.
 #![cfg(unix)]
 
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
-use idecraft_core::{
+use ferris_idea_core::{
     NO_PYTHON, PythonSearch, RunConfig, Workspace, context_config, launch_command,
     load_run_configs, python_environments, read_project, run_config, run_one, run_plan,
     save_interpreter, show_python, start_blocker, suggest_run_configs,
@@ -16,9 +16,9 @@ struct Root(PathBuf);
 impl Root {
     fn new(tag: &str) -> Self {
         let p =
-            std::env::temp_dir().join(format!("idecraft-pylaunch-{tag}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("ferris-idea-pylaunch-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&p);
-        std::fs::create_dir_all(p.join(".idecraft")).unwrap();
+        std::fs::create_dir_all(p.join(".ferris-idea")).unwrap();
         Self(p.canonicalize().unwrap())
     }
     fn path(&self) -> &Path {
@@ -68,6 +68,7 @@ fn config(name: &str, command: &[&str]) -> RunConfig {
         allow_multiple: false,
         before_launch: Vec::new(),
         verbatim: false,
+        http: None,
     }
 }
 
@@ -113,7 +114,7 @@ fn every_python_launch_uses_the_project_environment() {
 
     // A stored configuration with a bare `python3`: planned, shown and run with the environment.
     std::fs::write(
-        root.path().join(".idecraft/run.toml"),
+        root.path().join(".ferris-idea/run.toml"),
         "[[run]]\nname = \"app\"\ncommand = [\"python3\", \"main.py\", \"x\"]\n",
     )
     .unwrap();

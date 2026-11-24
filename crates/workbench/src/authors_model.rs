@@ -2,7 +2,7 @@
 //! hint per declaration with the lines it covers, moved by edits until the next read, and the `*`
 //! of a declaration taken from the current change markers.
 
-use idecraft_vcs::{CodeAuthor, LineChange, author_label, changed_within};
+use ferris_idea_vcs::{CodeAuthor, LineChange, author_label, changed_within};
 
 /// One declaration's author as the editor keeps it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -96,7 +96,7 @@ impl AuthorHints {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use idecraft_vcs::LineChangeKind;
+    use ferris_idea_vcs::LineChangeKind;
 
     fn author(line: usize, start: usize, end: usize, who: &str, others: usize) -> CodeAuthor {
         CodeAuthor {

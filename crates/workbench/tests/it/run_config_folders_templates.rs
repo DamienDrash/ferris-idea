@@ -5,16 +5,17 @@
 
 #![cfg(target_os = "macos")]
 
+use ferris_idea_core::{BeforeTask, RunTemplate, parse_run_configs, parse_run_templates};
+use ferris_idea_workbench::{RunConfigDialog, WorkbenchView, semantics};
 use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext, point, px};
-use idecraft_core::{BeforeTask, RunTemplate, parse_run_configs, parse_run_templates};
-use idecraft_workbench::{RunConfigDialog, WorkbenchView, semantics};
 
 fn workspace(tag: &str) -> std::path::PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-runcfg-{tag}-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-runcfg-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir_all(root.join(".idecraft")).unwrap();
+    std::fs::create_dir_all(root.join(".ferris-idea")).unwrap();
     std::fs::write(
-        root.join(".idecraft/run.toml"),
+        root.join(".ferris-idea/run.toml"),
         "# The API.\n[[run]]\nname = \"api\"\ncommand = [\"echo\", \"api\"]\n\n[[run]]\nname = \"web\"\ncommand = [\"echo\", \"web\"]\n",
     )
     .unwrap();
@@ -31,7 +32,7 @@ fn open(
     &'static mut VisualTestContext,
 ) {
     semantics::set_consumer(semantics::Consumer::SelfTest, true);
-    idecraft_workbench::hit_targets::enable();
+    ferris_idea_workbench::hit_targets::enable();
     let file = root.join("main.js");
     let root = root.to_path_buf();
     let window = cx.add_window(move |_, cx| WorkbenchView::new(&root, cx));
@@ -80,7 +81,7 @@ fn has(id: &str, cx: &mut VisualTestContext) -> bool {
 }
 
 fn run_toml(root: &std::path::Path) -> String {
-    std::fs::read_to_string(root.join(".idecraft/run.toml")).unwrap()
+    std::fs::read_to_string(root.join(".ferris-idea/run.toml")).unwrap()
 }
 
 /// AK-9: New Folder, Rename, moving configurations in and out, Remove Folder; Apply writes the

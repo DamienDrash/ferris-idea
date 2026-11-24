@@ -36,3 +36,7 @@ Binding for every AI agent working in this repository. `CLAUDE.md` is a link to 
 12. Security first: wherever a design, default or dependency choice affects security, take the more
     secure option; a weaker option needs the project owner's explicit decision. Remote paths follow
     ADR-0025.
+13. Shared lists stay untouched by parallel work (ADR-0035): a new MCP tool module keeps its router,
+    its rows of the effects table and its open-files entries in its own file; traceability rows go
+    to `docs/specifications/traceability.d/`; a new specification or ADR number is reserved first in
+    `docs/specifications/RESERVED.md` (`scripts/spec-number.sh next` prints the next free one).

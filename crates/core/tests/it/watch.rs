@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::sync::mpsc::Receiver;
 use std::time::{Duration, Instant};
 
-use idecraft_core::{FileChange, Workspace, watch};
+use ferris_idea_core::{FileChange, Workspace, watch};
 
 /// Collects batches until `want` shows up (or two seconds pass).
 fn wait_for(rx: &Receiver<Vec<FileChange>>, want: &FileChange) -> Vec<FileChange> {
@@ -23,7 +23,7 @@ fn wait_for(rx: &Receiver<Vec<FileChange>>, want: &FileChange) -> Vec<FileChange
 
 #[test]
 fn watcher_reports_create_modify_rename_delete() {
-    let root = std::env::temp_dir().join(format!("idecraft-watch-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-watch-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src")).unwrap();
     std::fs::create_dir_all(root.join("target")).unwrap();

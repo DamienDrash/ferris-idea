@@ -4,7 +4,7 @@
 use std::path::Path;
 use std::time::Duration;
 
-use idecraft_ui::theme::KeyFamily;
+use ferris_idea_ui::theme::KeyFamily;
 use serde::Serialize;
 use serde_json::{Value, json};
 
@@ -91,7 +91,7 @@ pub fn decode(
             .map(|(_, m)| m.clone())
             .collect();
         let refs: Vec<&str> = names.iter().map(String::as_str).collect();
-        let key = idecraft_ui::theme::semantic_key_in(token_type, &refs, family);
+        let key = ferris_idea_ui::theme::semantic_key_in(token_type, &refs, family);
         out.push(SemanticToken {
             line,
             start: from,
@@ -144,7 +144,7 @@ fn kotlin_roles(tokens: &mut Vec<SemanticToken>, text: &str) {
         if let Some(role) = role {
             t.token_type = role.to_owned();
             let refs: Vec<&str> = t.modifiers.iter().map(String::as_str).collect();
-            t.key = idecraft_ui::theme::semantic_key_in(role, &refs, KeyFamily::Kotlin);
+            t.key = ferris_idea_ui::theme::semantic_key_in(role, &refs, KeyFamily::Kotlin);
         }
     }
 }

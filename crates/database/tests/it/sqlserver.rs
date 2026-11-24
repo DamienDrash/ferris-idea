@@ -1,19 +1,20 @@
-//! SPEC-0116 against a real SQL Server. Set `IDECRAFT_TEST_SQLSERVER` to a SPEC-0008 URL of the
+//! SPEC-0116 against a real SQL Server. Set `FERRIS_IDEA_TEST_SQLSERVER` to a SPEC-0008 URL of the
 //! reference database (e.g. `sqlserver://idecraft@127.0.0.1:1433/inventory`) and the password in
-//! `IDECRAFT_TEST_SQLSERVER_PASSWORD` or a file named by `IDECRAFT_TEST_SQLSERVER_PASSWORD_FILE`
+//! `FERRIS_IDEA_TEST_SQLSERVER_PASSWORD` or a file named by `FERRIS_IDEA_TEST_SQLSERVER_PASSWORD_FILE`
 //! (`mssql.sh` of the reference environment); without them these tests pass without doing anything.
 //! Tests that create objects use their own `ide_*` names and drop them again.
 
-use idecraft_database::{
+use ferris_idea_database::{
     ConnectionProfile, Credentials, Dialect, OnError, Outcome, Secret, Session, explain, introspect,
 };
 
 async fn session(read_only: bool) -> Option<Session> {
-    let url = std::env::var("IDECRAFT_TEST_SQLSERVER").ok()?;
-    let password = std::env::var("IDECRAFT_TEST_SQLSERVER_PASSWORD")
+    let url = ferris_idea_core::product_var("FERRIS_IDEA_TEST_SQLSERVER").ok()?;
+    let password = ferris_idea_core::product_var("FERRIS_IDEA_TEST_SQLSERVER_PASSWORD")
         .ok()
         .or_else(|| {
-            let file = std::env::var("IDECRAFT_TEST_SQLSERVER_PASSWORD_FILE").ok()?;
+            let file =
+                ferris_idea_core::product_var("FERRIS_IDEA_TEST_SQLSERVER_PASSWORD_FILE").ok()?;
             Some(std::fs::read_to_string(file).ok()?.trim().to_owned())
         })?;
     let mut profile = ConnectionProfile::from_url("reference", &url).unwrap();
@@ -217,7 +218,9 @@ async fn routines_and_triggers() {
             .all(|o| !matches!(o.outcome, Outcome::Error(_))),
         "{created:?}"
     );
-    let objects = idecraft_database::schema_objects(&s, None).await.unwrap();
+    let objects = ferris_idea_database::schema_objects(&s, None)
+        .await
+        .unwrap();
     let find = |name: &str| objects.iter().find(|o| o.name == name).cloned();
     assert_eq!(find("ide_obj_p").unwrap().kind, "procedure");
     assert_eq!(find("ide_obj_f").unwrap().kind, "function");
@@ -227,7 +230,7 @@ async fn routines_and_triggers() {
         ("trigger", Some("ide_obj"))
     );
     assert_eq!(trigger.detail.as_deref(), Some("AFTER INSERT OR UPDATE"));
-    let definition = idecraft_database::object_definition(&s, None, &find("ide_obj_f").unwrap())
+    let definition = ferris_idea_database::object_definition(&s, None, &find("ide_obj_f").unwrap())
         .await
         .unwrap()
         .unwrap();

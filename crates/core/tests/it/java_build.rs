@@ -3,14 +3,14 @@
 
 use std::path::{Path, PathBuf};
 
-use idecraft_core::{
+use ferris_idea_core::{
     RunConfigs, RunKind, TestStatus, Workspace, read_project, run_config, run_one,
     suggest_run_configs, test_method_config,
 };
 
 const POM: &str = r#"<project xmlns="http://maven.apache.org/POM/4.0.0">
   <modelVersion>4.0.0</modelVersion>
-  <groupId>dev.idecraft</groupId>
+  <groupId>dev.ferrisidea</groupId>
   <artifactId>calc</artifactId>
   <version>1.0</version>
   <properties>
@@ -50,7 +50,7 @@ fn has(tool: &str) -> bool {
 }
 
 fn project(tag: &str) -> PathBuf {
-    let p = std::env::temp_dir().join(format!("idecraft-java-{tag}-{}", std::process::id()));
+    let p = std::env::temp_dir().join(format!("ferris-idea-java-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&p);
     std::fs::create_dir_all(p.join("src/main/java/calc")).unwrap();
     std::fs::create_dir_all(p.join("src/test/java/calc")).unwrap();

@@ -14,10 +14,8 @@ use crate::java_structure::{
 };
 use crate::lsp::LspError;
 use crate::ts_structure::{DeclarationMark, MarkKind, MarkTarget};
-use crate::usages::{UsageCount, distinct_places};
+use crate::usages::{Counted, Plan, UsageCount, distinct_places};
 
-/// At most this many declarations counted per file (behaviour of `SPEC-0320` 5).
-const MAX_DECLARATIONS: usize = 200;
 /// At most this many related types followed from one type.
 const MAX_RELATED: usize = 500;
 
@@ -59,14 +57,7 @@ pub fn counted_declarations(symbols: &Value) -> Vec<UsageCount> {
                 && let (Some(line), Some(character)) =
                     (at["line"].as_u64(), at["character"].as_u64())
             {
-                out.push(UsageCount {
-                    name: name.to_owned(),
-                    kind: k,
-                    line,
-                    character,
-                    count: 0,
-                    inheritors: 0,
-                });
+                out.push(UsageCount::new(name, k, line, character));
             }
             walk(&s["children"], out);
         }
@@ -74,7 +65,6 @@ pub fn counted_declarations(symbols: &Value) -> Vec<UsageCount> {
     let mut out = Vec::new();
     walk(symbols, &mut out);
     out.sort_by_key(|u| (u.line, u.character));
-    out.truncate(MAX_DECLARATIONS);
     out
 }
 
@@ -248,15 +238,17 @@ async fn marks(
 }
 
 /// Usage counts of a Java file: types and members, unused ones too, with inheritors at types
-/// (`SPEC-0292` v5).
+/// (`SPEC-0292` v5); those `plan` chooses, in its order, within `wait` (v8 behaviour 12).
 pub async fn usage_counts_in(
     root: &Path,
     file: &Path,
     text: Option<&str>,
     wait: Duration,
-) -> Result<Vec<UsageCount>, LspError> {
+    plan: &Plan,
+) -> Result<Counted, LspError> {
+    let deadline = Instant::now() + wait;
     let mut o = Opened::open_text(root, file, text, wait).await?;
-    let result = counts(&mut o, &project_root(root), Instant::now() + wait).await;
+    let result = counts(&mut o, &project_root(root), deadline, plan).await;
     o.close().await;
     result
 }
@@ -265,7 +257,8 @@ async fn counts(
     o: &mut Opened,
     project: &Path,
     deadline: Instant,
-) -> Result<Vec<UsageCount>, LspError> {
+    plan: &Plan,
+) -> Result<Counted, LspError> {
     let uri = o.uri.clone();
     let symbols = o
         .ask(
@@ -274,12 +267,14 @@ async fn counts(
         )
         .await?;
     let mut found = Vec::new();
-    for mut d in counted_declarations(&symbols) {
+    let mut complete = true;
+    for mut d in plan.order(counted_declarations(&symbols)) {
         let left = deadline.saturating_duration_since(Instant::now());
         if left.is_zero() {
+            complete = false;
             break;
         }
-        let references = o
+        let references = match o
             .ask_bounded(
                 "textDocument/references",
                 json!({"textDocument": {"uri": uri},
@@ -288,7 +283,16 @@ async fn counts(
                 left,
                 None,
             )
-            .await?;
+            .await
+        {
+            Ok(r) => r,
+            // The budget ended within the question: what was counted stands (v8 behaviour 12).
+            Err(LspError::Timeout(..)) if !found.is_empty() => {
+                complete = false;
+                break;
+            }
+            Err(e) => return Err(e),
+        };
         d.count = distinct_places(&references);
         if matches!(d.kind, "class" | "interface" | "enum" | "record")
             && let Some(item) = prepare(o, d.line, d.character).await?
@@ -297,7 +301,7 @@ async fn counts(
         }
         found.push(d);
     }
-    Ok(found)
+    Ok(Counted::new(found, complete))
 }
 
 #[cfg(test)]

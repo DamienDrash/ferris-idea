@@ -1,6 +1,9 @@
 # ADR-0010: Project name IDECraft and separate brand domain
 
-- **Status:** accepted · 2026-10-31 · supersedes the naming part of ADR-0001
+- **Status:** accepted · 2026-10-31 · supersedes the naming part of ADR-0001 · the name is superseded
+  on 2026-11-22: the project owner renamed the product to **Ferris IDEA** (decision in the
+  status file; step 1 the shown name, step 2 the technical names). The design
+  domains below stay in force.
 - **Context:** The project owner set the official name **IDECraft**, repository `idecraft`, tagline "The IDE
   for developers.", and asked for repository presentation in the style of the ArtCraft project
   family while the application keeps IntelliJ IDEA Ultimate as its interaction reference.

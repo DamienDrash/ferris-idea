@@ -17,9 +17,9 @@ the Database tool window, and agents do the same through MCP — under the same 
 permission rules as SQL connections.
 
 ## Behaviour
-1. **Store profiles** live in `.idecraft/stores.toml`, which starts with the ADR-0021 envelope
-   `[idecraft] kind = "stores"`, `format = 1` (a wrong kind is refused; a newer format is refused
-   with "written by a newer IDECraft, format n; this version reads up to 1"; a file without the
+1. **Store profiles** live in `.ferris-idea/stores.toml`, which starts with the ADR-0021 envelope
+   `[ferris-idea] kind = "stores"`, `format = 1` (a wrong kind is refused; a newer format is refused
+   with "written by a newer Ferris IDEA, format n; this version reads up to 1"; a file without the
    envelope is read as format 1 and gets it on the next save), followed by `[[store]]` entries: `id`, `name`,
    `system` (`mongodb` | `redis`), `url` (never with a password), `read_only`, `secret` (keychain
    entry, same service as SQL profiles) and `ai` (SPEC-0012 permissions, reading only by default).
@@ -96,7 +96,7 @@ permission rules as SQL connections.
 - **AK-4** Tree models: MongoDB sample → field paths with types and counts; Redis key names →
   groups by `:` (unit tests `tree::tests`).
 - **AK-5** Live: MongoDB and Redis containers with passwords (`nosql.sh` of the reference environment,
-  `IDECRAFT_TEST_MONGO`, `IDECRAFT_TEST_REDIS`): connect, list databases/collections/indexes/fields,
+  `FERRIS_IDEA_TEST_MONGO`, `FERRIS_IDEA_TEST_REDIS`): connect, list databases/collections/indexes/fields,
   scan key pages with "more", refuse writes on a read-only profile (`crates/nosql/tests/live.rs`).
 - **AK-6** Export to JSON, JSON Lines and CSV (unit tests `export::tests`).
 - **AK-7** MCP `list_stores`, `save_store` (dry run), `browse_store` and `run_store_command` refusal

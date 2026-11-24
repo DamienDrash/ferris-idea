@@ -1,9 +1,9 @@
-//! IDECraft file formats (`SPEC-0303`, ADR-0021): the `[idecraft]` envelope with `kind` and
+//! Ferris IDEA file formats (`SPEC-0303`, ADR-0021): the `[ferris-idea]` envelope with `kind` and
 //! `format`, the registry of kinds with their extensions, body shapes and migrations, and a reader
 //! that reports every problem at once with its key path.
 //!
 //! Exchange files (`.idcrun`, `.idckeymap`, …) must carry the envelope and stay under 64 KiB.
-//! Project files (`.idecraft/*.toml`, the user's settings and keymap) may lack it: such a file is
+//! Project files (`.ferris-idea/*.toml`, the user's settings and keymap) may lack it: such a file is
 //! format 0 of its kind and is migrated in memory. Writers always write the current format and
 //! never replace a file of a newer one.
 
@@ -54,7 +54,7 @@ pub fn problems_text(problems: &[Problem]) -> String {
         .join("; ")
 }
 
-/// The `[idecraft]` table (behaviour 1).
+/// The `[ferris-idea]` table (behaviour 1).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct Envelope {
@@ -77,7 +77,7 @@ pub struct Envelope {
     /// Web page of the file (`https://`), shown and never fetched.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub homepage: Option<String>,
-    /// Oldest IDECraft version the author expects.
+    /// Oldest Ferris IDEA version the author expects.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub min_version: Option<String>,
 }
@@ -174,7 +174,7 @@ pub struct Migration {
     pub apply: fn(&mut toml::Table),
 }
 
-/// A kind of IDECraft file (behaviours 6–7).
+/// A kind of Ferris IDEA file (behaviours 6–7).
 #[derive(Debug)]
 pub struct Kind {
     /// Id written as `kind`.
@@ -185,7 +185,7 @@ pub struct Kind {
     pub extension: Option<&'static str>,
     /// The format this version writes and reads up to.
     pub current: u32,
-    /// The body's shape (its top-level keys besides `idecraft`); `None`: checked by its reader.
+    /// The body's shape (its top-level keys besides `ferris-idea`); `None`: checked by its reader.
     pub body: Option<&'static Shape>,
     /// Migration steps, in order.
     pub migrations: &'static [Migration],
@@ -222,6 +222,46 @@ pub fn safe_stem(name: &str) -> String {
     if s.is_empty() { "export".into() } else { s }
 }
 
+/// The name of the envelope's table (ADR-0021).
+pub const ENVELOPE_KEY: &str = "ferris-idea";
+
+/// The envelope's name in files written under the product's former name (`SPEC-0356`
+/// behaviour 10).
+const FORMER_ENVELOPE_KEY: &str = "idecraft"; // rebrand:keep
+
+/// Renames an envelope written under the product's former name to today's name, when `table`
+/// has none of today's (`SPEC-0356` behaviour 10). Every reader of a file with an envelope calls
+/// this before looking at it; writing always uses today's name.
+pub fn adopt_former_envelope(table: &mut toml::Table) {
+    if FORMER_ENVELOPE_KEY != ENVELOPE_KEY
+        && !table.contains_key(ENVELOPE_KEY)
+        && let Some(envelope) = table.remove(FORMER_ENVELOPE_KEY)
+    {
+        table.insert(ENVELOPE_KEY.into(), envelope);
+    }
+}
+
+/// `text` deserialized as `T`, as [`toml::from_str`] does; a file whose envelope carries the
+/// product's former name is read as if it carried today's (`SPEC-0356` behaviour 10). For readers
+/// whose type names the envelope as a field.
+pub fn from_str_adopting<T: serde::de::DeserializeOwned>(text: &str) -> Result<T, toml::de::Error> {
+    let error = match toml::from_str::<T>(text) {
+        Ok(value) => return Ok(value),
+        Err(e) => e,
+    };
+    let Ok(mut table) = toml::from_str::<toml::Table>(text) else {
+        return Err(error);
+    };
+    if FORMER_ENVELOPE_KEY == ENVELOPE_KEY
+        || table.contains_key(ENVELOPE_KEY)
+        || !table.contains_key(FORMER_ENVELOPE_KEY)
+    {
+        return Err(error);
+    }
+    adopt_former_envelope(&mut table);
+    toml::Value::Table(table).try_into()
+}
+
 /// Shape of the envelope.
 pub const ENVELOPE: Shape = Shape::Table(&[
     req("kind", Shape::Str, "The kind of file."),
@@ -245,7 +285,7 @@ pub const ENVELOPE: Shape = Shape::Table(&[
     opt(
         "min_version",
         Shape::Str,
-        "Oldest IDECraft version the author expects.",
+        "Oldest Ferris IDEA version the author expects.",
     ),
 ]);
 
@@ -322,7 +362,7 @@ pub const THEME_BODY: Shape = Shape::Table(&[req(
         req(
             "name",
             Shape::Str,
-            "A bundled theme, e.g. \"IDECraft Light\".",
+            "A bundled theme, e.g. \"Ferris IDEA Light\".",
         ),
         opt("compact_mode", Shape::Bool, "Compact mode (SPEC-0165)."),
     ]),
@@ -374,6 +414,18 @@ const INDENT: Shape = Shape::Table(&[
     req("indent", INT, "Indent size."),
     req("tab", INT, "Tab size."),
     req("use_tabs", Shape::Bool, "Indent with tabs."),
+]);
+
+/// The scope of the grammar check for one file type (`SPEC-0155` v8 behaviour 14).
+const GRAMMAR_SCOPE: Shape = Shape::Table(&[
+    opt("enabled", Shape::Bool, "Check files of the type."),
+    opt("comments", Shape::Bool, ""),
+    opt(
+        "documentation",
+        Shape::Bool,
+        "Documentation comments and docstrings.",
+    ),
+    opt("string_literals", Shape::Bool, "Off by default."),
 ]);
 
 /// The shareable sections of the IDE settings (`SPEC-0129`).
@@ -432,6 +484,18 @@ pub const SETTINGS: Shape = Shape::Table(&[
                 ]),
                 "Editor Tabs (SPEC-0059 v9).",
             ),
+            opt(
+                "grammar",
+                Shape::Table(&[
+                    opt("commit_messages", Shape::Bool, "Check commit messages."),
+                    opt(
+                        "file_types",
+                        Shape::Map(&GRAMMAR_SCOPE),
+                        "Scope per file type (status-bar name, e.g. Java, Plain text).",
+                    ),
+                ]),
+                "Scope of the grammar and spelling checks (SPEC-0155 v8).",
+            ),
         ]),
         "Editor settings.",
     ),
@@ -447,6 +511,11 @@ pub const SETTINGS: Shape = Shape::Table(&[
                 "editor_scheme",
                 Shape::Str,
                 "The editor colour scheme; empty for the theme's own (SPEC-0337).",
+            ),
+            opt(
+                "startup_animation",
+                Shape::Bool,
+                "The startup animation while start-up work runs (SPEC-0355).",
             ),
         ]),
         "Appearance settings.",
@@ -508,6 +577,15 @@ pub const SETTINGS: Shape = Shape::Table(&[
         )]),
         "Notifications (SPEC-0337).",
     ),
+    opt(
+        "intentions",
+        Shape::Table(&[opt(
+            "disabled",
+            Shape::Array(&Shape::Str),
+            "Titles of the intentions turned off in the context actions.",
+        )]),
+        "Intentions (SPEC-0076 v11).",
+    ),
 ]);
 
 /// Body of a `settings` file.
@@ -516,7 +594,7 @@ pub const SETTINGS_BODY: Shape = Shape::Table(&[
     opt("keymap", KEYMAP, "The user keymap."),
 ]);
 
-/// Body of `.idecraft/breakpoints.toml` (behaviour 14).
+/// Body of `.ferris-idea/breakpoints.toml` (behaviour 14).
 pub const BREAKPOINTS_BODY: Shape = Shape::Table(&[opt(
     "breakpoint",
     Shape::Array(&Shape::Table(&[
@@ -568,7 +646,7 @@ pub const BREAKPOINTS_BODY: Shape = Shape::Table(&[opt(
     "Line breakpoints.",
 )]);
 
-/// Body of `.idecraft/bookmarks.toml` (`SPEC-0331` behaviour 10).
+/// Body of `.ferris-idea/bookmarks.toml` (`SPEC-0331` behaviour 10).
 pub const BOOKMARKS_BODY: Shape = Shape::Table(&[opt(
     "bookmark",
     Shape::Array(&Shape::Table(&[
@@ -671,7 +749,7 @@ pub const KINDS: &[Kind] = &[
     project("breakpoints", "Breakpoints", Some(&BREAKPOINTS_BODY)),
     project("bookmarks", "Bookmarks", Some(&BOOKMARKS_BODY)),
     project("ide-settings", "IDE settings", None),
-    // A script of UI driver steps; it runs only through `idecraft drive run`, never by opening or
+    // A script of UI driver steps; it runs only through `ferris-idea drive run`, never by opening or
     // importing it (SPEC-0319 behaviour 30).
     project("ui-script", "UI script", None),
 ];
@@ -707,9 +785,10 @@ pub fn is_exchange_file(path: &Path) -> bool {
 
 /// The `kind` an envelope names, without checking anything else.
 pub fn sniff_kind(text: &str) -> Option<String> {
-    let table: toml::Table = toml::from_str(text).ok()?;
+    let mut table: toml::Table = toml::from_str(text).ok()?;
+    adopt_former_envelope(&mut table);
     table
-        .get("idecraft")?
+        .get("ferris-idea")?
         .get("kind")?
         .as_str()
         .map(str::to_owned)
@@ -718,7 +797,7 @@ pub fn sniff_kind(text: &str) -> Option<String> {
 /// The message for a file of a newer format (behaviour 2).
 pub fn newer_message(kind: &str, found: i64, reads: u32) -> String {
     format!(
-        "written by a newer IDECraft (format {found}); this version reads {kind} files up to format {reads}"
+        "written by a newer Ferris IDEA (format {found}); this version reads {kind} files up to format {reads}"
     )
 }
 
@@ -727,7 +806,7 @@ pub fn newer_message(kind: &str, found: i64, reads: u32) -> String {
 pub struct Document {
     /// The envelope, its `format` now the current one.
     pub envelope: Envelope,
-    /// Everything besides `idecraft`.
+    /// Everything besides `ferris-idea`.
     pub body: toml::Table,
     /// The format the file had when it was older.
     pub migrated_from: Option<u32>,
@@ -789,22 +868,23 @@ pub fn read_with(
         ))]);
     }
     let mut body: toml::Table = toml::from_str(text).map_err(|e| vec![syntax_problem(text, &e)])?;
+    adopt_former_envelope(&mut body);
     let mut problems = Vec::new();
-    let (kind_id, format, mut envelope) = match body.remove("idecraft") {
+    let (kind_id, format, mut envelope) = match body.remove("ferris-idea") {
         None if used == Use::Exchange => {
             return Err(vec![Problem::new(
-                "idecraft",
-                "not an IDECraft file: the [idecraft] table with kind and format is missing",
+                "ferris-idea",
+                "not a Ferris IDEA file: the [ferris-idea] table with kind and format is missing",
             )]);
         }
         None => {
             let Some(kind) = expected else {
-                return Err(vec![Problem::new("idecraft", "missing")]);
+                return Err(vec![Problem::new("ferris-idea", "missing")]);
             };
             (kind.to_owned(), 0i64, Envelope::default())
         }
         Some(value) => {
-            check(&value, &ENVELOPE, "idecraft", &mut problems);
+            check(&value, &ENVELOPE, "ferris-idea", &mut problems);
             if !problems.is_empty() {
                 return Err(problems);
             }
@@ -816,7 +896,7 @@ pub fn read_with(
     };
     let Some(kind) = kinds.iter().find(|k| k.id == kind_id) else {
         return Err(vec![Problem::new(
-            "idecraft.kind",
+            "ferris-idea.kind",
             format!("unknown kind `{kind_id}`"),
         )]);
     };
@@ -824,13 +904,13 @@ pub fn read_with(
         && expected != kind.id
     {
         return Err(vec![Problem::new(
-            "idecraft.kind",
+            "ferris-idea.kind",
             format!("is a `{}` file, not `{expected}`", kind.id),
         )]);
     }
     if format > i64::from(kind.current) {
         return Err(vec![Problem::new(
-            "idecraft.format",
+            "ferris-idea.format",
             newer_message(kind.id, format, kind.current),
         )]);
     }
@@ -858,14 +938,15 @@ pub fn read_with(
 /// The format of a project file of `kind` from its text: 0 without envelope; problems for another
 /// kind or a newer or bad format. Syntax errors count as 0 (the file's reader reports them).
 pub fn project_format(text: &str, kind: &str) -> Result<u32, Vec<Problem>> {
-    let Ok(table) = toml::from_str::<toml::Table>(text) else {
+    let Ok(mut table) = toml::from_str::<toml::Table>(text) else {
         return Ok(0);
     };
-    let Some(env) = table.get("idecraft") else {
+    adopt_former_envelope(&mut table);
+    let Some(env) = table.get("ferris-idea") else {
         return Ok(0);
     };
     let mut problems = Vec::new();
-    check(env, &ENVELOPE, "idecraft", &mut problems);
+    check(env, &ENVELOPE, "ferris-idea", &mut problems);
     if !problems.is_empty() {
         return Err(problems);
     }
@@ -873,14 +954,14 @@ pub fn project_format(text: &str, kind: &str) -> Result<u32, Vec<Problem>> {
     let found = env["kind"].as_str().unwrap_or_default();
     if found != kind {
         return Err(vec![Problem::new(
-            "idecraft.kind",
+            "ferris-idea.kind",
             format!("is a `{found}` file, not `{kind}`"),
         )]);
     }
     let format = env["format"].as_integer().unwrap_or_default();
     if format > i64::from(k.current) {
         return Err(vec![Problem::new(
-            "idecraft.format",
+            "ferris-idea.format",
             newer_message(kind, format, k.current),
         )]);
     }
@@ -889,20 +970,22 @@ pub fn project_format(text: &str, kind: &str) -> Result<u32, Vec<Problem>> {
 
 /// Removes the envelope of a project file of `kind` from `table` and checks it.
 pub fn take_envelope(table: &mut toml::Table, kind: &str) -> Result<u32, Vec<Problem>> {
-    let Some(env) = table.remove("idecraft") else {
+    adopt_former_envelope(table);
+    let Some(env) = table.remove("ferris-idea") else {
         return Ok(0);
     };
     let mut t = toml::Table::new();
-    t.insert("idecraft".into(), env);
+    t.insert("ferris-idea".into(), env);
     project_format(&toml::to_string(&t).unwrap_or_default(), kind)
 }
 
 /// The text of a file: the envelope, then `body` (behaviour 3). The body's top level must be
-/// tables (or arrays of tables), so nothing falls into `[idecraft]`.
+/// tables (or arrays of tables), so nothing falls into `[ferris-idea]`.
 pub fn write(envelope: &Envelope, body: &impl Serialize) -> Result<String, String> {
     #[derive(Serialize)]
     struct Head<'a> {
-        idecraft: &'a Envelope,
+        #[serde(rename = "ferris-idea")]
+        ferris_idea: &'a Envelope,
     }
     let value = toml::Value::try_from(body).map_err(|e| e.to_string())?;
     let mut table = match value {
@@ -919,10 +1002,13 @@ pub fn write(envelope: &Envelope, body: &impl Serialize) -> Result<String, Strin
         _ => true,
     }) {
         return Err(format!(
-            "`{key}` is not a table and would fall into [idecraft]"
+            "`{key}` is not a table and would fall into [ferris-idea]"
         ));
     }
-    let mut out = toml::to_string(&Head { idecraft: envelope }).map_err(|e| e.to_string())?;
+    let mut out = toml::to_string(&Head {
+        ferris_idea: envelope,
+    })
+    .map_err(|e| e.to_string())?;
     // Straight from the body keeps its key order; a `toml::Table` sorts the keys.
     let body = if dropped {
         toml::to_string(&table)
@@ -1178,8 +1264,8 @@ fn json_schema_unsorted(kind: &Kind) -> Option<serde_json::Value> {
         "maximum": kind.current,
         "description": "Format version; older ones are migrated when read."
     });
-    schema["properties"]["idecraft"] = envelope;
-    let mut required = vec![json!("idecraft")];
+    schema["properties"]["ferris-idea"] = envelope;
+    let mut required = vec![json!("ferris-idea")];
     required.extend(fields.iter().filter(|f| f.required).map(|f| json!(f.name)));
     schema["required"] = json!(required);
     let mut out = serde_json::Map::new();
@@ -1190,7 +1276,7 @@ fn json_schema_unsorted(kind: &Kind) -> Option<serde_json::Value> {
     out.insert(
         "title".into(),
         json!(format!(
-            "IDECraft {} (kind `{}`, format {})",
+            "Ferris IDEA {} (kind `{}`, format {})",
             kind.title.to_lowercase(),
             kind.id,
             kind.current
@@ -1202,7 +1288,7 @@ fn json_schema_unsorted(kind: &Kind) -> Option<serde_json::Value> {
             Some(ext) => format!(
                 "Exchange file `.{ext}` (SPEC-0303). TOML; validated on import with every problem and its key path."
             ),
-            None => "Project file (SPEC-0303). TOML; files without [idecraft] are format 0 and still read.".to_owned(),
+            None => "Project file (SPEC-0303). TOML; files without [ferris-idea] are format 0 and still read.".to_owned(),
         }),
     );
     if let serde_json::Value::Object(m) = schema {
@@ -1215,13 +1301,43 @@ fn json_schema_unsorted(kind: &Kind) -> Option<serde_json::Value> {
 mod tests {
     use super::*;
 
-    const RUN: &str = "[idecraft]\nkind = \"run\"\nformat = 1\n\n[run]\nname = \"test\"\ncommand = [\"cargo\", \"test\"]\n";
+    const RUN: &str = "[ferris-idea]\nkind = \"run\"\nformat = 1\n\n[run]\nname = \"test\"\ncommand = [\"cargo\", \"test\"]\n";
 
     fn messages(r: Result<Document, Vec<Problem>>) -> Vec<String> {
         r.unwrap_err().iter().map(Problem::to_string).collect()
     }
 
     /// SPEC-0303 AK-1: kind, format, size, syntax and body problems.
+    /// SPEC-0356 AK-8 (behaviour 10): a file whose envelope carries the product's former name is
+    /// read like one with today's; today's name wins when a file has both.
+    #[test]
+    fn an_envelope_under_the_former_name_is_read() {
+        let text = format!(
+            "[{FORMER_ENVELOPE_KEY}]\nkind = \"run\"\nformat = 1\n\n[run]\nname = \"test\"\n"
+        );
+        assert_eq!(sniff_kind(&text).as_deref(), Some("run"));
+        assert_eq!(project_format(&text, "run"), Ok(1));
+        let mut table: toml::Table = toml::from_str(&text).unwrap();
+        assert_eq!(take_envelope(&mut table, "run"), Ok(1));
+        assert!(!table.contains_key(ENVELOPE_KEY) && !table.contains_key(FORMER_ENVELOPE_KEY));
+        assert!(table.contains_key("run"));
+
+        if FORMER_ENVELOPE_KEY != ENVELOPE_KEY {
+            let envelope = |kind: &str| {
+                toml::Value::Table(toml::Table::from_iter([(
+                    "kind".to_owned(),
+                    toml::Value::String(kind.into()),
+                )]))
+            };
+            let mut both = toml::Table::new();
+            both.insert(ENVELOPE_KEY.into(), envelope("run"));
+            both.insert(FORMER_ENVELOPE_KEY.into(), envelope("other"));
+            adopt_former_envelope(&mut both);
+            assert_eq!(both[ENVELOPE_KEY]["kind"].as_str(), Some("run"));
+            assert_eq!(both[FORMER_ENVELOPE_KEY]["kind"].as_str(), Some("other"));
+        }
+    }
+
     #[test]
     fn envelope_is_checked_and_problems_are_collected() {
         let doc = read(RUN, Some("run"), Use::Exchange).unwrap();
@@ -1231,7 +1347,7 @@ mod tests {
 
         assert_eq!(
             messages(read(RUN, Some("keymap"), Use::Exchange)),
-            ["idecraft.kind: is a `run` file, not `keymap`"]
+            ["ferris-idea.kind: is a `run` file, not `keymap`"]
         );
         assert_eq!(
             messages(read(
@@ -1239,12 +1355,12 @@ mod tests {
                 None,
                 Use::Exchange
             )),
-            ["idecraft.kind: unknown kind `song`"]
+            ["ferris-idea.kind: unknown kind `song`"]
         );
         assert_eq!(
             messages(read("[run]\nname = \"x\"\n", Some("run"), Use::Exchange)),
             [
-                "idecraft: not an IDECraft file: the [idecraft] table with kind and format is missing"
+                "ferris-idea: not a Ferris IDEA file: the [ferris-idea] table with kind and format is missing"
             ]
         );
         assert_eq!(
@@ -1254,7 +1370,7 @@ mod tests {
                 Use::Exchange
             )),
             [
-                "idecraft.format: written by a newer IDECraft (format 2); this version reads run files up to format 1"
+                "ferris-idea.format: written by a newer Ferris IDEA (format 2); this version reads run files up to format 1"
             ]
         );
         assert_eq!(
@@ -1263,7 +1379,7 @@ mod tests {
                 None,
                 Use::Exchange
             )),
-            ["idecraft.format: 0 is not at least 1"]
+            ["ferris-idea.format: 0 is not at least 1"]
         );
         assert_eq!(
             messages(read(
@@ -1272,8 +1388,8 @@ mod tests {
                 Use::Exchange
             )),
             [
-                "idecraft.authr: unknown key",
-                "idecraft.format: expected an integer, found a string"
+                "ferris-idea.authr: unknown key",
+                "ferris-idea.format: expected an integer, found a string"
             ]
         );
         let big = format!("{RUN}# {}\n", "x".repeat(70 * 1024));
@@ -1282,7 +1398,7 @@ mod tests {
             read(&big, Some("run"), Use::Project).is_ok(),
             "no limit for project files"
         );
-        let syntax = messages(read("[idecraft]\nkind = \n", None, Use::Exchange));
+        let syntax = messages(read("[ferris-idea]\nkind = \n", None, Use::Exchange));
         assert!(
             syntax[0].starts_with("(file): line 2, column"),
             "{syntax:?}"
@@ -1302,7 +1418,7 @@ mod tests {
         );
         assert_eq!(
             messages(read(
-                "[idecraft]\nkind = \"run\"\nformat = 1\n",
+                "[ferris-idea]\nkind = \"run\"\nformat = 1\n",
                 None,
                 Use::Exchange
             )),
@@ -1338,15 +1454,15 @@ mod tests {
             ],
             ..exchange("paint", "Paint", "idcpaint", Some(&BODY))
         }];
-        let old = "[idecraft]\nkind = \"paint\"\nformat = 1\ncolour = \"red\"\n";
-        // `colour` is a top-level key after the table header, so it belongs to [idecraft]:
+        let old = "[ferris-idea]\nkind = \"paint\"\nformat = 1\ncolour = \"red\"\n";
+        // `colour` is a top-level key after the table header, so it belongs to [ferris-idea]:
         assert!(read_with(old, None, Use::Exchange, &kinds).is_err());
-        let old = "colour = \"red\"\n[idecraft]\nkind = \"paint\"\nformat = 1\n";
+        let old = "colour = \"red\"\n[ferris-idea]\nkind = \"paint\"\nformat = 1\n";
         let doc = read_with(old, None, Use::Exchange, &kinds).unwrap();
         assert_eq!(doc.migrated_from, Some(1));
         assert_eq!(doc.envelope.format, 3);
         assert_eq!(doc.body["color"].as_str(), Some("RED"));
-        let two = "color = \"blue\"\n[idecraft]\nkind = \"paint\"\nformat = 2\n";
+        let two = "color = \"blue\"\n[ferris-idea]\nkind = \"paint\"\nformat = 2\n";
         let doc = read_with(two, None, Use::Exchange, &kinds).unwrap();
         assert_eq!(doc.migrated_from, Some(2));
         assert_eq!(doc.body["color"].as_str(), Some("BLUE"));
@@ -1375,7 +1491,7 @@ mod tests {
             name = "a" },
         )
         .unwrap();
-        assert!(text.starts_with("[idecraft]\nkind = \"run-configurations\"\nformat = 1\n"));
+        assert!(text.starts_with("[ferris-idea]\nkind = \"run-configurations\"\nformat = 1\n"));
         assert_eq!(project_format(&text, "run-configurations"), Ok(1));
         assert!(project_format(&text, "connections").is_err());
         let newer = text.replace("format = 1", "format = 9");
@@ -1390,14 +1506,14 @@ mod tests {
                 &toml::toml! { interpreter = "x" }
             )
             .is_err(),
-            "top-level values would fall into [idecraft]"
+            "top-level values would fall into [ferris-idea]"
         );
         // run.toml is read with or without envelope; a newer one is a problem (behaviour 16).
-        let run = "[idecraft]\nkind = \"run-configurations\"\nformat = 2\n\n[[run]]\nname = \"a\"\ncommand = [\"x\"]\n";
+        let run = "[ferris-idea]\nkind = \"run-configurations\"\nformat = 2\n\n[[run]]\nname = \"a\"\ncommand = [\"x\"]\n";
         let newer = crate::parse_run_configs(run);
         assert!(newer.configs.is_empty());
         assert!(
-            newer.problems[0].contains("newer IDECraft (format 2)"),
+            newer.problems[0].contains("newer Ferris IDEA (format 2)"),
             "{newer:?}"
         );
         assert_eq!(
@@ -1407,7 +1523,8 @@ mod tests {
             1
         );
         // The IDE settings, too; saving keeps the old file once.
-        let dir = std::env::temp_dir().join(format!("idecraft-format-ide-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("ferris-idea-format-ide-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("settings.toml");
@@ -1426,7 +1543,7 @@ mod tests {
 
     #[test]
     fn backups_are_kept_once_and_newer_files_are_not_replaced() {
-        let dir = std::env::temp_dir().join(format!("idecraft-format-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-format-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("sql-files.toml");
@@ -1442,7 +1559,7 @@ mod tests {
                 .contains("a.sql"),
             "the first backup is kept"
         );
-        std::fs::write(&file, "[idecraft]\nkind = \"sql-files\"\nformat = 5\n").unwrap();
+        std::fs::write(&file, "[ferris-idea]\nkind = \"sql-files\"\nformat = 5\n").unwrap();
         let e = prepare_write(&file, "sql-files").unwrap_err().to_string();
         assert!(
             e.contains("format 5") && e.contains("not overwritten"),
@@ -1481,11 +1598,11 @@ mod tests {
     }
 
     /// SPEC-0303 AK-2: the published schemas are the ones the shapes give. With
-    /// `IDECRAFT_WRITE_SCHEMAS=1` the test writes them.
+    /// `FERRIS_IDEA_WRITE_SCHEMAS=1` the test writes them.
     #[test]
     fn published_schemas_match_the_shapes() {
         let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/formats");
-        let write = std::env::var_os("IDECRAFT_WRITE_SCHEMAS").is_some();
+        let write = crate::product_var_os("FERRIS_IDEA_WRITE_SCHEMAS").is_some();
         let mut n = 0;
         for kind in KINDS {
             let Some(schema) = json_schema(kind) else {
@@ -1503,7 +1620,7 @@ mod tests {
             assert_eq!(
                 published,
                 text,
-                "{} differs from the code; run with IDECRAFT_WRITE_SCHEMAS=1",
+                "{} differs from the code; run with FERRIS_IDEA_WRITE_SCHEMAS=1",
                 file.display()
             );
         }
@@ -1514,7 +1631,7 @@ mod tests {
     #[test]
     fn settings_shape_covers_the_ide_settings() {
         let mut s = crate::IdeSettings::default();
-        s.appearance.theme = Some("IDECraft Light".into());
+        s.appearance.theme = Some("Ferris IDEA Light".into());
         s.code_style
             .indents
             .insert("Go".into(), crate::CodeStyleSettings::default_indent("Go"));

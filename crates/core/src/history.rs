@@ -11,7 +11,7 @@ use sha2::{Digest, Sha256};
 use crate::watch::FileChange;
 
 /// Directory of the history, relative to the workspace root.
-pub const HISTORY_DIR: &str = ".idecraft/history";
+pub const HISTORY_DIR: &str = ".ferris-idea/history";
 /// Largest file that is recorded.
 pub const MAX_RECORDED_BYTES: u64 = 2 * 1024 * 1024;
 /// Default retention for [`LocalHistory::prune`].

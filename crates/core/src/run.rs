@@ -15,7 +15,7 @@ use crate::run_tasks::{BeforeTask, TaskKind};
 use crate::testreport::{ReportFormat, TestReport, parse_report};
 
 /// File of the run configurations, relative to the workspace root.
-pub const RUN_FILE: &str = ".idecraft/run.toml";
+pub const RUN_FILE: &str = ".ferris-idea/run.toml";
 /// Default timeout in seconds.
 pub const DEFAULT_TIMEOUT_SECS: u64 = 600;
 
@@ -36,7 +36,8 @@ pub enum RunKind {
 pub struct RunConfig {
     /// Unique name.
     pub name: String,
-    /// Program and arguments.
+    /// Program and arguments; empty for a configuration with `http` (v6 behaviour 17).
+    #[serde(default)]
     pub command: Vec<String>,
     /// Working directory, workspace-relative.
     #[serde(default)]
@@ -78,6 +79,65 @@ pub struct RunConfig {
     /// `run.toml`.
     #[serde(skip)]
     pub verbatim: bool,
+    /// Requests of a request file to send instead of a program (v6 behaviour 17).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub http: Option<HttpRun>,
+}
+
+/// What an HTTP request configuration sends (`SPEC-0047` v6 behaviour 17).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HttpRun {
+    /// The `.http` or `.rest` file, workspace-relative.
+    pub file: String,
+    /// A request's name or its number counted from 1; none: every request of the file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request: Option<String>,
+    /// The environment of the environment files (`SPEC-0102`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub environment: Option<String>,
+}
+
+impl HttpRun {
+    /// The words shown as the configuration's command line: `HTTP request`, file, request and
+    /// environment. Never started as a program.
+    pub fn command_line(&self) -> Vec<String> {
+        let mut words = vec!["HTTP request".to_owned(), self.file.clone()];
+        words.push(match &self.request {
+            Some(r) => format!("request {r}"),
+            None => "all requests".to_owned(),
+        });
+        if let Some(e) = &self.environment {
+            words.push(format!("environment {e}"));
+        }
+        words
+    }
+
+    /// What is wrong with it (v6 behaviour 17), each without the configuration's name.
+    fn problems(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        if !inside(&self.file) || self.file.trim().is_empty() {
+            out.push(format!(
+                "the request file {} leaves the workspace",
+                self.file
+            ));
+        }
+        let lower = self.file.to_ascii_lowercase();
+        if !(lower.ends_with(".http") || lower.ends_with(".rest")) {
+            out.push(format!("{} is no .http or .rest file", self.file));
+        }
+        if self.request.as_deref().is_some_and(|r| r.trim().is_empty()) {
+            out.push("the HTTP request is empty".to_owned());
+        }
+        if self
+            .environment
+            .as_deref()
+            .is_some_and(|e| e.trim().is_empty())
+        {
+            out.push("the HTTP environment is empty".to_owned());
+        }
+        out
+    }
 }
 
 impl RunConfig {
@@ -95,7 +155,7 @@ impl RunConfig {
 #[serde(deny_unknown_fields)]
 struct RunFile {
     /// The envelope (`SPEC-0303`), checked by [`crate::format::project_format`].
-    #[serde(default, rename = "idecraft")]
+    #[serde(default, rename = "ferris-idea")]
     _envelope: Option<toml::Table>,
     #[serde(default)]
     run: Vec<RunConfig>,
@@ -120,7 +180,7 @@ pub(crate) fn inside(path: &str) -> bool {
             .all(|c| matches!(c, Component::Normal(_) | Component::CurDir))
 }
 
-/// Loads and validates `.idecraft/run.toml` of `root`; a missing file means no configurations.
+/// Loads and validates `.ferris-idea/run.toml` of `root`; a missing file means no configurations.
 pub fn load_run_configs(root: &Path) -> RunConfigs {
     match std::fs::read_to_string(root.join(RUN_FILE)) {
         Ok(text) => parse_run_configs(&text),
@@ -135,7 +195,7 @@ pub fn load_run_configs(root: &Path) -> RunConfigs {
     }
 }
 
-/// Appends `config` to `.idecraft/run.toml` of `root` as text, so comments and order stay
+/// Appends `config` to `.ferris-idea/run.toml` of `root` as text, so comments and order stay
 /// (`SPEC-0303` behaviour 12). A file without envelope is kept once as `run.toml.bak` and gains the
 /// envelope; a file of a newer format is not touched.
 pub fn append_run_config(root: &Path, config: &RunConfig) -> std::io::Result<()> {
@@ -192,7 +252,7 @@ pub(crate) fn read_configs(text: &str) -> Result<Vec<RunConfig>, String> {
     if let Err(p) = crate::format::project_format(text, "run-configurations") {
         return Err(format!("{RUN_FILE}: {}", crate::format::problems_text(&p)));
     }
-    toml::from_str::<RunFile>(text)
+    crate::format::from_str_adopting::<RunFile>(text)
         .map(|f| f.run)
         .map_err(|e| format!("{RUN_FILE}: {e}"))
 }
@@ -206,7 +266,23 @@ pub(crate) fn field_problems(
     use crate::run_edit::RunField;
     let mut problems = Vec::new();
     let no_command = c.command.is_empty() || c.command[0].trim().is_empty();
-    if no_command && c.url.is_none() {
+    if let Some(h) = &c.http {
+        // An HTTP request configuration starts no program (v6 behaviour 17).
+        let mut own = h.problems();
+        if !c.command.is_empty() {
+            own.push("a configuration with `http` has no command".to_owned());
+        }
+        if c.url.is_some() {
+            own.push("a configuration with `http` opens no page".to_owned());
+        }
+        if c.kind == RunKind::Test {
+            own.push("a configuration with `http` is no test".to_owned());
+        }
+        problems.extend(
+            own.into_iter()
+                .map(|p| (RunField::Command, format!("{}: {p}", c.name))),
+        );
+    } else if no_command && c.url.is_none() {
         problems.push((
             RunField::Command,
             format!("{}: the command is empty", c.name),
@@ -386,6 +462,12 @@ impl RunOutcome {
 /// Runs one configuration on its own, without its before-launch chain.
 pub fn run_one(root: &Path, c: &RunConfig) -> RunOutcome {
     run_one_with(root, c, &AtomicBool::new(false), None, Open::NONE, None)
+}
+
+/// [`run_one`], ended with its process group as soon as `stop` is set: an MCP call its client
+/// cancelled (`SPEC-0006` v57 behaviour 15).
+pub fn run_one_until(root: &Path, c: &RunConfig, stop: &AtomicBool) -> RunOutcome {
+    run_one_with(root, c, stop, None, Open::NONE, None)
 }
 
 /// What a streaming run reports, in order (`SPEC-0087` behaviour 4).
@@ -662,6 +744,12 @@ fn run_one_with(
     // Safe mode: an untrusted project runs nothing (SPEC-0278 behaviour 5).
     if let Err(why) = crate::trust::require_trusted(root) {
         outcome.start_error = Some(why);
+        return outcome;
+    }
+    // Requests of a request file, sent here and not by a program (v6 behaviour 17).
+    if let Some(h) = &c.http {
+        crate::run_http::run(root, c, h, stop, events, &mut outcome);
+        outcome.millis = started.elapsed().as_millis() as u64;
         return outcome;
     }
     let args = match launch_command(root, c) {
@@ -995,6 +1083,17 @@ pub fn run_config(
     configs: &RunConfigs,
     name: &str,
 ) -> Result<Vec<RunOutcome>, String> {
+    run_config_until(root, configs, name, Arc::new(AtomicBool::new(false)))
+}
+
+/// [`run_config`], ended as soon as `stop` is set: the running step stops with its process group
+/// and no further step starts (`SPEC-0006` v57 behaviour 15: an MCP call its client cancelled).
+pub fn run_config_until(
+    root: &Path,
+    configs: &RunConfigs,
+    name: &str,
+    stop: Arc<AtomicBool>,
+) -> Result<Vec<RunOutcome>, String> {
     if !configs.problems.is_empty() {
         return Err(format!(
             "{RUN_FILE} has problems: {}",
@@ -1002,7 +1101,6 @@ pub fn run_config(
         ));
     }
     let (steps, open) = launch_steps(root, configs, name)?;
-    let stop = Arc::new(AtomicBool::new(false));
     let _instance = crate::run_tasks::register_instance(root, name, stop.clone());
     let last = steps.len().saturating_sub(1);
     let mut outcomes = Vec::new();
@@ -1036,11 +1134,23 @@ pub struct PlannedRun {
     /// behaviour 13).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub opens_after_port: Vec<(String, u16)>,
+    /// The requests this step sends instead of starting a program (v6 behaviour 17).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub http: Option<HttpRun>,
+}
+
+/// Whether a run of configuration `name` sends HTTP requests in one of its steps (v6 behaviour
+/// 17): such a run needs the `http` right of an agent. False when it cannot start.
+pub fn sends_http(root: &Path, configs: &RunConfigs, name: &str) -> bool {
+    launch_steps(root, configs, name).is_ok_and(|(steps, _)| steps.iter().any(|c| c.http.is_some()))
 }
 
 /// The command a configuration runs: its own, or for a page without one the system's way of
 /// opening a URL in the default browser (`SPEC-0133` behaviour 1).
 pub fn effective_command(c: &RunConfig) -> Vec<String> {
+    if let Some(h) = &c.http {
+        return h.command_line();
+    }
     match (&c.url, c.command.first()) {
         (Some(url), None) => {
             let open = if cfg!(target_os = "macos") {
@@ -1103,6 +1213,7 @@ pub fn run_plan(root: &Path, configs: &RunConfigs, name: &str) -> Result<Vec<Pla
                 timeout: c.timeout.unwrap_or(DEFAULT_TIMEOUT_SECS),
                 opens,
                 opens_after_port,
+                http: c.http.clone(),
             })
         })
         .collect()
@@ -1158,6 +1269,7 @@ fn task_step(name: String, command: Vec<String>, cwd: Option<String>) -> RunConf
         allow_multiple: false,
         before_launch: Vec::new(),
         verbatim: false,
+        http: None,
     }
 }
 

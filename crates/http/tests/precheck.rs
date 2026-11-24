@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::Duration;
 
-use idecraft_http::{
+use ferris_idea_http::{
     Response, SendOptions, finish_body, load_environments, parse, resolve, send_with,
 };
 use serde_json::Value;
@@ -179,7 +179,7 @@ fn the_precheck_files_run_against_the_python_server() {
                 assert_eq!(e.header("X-Request-Name"), Some("get with headers"));
                 assert_eq!(e.header("X-After-Comment"), Some("yes"));
                 assert_eq!(e.header("Host"), Some(here.as_str()));
-                assert_eq!(e.header("User-Agent"), Some("IDECraft"));
+                assert_eq!(e.header("User-Agent"), Some("FerrisIDEA"));
             }
             "query over several lines" => assert_eq!(
                 Echo::of(r).target(),
@@ -319,7 +319,7 @@ fn the_precheck_files_run_against_the_python_server() {
         let text = r.text.as_deref();
         match name {
             "chunked" => assert_eq!(text, Some("{\"chunks\": 3, \"ok\": true}")),
-            // Asked for by the request, by IDECraft (no header in the file), or sent unasked:
+            // Asked for by the request, by Ferris IDEA (no header in the file), or sent unasked:
             // decoded each time (behaviour 12).
             "gzip when accepted" | "gzip asked for by the client" | "gzip forced" => {
                 assert_eq!(r.header("content-encoding"), Some("gzip"));
@@ -547,7 +547,7 @@ fn the_precheck_files_run_against_the_python_server() {
         ["both", "token"]
     );
     assert_eq!(
-        idecraft_http::mask_for_log(
+        ferris_idea_http::mask_for_log(
             &format!("http://{here}/echo/token-in-url?access_token=precheck-private-token"),
             &private
         ),
@@ -562,7 +562,7 @@ fn the_precheck_files_run_against_the_python_server() {
 #[test]
 fn a_self_signed_server_is_not_trusted() {
     let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/precheck/server.py");
-    let dir = std::env::temp_dir().join(format!("idecraft-http-tls-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-http-tls-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let (key, cert) = (dir.join("key.pem"), dir.join("cert.pem"));
@@ -597,7 +597,7 @@ fn a_self_signed_server_is_not_trusted() {
         let _ = std::fs::remove_dir_all(&dir);
         return;
     };
-    let request = idecraft_http::ResolvedRequest {
+    let request = ferris_idea_http::ResolvedRequest {
         name: None,
         line: 1,
         method: "GET".into(),

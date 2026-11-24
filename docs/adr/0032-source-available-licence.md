@@ -24,15 +24,15 @@ On 2026-11-14 the Project Owner set a new requirement: everyone may see and use 
 licence (Open Source Definition, criterion 6), so the project is called **source-available**.
 
 The requirement left one question open, because for an IDE it decides who can use it at all: does a
-developer who uses IDECraft at work need consent?
+developer who uses Ferris IDEA at work need consent?
 
 ## Decision
 
 1. **Owner's decision 1 (2026-11-14):** the project is offered so that everyone may see and use it;
    commercial use needs his consent.
-2. **Owner's decision 2 (2026-11-14):** asked whether a developer may use IDECraft for free at
+2. **Owner's decision 2 (2026-11-14):** asked whether a developer may use Ferris IDEA for free at
    their job, he chose "Beruflich frei, kein Weiterverkauf": professional use is free; selling
-   IDECraft or building a competing offering on it needs his consent.
+   Ferris IDEA or building a competing offering on it needs his consent.
 3. **Licence:** the **PolyForm Shield License 1.0.0, unmodified**, for the project's own code and
    documentation. `LICENSE.md` holds the text as published at
    <https://polyformproject.org/licenses/shield/1.0.0>, followed by the `Required Notice:` line
@@ -75,7 +75,7 @@ developer who uses IDECraft at work need consent?
 | PolyForm Small Business 1.0.0 | under a size threshold | A size limit instead of consent; not what was asked. |
 | Functional Source License 1.1 | yes | The closest alternative: it also blocks competing use only, in other words. Each version becomes Apache-2.0 or MIT two years after its release. Not picked; the Project Owner chose the licence without a conversion date. |
 | Business Source License 1.1 | unclear ("production use" undefined for an IDE) | Needs a self-written use grant; converts to an open-source licence after at most four years. |
-| Elastic License 2.0 | yes | Written for server software: blocks hosted services and tampering with licence keys, which IDECraft does not have (ADR-0007). |
+| Elastic License 2.0 | yes | Written for server software: blocks hosted services and tampering with licence keys, which Ferris IDEA does not have (ADR-0007). |
 | Apache-2.0 with Commons Clause | yes | Blocks selling only; vague ("substantially"); often mistaken for Apache-2.0. |
 | CC BY-NC 4.0 | probably no | Creative Commons advises against its licences for software. |
 | Own licence text | as written | Standard terms under German law (§§ 305 ff. BGB): unclear clauses are read against the author; no case law, no scanner support. |
@@ -84,10 +84,10 @@ developer who uses IDECraft at work need consent?
 
 - **What the licence does and does not do (reviewer's note, 2026-11-14).** It restricts
   competing products, not charging as such: it forbids providing a product that competes with
-  IDECraft or with another product the licensor provides using it, "even when provided free of
-  charge". It does not forbid earning money: a company may use IDECraft unpaid for ever, a
+  Ferris IDEA or with another product the licensor provides using it, "even when provided free of
+  charge". It does not forbid earning money: a company may use Ferris IDEA unpaid for ever, a
   product that does not compete may contain parts of it, and passing on unchanged copies for a
-  fee or selling support for IDECraft is not clearly excluded. Whether that matches "kein
+  fee or selling support for Ferris IDEA is not clearly excluded. Whether that matches "kein
   Weiterverkauf" is an open decision for the Project Owner with a lawyer (open question 2).
   `LICENSING.md` therefore speaks only in the licence's terms and does not use the word resale.
 - **The legal basis is older than this decision.** The project's internal legal analysis and the
@@ -146,8 +146,8 @@ For a lawyer unless marked otherwise.
    everything the Project Owner means by "kein Weiterverkauf" and "commercial use only with my
    consent"? It restricts providing competing products, not charging as such: passing on
    unchanged copies for a fee, paid support or installation, or selling a product that contains
-   parts of IDECraft without competing, is not clearly excluded. Also unsettled in the text: where
-   passing on a copy ends and providing a competing product begins, and using IDECraft as the
+   parts of Ferris IDEA without competing, is not clearly excluded. Also unsettled in the text: where
+   passing on a copy ends and providing a competing product begins, and using Ferris IDEA as the
    tool to build a competitor (`LICENSING.md` states the project's reading, unchecked). If
    payment matters, the licence is the wrong one or needs a companion text. (Project Owner and
    lawyer.)
@@ -183,7 +183,7 @@ For a lawyer unless marked otherwise.
    do such files need the Apache header and a "modified" notice?
 10. **Third-party logos in file-type icons** from the open platform (Docker, Kotlin, Python and
     others): the copyright licence does not cover those marks; relevant once licences are sold.
-11. **Name and trademark.** "IDECraft" is not registered as far as recorded. Clearance and
+11. **Name and trademark.** "Ferris IDEA" is not registered as far as recorded. Clearance and
     registration (DPMA or EUIPO) before publication; distance to "ArtCraft" and to JetBrains'
     names (internal legal analysis, §7). Brand assets: all rights reserved, as `TRADEMARKS.md` proposes?
     Copyright in AI-drawn marks is uncertain; a registered mark does not depend on it.

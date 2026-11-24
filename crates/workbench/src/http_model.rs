@@ -1,7 +1,7 @@
 //! Running requests from `.http` files in the window (`SPEC-0096`): which request runs and how its
 //! response is shown.
 
-use idecraft_http::{RequestFile, ResolvedRequest, Response};
+use ferris_idea_http::{RequestFile, ResolvedRequest, Response};
 
 /// Whether `path` is a request file.
 pub fn is_request_file(path: &std::path::Path) -> bool {
@@ -55,7 +55,7 @@ pub fn status_class(status: u16) -> Option<&'static str> {
 /// The 0-based lines of the requests of `text`, where their run marks stand (`SPEC-0096` v4
 /// behaviour 6).
 pub fn run_lines(text: &str) -> Vec<usize> {
-    idecraft_http::parse(text)
+    ferris_idea_http::parse(text)
         .requests
         .iter()
         .map(|r| r.line.saturating_sub(1))
@@ -63,9 +63,9 @@ pub fn run_lines(text: &str) -> Vec<usize> {
 }
 
 /// The colours of a request file (`SPEC-0096` v4 behaviour 5): the classes of
-/// [`idecraft_http::highlight`], a JSON body with JSON's own, the `{{…}}` in it kept whole.
-pub fn spans(text: &str) -> Vec<idecraft_languages::syntax::Span> {
-    let h = idecraft_http::highlight(text);
+/// [`ferris_idea_http::highlight`], a JSON body with JSON's own, the `{{…}}` in it kept whole.
+pub fn spans(text: &str) -> Vec<ferris_idea_languages::syntax::Span> {
+    let h = ferris_idea_http::highlight(text);
     // Byte offset of each character, and of the end.
     let bytes: Vec<usize> = text
         .char_indices()
@@ -88,8 +88,8 @@ pub fn spans(text: &str) -> Vec<idecraft_languages::syntax::Span> {
             .filter(|(r, _)| inside(r, body))
             .cloned()
             .collect();
-        let json = idecraft_languages::syntax::SyntaxDocument::new(
-            idecraft_languages::LanguageId::Json,
+        let json = ferris_idea_languages::syntax::SyntaxDocument::new(
+            ferris_idea_languages::LanguageId::Json,
             false,
             &text[bytes[body.start]..bytes[body.end]],
         )
@@ -98,11 +98,11 @@ pub fn spans(text: &str) -> Vec<idecraft_languages::syntax::Span> {
         .into_iter()
         .map(|s| (s.start + body.start..s.end + body.start, s.kind))
         .collect();
-        out.extend(idecraft_http::overlay(json, &own));
+        out.extend(ferris_idea_http::overlay(json, &own));
     }
     out.sort_by_key(|(r, _)| (r.start, r.end));
     out.into_iter()
-        .map(|(r, kind)| idecraft_languages::syntax::Span {
+        .map(|(r, kind)| ferris_idea_languages::syntax::Span {
             start: r.start,
             end: r.end,
             kind,
@@ -179,7 +179,7 @@ pub fn response_text(response: &Response) -> String {
             out.push_str(&format!(
                 "\n\n(cut after {} decoded bytes: {})",
                 d.size,
-                idecraft_http::decode_limit(response.size)
+                ferris_idea_http::decode_limit(response.size)
             ));
         } else if let Some(why) = &d.damaged {
             out.push_str(&format!(
@@ -241,7 +241,7 @@ mod tests {
 
     #[test]
     fn decoded_bodies() {
-        let decoded = |text: &str| idecraft_http::Decoded {
+        let decoded = |text: &str| ferris_idea_http::Decoded {
             codings: vec!["gzip".into()],
             remaining: Vec::new(),
             body: text.as_bytes().to_vec(),
@@ -255,8 +255,8 @@ mod tests {
         r.decoded = Some(decoded("{\"a\":1}"));
         // Shown decoded and indented like any JSON; both sizes in the output line.
         assert!(response_text(&r).ends_with("\n\n{\n  \"a\": 1\n}"));
-        let file = idecraft_http::parse("GET http://a/\n");
-        let req = idecraft_http::resolve(&file, &Default::default()).remove(0);
+        let file = ferris_idea_http::parse("GET http://a/\n");
+        let req = ferris_idea_http::resolve(&file, &Default::default()).remove(0);
         assert_eq!(
             status_line(&req, &r),
             "GET http://a/ → 200 OK · 7 ms · 27 bytes, 7 decoded from gzip"
@@ -273,7 +273,7 @@ mod tests {
         // Cut at a limit: what was decoded, then a line that says so.
         let mut cut = response("text/plain", "aaaa");
         cut.size = 20;
-        cut.decoded = Some(idecraft_http::Decoded {
+        cut.decoded = Some(ferris_idea_http::Decoded {
             cut: true,
             ..decoded("aaaa")
         });
@@ -285,7 +285,7 @@ mod tests {
             response_text(&cut)
         );
         let mut damaged = response("text/plain", "aa");
-        damaged.decoded = Some(idecraft_http::Decoded {
+        damaged.decoded = Some(ferris_idea_http::Decoded {
             damaged: Some("it ends too early".into()),
             ..decoded("aa")
         });
@@ -293,11 +293,11 @@ mod tests {
             "\n\naa\n\n(the coded body is damaged, it ends too early: 2 bytes were decoded before that place)"
         ));
 
-        // A coding under a decoded one that IDECraft does not decode.
+        // A coding under a decoded one that Ferris IDEA does not decode.
         let mut left = response("text/plain", "");
         left.text = None;
         left.size = 30;
-        left.decoded = Some(idecraft_http::Decoded {
+        left.decoded = Some(ferris_idea_http::Decoded {
             remaining: vec!["br".into()],
             ..decoded("0123456789")
         });
@@ -321,8 +321,8 @@ mod tests {
                 .ends_with("\n\n{\"broken\": ")
         );
 
-        let file = idecraft_http::parse("GET http://a/\n\n> {% client.log(1); %}\n");
-        let req = idecraft_http::resolve(&file, &Default::default()).remove(0);
+        let file = ferris_idea_http::parse("GET http://a/\n\n> {% client.log(1); %}\n");
+        let req = ferris_idea_http::resolve(&file, &Default::default()).remove(0);
         assert_eq!(
             req.body, "",
             "the handler script is not part of the request"
@@ -339,7 +339,7 @@ mod tests {
 
     #[test]
     fn request_at_the_caret_and_response_texts() {
-        let file = idecraft_http::parse("GET http://a/\n\n###\nPOST http://b/\n\n{}\n");
+        let file = ferris_idea_http::parse("GET http://a/\n\n###\nPOST http://b/\n\n{}\n");
         assert_eq!(request_at(&file, 1), Some(0));
         assert_eq!(request_at(&file, 2), Some(0));
         assert_eq!(
@@ -347,14 +347,14 @@ mod tests {
             Some(1),
             "inside the body of the second"
         );
-        assert_eq!(request_at(&idecraft_http::parse(""), 1), None);
+        assert_eq!(request_at(&ferris_idea_http::parse(""), 1), None);
         let r = response("application/json", "{\"a\":1}");
         assert_eq!(
             response_text(&r),
             "HTTP 200 OK\nContent-Type: application/json\n\n{\n  \"a\": 1\n}"
         );
         assert!(response_text(&response("text/plain", "{\"a\":1}")).ends_with("\n\n{\"a\":1}"));
-        let req = idecraft_http::resolve(&file, &Default::default()).remove(0);
+        let req = ferris_idea_http::resolve(&file, &Default::default()).remove(0);
         assert_eq!(
             status_line(&req, &r),
             "GET http://a/ → 200 OK · 7 ms · 7 bytes"
@@ -364,8 +364,8 @@ mod tests {
     /// SPEC-0096 v4 AK-6: an error status is named in words and is no failure.
     #[test]
     fn error_statuses_are_named_not_failed() {
-        let file = idecraft_http::parse("GET http://a/\n");
-        let req = idecraft_http::resolve(&file, &Default::default()).remove(0);
+        let file = ferris_idea_http::parse("GET http://a/\n");
+        let req = ferris_idea_http::resolve(&file, &Default::default()).remove(0);
         let mut r = response("text/plain", "gone");
         r.status = 404;
         r.reason = "Not Found".into();
@@ -394,7 +394,7 @@ mod tests {
         let text = "@host = http://a\n# GET http://not-a-request/\n\n### one\nGET {{host}}/x\nAccept: */*\n\n{\"GET\": 1}\n\n### two\n\nPOST http://b/\n";
         let lines = run_lines(text);
         assert_eq!(lines, vec![4, 11]);
-        let file = idecraft_http::parse(text);
+        let file = ferris_idea_http::parse(text);
         assert_eq!(request_at(&file, lines[1] + 1), Some(1));
         assert_eq!(request_at(&file, lines[0] + 1), Some(0));
         assert!(run_lines("# only a comment\n\n").is_empty());

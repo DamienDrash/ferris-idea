@@ -437,7 +437,7 @@ impl Repo {
             &["rev-parse", "--absolute-git-dir"],
             LOCAL_TIMEOUT,
         )?;
-        let work = Path::new(git_dir.trim()).join("idecraft-rebase");
+        let work = Path::new(git_dir.trim()).join("ferris-idea-rebase");
         let text = work.to_string_lossy();
         if text.contains(['\'', '\n']) {
             return Err(GitError::Rejected(
@@ -544,7 +544,11 @@ impl Repo {
     /// Where the id of a smart checkout's stash is kept until it is brought back (`SPEC-0231`
     /// behaviour 2).
     fn smart_stash_file(&self) -> std::path::PathBuf {
-        self.git_dir().join("idecraft").join("smart-stash")
+        let git = self.git_dir();
+        // A stash recorded under the product's former name is still brought back (`SPEC-0356`
+        // behaviour 2).
+        ferris_idea_core::takeover::take_over_named_folder(git);
+        git.join("ferris-idea").join("smart-stash")
     }
 
     /// The stash a smart checkout or merge put aside and has not brought back yet.
@@ -666,7 +670,7 @@ impl Repo {
         create: bool,
     ) -> Result<SmartOutcome<SwitchOutcome>, GitError> {
         let from = self.current_branch_name().unwrap_or_else(|| "HEAD".into());
-        let stash = self.smart_stash(&format!("IDECraft smart checkout: {from} → {name}"))?;
+        let stash = self.smart_stash(&format!("Ferris IDEA smart checkout: {from} → {name}"))?;
         match self.checkout(name, create) {
             Ok(result) => Ok(SmartOutcome {
                 result,
@@ -689,7 +693,7 @@ impl Repo {
     pub fn smart_merge(&self, source: &str) -> Result<SmartOutcome<OpOutcome>, GitError> {
         self.refuse_while_in_progress()?;
         let into = self.current_branch_name().unwrap_or_else(|| "HEAD".into());
-        let stash = self.smart_stash(&format!("IDECraft smart merge: {source} → {into}"))?;
+        let stash = self.smart_stash(&format!("Ferris IDEA smart merge: {source} → {into}"))?;
         match self.git_run(&["merge", "--no-edit", source]) {
             Ok(done) if done.in_progress.is_some() || !done.conflicts.is_empty() => {
                 Ok(SmartOutcome {

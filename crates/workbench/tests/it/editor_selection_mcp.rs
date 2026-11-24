@@ -5,11 +5,12 @@
 
 use std::path::PathBuf;
 
+use ferris_idea_workbench::WorkbenchView;
 use gpui::{TestAppContext, VisualTestContext, px};
-use idecraft_workbench::WorkbenchView;
 
 fn workspace() -> PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-mcp-selection-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-mcp-selection-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src")).unwrap();
     std::fs::write(root.join("src/app.py"), "a = 1\nname = \"shop\"\n").unwrap();
@@ -25,7 +26,7 @@ fn the_window_reports_the_active_editors_selection(cx: &mut TestAppContext) {
     let cx = VisualTestContext::from_window(window.into(), cx).into_mut();
     cx.simulate_resize(gpui::size(px(1372.), px(860.)));
     cx.update(|_, cx| {
-        idecraft_workbench::project_windows::register_workbench(bench.downgrade(), cx)
+        ferris_idea_workbench::project_windows::register_workbench(bench.downgrade(), cx)
     });
     cx.run_until_parked();
     let ask = |cx: &mut VisualTestContext| {

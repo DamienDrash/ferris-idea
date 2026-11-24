@@ -13,7 +13,7 @@ use std::process::{Child, Stdio};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-pub use idecraft_remote::RemoteError as TunnelError;
+pub use ferris_idea_remote::RemoteError as TunnelError;
 
 use crate::profile::SshTunnel;
 
@@ -47,8 +47,8 @@ fn forward_host(host: &str) -> String {
 
 /// The `ssh` command line of a tunnel from `127.0.0.1:local_port` to `target_host:target_port`
 /// through `ssh`; `extra` goes before the host (tests pass `-F <config>`). Nothing secret is ever
-/// part of it: there is no password option in `ssh` and IDECraft adds none. It comes from the one
-/// start point `idecraft_remote::SshCommand` for the client `program`: the client check, the
+/// part of it: there is no password option in `ssh` and Ferris IDEA adds none. It comes from the one
+/// start point `ferris_idea_remote::SshCommand` for the client `program`: the client check, the
 /// shared options first (batch mode, strict host keys, connect timeout, post-quantum key exchange,
 /// SPEC-0121, ADR-0025) and every jump host held to the same options.
 pub fn tunnel_line(
@@ -58,8 +58,8 @@ pub fn tunnel_line(
     target_port: u16,
     local_port: u16,
     extra: &[String],
-) -> Result<idecraft_remote::SshLine, TunnelError> {
-    idecraft_remote::SshCommand::new(idecraft_remote::SshPurpose::Tunnel)
+) -> Result<ferris_idea_remote::SshLine, TunnelError> {
+    ferris_idea_remote::SshCommand::new(ferris_idea_remote::SshPurpose::Tunnel)
         .program(program)
         .args([
             "-v",
@@ -110,12 +110,12 @@ fn free_port() -> Result<u16, TunnelError> {
 }
 
 /// Extra `ssh` arguments for tests: in builds with debug assertions only, the environment
-/// variable `IDECRAFT_TEST_SSH_CONFIG` names an `ssh` config file used instead of the user's.
+/// variable `FERRIS_IDEA_TEST_SSH_CONFIG` names an `ssh` config file used instead of the user's.
 pub fn test_extra_args() -> Vec<String> {
     if !cfg!(debug_assertions) {
         return Vec::new();
     }
-    std::env::var("IDECRAFT_TEST_SSH_CONFIG")
+    ferris_idea_core::product_var("FERRIS_IDEA_TEST_SSH_CONFIG")
         .ok()
         .filter(|f| !f.is_empty())
         .map(|f| vec!["-F".to_owned(), f])
@@ -147,7 +147,7 @@ impl Tunnel {
             target_port,
             limit,
             &test_extra_args(),
-            idecraft_remote::SSH_PROGRAM,
+            ferris_idea_remote::SSH_PROGRAM,
         )
     }
 
@@ -235,7 +235,7 @@ impl Tunnel {
                 "{host}: the local tunnel port was taken by another program; nothing was sent"
             ));
         }
-        idecraft_remote::classify(host, &text)
+        ferris_idea_remote::classify(host, &text)
     }
 
     /// What the connection dialog shows when the tunnel could not be opened: the refusals of the
@@ -243,10 +243,10 @@ impl Tunnel {
     pub fn explain(err: &TunnelError) -> String {
         match err {
             TunnelError::NoPqKex(host) => format!(
-                "SSH host `{host}` offers no post-quantum key exchange. IDECraft opens SSH tunnels only with post-quantum protection (ADR-0025): update OpenSSH on the SSH host to 9.0 or later (ML-KEM from 9.9). Nothing was sent to the database."
+                "SSH host `{host}` offers no post-quantum key exchange. Ferris IDEA opens SSH tunnels only with post-quantum protection (ADR-0025): update OpenSSH on the SSH host to 9.0 or later (ML-KEM from 9.9). Nothing was sent to the database."
             ),
             TunnelError::ClientWithoutPq(needs) => format!(
-                "The ssh client on this computer offers no post-quantum key exchange. Update OpenSSH here ({needs}); IDECraft does not fall back to a classical key exchange (ADR-0025). Nothing was sent."
+                "The ssh client on this computer offers no post-quantum key exchange. Update OpenSSH here ({needs}); Ferris IDEA does not fall back to a classical key exchange (ADR-0025). Nothing was sent."
             ),
             other => other.to_string(),
         }
@@ -330,7 +330,7 @@ mod tests {
         );
         assert_eq!(
             args[..8],
-            idecraft_remote::testing::shared_options("ssh")[..8],
+            ferris_idea_remote::testing::shared_options("ssh")[..8],
             "shared options first"
         );
         assert!(

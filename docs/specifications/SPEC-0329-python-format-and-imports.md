@@ -3,9 +3,9 @@
 - **Version:** 3 · **Date:** 2026-11-12 (v3: carets and selections stay on their text,
   behaviour 7, OBS-0034 item 46; v2: the hint of the import clean-up in safe mode)
 - **Sources:** OBS-0034 items 41 and 42 (the reference formats a Python file and removes its
-  unused imports without an extra tool; IDECraft refused both: pyright has no formatter, and the
+  unused imports without an extra tool; Ferris IDEA refused both: pyright has no formatter, and the
   import clean-up knew Java and Kotlin only), decision of the coordinator 2026-11-12 (no Python
-  formatter of IDECraft's own; `ruff`, then `black`, from the selected environment, then from
+  formatter of Ferris IDEA's own; `ruff`, then `black`, from the selected environment, then from
   `PATH`; nothing downloaded or installed), STD (ruff command line: `ruff format
   --stdin-filename <name> [--range=<l:c-l:c>] -` and `ruff check --select <codes> --fix-only
   --no-cache --stdin-filename <name> -` print the changed text to standard output, rule `F401`
@@ -19,7 +19,7 @@
 
 ## Purpose
 A Python file is laid out and its imports are cleaned the way the project's own tools and its CI
-do it, from the editor and for agents, without IDECraft bringing or fetching a tool.
+do it, from the editor and for agents, without Ferris IDEA bringing or fetching a tool.
 
 ## Behaviour
 1. **Lookup:** the formatter of a project is the first that exists of: `ruff` in the folder of
@@ -34,7 +34,7 @@ do it, from the editor and for agents, without IDECraft bringing or fetching a t
    it reads the project's configuration, which holds settings and no code. Refusing every run in
    safe mode would be the stricter option; the Project Owner decided on 2026-11-12 to allow a
    tool from `PATH`. [SPEC-0278, rule 12, decision]
-3. **Nothing found:** the action says which tools it looked for and where, that IDECraft
+3. **Nothing found:** the action says which tools it looked for and where, that Ferris IDEA
    installs none itself, and that the Python Packages tool window (MCP:
    `python_install_packages`) adds one to the environment. In safe mode, when only the
    environment has one, it says that the project must be trusted first. [GEN]
@@ -52,7 +52,7 @@ do it, from the editor and for agents, without IDECraft bringing or fetching a t
    isort settings; rules the project ignores or marks unfixable stay as the project wants them,
    and ruff's own caution applies (it leaves an unused import of an `__init__.py` alone; a
    text it cannot parse comes back unchanged). [STD]
-6. **Import clean-up without ruff:** IDECraft removes the imports the Python language server
+6. **Import clean-up without ruff:** Ferris IDEA removes the imports the Python language server
    marks as not accessed (the diagnostics tagged unnecessary whose place is the bound name of
    an import) and sorts nothing. Only what is safe is changed:
    - only import statements of the module itself, not those in `try`, `if`, functions or
@@ -99,7 +99,7 @@ do it, from the editor and for agents, without IDECraft bringing or fetching a t
   `python_tools::tests::command_lines`).
 - **AK-3 (behaviour 4)** The plan of a change: one edit in characters, whitespace-only or not,
   none for equal texts (unit test `python_tools::tests::plan_of_a_change`).
-- **AK-4 (behaviours 4–5)** With ruff and black installed (`IDECRAFT_TEST_PYTOOLS` names a
+- **AK-4 (behaviours 4–5)** With ruff and black installed (`FERRIS_IDEA_TEST_PYTOOLS` names a
   folder with both, else `PATH`; skipped without): unsaved text is formatted and no file is
   written, the project's `pyproject.toml` line length applies, a range leaves the rest alone, a
   syntax error is reported with the tool's name, black formats when ruff is missing, ruff
@@ -115,12 +115,12 @@ do it, from the editor and for agents, without IDECraft bringing or fetching a t
   and a trusted project never give the trust hint (unit tests
   `python_tools::tests::{summaries, ruff_that_waits_for_trust}`). The MCP tool and the
   window pass the same search to the same function; an end-to-end run needs a Python language
-  server and is a check by hand (`idecraft call <folder> optimize_imports` in an untrusted
+  server and is a check by hand (`ferris-idea call <folder> optimize_imports` in an untrusted
   project whose environment has ruff).
 - **AK-6 (behaviour 8)** MCP: `format_file` and `optimize_imports` on a Python file with a
   stand-in formatter on the search path, and the refusals without a tool
-  (`crates/mcp/tests/it/protocol.rs`); `idecraft call` on the file of OBS-0034 part 9.
-- **AK-9 (v3, behaviour 7)** `idecraft_editor::reformat`: the edits give the formatter's text and
+  (`crates/mcp/tests/it/protocol.rs`); `ferris-idea call` on the file of OBS-0034 part 9.
+- **AK-9 (v3, behaviour 7)** `ferris_idea_editor::reformat`: the edits give the formatter's text and
   leave unchanged lines alone; a caret in unchanged text, in reformatted text and in removed text,
   and a selection over a reformatted line, end on the same text (unit tests
   `reformat::tests`).
@@ -128,7 +128,7 @@ do it, from the editor and for agents, without IDECraft bringing or fetching a t
   Optimize Imports on that file, a selection, undo, the messages without a tool.
 
 ## Out of scope
-A Python formatter of IDECraft's own; installing a tool from the action; formatting on save;
+A Python formatter of Ferris IDEA's own; installing a tool from the action; formatting on save;
 other formatters (yapf, autopep8) and other import sorters (isort alone); passing the editor's
 indentation or the code style settings to the tool; notebooks; a remote project's host; sorting
 imports without ruff; unused imports inside blocks without ruff.
@@ -136,7 +136,7 @@ imports without ruff; unused imports inside blocks without ruff.
 ## Known deviations from the reference
 The reference formats Python with a built-in formatter and its own code style settings, without
 any tool, and keeps for example `import os, sys` on one line, one-line bodies and the quotes as
-written (OBS-0034 item 41). IDECraft runs the project's formatter instead, so Reformat Code gives
+written (OBS-0034 item 41). Ferris IDEA runs the project's formatter instead, so Reformat Code gives
 exactly what the project's CI check accepts (IMP-0401); the price is that a project without ruff
 or black is not formatted until one is installed, which the action says. Without ruff the import
 clean-up removes but does not sort, and leaves imports inside blocks.

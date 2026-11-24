@@ -20,7 +20,7 @@ installed there. The Linux window run therefore happens in a local VM on the Mac
 | Tools | from their projects' own distribution places, each pinned (SHA-256 or version) by the script: clangd 21.1.8 (apt.llvm.org, key checked by fingerprint), perf 6.8 (`linux-tools` of the VM kernel), JDK 25 for jdtls (archive; `java` stays 21), jdtls 1.64.0 (Eclipse), java-debug 0.53.1 (Maven Central), Node.js 24.18.0 (nodejs.org), js-debug 1.95.3 (Microsoft's release), pyright 1.1.414 (npm), Gradle 8.10.2 with the Kotlin Gradle plugin 2.0.21 in its cache, kotlin-debug-adapter 0.4.4 (fwcd's release), ruby-lsp 0.26.11 (rubygems.org) with bundler (archive) |
 | Display | `xvfb-run -a -s '-screen 0 1920x1080x24'`, no window manager |
 | GPU | Mesa lavapipe (`llvmpipe (LLVM 20.1.2, 128 bits)`, software Vulkan) |
-| Build | `cargo build -p idecraft` (debug, without incremental state), linked with lld |
+| Build | `cargo build -p ferris-idea` (debug, without incremental state), linked with lld |
 
 The other Lima VMs (`idecraft-db`, `idecraft-docker`, `idecraft-k3s`, `idecraft-mssql`) were not
 touched. The VM is stopped after the run and kept.
@@ -30,7 +30,7 @@ touched. The VM is stopped after the run and kept.
 ```sh
 scripts/linux-ui-selftest-lima.sh          # create or start the VM, provision, copy, build, run, stop
 scripts/linux-ui-selftest-lima.sh --keep   # the same, the VM keeps running
-IDECRAFT_SELFTEST_ONLY=editor scripts/linux-ui-selftest-lima.sh --keep   # one group
+FERRIS_IDEA_SELFTEST_ONLY=editor scripts/linux-ui-selftest-lima.sh --keep   # one group
 ```
 
 The script prints the tools and groups the self-test skipped, the slowest groups and the result line
@@ -56,7 +56,7 @@ What the run does not cover, each printed as its own line:
 
 - **browser-debug** has no steps: js-debug is there, but Google builds Chrome for Linux on x86_64 only,
   and the VM is aarch64. Ubuntu's Chromium is a snap; it was not installed.
-- **run-config-folders** and **run-config-templates** need `IDECRAFT_SELFTEST_DRIVER=1`, and
+- **run-config-folders** and **run-config-templates** need `FERRIS_IDEA_SELFTEST_DRIVER=1`, and
   **merge-edit** checks its keys only, as on the Mac (the default run does not use the driver).
 - **profiler-attach** samples nothing: Ubuntu's kernel default `kernel.perf_event_paranoid=4` refuses
   perf, and the step accepts that refusal as the Linux form of the macOS permission note (item 8
@@ -161,7 +161,7 @@ below); two full runs ended without a result line when the python-debug group cl
 
 The coordinator decided on 2026-11-15 (PO-STATUS, open question 40): **no XTEST or any display-wide
 input injection on Linux**. Instead the self-test's `click(…)` and `hover(…)` steps on Linux deliver
-the toolkit's own pointer events in process, into IDECraft's window input handler — the handler gpui's
+the toolkit's own pointer events in process, into Ferris IDEA's window input handler — the handler gpui's
 X11 and Wayland layers call for real input — only from the self-test, never through the X server or
 the compositor (SPEC-0319 v5 behaviour 20c, UISEC-9).
 
@@ -169,8 +169,8 @@ the compositor (SPEC-0319 v5 behaviour 20c, UISEC-9).
   so no code outside it can call it. The workspace now uses gpui 0.2.2 vendored in `vendor/gpui/`
   (byte for byte the published crate, checksum as in `Cargo.lock` before) with one addition,
   `Window::dispatch_in_process_pointer_input`, which takes pointer events only and refuses keys and
-  file drops; `vendor/gpui/IDECRAFT.md` names every difference. The macOS path is unchanged (native
-  `NSEvent`s posted to IDECraft's own queue).
+  file drops; `vendor/gpui/FERRIS_IDEA.md` names every difference. The macOS path is unchanged (native
+  `NSEvent`s posted to Ferris IDEA's own queue).
 - **The boundary:** `crates/app/src/native_click.rs` builds the events of a click (move, each press and
   release with its count, Control on a Control-click and a move without it afterwards) and hands them
   to the window after the current frame. The UISEC-9 scan (`scans::uisec9_no_system_wide_input`) checks
@@ -179,8 +179,8 @@ the compositor (SPEC-0319 v5 behaviour 20c, UISEC-9).
   and keyboard and `/dev/uinput`. External clients keep `unsupported` for the native level and for
   pointer actions at the window level (SPEC-0319 16a, 20a).
 - **The proof that nothing reaches other X clients:** `native_click::tests::
-  a_click_reaches_this_window_and_no_other_x_client` (live under Xvfb, `xvfb-run cargo test -p idecraft
-  --bin idecraft native_click`; returns early without an X11 session): a gpui window of the test process
+  a_click_reaches_this_window_and_no_other_x_client` (live under Xvfb, `xvfb-run cargo test -p ferris-idea
+  --bin ferris-idea native_click`; returns early without an X11 session): a gpui window of the test process
   gets a double click and a right click (`left 1, up 1, left 2, up 2, right 1`), while an observer with
   its own X connection — a window under the whole screen that takes button and motion events, and the
   raw input of every device on the root window (XInput 2.2, which XTEST input and every real device
@@ -206,9 +206,9 @@ followed from them. The macOS window self-test has not run since then either (it
 | Refresh in the Database window refreshes the SQL editors' schema | step: it asked for no cached schema right after Refresh; since SPEC-0192 v3 behaviour 11 (#782) Refresh inspects the open `.sql` files again at once, and on the software renderer that read ended before the next frame | an open file marks a table that does not exist; the table is created outside and stays unknown until Refresh; after it the mark goes without an edit (SPEC-0089 v11.1 AK-7); the table is dropped and read once more for the steps after |
 | the new interpreter is pushed to the Python language server (SPEC-0170) | timing under load in that run only; green in the group run and in the full run below | — |
 
-Explain and the Compare Schemas steps failed only in runs with `IDECRAFT_SELFTEST_ONLY=db-compare`: the
+Explain and the Compare Schemas steps failed only in runs with `FERRIS_IDEA_SELFTEST_ONLY=db-compare`: the
 group uses the `shop` connection of the database groups before it, and `database` needs the
-`.idecraft` folder the `run` group makes. With `run` and the database groups in front they pass.
+`.ferris-idea` folder the `run` group makes. With `run` and the database groups in front they pass.
 
 Runs on the branch (VM as above, `main` at `ae7db55b` plus the fix):
 

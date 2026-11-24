@@ -31,7 +31,7 @@ impl WorkbenchView {
             let e = editor.read(cx);
             (e.custom_regions(), e.status().line.saturating_sub(1))
         };
-        let Some(selected) = idecraft_languages::folding::region_at(&regions, line) else {
+        let Some(selected) = ferris_idea_languages::folding::region_at(&regions, line) else {
             self.status = Some(keymap_actions::NO_CUSTOM_REGIONS.into());
             cx.notify();
             return true;
@@ -199,12 +199,12 @@ impl WorkbenchView {
 
     /// `ExpressionTypeInfo`: asks the language server for the hover at the caret (at the start
     /// of a selection) and shows the type it names below the caret. False without an editor
-    /// of a language IDECraft has a server for.
+    /// of a language Ferris IDEA has a server for.
     pub(super) fn show_type_info(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
         let (Some(editor), Some(path)) = (self.active_editor(), self.active_path()) else {
             return false;
         };
-        if idecraft_languages::LanguageId::detect(&path).is_none() {
+        if ferris_idea_languages::LanguageId::detect(&path).is_none() {
             return false;
         }
         let (text, at, revision) = {
@@ -231,7 +231,7 @@ impl WorkbenchView {
                         .enable_all()
                         .build()
                         .map_err(|e| e.to_string())?;
-                    rt.block_on(idecraft_languages::insight::hover_in(
+                    rt.block_on(ferris_idea_languages::insight::hover_in(
                         &root,
                         &from,
                         Some(&text),

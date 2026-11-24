@@ -360,6 +360,17 @@ impl Engine {
         Ok(id)
     }
 
+    /// Notes a window command or screenshot of `actor` on `window` (`SPEC-0319` v7 behaviours
+    /// 46-53): the client counts as driving the window, and while the user's own input pauses
+    /// external clients the command answers `interrupted` and does nothing (behaviour 37).
+    pub fn command(&mut self, actor: &Actor, window: u64, now: Instant) -> Result<(), UiError> {
+        if actor.is_external() && self.supervisor.paused(now) {
+            return Err(security::interrupted());
+        }
+        self.supervisor.driving(actor, window, now);
+        Ok(())
+    }
+
     /// Calls not answered yet.
     pub fn pending(&self) -> usize {
         self.pending.len()
@@ -722,15 +733,35 @@ fn ambiguous(l: &Locator, ids: &[ElementId], tree: &Tree, view: &View) -> UiErro
 /// The effects and reservations of each key of a `press` (behaviour 35).
 type KeyFacts = Vec<security::KeyFact>;
 
-fn key_facts(keys_text: &str, keys: &dyn Keys, tree: &Tree) -> Result<KeyFacts, UiError> {
+fn key_facts(
+    keys_text: &str,
+    keys: &dyn Keys,
+    tree: &Tree,
+    target: Option<&UiNode>,
+) -> Result<KeyFacts, UiError> {
+    // The keys reach the target once it has the focus (the plan moves it there first), else the
+    // focused element.
+    let receiver = target.or_else(|| tree.focused());
+    // A view that handles keys itself — the letters of the Containers list, Enter in the Remote
+    // Host field, ⌘⌫ in its list — declares their effects on its element or an element around it
+    // (`SPEC-0319` v7 behaviour 56): every key that reaches it may have them, besides its keymap
+    // action's own.
+    let own = receiver.and_then(|r| declared_around(tree, r));
     let mut out = Vec::new();
     for k in parse_keys(keys_text)? {
         let actions = keys.actions_for(&k);
-        let (effects, reserved) = if actions.is_empty() {
-            // An unbound key types into the focused element.
-            match tree.focused() {
-                Some(f) if f.secret => (None, Some(Reserved::Secret)),
-                Some(f) if f.editable() => (f.effects.clone(), f.reserved),
+        let handled_by_view = receiver.is_some_and(|r| handles_key(tree, r, &k));
+        let (effects, reserved) = if handled_by_view {
+            // Its view takes the key before the keymap: the view's effects, not the action's.
+            match &own {
+                Some((effects, reserved)) => (Some(effects.clone()), *reserved),
+                None => (None, None),
+            }
+        } else if actions.is_empty() {
+            // An unbound key types into the focused element, or its view takes it.
+            match (receiver, &own) {
+                (Some(f), _) if f.secret => (None, Some(Reserved::Secret)),
+                (_, Some((effects, reserved))) => (Some(effects.clone()), *reserved),
                 _ => (None, None),
             }
         } else {
@@ -742,11 +773,59 @@ fn key_facts(keys_text: &str, keys: &dyn Keys, tree: &Tree) -> Result<KeyFacts, 
                     _ => all = None,
                 }
             }
+            if let (Some(list), Some((effects, _))) = (&mut all, &own) {
+                list.extend(effects.iter().copied());
+            }
+            let reserved = reserved.or_else(|| own.as_ref().and_then(|(_, r)| *r));
             (all, reserved)
         };
         out.push((k, effects, reserved));
     }
     Ok(out)
+}
+
+/// Whether `node` or an element around it handles `key` itself before the keymap: the nearest
+/// one that names keys decides (a field names the keys it takes from the window around it).
+fn handles_key(tree: &Tree, node: &UiNode, key: &KeyPress) -> bool {
+    let same = |text: &str| {
+        parse_keys(text).ok().is_some_and(|parsed| {
+            parsed.len() == 1 && {
+                let mut a = parsed[0].modifiers.clone();
+                let mut b = key.modifiers.clone();
+                a.sort();
+                b.sort();
+                a == b && parsed[0].key == key.key
+            }
+        })
+    };
+    let mut at = Some(node);
+    while let Some(n) = at {
+        if !n.own_keys.is_empty() {
+            return n.own_keys.iter().any(|k| same(k));
+        }
+        at = n.parent.and_then(|p| tree.get(p));
+    }
+    false
+}
+
+/// The effects declared on `node` and the elements around it, which see its keys as they bubble
+/// up, and the first reservation among them; `None` when none of them declares any.
+fn declared_around(tree: &Tree, node: &UiNode) -> Option<(Vec<Effect>, Option<Reserved>)> {
+    let mut effects: Vec<Effect> = Vec::new();
+    let mut declared = false;
+    let mut reserved = None;
+    let mut at = Some(node);
+    while let Some(n) = at {
+        if let Some(list) = &n.effects {
+            declared = true;
+            effects.extend(list.iter().copied());
+        }
+        reserved = reserved.or(n.reserved);
+        at = n.parent.and_then(|p| tree.get(p));
+    }
+    effects.sort();
+    effects.dedup();
+    declared.then_some((effects, reserved))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -871,7 +950,7 @@ fn act(
         return Progress::Done(Err(e));
     }
     let facts = match action {
-        Action::Press { keys: text } => match key_facts(text, keys, tree) {
+        Action::Press { keys: text } => match key_facts(text, keys, tree, node) {
             Ok(f) => f,
             Err(e) => return Progress::Done(Err(e)),
         },

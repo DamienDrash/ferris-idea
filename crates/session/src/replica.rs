@@ -407,17 +407,9 @@ fn run_job(job: Job) -> std::io::Result<()> {
         } => {
             copy.text = text.to_string();
             let bytes = serde_json::to_vec_pretty(&copy).map_err(std::io::Error::other)?;
-            #[cfg(unix)]
-            {
-                crate::reattach::private_dir(&dir)
-                    .map_err(|e| std::io::Error::other(e.to_string()))?;
-                crate::reattach::write_private(&file, &bytes)
-            }
-            #[cfg(not(unix))]
-            {
-                std::fs::create_dir_all(&dir)?;
-                idecraft_core::write_atomic(&file, bytes)
-            }
+            // Off Unix both refuse (`SPEC-0321` v6 behaviour 8a).
+            crate::reattach::private_dir(&dir).map_err(|e| std::io::Error::other(e.to_string()))?;
+            crate::reattach::write_private(&file, &bytes)
         }
     }
 }
@@ -1431,7 +1423,7 @@ mod tests {
     #[test]
     fn random_sessions_converge_through_the_backend() {
         use crate::docs::DocStore;
-        let dir = std::env::temp_dir().join(format!("idecraft-conv-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-conv-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let root = std::fs::canonicalize(&dir).unwrap();
@@ -1441,7 +1433,7 @@ mod tests {
             std::fs::write(root.join(&name), rng.text(6)).unwrap();
             let mut store = DocStore::new(
                 root.clone(),
-                idecraft_editor::documents::DocumentRegistry::default(),
+                ferris_idea_editor::documents::DocumentRegistry::default(),
             );
             let clients = ["w1", "w2", "agent"];
             let mut replicas: Vec<RemoteDoc> = clients

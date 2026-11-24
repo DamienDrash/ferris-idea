@@ -29,7 +29,7 @@ machine, and nothing unauthenticated is exposed on either machine.
 ## Behaviour
 
 ### General
-1. **Families:** the backend (`idecraft serve`, in process or over SSH) binds the families `lsp`,
+1. **Families:** the backend (`ferris-idea serve`, in process or over SSH) binds the families `lsp`,
    `search`, `git`, `term`, `run`, `port`, `dap` and `mcp` (methods below) and lists each in the
    capabilities of `session.hello` (SPEC-0317 v2 detail 10: until now they answered "method not
    found"). A window that finds a family missing (an older backend) leaves its functions off and
@@ -77,7 +77,7 @@ machine, and nothing unauthenticated is exposed on either machine.
    unnecessary). `lsp.diagnostics {doc}` as a request returns the current list. The window shows them
    as for local files (underlines, gutter, Problems tool window, the file's problem count).
    [SPEC-0024, SPEC-0090]
-9. **Inspections:** `lsp.inspect {doc, revision}` runs IDECraft's own inspections (SPEC-0092
+9. **Inspections:** `lsp.inspect {doc, revision}` runs Ferris IDEA's own inspections (SPEC-0092
    catalogue, the host project's inspection profile SPEC-0315 and dictionary SPEC-0163) on the
    document's text on the host and returns the findings with their ranges; the window shows them
    with the diagnostics. [SPEC-0092]
@@ -122,7 +122,7 @@ machine, and nothing unauthenticated is exposed on either machine.
     searched are those of SPEC-0029 v5 behaviours 7 and 8, from the same listing as the local search:
     the project's own sources by default; `folder` wins when it names a folder that is not the
     project's own (it is searched completely); `include_non_project: true` searches every file
-    except version control data and `.idecraft`; `files` (relative paths, each checked as a path
+    except version control data and `.ferris-idea`; `files` (relative paths, each checked as a path
     inside the project like `folder`) searches those files whatever they are, for the Open Files
     scope. A folder or file behind a symbolic link is not read and finds nothing. When the search
     left something out, the answer has `not_searched`, the line of SPEC-0029 behaviour 10. There is
@@ -172,7 +172,7 @@ machine, and nothing unauthenticated is exposed on either machine.
 
 ### Running and testing
 21. **Run configurations of the host project:** `run.configs {}` returns the configurations of the
-    host's `.idecraft/run.toml` and the detected ones (SPEC-0045, SPEC-0097) with their problems.
+    host's `.ferris-idea/run.toml` and the detected ones (SPEC-0045, SPEC-0097) with their problems.
     `run.start {name}` starts one with its before-launch chain on the host (SPEC-0087) and returns
     `{run, stdout, stderr}` (two streams); `run.event {run, kind, …}` reports `started` (name,
     command), `finished` (exit code, timed out, stopped, duration), `tests` (the parsed test report
@@ -224,7 +224,7 @@ machine, and nothing unauthenticated is exposed on either machine.
     transports. [ADR-0026 §6, ADR-0025 §6]
 
 ### Agents
-29. **The same tools on the host:** `mcp.tools {}` returns the tools of IDECraft's MCP server for the
+29. **The same tools on the host:** `mcp.tools {}` returns the tools of Ferris IDEA's MCP server for the
     host project and `mcp.call {tool, arguments}` calls one there — with the agent rights,
     permissions file and safe mode of the host project (SPEC-0053, SPEC-0158 behaviour 3), never
     the window's. The window's MCP HTTP server (SPEC-0221) serves each remote project window under a
@@ -248,7 +248,7 @@ machine, and nothing unauthenticated is exposed on either machine.
   tokens, rename plan and applied rename (open document edited by author `lsp`, closed file written),
   `stale_revision` for an old revision; a `file:` URI or path outside the project is refused with
   `invalid` before a server sees it, and a location outside the project comes back as `outside` only
-  (SEC-14). Skipped without clangd, failing under `IDECRAFT_REQUIRE_TOOLS`.
+  (SEC-14). Skipped without clangd, failing under `FERRIS_IDEA_REQUIRE_TOOLS`.
 - **AK-3** Search: `search.text` finds unsaved text of an open document and saved text of others,
   respects `mask`, `max` and `truncated`; `search.everywhere` and `search.files` return relative
   paths only. (v8) `search.text` searches the project's own sources, the rest with
@@ -298,7 +298,7 @@ moves to the host. [GEN]
     force push does not exist on the host either (IMP-0029). Rights: `vcs-write` for fetch, pull and
     reset, `view` for outgoing, **`push`** for push; all but `git.outgoing` are audited.
     [SPEC-0055, SPEC-0109, SPEC-0144]
-32. **Credentials stay on the host.** IDECraft neither transports nor stores a Git credential:
+32. **Credentials stay on the host.** Ferris IDEA neither transports nor stores a Git credential:
     nothing about them is in any request or answer, and the backend adds nothing to the environment
     of `git`. `git` runs on the host with the host's own `ssh-agent`, keys and credential helpers
     (the `git` executable of SPEC-0055). It never prompts (no terminal, no askpass program, `ssh` in
@@ -309,7 +309,7 @@ moves to the host. [GEN]
     `GIT_SSH_COMMAND` as a local operation does: strict host keys, the required post-quantum key
     exchange on every hop, the user's `core.sshCommand` replaced. A host or client without it comes
     back as `ssh_refusal` and nothing is transferred. The Azure DevOps exception of ADR-0025 section
-    1a follows the settings **of the host** (read by `idecraft serve` at the start); its use is
+    1a follows the settings **of the host** (read by `ferris-idea serve` at the start); its use is
     reported with `pq: false` and `pq_notice`, which the window shows once per session, and logged
     on the host. [ADR-0025 §1a]
 34. **Nothing secret in answers.** `output`, `messages` and `ssh_refusal` have any `user:password@`
@@ -432,7 +432,7 @@ moves to the host. [GEN]
 1. **`lsp` methods are structured, not raw LSP pass-through.** ADR-0026 §6 lets LSP payloads pass
    unchanged with `lsp.request {server, method, params}`. This spec binds named methods
    (`lsp.complete`, `lsp.hover`, …) that run on the host with the backend's text and answer with
-   IDECraft's parsed results, because (a) every host path and URI is translated to a relative path
+   Ferris IDEA's parsed results, because (a) every host path and URI is translated to a relative path
    or refused in one place on the host instead of in each window feature (behaviour 3, SEC-14 —
    security first); (b) position units, encodings and server quirks (SPEC-0042) are handled where the
    server runs; (c) the window's editor already consumes these parsed results. A raw `lsp.request`
@@ -515,7 +515,7 @@ where it is and says why, instead of acting on this machine. [GEN]
    Revision are not on the host yet and say "Not available for a remote project yet". [SPEC-0063, SPEC-0064, SPEC-0068, SPEC-0086]
 8. **Language functions:** Rename (⇧F6) plans and applies on the host (`lsp.rename` with `apply:
    true`, behaviour 12): the editors take the host's edits through the session. ⌥⏎ lists
-   IDECraft's own fixes at the caret (computed in the window on the document's text, applied as
+   Ferris IDEA's own fixes at the caret (computed in the window on the document's text, applied as
    editor edits) and the host server's actions (`lsp.code_actions`); an action's preview lists the
    files it changes (`apply: false`), applying sends `lsp.apply_action` with `apply: true`.
    Parameter info (⌘P, and after `(`) asks `lsp.signature`. [SPEC-0074, SPEC-0076, SPEC-0080]
@@ -534,7 +534,7 @@ where it is and says why, instead of acting on this machine. [GEN]
     detected ports (port, kind, command) and the open forwards (host port → local address);
     choosing a port forwards it (or says why not), choosing a forward offers Open in Browser
     (`http://127.0.0.1:<local port>`) and Stop Forwarding. The Services tool window shows them too (v5 behaviour 42); the list is the same
-    `idecraft_remote::ports` registry agents use. Forwards close with the window. [ADR-0025 §6]
+    `ferris_idea_remote::ports` registry agents use. Forwards close with the window. [ADR-0025 §6]
 12. **Trust banner:** when `run.configs` says the host project is not trusted, the window shows the
     safe-mode banner: "<folder> on <host> is not trusted: nothing of it runs on the host — run
     configurations and Git hooks are skipped, language servers run in their safe configuration"
@@ -557,7 +557,7 @@ where it is and says why, instead of acting on this machine. [GEN]
 
 ## Window check (v3)
 The window check of 2026-11-07 ran details 2–12 in the window (self-test group
-`IDECRAFT_SELFTEST_ONLY=remote-project` with `IDECRAFT_SELFTEST_HOLD_MS`, a screenshot of each
+`FERRIS_IDEA_SELFTEST_ONLY=remote-project` with `FERRIS_IDEA_SELFTEST_HOLD_MS`, a screenshot of each
 point). It fixed these points; details 2–12 stay the rule otherwise. [GEN]
 
 1. **No local safe mode for a remote project (detail 12):** the window's own trust check of the

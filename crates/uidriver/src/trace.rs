@@ -120,8 +120,15 @@ impl Trace {
     }
 }
 
-/// Creates `dir` (and its parents) and makes it 0700.
+/// Creates `dir` (and its parents) and makes it 0700; refused off Unix, where it cannot be made
+/// private yet (`SPEC-0321` v6 behaviour 8a).
 fn create_private_dir(dir: &Path) -> std::io::Result<()> {
+    if cfg!(not(unix)) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "private trace folders are not supported on this platform yet",
+        ));
+    }
     std::fs::create_dir_all(dir)?;
     #[cfg(unix)]
     {
@@ -140,7 +147,7 @@ pub struct AuditFacts {
     pub effects: Vec<Effect>,
 }
 
-/// One line of `.idecraft/agent-log.jsonl` for an external call: time, actor, tool, locator,
+/// One line of `.ferris-idea/agent-log.jsonl` for an external call: time, actor, tool, locator,
 /// resolved role, name and test id, effects, outcome and duration; typed text only as its length.
 #[allow(clippy::too_many_arguments)]
 pub fn audit_entry(

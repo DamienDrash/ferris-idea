@@ -3,7 +3,7 @@
   "additionalProperties": false,
   "description": "Exchange file `.idckeymap` (SPEC-0303). TOML; validated on import with every problem and its key path.",
   "properties": {
-    "idecraft": {
+    "ferris-idea": {
       "additionalProperties": false,
       "properties": {
         "author": {
@@ -33,7 +33,7 @@
           "type": "string"
         },
         "min_version": {
-          "description": "Oldest IDECraft version the author expects.",
+          "description": "Oldest Ferris IDEA version the author expects.",
           "type": "string"
         },
         "name": {
@@ -77,9 +77,9 @@
     }
   },
   "required": [
-    "idecraft",
+    "ferris-idea",
     "keymap"
   ],
-  "title": "IDECraft keymap (kind `keymap`, format 1)",
+  "title": "Ferris IDEA keymap (kind `keymap`, format 1)",
   "type": "object"
 }

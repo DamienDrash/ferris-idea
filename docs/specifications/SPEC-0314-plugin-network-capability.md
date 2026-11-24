@@ -1,7 +1,7 @@
 # SPEC-0314: Network capability for WebAssembly connector plugins
 
 - **Version:** 2 · **Date:** 2026-11-16 (v2: the connection's SSL mode decides whether a plugin
-  gets a connection without TLS; elsewhere IDECraft makes the TLS — `net_connect_tls`, answers `-6`
+  gets a connection without TLS; elsewhere Ferris IDEA makes the TLS — `net_connect_tls`, answers `-6`
   and `-7`, `ssl` in the request, `tls` in the audit; behaviours 3, 4, 9, 10, AK-6, SPEC-0016 v4,
   IMP-0427); 2026-11-05 (v1)
 - **Sources:** GEN (plugin platforms of editors and browsers give extensions network access either
@@ -13,7 +13,7 @@
 - **Feature matrix rows:** F-080, F-060
 
 ## Purpose
-A database system that IDECraft cannot reach with its own drivers or ODBC can be added by a
+A database system that Ferris IDEA cannot reach with its own drivers or ODBC can be added by a
 WebAssembly plugin that speaks the system's protocol. The plugin may connect only to the server of
 the connection the user picked. Before it does so for the first time, the user, or an agent, sees a
 clear warning and decides.
@@ -34,12 +34,12 @@ clear warning and decides.
    Without `[plugin]`, or with `[plugin]` under another family, the definition gets a problem with
    its key path. A plugin connector:
    - is not connectable through native sessions;
-   - shows the note "Connects through the WebAssembly plugin `<module>`; IDECraft does not review
+   - shows the note "Connects through the WebAssembly plugin `<module>`; Ferris IDEA does not review
      its code.";
    - reads as User or Imported like every file (never Supported).
 
    Its URL schemes select it, and the profile's dialect is the `lexis` family. [ADR-0020, ADR-0024]
-3. **Host functions** of module `idecraft`. Each answers `-1` unless the call was started with
+3. **Host functions** of module `ferris-idea`. Each answers `-1` unless the call was started with
    network access for this plugin (behaviour 5):
    - `net_connect(ptr, len: i32) -> i32` takes UTF-8 `host:port` (`[v6]:port` for IPv6 literals). It
      returns a handle (≥ 0) when host and port equal the granted target: the host name is compared
@@ -84,7 +84,7 @@ clear warning and decides.
    - the target `host:port` ("the host and port of the connection you pick" when none is known yet);
    - that it receives the connection's user name and password;
    - the connector's status (Beta, User or Imported) and what that status means;
-   - "IDECraft does not review the code of plugins. Allow it only if you trust the author."
+   - "Ferris IDEA does not review the code of plugins. Allow it only if you trust the author."
 
    The object has `plugin`, `version`, `author`, `connector`, `status`, `host`, `port`,
    `reviewed: false`, `receives_credentials: true`, `title` and `text`. [ADR-0024]
@@ -107,7 +107,7 @@ clear warning and decides.
    - `test_connection` on a plugin connector returns `warning` and `requires_grant` too. Without an
      agent grant for the profile's host and port it connects nowhere. It returns `ok: false`,
      `requires_grant: true` and an error naming `grant_plugin_network`.
-   - `grant_plugin_network {connection}` asks the user in the IDECraft window with the full warning.
+   - `grant_plugin_network {connection}` asks the user in the Ferris IDEA window with the full warning.
      "Allow once" lasts for this MCP session, "Always" stores an `agent` grant, and a refusal or no
      window gives no grant.
    - `revoke_plugin_network {plugin, host?, port?}` removes grants.
@@ -174,6 +174,6 @@ offered: the host could not tell the bytes before the switch from a password.
 
 ## Known deviations from the reference
 The reference has no sandboxed connector plugins; its JDBC drivers run with the IDE's full rights.
-IDECraft confines a connector plugin to the one host and port the user picked, warns people and
+Ferris IDEA confines a connector plugin to the one host and port the user picked, warns people and
 agents with the same content, and keeps a local audit of every connection (IMP-0300). v2: the
-plugin's traffic follows the connection's SSL mode, with TLS made by IDECraft (IMP-0427).
+plugin's traffic follows the connection's SSL mode, with TLS made by Ferris IDEA (IMP-0427).

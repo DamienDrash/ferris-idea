@@ -35,7 +35,7 @@ pub fn parse_address(text: &str) -> Result<u64, String> {
     u64::from_str_radix(digits, 16).map_err(|_| format!("address `{text}` is not hexadecimal"))
 }
 
-/// An address as IDECraft writes it: `0x` and 16 lowercase hexadecimal digits.
+/// An address as Ferris IDEA writes it: `0x` and 16 lowercase hexadecimal digits.
 pub fn hex_address(address: u64) -> String {
     format!("0x{address:016x}")
 }

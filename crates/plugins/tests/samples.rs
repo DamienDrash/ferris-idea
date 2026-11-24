@@ -3,7 +3,7 @@
 
 use std::path::{Path, PathBuf};
 
-use idecraft_plugins::{
+use ferris_idea_plugins::{
     Access, ActionKind, CompleteContext, EditorContext, MAX_STATUS, PanelContext, Permission,
     Plugin, ReviewKind, TokenKind, action_list, compare_versions, contributions, file_type_for,
     granted, highlight, install, review, set_granted,
@@ -18,20 +18,20 @@ fn sample(name: &str) -> Plugin {
     Plugin::from_bytes(Path::new(&format!("{name}.wasm")), &wasm).unwrap()
 }
 
-/// The built modules next to the sources are what the sources compile to (with `IDECRAFT_BLESS=1`
+/// The built modules next to the sources are what the sources compile to (with `FERRIS_IDEA_BLESS=1`
 /// they are written anew), so they can be installed by hand and by the window self-test.
 #[test]
 fn sample_modules_match_their_sources() {
     for name in ["complete", "filetype", "status", "panel", "runconfig"] {
         let built = wat::parse_file(samples().join(format!("{name}.wat"))).unwrap();
         let file = samples().join(format!("{name}.wasm"));
-        if std::env::var_os("IDECRAFT_BLESS").is_some() {
+        if ferris_idea_core::product_var_os("FERRIS_IDEA_BLESS").is_some() {
             std::fs::write(&file, &built).unwrap();
         }
         assert_eq!(
             std::fs::read(&file).unwrap_or_default(),
             built,
-            "{name}.wasm is stale: run with IDECRAFT_BLESS=1"
+            "{name}.wasm is stale: run with FERRIS_IDEA_BLESS=1"
         );
         assert!(Plugin::load(&file).is_ok());
     }
@@ -109,6 +109,46 @@ fn status_text() {
         .unwrap();
     assert_eq!(status.text, "Lines: 12346");
     assert!(status.text.chars().count() <= MAX_STATUS);
+}
+
+/// SPEC-0356 AK-9 (behaviour 12): a plugin built for the product's former name (a host function
+/// imported from the former module, its exports with the former prefix) still links and runs.
+#[test]
+fn a_plugin_built_for_the_former_name_still_runs() {
+    let former_module = "\"idecraft\""; // rebrand:keep
+    let former_prefix = "\"idecraft_"; // rebrand:keep
+    let source = std::fs::read_to_string(samples().join("status.wat")).unwrap();
+    let old = source
+        .replace(
+            &format!("\"{}\"", ferris_idea_plugins::HOST_MODULE),
+            former_module,
+        )
+        .replace(
+            &format!("\"{}", ferris_idea_plugins::EXPORT_PREFIX),
+            former_prefix,
+        )
+        .replacen(
+            "(module",
+            &format!("(module\n  (import {former_module} \"list_files\" (func (result i64)))"),
+            1,
+        );
+    let p = Plugin::from_bytes(Path::new("status.wasm"), &wat::parse_str(&old).unwrap()).unwrap();
+    let status = p
+        .run_status(
+            "lines",
+            &EditorContext {
+                path: "a.txt".into(),
+                language: None,
+                text: "one\ntwo".into(),
+                selection_start: 0,
+                selection_end: 0,
+                line: 0,
+                column: 0,
+            },
+            Access::default(),
+        )
+        .unwrap();
+    assert_eq!(status.text, "Lines: 2");
 }
 
 #[test]
@@ -191,7 +231,8 @@ fn review_and_update() {
     assert_eq!(compare_versions("1.0-beta", "1.0-alpha"), Greater);
     assert_eq!(compare_versions("0.9", "0.10"), Less);
 
-    let base = std::env::temp_dir().join(format!("idecraft-plugin-review-{}", std::process::id()));
+    let base =
+        std::env::temp_dir().join(format!("ferris-idea-plugin-review-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
     let (download, dir) = (base.join("download"), base.join("plugins"));
     std::fs::create_dir_all(&download).unwrap();
@@ -251,8 +292,8 @@ fn review_and_update() {
 /// over only to the same plugin (same manifest name), never to a new or a different one.
 #[test]
 fn reviewed_bytes_and_grants_of_the_same_plugin_only() {
-    use idecraft_plugins::{Holder, Target, grant_network, install_reviewed, network_grants};
-    let base = std::env::temp_dir().join(format!("idecraft-plugin-same-{}", std::process::id()));
+    use ferris_idea_plugins::{Holder, Target, grant_network, install_reviewed, network_grants};
+    let base = std::env::temp_dir().join(format!("ferris-idea-plugin-same-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
     let (download, dir) = (base.join("download"), base.join("plugins"));
     std::fs::create_dir_all(&download).unwrap();
@@ -343,7 +384,7 @@ fn reviewed_bytes_and_grants_of_the_same_plugin_only() {
 /// longer asks for it and with removal.
 #[test]
 fn run_config_suggestions() {
-    use idecraft_plugins::{RunConfigContext, run_types, uninstall};
+    use ferris_idea_plugins::{RunConfigContext, run_types, uninstall};
     let p = sample("runconfig");
     assert_eq!(p.manifest.permissions, [Permission::SuggestCommands]);
     assert_eq!(p.manifest.actions[0].kind, ActionKind::RunConfig);
@@ -371,12 +412,13 @@ fn run_config_suggestions() {
     assert!(problems[1].contains("Escape") && problems[1].contains("folder"));
 
     // Through the plugins folder: listed, but run only with the grant.
-    let base = std::env::temp_dir().join(format!("idecraft-plugin-runcfg-{}", std::process::id()));
+    let base =
+        std::env::temp_dir().join(format!("ferris-idea-plugin-runcfg-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
     let (dir, root) = (base.join("plugins"), base.join("demo"));
     std::fs::create_dir_all(&root).unwrap();
     install(&dir, &samples().join("runconfig.wasm")).unwrap();
-    let plugins = idecraft_plugins::load_dir(&dir).0;
+    let plugins = ferris_idea_plugins::load_dir(&dir).0;
     let types = run_types(&plugins, Some(&dir), &root, None);
     assert_eq!(types.len(), 1);
     assert_eq!(

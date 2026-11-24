@@ -12,9 +12,9 @@
 //! fifth package the editor font size (`SPEC-0129` v4). The decisions without a window are in
 //! [`crate::keymap_actions`].
 
+use ferris_idea_ui::tool_windows::ToolWindow;
+use ferris_idea_vcs::Repo;
 use gpui::{AppContext, Context, Window};
-use idecraft_ui::tool_windows::ToolWindow;
-use idecraft_vcs::Repo;
 
 use super::{DocPopup, WorkbenchView, file_status_keys};
 use crate::DiffView;
@@ -33,7 +33,7 @@ impl WorkbenchView {
         }
         let mut settings = crate::appearance::ide_settings(cx);
         let size = settings.editor.font_size;
-        let Some(next) = idecraft_core::font_size_step(size, delta) else {
+        let Some(next) = ferris_idea_core::font_size_step(size, delta) else {
             self.status = Some(format!(
                 "Editor font size: {size} is the {}",
                 if delta > 0.0 { "largest" } else { "smallest" }
@@ -117,7 +117,7 @@ impl WorkbenchView {
             return false;
         }
         let keymap = crate::keymaps::current();
-        let Some(stroke) = idecraft_ui::keymap::EventStrokes::of(
+        let Some(stroke) = ferris_idea_ui::keymap::EventStrokes::of(
             &k.key,
             m.control,
             m.alt,
@@ -307,8 +307,8 @@ impl WorkbenchView {
             remote: folders.as_ref(),
         };
         let reference = subject.line.zip(subject.paths.first()).map(|(line, path)| {
-            let language = idecraft_languages::LanguageId::detect(path);
-            if folders.is_none() && idecraft_languages::reference_name::has_rules(language) {
+            let language = ferris_idea_languages::LanguageId::detect(path);
+            if folders.is_none() && ferris_idea_languages::reference_name::has_rules(language) {
                 String::new()
             } else {
                 scope.line_reference(path, line)
@@ -411,7 +411,7 @@ impl WorkbenchView {
     /// the language server's symbols of the file; file and line where there is none (`SPEC-0332`
     /// v2 behaviours 13b and 13c).
     pub(super) fn copy_reference(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        use idecraft_languages::reference_name;
+        use ferris_idea_languages::reference_name;
         let (Some(here), Some(editor)) = (self.here(cx), self.active_editor()) else {
             self.status = Some(crate::copy_path_model::NO_EDITOR.into());
             cx.notify();
@@ -425,7 +425,7 @@ impl WorkbenchView {
             remote: folders.as_ref(),
         }
         .line_reference(&here.path, here.line);
-        let language = idecraft_languages::LanguageId::detect(&here.path);
+        let language = ferris_idea_languages::LanguageId::detect(&here.path);
         // A remote document's symbols are not asked of the host; other languages have no names.
         if folders.is_some() || !reference_name::has_rules(language) {
             cx.write_to_clipboard(gpui::ClipboardItem::new_string(fallback.clone()));
@@ -446,7 +446,7 @@ impl WorkbenchView {
                         .build()
                         .map_err(|e| e.to_string())?;
                     let symbols = rt
-                        .block_on(idecraft_languages::insight::symbols_in(
+                        .block_on(ferris_idea_languages::insight::symbols_in(
                             &folder,
                             &file,
                             Some(&asked),
@@ -722,7 +722,7 @@ impl WorkbenchView {
     /// language server does; false without an editor. For checks without a language server.
     pub fn show_param_info(
         &mut self,
-        help: idecraft_languages::insight::SignatureHelp,
+        help: ferris_idea_languages::insight::SignatureHelp,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
@@ -857,7 +857,7 @@ impl WorkbenchView {
             cx.notify();
             return;
         }
-        let Some(dir) = idecraft_core::user_config_dir().map(|d| d.join("scratches")) else {
+        let Some(dir) = ferris_idea_core::user_config_dir().map(|d| d.join("scratches")) else {
             self.status = Some("No settings folder to keep scratch files in".into());
             cx.notify();
             return;
@@ -1106,7 +1106,7 @@ impl WorkbenchView {
     pub(super) fn take_diff_side(
         &mut self,
         from_left: bool,
-        change: Option<idecraft_vcs::LineChange>,
+        change: Option<ferris_idea_vcs::LineChange>,
         cx: &mut Context<Self>,
     ) -> bool {
         if self.diff.is_none() {
@@ -1124,7 +1124,7 @@ impl WorkbenchView {
     fn take_in_diff(
         &mut self,
         from_left: bool,
-        change: Option<idecraft_vcs::LineChange>,
+        change: Option<ferris_idea_vcs::LineChange>,
         cx: &mut Context<Self>,
     ) -> Result<String, String> {
         let diff = self.diff.clone().ok_or_else(String::new)?;
@@ -1166,14 +1166,14 @@ impl WorkbenchView {
         // Both sides are read again: what is written must be what the viewer shows.
         let left = self.diff_side_text(&sides.left, cx)?;
         let right = self.diff_side_text(&sides.right, cx)?;
-        if idecraft_vcs::side_by_side(&left, &right) != diff.read(cx).rows() {
+        if ferris_idea_vcs::side_by_side(&left, &right) != diff.read(cx).rows() {
             diff.update(cx, |d, cx| {
                 d.refresh(&left, &right);
                 cx.notify();
             });
             return Err(diff_actions::SIDES_CHANGED.into());
         }
-        let taken = idecraft_vcs::take_change(&left, &right, &change, from_left);
+        let taken = ferris_idea_vcs::take_change(&left, &right, &change, from_left);
         let before = if from_left { &right } else { &left };
         if &taken == before {
             return Err(diff_actions::ALREADY_EQUAL.into());
@@ -1238,7 +1238,7 @@ impl WorkbenchView {
             }
         };
         let (left_title, right_title) = keymap_actions::compare_titles(&self.root, &left, &right);
-        let rows = idecraft_vcs::side_by_side(&old, &new);
+        let rows = ferris_idea_vcs::side_by_side(&old, &new);
         let view = cx.new(|cx| {
             DiffView::new(format!("{left_title} vs {right_title}"), rows, cx)
                 .with_sides(&left_title, &right_title)
@@ -1494,7 +1494,7 @@ impl WorkbenchView {
         let Some(here) = self.here(cx) else {
             return;
         };
-        let Some(language) = idecraft_languages::LanguageId::detect(&here.path) else {
+        let Some(language) = ferris_idea_languages::LanguageId::detect(&here.path) else {
             return;
         };
         if self.remote_ask(&here.path).is_some() {
@@ -1531,7 +1531,7 @@ impl WorkbenchView {
                         .build()
                         .map_err(|e| e.to_string())?;
                     let targets = rt
-                        .block_on(idecraft_languages::quick_definition::targets(
+                        .block_on(ferris_idea_languages::quick_definition::targets(
                             &root,
                             &from.path,
                             Some(&text),
@@ -1540,8 +1540,8 @@ impl WorkbenchView {
                             std::time::Duration::from_secs(30),
                         ))
                         .map_err(|e| match e {
-                            idecraft_languages::lsp::LspError::NoServer(why) => {
-                                idecraft_languages::servers::no_server_message(language, &why)
+                            ferris_idea_languages::lsp::LspError::NoServer(why) => {
+                                ferris_idea_languages::servers::no_server_message(language, &why)
                             }
                             e => format!("The language server gave no answer: {e}"),
                         })?;
@@ -1554,7 +1554,7 @@ impl WorkbenchView {
                                 Some(text) => text.clone(),
                                 None => std::fs::read_to_string(&path).ok()?,
                             };
-                            let source = idecraft_languages::quick_definition::source_at(
+                            let source = ferris_idea_languages::quick_definition::source_at(
                                 &path,
                                 &text,
                                 l.range.start_line as usize,
@@ -1679,7 +1679,7 @@ impl WorkbenchView {
         let Some((_, relative, name)) = self.local_project_file("Go to Test", cx) else {
             return;
         };
-        let Some(me) = idecraft_languages::related::test_name(&relative) else {
+        let Some(me) = ferris_idea_languages::related::test_name(&relative) else {
             self.status = Some(keymap_actions::goto_test_nothing(&name, None));
             cx.notify();
             return;
@@ -1689,8 +1689,9 @@ impl WorkbenchView {
             let walk_root = root.clone();
             let found = cx
                 .background_spawn(async move {
-                    let files = idecraft_core::OwnSources::new(&walk_root).files();
-                    idecraft_languages::related::counterparts(&relative, &files).unwrap_or_default()
+                    let files = ferris_idea_core::OwnSources::new(&walk_root).files();
+                    ferris_idea_languages::related::counterparts(&relative, &files)
+                        .unwrap_or_default()
                 })
                 .await;
             let _ = this.update_in(cx, |this, window, cx| {
@@ -1715,7 +1716,7 @@ impl WorkbenchView {
             let ask_root = root.clone();
             let found = cx
                 .background_spawn(async move {
-                    idecraft_languages::related::related_files(&ask_root, &path, text.as_deref())
+                    ferris_idea_languages::related::related_files(&ask_root, &path, text.as_deref())
                 })
                 .await;
             let _ = this.update_in(cx, |this, window, cx| {

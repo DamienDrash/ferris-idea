@@ -1,13 +1,13 @@
-//! The groups of the window self-test (`idecraft ui --selftest`): which of them a run takes
-//! (`IDECRAFT_SELFTEST_ONLY`, `IDECRAFT_SELFTEST_SKIP`), the meta groups that name several at
+//! The groups of the window self-test (`ferris-idea ui --selftest`): which of them a run takes
+//! (`FERRIS_IDEA_SELFTEST_ONLY`, `FERRIS_IDEA_SELFTEST_SKIP`), the meta groups that name several at
 //! once, and the report of how long each took. The steps themselves are in `workbench.rs`.
 
 use std::time::Duration;
 
 /// Runs only the named groups (comma-separated; group and meta group names).
-pub const ONLY: &str = "IDECRAFT_SELFTEST_ONLY";
+pub const ONLY: &str = "FERRIS_IDEA_SELFTEST_ONLY";
 /// Leaves the named groups out (comma-separated; group and meta group names).
-pub const SKIP: &str = "IDECRAFT_SELFTEST_SKIP";
+pub const SKIP: &str = "FERRIS_IDEA_SELFTEST_SKIP";
 
 /// Names for several groups at once.
 ///
@@ -20,7 +20,7 @@ pub const SKIP: &str = "IDECRAFT_SELFTEST_SKIP";
 /// js-debug, kotlin-debug-adapter, debugpy on a launched script) are in the list as well: one
 /// switch turns off everything that debugs.
 ///
-/// The other meta groups keep the names `IDECRAFT_SELFTEST_ONLY` took before every block of steps
+/// The other meta groups keep the names `FERRIS_IDEA_SELFTEST_ONLY` took before every block of steps
 /// had a name of its own.
 pub const META: &[(&str, &[&str])] = &[
     (
@@ -143,8 +143,8 @@ pub fn select(
 pub fn from_env(names: &[&'static str]) -> Result<Selection, String> {
     select(
         names,
-        std::env::var(ONLY).ok().as_deref(),
-        std::env::var(SKIP).ok().as_deref(),
+        ferris_idea_core::product_var(ONLY).ok().as_deref(),
+        ferris_idea_core::product_var(SKIP).ok().as_deref(),
     )
 }
 
@@ -299,7 +299,7 @@ mod tests {
     fn an_unknown_name_is_an_error_that_names_the_variable() {
         let e = select(NAMES, Some("mouse,nope"), None).unwrap_err();
         assert!(
-            e.starts_with("IDECRAFT_SELFTEST_ONLY: unknown self-test group \"nope\""),
+            e.starts_with("FERRIS_IDEA_SELFTEST_ONLY: unknown self-test group \"nope\""),
             "{e}"
         );
         assert!(
@@ -307,7 +307,7 @@ mod tests {
             "{e}"
         );
         let e = select(NAMES, None, Some("debugger")).unwrap_err();
-        assert!(e.starts_with("IDECRAFT_SELFTEST_SKIP: "), "{e}");
+        assert!(e.starts_with("FERRIS_IDEA_SELFTEST_SKIP: "), "{e}");
     }
 
     #[test]
@@ -353,7 +353,7 @@ mod tests {
     fn the_skipped_line_reads_like_the_lines_of_missing_tools() {
         assert_eq!(
             skipped_line("kotlin-debug"),
-            "kotlin-debug steps skipped: IDECRAFT_SELFTEST_SKIP"
+            "kotlin-debug steps skipped: FERRIS_IDEA_SELFTEST_SKIP"
         );
     }
 

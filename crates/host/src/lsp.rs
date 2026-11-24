@@ -1,15 +1,15 @@
 //! `lsp.*` (`SPEC-0318` behaviours 7–12): the host's language servers (the pool of `SPEC-0090`)
 //! on the backend's documents. The backend keeps every server's copy of a document in step with
-//! the registry, so the window never sends text to a server; answers come as IDECraft's parsed
+//! the registry, so the window never sends text to a server; answers come as Ferris IDEA's parsed
 //! results with relative paths.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use idecraft_languages::insight::{self, LocationKind, Range};
-use idecraft_languages::{LanguageId, actions, pool, rename, semantic};
-use idecraft_session::{Backend, Call, ErrorCode, Op, Right, RpcError};
+use ferris_idea_languages::insight::{self, LocationKind, Range};
+use ferris_idea_languages::{LanguageId, actions, pool, rename, semantic};
+use ferris_idea_session::{Backend, Call, ErrorCode, Op, Right, RpcError};
 use serde_json::{Value, json};
 
 use crate::paths::{DocCtx, char_offset, doc_ctx, relative};
@@ -21,9 +21,9 @@ const WAIT: Duration = Duration::from_secs(30);
 /// How soon a document change reaches its server.
 const FOLLOW: Duration = Duration::from_millis(150);
 
-fn lsp_error(e: idecraft_languages::lsp::LspError) -> RpcError {
+fn lsp_error(e: ferris_idea_languages::lsp::LspError) -> RpcError {
     let text = e.to_string();
-    if matches!(e, idecraft_languages::lsp::LspError::NoServer(_)) {
+    if matches!(e, ferris_idea_languages::lsp::LspError::NoServer(_)) {
         RpcError::new(ErrorCode::Unavailable, text)
             .hint("no language server for this file is installed on the host")
     } else {
@@ -69,14 +69,14 @@ pub fn bind(backend: &Backend, options: &HostOptions) {
     add(backend, "lsp", "lsp.status", Right::View, false, |call| {
         let root = backend_of(call)?.root().unwrap_or_default();
         // Languages and the program each would use; no host paths (behaviour 3).
-        let servers: Vec<Value> = idecraft_languages::servers::overview_for(&root)
+        let servers: Vec<Value> = ferris_idea_languages::servers::overview_for(&root)
             .into_iter()
             .map(|l| json!({ "language": l.language, "program": l.selected }))
             .collect();
         Ok(json!({
             "servers": servers,
             "running": pool::running(),
-            "safe_mode": !idecraft_core::trust::allows_project_code(&root),
+            "safe_mode": !ferris_idea_core::trust::allows_project_code(&root),
         }))
     });
     add(
@@ -108,7 +108,7 @@ pub fn bind(backend: &Backend, options: &HostOptions) {
         let b = backend_of(call)?;
         let c = doc_ctx(&b, &call.params, true)?;
         let text = c.text.clone().unwrap_or_default();
-        let findings = idecraft_languages::inspections::inspect_text(&c.file, &text);
+        let findings = ferris_idea_languages::inspections::inspect_text(&c.file, &text);
         let items: Vec<Value> = findings
             .iter()
             .map(|f| {
@@ -440,7 +440,7 @@ pub(crate) fn apply_files(
             }
             Step::File(path, doc, text) => {
                 write_keeping_mode(&path, &text).map_err(internal)?;
-                if let Ok(mut h) = idecraft_core::LocalHistory::open(root) {
+                if let Ok(mut h) = ferris_idea_core::LocalHistory::open(root) {
                     let _ = h.record(&doc);
                 }
                 changed.push(doc);
@@ -453,7 +453,7 @@ pub(crate) fn apply_files(
 fn write_keeping_mode(path: &Path, text: &str) -> std::io::Result<()> {
     let mode = std::fs::metadata(path).map(|m| m.permissions()).ok();
     let mut name = path.file_name().unwrap_or_default().to_os_string();
-    name.push(format!(".idecraft-{}", std::process::id()));
+    name.push(format!(".ferris-idea-{}", std::process::id()));
     let tmp = path.with_file_name(name);
     let r = std::fs::write(&tmp, text)
         .and_then(|()| match &mode {

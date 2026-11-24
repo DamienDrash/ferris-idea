@@ -2,24 +2,24 @@
 //! onto the editor's lines, the column's labels, age colours and hover text, and the status texts
 //! for files that cannot be annotated.
 //!
-//! The blame itself comes from [`idecraft_vcs::Repo::blame_head`] on a background thread; mapping
-//! it onto the buffer after an edit ([`idecraft_vcs::HeadBlame::map`]) runs there too.
+//! The blame itself comes from [`ferris_idea_vcs::Repo::blame_head`] on a background thread; mapping
+//! it onto the buffer after an edit ([`ferris_idea_vcs::HeadBlame::map`]) runs there too.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use idecraft_vcs::{BlameCommit, GitError, HeadBlame};
+use ferris_idea_vcs::{BlameCommit, GitError, HeadBlame};
 
 use crate::git_log_model::{DateStyle, LocalZone};
 
 /// Annotate with Git Blame; closes the annotations while they are shown (behaviour 1).
 pub const ANNOTATE: &str = "Annotate";
 /// Close Annotations (behaviour 6).
-pub const CLOSE_ANNOTATIONS: &str = "IDECraft.CloseAnnotations";
+pub const CLOSE_ANNOTATIONS: &str = "FerrisIDEA.CloseAnnotations";
 /// Show the line's commit in the Git log (behaviour 6).
-pub const SHOW_IN_GIT_LOG: &str = "IDECraft.Annotation.ShowInGitLog";
+pub const SHOW_IN_GIT_LOG: &str = "FerrisIDEA.Annotation.ShowInGitLog";
 /// Copy the line's full commit id (behaviour 6).
-pub const COPY_REVISION: &str = "IDECraft.Annotation.CopyRevision";
+pub const COPY_REVISION: &str = "FerrisIDEA.Annotation.CopyRevision";
 
 /// Label of a line changed since HEAD (behaviour 2).
 pub const NOT_COMMITTED: &str = "not committed";
@@ -288,7 +288,7 @@ impl<V: PartialEq> BlameRequests<V> {
 
 /// The annotated views whose blame is stale (behaviour 8): `annotated` holds per view its file and
 /// the HEAD text blamed; `heads` the HEAD text per file as the status poll just read it, or `None`
-/// after a commit in IDECraft, which makes every annotated view stale.
+/// after a commit in Ferris IDEA, which makes every annotated view stale.
 pub fn stale_views<V: Clone>(
     annotated: &[(V, PathBuf, String)],
     heads: Option<&[(PathBuf, Option<String>)]>,
@@ -309,7 +309,7 @@ pub fn stale_views<V: Clone>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use idecraft_vcs::CommitInfo;
+    use ferris_idea_vcs::CommitInfo;
 
     fn commit(id: &str, author: &str, time: i64, message: &str) -> BlameCommit {
         BlameCommit {

@@ -1,6 +1,6 @@
 # SPEC-0109: Push, Update Project and the VCS operations popup
 
-- **Version:** 3 · **Date:** 2026-11-06 (v3: ⌘T and ⇧⌘K, shortcuts in the VCS operations popup, Commit runs ⌘K, behaviour 11; v2: the reference's entries and digits in the popup, files per commit, ⌘A in the dialog, "(new)" only for a branch the remote lacks; OBS-0022 L13, L17, L23, L24)
+- **Version:** 4 · **Date:** 2026-11-23 (v4: Rollback lists every changed file with the current one checked and confirms with their number, behaviour 12, AK-10; OBS-0119 K4); 2026-11-06 (v3: ⌘T and ⇧⌘K, shortcuts in the VCS operations popup, Commit runs ⌘K, behaviour 11; v2: the reference's entries and digits in the popup, files per commit, ⌘A in the dialog, "(new)" only for a branch the remote lacks; OBS-0022 L13, L17, L23, L24)
 - **Sources:** GEN (VCS operations quick list, Push dialog with outgoing commits, Update Project, Fetch),
   SPEC-0055 (remote operations), SPEC-0106 (stash), SPEC-0101 (conflicts), ADR-0008, ADR-0012
 - **Feature matrix rows:** F-045
@@ -25,6 +25,23 @@ it happens.
    are refreshed. [ADR-0012, IMP-0011]
 5. **MCP:** `git_outgoing` returns what Push would send; `git_fetch`/`git_pull`/`git_push` already exist.
    [ADR-0008]
+12. **v4 – Rollback of files:** `ChangesView.Revert` (⌥⌘Z on macOS, Ctrl+Alt+Z elsewhere; Rollback…
+    in the VCS operations popup) lists every file of the repository with a change Git knows,
+    staged or not, by path, each with a check box; untracked files are never listed. The file of
+    the active editor is checked when it is listed, and only it, so Enter right away rolls back
+    just that file as before v4. Space checks and unchecks the selected row, ⌘A checks all,
+    Escape cancels. Enter with nothing checked does nothing. Enter with checked files asks for a
+    confirmation that names the file, or the number of files, with Rollback first and Cancel
+    second; it is destructive, so it is never skipped. Rolling back gives each file its HEAD
+    content in the working tree and the index (an added file leaves the index and stays on disk;
+    SPEC-0063 behaviour 10). Before, the Local History records each file's state under the label
+    "Before Rollback", and afterwards labels the step "Rollback", so the earlier text can be
+    restored there; open editors show the rolled-back text, discarding their unsaved edits, which
+    is what rolling back means. The status bar says how many files were rolled back. With no
+    change to roll back the status bar says so and no list opens. ⌥⌘Z is shared with
+    `Vcs.RollbackChangedLines` (SPEC-0064 behaviour 7): with the caret in a changed range it
+    takes back that change; anywhere else it is this Rollback (before v4 it said there was no
+    change at the caret). MCP: `git_rollback` takes several paths (SPEC-0063). [OBS-0119 K4, GEN]
 
 ## Acceptance criteria
 - **AK-1** Reports for fetch, push and update outcomes (unit tests).
@@ -46,7 +63,7 @@ it happens.
 
 6. **v2 – Entries of the popup:** in the reference's order, the first ten with the digits 1–9 and 0:
    Commit…, Commit File… (`CheckinFiles`: the Commit window with only the active file checked),
-   Rollback… (`ChangesView.Revert`: the active file after a confirmation), Show History
+   Rollback… (`ChangesView.Revert`: the changed files, behaviour 12), Show History
    (`Vcs.ShowTabbedFileHistory`: the Git log filtered to the active file), Annotate with Git Blame,
    Show Diff (`Compare.SameVersion`: the active file against HEAD), Branches…, Push…, Stash Changes…,
    Unstash Changes…; after a line: Update Project…, Fetch, Resolve Conflicts…, Add to VCS
@@ -63,6 +80,16 @@ it happens.
 10. **v2 – MCP:** `git_outgoing` also returns `files` (by commit id) and `remote_branches`. [ADR-0008]
 11. **v3 – Shortcuts:** Update Project is ⌘T (Ctrl+T) and Push ⇧⌘K (Ctrl+Shift+K), as the reference's VCS plugin binds them (they are not in the platform keymap); the VCS operations popup shows each entry's shortcut from the keymap in use on the right, and its Commit… entry runs Commit (⌘K: shows the Commit window with the focus and never hides it). Before v3 ⌘T and ⇧⌘K did nothing. [OBS-0022 Nachprüfung im Fenster 2026-11-06, L13]
 - **AK-9 (v3)** The macOS keymap maps ⌘T to `Vcs.UpdateProject` and ⇧⌘K to `Vcs.Push`, the default keymap Ctrl+T (unit test `keymap::tests::update_and_push_have_the_reference_shortcuts`); `vcs_ops_model` lists `CheckinProject` first.
+
+- **AK-10 (v4, behaviour 12)** Unit test (`vcs_ops_model::tests::rollback_lists_the_changed_files_with_the_current_one_checked`):
+  the rows leave out untracked files and check only the current file; the confirmation names one
+  file or the number. In a window of the test harness with a Git repository of its own, two
+  changed files and an untracked one, by keys
+  (`crates/workbench/tests/it/keymap_gaps_obs0119.rs::rollback_lists_the_changed_files_and_rolls_back_the_checked_ones`):
+  ⌥⌘Z lists the two changed files with the current one checked; Enter asks about that file,
+  Cancel changes nothing; ⌥⌘Z, ↓ Space Enter asks about 2 files, Rollback rolls both back, the
+  untracked file stays, the editor shows HEAD's text, the Local History has the label; ⌥⌘Z then
+  says there is nothing to roll back.
 
 ## Out of scope
 Choosing another remote in the dialog, update of several repositories, worktrees in the popup.

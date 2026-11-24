@@ -10,7 +10,7 @@ use gpui::{
     div, font, prelude::*, px, rgb,
 };
 
-use idecraft_database::{
+use ferris_idea_database::{
     Applied, CellState, ConnectionProfile, Dialect, EditTarget, ExportFormat, GridEdits,
     TableQuery, order_text, page_count,
 };
@@ -64,7 +64,7 @@ pub enum ServicesEvent {
     /// behaviour 5).
     Submit {
         /// The changes, applied in one transaction.
-        set: idecraft_database::EditSet,
+        set: ferris_idea_database::EditSet,
         /// The query to run again afterwards.
         query: String,
     },
@@ -115,7 +115,7 @@ pub struct ConsoleRun {
     /// Per result, whether and how its rows can be edited (`SPEC-0107`).
     pub edits: Vec<Option<GridEdits>>,
     /// A query plan, shown in a "Plan" tab (`SPEC-0110`).
-    pub plan: Option<idecraft_database::Plan>,
+    pub plan: Option<ferris_idea_database::Plan>,
     /// A schema comparison, shown in a "Schema Diff" tab (`SPEC-0110`).
     pub schema_diff: Option<SchemaDiffTab>,
 }
@@ -153,7 +153,7 @@ struct TableTab {
     /// Why the rows cannot be edited, if so.
     read_only: Option<String>,
     /// Isolation of the transactions this tab opens (`SPEC-0190` v3 behaviour 13).
-    isolation: idecraft_database::Isolation,
+    isolation: ferris_idea_database::Isolation,
 }
 
 /// Which rows an export takes (SPEC-0021 v2 behaviour 11).
@@ -190,7 +190,7 @@ struct TabInfo {
     /// Rows shown as columns (`SPEC-0099` v2 behaviour 7).
     transposed: bool,
     /// Table, tree or text view (`SPEC-0099` v3 behaviour 10).
-    view: idecraft_database::grid::ResultView,
+    view: ferris_idea_database::grid::ResultView,
     /// Rows expanded in the tree view, by position on the page.
     tree_open: std::collections::BTreeSet<usize>,
 }
@@ -198,7 +198,7 @@ struct TabInfo {
 /// How a result tab looked: view, transposition and column widths, carried over when the same
 /// query is run again (`SPEC-0099` v4 behaviour 12).
 struct ResultViewState {
-    view: idecraft_database::grid::ResultView,
+    view: ferris_idea_database::grid::ResultView,
     transposed: bool,
     widths: Vec<Option<f32>>,
 }
@@ -288,7 +288,7 @@ pub struct ServicesView {
     output: Vec<(String, bool)>,
     results: Vec<ResultSet>,
     response: Option<String>,
-    plan: Option<idecraft_database::Plan>,
+    plan: Option<ferris_idea_database::Plan>,
     schema_diff: Option<SchemaDiffTab>,
     /// The view the Plan tab shows: Tree, Diagram, Flame or Raw (`SPEC-0110` v13 behaviour 19).
     plan_mode: crate::plan_view_model::PlanMode,
@@ -455,7 +455,7 @@ impl ServicesView {
     /// list of the column's value filter (`SPEC-0099` v3 behaviour 9).
     pub fn column_values(&self, column: usize) -> Vec<(Option<String>, usize)> {
         self.shown_index()
-            .map(|i| idecraft_database::grid::column_values(&self.results[i].rows, column))
+            .map(|i| ferris_idea_database::grid::column_values(&self.results[i].rows, column))
             .unwrap_or_default()
     }
 
@@ -529,7 +529,7 @@ impl ServicesView {
     }
 
     /// How the shown result is shown (`SPEC-0099` v3 behaviour 10).
-    pub fn result_view(&self) -> idecraft_database::grid::ResultView {
+    pub fn result_view(&self) -> ferris_idea_database::grid::ResultView {
         self.shown_index()
             .map(|i| self.infos[i].view)
             .unwrap_or_default()
@@ -538,7 +538,7 @@ impl ServicesView {
     /// Shows the shown result as a table, a tree or text (v3 behaviour 10).
     pub fn set_result_view(
         &mut self,
-        view: idecraft_database::grid::ResultView,
+        view: ferris_idea_database::grid::ResultView,
         cx: &mut Context<Self>,
     ) {
         if let Some(i) = self.shown_index() {
@@ -566,17 +566,17 @@ impl ServicesView {
         let page = self.page_values(i);
         let owned: Vec<Vec<Option<String>>> = page.iter().map(|r| r.to_vec()).collect();
         let numeric =
-            idecraft_database::grid::numeric_columns(self.results[i].columns.len(), &owned);
-        idecraft_database::grid::text_view(&self.results[i].columns, &page, &numeric)
+            ferris_idea_database::grid::numeric_columns(self.results[i].columns.len(), &owned);
+        ferris_idea_database::grid::text_view(&self.results[i].columns, &page, &numeric)
     }
 
     /// The shown page as the tree view (v3 behaviour 10).
-    pub fn tree_lines(&self) -> Vec<idecraft_database::grid::TreeLine> {
+    pub fn tree_lines(&self) -> Vec<ferris_idea_database::grid::TreeLine> {
         let Some(i) = self.shown_index() else {
             return Vec::new();
         };
         let first = self.page_rows(i).start;
-        idecraft_database::grid::tree_view(
+        ferris_idea_database::grid::tree_view(
             &self.results[i].columns,
             &self.page_values(i),
             first,
@@ -852,7 +852,7 @@ impl ServicesView {
     }
 
     /// The isolation level data editor transactions open with (`SPEC-0190` v3 behaviour 13).
-    pub fn isolation(&self) -> Option<idecraft_database::Isolation> {
+    pub fn isolation(&self) -> Option<ferris_idea_database::Isolation> {
         let i = self.shown_index()?;
         self.infos[i].table.as_ref().map(|t| t.isolation)
     }
@@ -860,7 +860,11 @@ impl ServicesView {
     /// Chooses the isolation level of the shown data editor's next transaction; refused with the
     /// reason in the note when the database has no such level, or while a transaction is open
     /// (`SPEC-0190` v3 behaviour 13).
-    pub fn set_isolation(&mut self, level: idecraft_database::Isolation, cx: &mut Context<Self>) {
+    pub fn set_isolation(
+        &mut self,
+        level: ferris_idea_database::Isolation,
+        cx: &mut Context<Self>,
+    ) {
         self.tx_menu = false;
         let Some(t) = self
             .shown_index()
@@ -870,7 +874,7 @@ impl ServicesView {
         };
         if t.tx_open {
             self.note = Some("Commit or roll back before changing the isolation level".into());
-        } else if let Err(e) = idecraft_database::begin_statements(t.profile.dialect, level) {
+        } else if let Err(e) = ferris_idea_database::begin_statements(t.profile.dialect, level) {
             self.note = Some(e);
         } else {
             t.isolation = level;
@@ -1136,7 +1140,7 @@ impl ServicesView {
                     };
                     let before = replaced.iter().find(|(sql, _, _, _)| *sql == set.sql);
                     let grid = before.map_or_else(GridState::default, |(_, columns, grid, _)| {
-                        idecraft_database::grid::kept_view(
+                        ferris_idea_database::grid::kept_view(
                             grid,
                             *columns == set.columns,
                             set.rows.len(),
@@ -1284,7 +1288,7 @@ impl ServicesView {
     }
 
     /// The plan of the last run, if it was an explain (`SPEC-0110`).
-    pub fn plan(&self) -> Option<&idecraft_database::Plan> {
+    pub fn plan(&self) -> Option<&ferris_idea_database::Plan> {
         self.plan.as_ref()
     }
 
@@ -1963,7 +1967,7 @@ impl ServicesView {
                 tx_changes: 0,
                 savepoints: 0,
                 read_only: None,
-                isolation: idecraft_database::Isolation::default(),
+                isolation: ferris_idea_database::Isolation::default(),
             }),
             ..TabInfo::default()
         });
@@ -1990,7 +1994,8 @@ impl ServicesView {
             };
             let mut query = TableQuery::new(&name, key);
             query.schema = None;
-            let page = table_session::load_page(rt, s, &query, 0, idecraft_database::TABLE_PAGE)?;
+            let page =
+                table_session::load_page(rt, s, &query, 0, ferris_idea_database::TABLE_PAGE)?;
             Ok((found, query, page, read_only))
         });
         let task = cx.background_executor().spawn(async move {
@@ -2233,14 +2238,19 @@ impl ServicesView {
         cx.notify();
     }
 
-    fn submit_table(&mut self, i: usize, set: idecraft_database::EditSet, cx: &mut Context<Self>) {
+    fn submit_table(
+        &mut self,
+        i: usize,
+        set: ferris_idea_database::EditSet,
+        cx: &mut Context<Self>,
+    ) {
         let size = self.table_size(i);
         let Some(t) = self.infos[i].table.as_mut() else {
             return;
         };
         let savepoint = t.manual.then(|| {
             t.savepoints += 1;
-            (format!("idecraft_{}", t.savepoints), !t.tx_open)
+            (format!("ferris_idea_{}", t.savepoints), !t.tx_open)
         });
         if t.manual {
             t.tx_open = true;
@@ -2702,6 +2712,7 @@ impl ServicesView {
                 .border_r_1()
                 .border_color(c(p.separator))
         };
+        let edits = self.edits[index].as_ref();
         let header = div()
             .flex()
             .h(px(ROW_HEIGHT))
@@ -2719,13 +2730,20 @@ impl ServicesView {
                     .map(|(k, (name, w))| {
                         let mark = state.mark(k);
                         let width = *w;
+                        let col_type = edits
+                            .and_then(|e| e.column_type(k))
+                            .filter(|t| !t.is_empty())
+                            .unwrap_or(if numeric[k] { "numeric" } else { "text" });
                         cell(width)
                             .id(("services-column", k))
                             .relative()
                             .semantics(
                                 Semantics::new(Role::ColumnHeader)
                                     .name(name.clone())
-                                    .test_id(format!("services-column-{k}")),
+                                    .description(col_type)
+                                    .test_id(format!("services-column-{k}"))
+                                    .action(AxAction::Click)
+                                    .effects(&[Effect::None]),
                             )
                             .flex()
                             .gap_1()
@@ -2790,7 +2808,6 @@ impl ServicesView {
                             )
                     }),
             );
-        let edits = self.edits[index].as_ref();
         let loaded = set.rows.len();
         let selection = self.selection;
         let ids = self.shown_ids(index);
@@ -2845,13 +2862,26 @@ impl ServicesView {
                             (None, CellState::Added) => DEFAULT_TEXT.to_owned(),
                             _ => cell_text(&value).to_owned(),
                         };
+                        let mut sem = Semantics::new(Role::Cell)
+                            .name(text.clone())
+                            .value(text.clone())
+                            .selected(here || inside)
+                            .read_only(edits.is_none() || edits.is_some_and(|e| !e.editable(k)))
+                            .test_id(format!("services-cell-{r}-{k}"))
+                            .action(AxAction::Click)
+                            .effects(&[Effect::None]);
+                        if state != CellState::Loaded {
+                            sem = sem.description(match state {
+                                CellState::Changed => "changed",
+                                CellState::Added => "added",
+                                CellState::Deleted => "deleted",
+                                CellState::Loaded => "",
+                            });
+                        }
                         cell(*w)
                             .id(("services-cell", r * 10_000 + k))
                             .relative()
-                            .semantics(
-                                Semantics::new(Role::Cell)
-                                    .test_id(format!("services-cell-{r}-{k}")),
-                            )
+                            .semantics(sem)
                             .font(mono.clone())
                             .when(numeric[k], |d| d.text_right())
                             .when(value.is_none(), |d| d.text_color(c(p.ui_dim)))
@@ -2883,14 +2913,23 @@ impl ServicesView {
             Some(t) => (t.page, page_count(t.total, self.table_size(index)) - 1),
             None => (state.page, pages_of(order.len(), state.size()) - 1),
         };
-        let pager = |control: &'static idecraft_ui::tooltip::Control,
+        let pager = |control: &'static ferris_idea_ui::tooltip::Control,
                      glyph: &'static str,
                      delta: i64,
                      on: bool,
                      cx: &mut Context<Self>| {
             div()
                 .id(control.name)
+                .relative()
                 .tip(control)
+                .semantics(
+                    Semantics::new(Role::Button)
+                        .name(control.title)
+                        .enabled(on)
+                        .test_id(control.name)
+                        .action(AxAction::Click)
+                        .effects(&[Effect::None]),
+                )
                 .px_1()
                 .rounded(px(4.))
                 .when(!on, |d| d.opacity(0.4))
@@ -2924,10 +2963,17 @@ impl ServicesView {
                 .child(div().flex_1().min_w_0().h(px(18.)).child(field))
         };
         let button = |id: &'static str, label: String, cx: &mut Context<Self>| {
+            let mut sem = Semantics::new(Role::Button).name(label.clone()).test_id(id);
+            if !matches!(
+                id,
+                "services-submit" | "services-commit" | "services-rollback"
+            ) {
+                sem = sem.action(AxAction::Click).effects(&[Effect::None]);
+            }
             div()
                 .id(id)
                 .relative()
-                .semantics(Semantics::new(Role::Button).name(label.clone()).test_id(id))
+                .semantics(sem)
                 .px_2()
                 .rounded(px(4.))
                 .hover(|s| s.bg(c(p.tree_hover)))
@@ -2967,12 +3013,19 @@ impl ServicesView {
                 page > 0,
                 cx,
             ))
-            .child(
+            .child({
+                let label = self.label(index);
                 div()
+                    .relative()
+                    .semantics(
+                        Semantics::new(Role::Label)
+                            .name(label.clone())
+                            .test_id("services-page-label"),
+                    )
                     .px_1()
                     .text_color(c(p.ui_muted))
-                    .child(self.label(index)),
-            )
+                    .child(label)
+            })
             .child(pager(
                 declared!(SERVICES_TOOLBAR, "services-next"),
                 "›",
@@ -3019,7 +3072,7 @@ impl ServicesView {
         }
         // SPEC-0099 v3 behaviour 10: Table, Tree or Text.
         if has(ToolbarGroup::View) {
-            use idecraft_database::grid::ResultView;
+            use ferris_idea_database::grid::ResultView;
             let current = self.infos[index].view;
             toolbar = toolbar.child(
                 div()
@@ -3160,7 +3213,7 @@ impl ServicesView {
                                         // Marked, without a tooltip, for clicks.
                                         .tip_text(
                                             format!("more-{id}"),
-                                            idecraft_ui::tooltip::Tip::default(),
+                                            ferris_idea_ui::tooltip::Tip::default(),
                                         )
                                         .px_2()
                                         .rounded(px(4.))
@@ -3226,7 +3279,7 @@ impl ServicesView {
                 cx.listener(|this, _: &gpui::MouseUpEvent, _, _| this.column_drag = None),
             )
             .child(match (self.infos[index].view, tview) {
-                (idecraft_database::grid::ResultView::Text, _) => div()
+                (ferris_idea_database::grid::ResultView::Text, _) => div()
                     .id("services-text-view")
                     .p_2()
                     .font(mono.clone())
@@ -3235,7 +3288,7 @@ impl ServicesView {
                     .flex_col()
                     .children(self.text_view().lines().map(|l| div().child(l.to_owned())))
                     .into_any_element(),
-                (idecraft_database::grid::ResultView::Tree, _) => div()
+                (ferris_idea_database::grid::ResultView::Tree, _) => div()
                     .id("services-tree-view")
                     .p_1()
                     .flex()
@@ -3396,7 +3449,7 @@ impl ServicesView {
                             div()
                                 .id("services-value-apply")
                                 .text_color(c(p.link))
-                                .child(idecraft_ui::keymap::local_keys(
+                                .child(ferris_idea_ui::keymap::local_keys(
                                     "Apply (⌘↩)",
                                     cfg!(target_os = "macos"),
                                 ))
@@ -3594,13 +3647,23 @@ impl ServicesView {
             .occlude()
             .child(div().px_2().text_color(c(p.ui_dim)).child("Rows per page"))
             .children(PAGE_SIZES.into_iter().enumerate().map(|(n, size)| {
+                let label = page_size_label(size);
                 div()
                     .id(("services-size", n))
+                    .relative()
+                    .semantics(
+                        Semantics::new(Role::MenuItem)
+                            .name(label.clone())
+                            .selected(size == current)
+                            .test_id(format!("services-size-{n}"))
+                            .action(AxAction::Click)
+                            .effects(&[Effect::None]),
+                    )
                     .px_2()
                     .rounded(px(4.))
                     .when(size == current, |d| d.bg(c(p.tree_selection)))
                     .hover(|s| s.bg(c(p.tree_hover)))
-                    .child(page_size_label(size))
+                    .child(label)
                     .on_click(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
                         this.set_page_size(size, cx)
                     }))
@@ -3614,7 +3677,7 @@ impl ServicesView {
         let (manual, level) = self.infos[index]
             .table
             .as_ref()
-            .map_or((false, idecraft_database::Isolation::Default), |t| {
+            .map_or((false, ferris_idea_database::Isolation::Default), |t| {
                 (t.manual, t.isolation)
             });
         let item = |id: (&'static str, usize), label: String, on: bool| {
@@ -3670,7 +3733,7 @@ impl ServicesView {
                     .child("Isolation"),
             )
             .children(
-                idecraft_database::Isolation::ALL
+                ferris_idea_database::Isolation::ALL
                     .into_iter()
                     .enumerate()
                     .map(|(n, l)| {
@@ -3891,11 +3954,17 @@ impl ServicesView {
                     .bg(rgb(p.console_background))
                     .font(mono())
                     .text_size(px(crate::fonts::EDITOR_FONT_SIZE))
-                    .children(
-                        lines.into_iter().map(|(l, dim)| {
-                            div().when(dim, |d| d.text_color(c(p.ui_muted))).child(l)
-                        }),
-                    ),
+                    .children(lines.into_iter().enumerate().map(|(n, (l, dim))| {
+                        div()
+                            .relative()
+                            .semantics(
+                                Semantics::new(Role::Label)
+                                    .name(l.clone())
+                                    .test_id(format!("services-preview-line-{n}")),
+                            )
+                            .when(dim, |d| d.text_color(c(p.ui_muted)))
+                            .child(l)
+                    })),
             )
     }
 
@@ -4320,7 +4389,7 @@ impl ServicesView {
     /// The actions of toolbar group `g` of result `index` as (id, label); the ids are those of
     /// [`Self::toolbar_action`].
     fn toolbar_entries(&self, index: usize, g: ToolbarGroup) -> Vec<(&'static str, String)> {
-        use idecraft_database::grid::ResultView;
+        use ferris_idea_database::grid::ResultView;
         let current = self.infos.get(index).map(|i| i.view);
         match g {
             ToolbarGroup::Pager | ToolbarGroup::Fields => Vec::new(),
@@ -4414,7 +4483,7 @@ impl ServicesView {
 
     /// Carries out the toolbar action `id`, from its button or from the ⋮ menu.
     pub fn toolbar_action(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
-        use idecraft_database::grid::ResultView;
+        use ferris_idea_database::grid::ResultView;
         match id {
             "services-add-row" => self.add_row(cx),
             "services-delete-row" => self.toggle_delete_row(cx),
@@ -4789,7 +4858,7 @@ impl ServicesView {
     /// each child up to its parent (v13 behaviour 19).
     fn plan_diagram(
         &self,
-        plan: &idecraft_database::Plan,
+        plan: &ferris_idea_database::Plan,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let p = Palette::current();
@@ -4924,7 +4993,7 @@ impl ServicesView {
     /// (v13 behaviour 19).
     fn plan_flame(
         &self,
-        plan: &idecraft_database::Plan,
+        plan: &ferris_idea_database::Plan,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let p = Palette::current();
@@ -5284,7 +5353,7 @@ impl Render for ServicesView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // No tooltip next to an open toolbar menu (SPEC-0294 v4 behaviour 11).
         if self.more_menu || self.size_menu || self.tx_menu || self.copy_menu {
-            idecraft_ui::tooltip::hold_this_frame();
+            ferris_idea_ui::tooltip::hold_this_frame();
         }
         let p = Palette::current();
         let extra = self.tab == self.results.len() + 1;

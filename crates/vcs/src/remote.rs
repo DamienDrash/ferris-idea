@@ -3,7 +3,7 @@
 //! Network operations use the installed `git`, as the user's credential helpers, SSH configuration
 //! and transports live there. Git never prompts: a missing credential fails fast (IMP-0029). Git
 //! over SSH uses the shared `ssh` options with the required post-quantum key exchange on every hop
-//! (ADR-0025, `idecraft_remote::SshCommand::git_ssh_command`); the one exception, Azure DevOps with the strongest classical
+//! (ADR-0025, `ferris_idea_remote::SshCommand::git_ssh_command`); the one exception, Azure DevOps with the strongest classical
 //! methods it offers, is reported as `pq: false` with a notice and logged (ADR-0025 section 1a,
 //! SPEC-0055 v3).
 
@@ -176,10 +176,11 @@ pub(crate) fn git_cmd(workdir: &Path) -> Command {
     // SSH remotes: the system `ssh` from the one start point, with the shared options — batch
     // mode, strict host keys, the post-quantum key exchange on every hop. It replaces the user's
     // `GIT_SSH_COMMAND`, `GIT_SSH` and `core.sshCommand` (no path without the post-quantum
-    // exchange); `~/.ssh/config` still applies.
+    // exchange); `~/.ssh/config` still applies, and Ferris IDEA's own SSH hosts are reached with its
+    // own file (SPEC-0055 v5, SPEC-0121 v6 behaviour 1b).
     cmd.env(
         "GIT_SSH_COMMAND",
-        idecraft_remote::SshCommand::git_ssh_command(),
+        ferris_idea_remote::SshCommand::git_ssh_command(),
     )
     .env_remove("GIT_SSH")
     .env_remove("GIT_SSH_VARIANT")
@@ -324,17 +325,18 @@ fn parse_updates(stdout: &str) -> Vec<RefUpdate> {
 
 /// `ssh`'s refusal of the key exchange in Git's messages, named for the peer `ssh` reported.
 fn ssh_refusal(messages: &str) -> Option<String> {
-    let peer = idecraft_remote::negotiating_peer(messages).unwrap_or_else(|| "the remote".into());
-    idecraft_remote::kex_refusal(&peer, messages).map(|e| e.to_string())
+    let peer =
+        ferris_idea_remote::negotiating_peer(messages).unwrap_or_else(|| "the remote".into());
+    ferris_idea_remote::kex_refusal(&peer, messages).map(|e| e.to_string())
 }
 
-/// File name of the log of Git operations without a post-quantum key exchange, in the IDECraft log
+/// File name of the log of Git operations without a post-quantum key exchange, in the Ferris IDEA log
 /// folder (ADR-0025 section 1a).
 pub const CLASSIC_KEX_LOG: &str = "git-ssh-kex.log";
 
 /// `pq` and `pq_notice` from the stand-in's reports: `false` and a notice when any connection used
 /// a classical method.
-fn kex_result(reports: &[idecraft_remote::KexReport]) -> (Option<bool>, Option<String>) {
+fn kex_result(reports: &[ferris_idea_remote::KexReport]) -> (Option<bool>, Option<String>) {
     let classic: Vec<_> = reports.iter().filter(|r| r.pq() == Some(false)).collect();
     if !classic.is_empty() {
         let mut hosts: Vec<String> = classic.iter().map(|r| r.host.clone()).collect();
@@ -343,7 +345,7 @@ fn kex_result(reports: &[idecraft_remote::KexReport]) -> (Option<bool>, Option<S
         kex.dedup();
         return (
             Some(false),
-            Some(idecraft_remote::classic_kex_notice(&hosts, &kex)),
+            Some(ferris_idea_remote::classic_kex_notice(&hosts, &kex)),
         );
     }
     (reports.iter().find_map(|r| r.pq()), None)
@@ -351,7 +353,10 @@ fn kex_result(reports: &[idecraft_remote::KexReport]) -> (Option<bool>, Option<S
 
 /// The log line of a Git operation without a post-quantum key exchange: time, Git's subcommand,
 /// host and method; no URL, reference or other argument.
-fn classic_kex_log_line(args: &[&str], reports: &[idecraft_remote::KexReport]) -> Option<String> {
+fn classic_kex_log_line(
+    args: &[&str],
+    reports: &[ferris_idea_remote::KexReport],
+) -> Option<String> {
     let classic: Vec<_> = reports.iter().filter(|r| r.pq() == Some(false)).collect();
     if classic.is_empty() {
         return None;
@@ -367,20 +372,20 @@ fn classic_kex_log_line(args: &[&str], reports: &[idecraft_remote::KexReport]) -
         .collect();
     Some(format!(
         "{} git {sub} {} pq=false (ADR-0025 section 1a exception, {})",
-        idecraft_core::logs::utc_stamp(std::time::SystemTime::now()),
+        ferris_idea_core::logs::utc_stamp(std::time::SystemTime::now()),
         hosts.join(" "),
-        idecraft_remote::AZURE_CLASSIC_SETTING
+        ferris_idea_remote::AZURE_CLASSIC_SETTING
     ))
 }
 
 fn outcome(args: &[&str], result: (bool, String, String, bool)) -> RemoteOutcome {
     let (ok, stdout, stderr, timed_out) = result;
-    let (reports, stderr) = idecraft_remote::take_kex_reports(&stderr);
+    let (reports, stderr) = ferris_idea_remote::take_kex_reports(&stderr);
     if let (Some(line), Some(dir)) = (
         classic_kex_log_line(args, &reports),
-        idecraft_core::logs::log_dir(),
+        ferris_idea_core::logs::log_dir(),
     ) {
-        let _ = idecraft_core::logs::append_line(&dir.join(CLASSIC_KEX_LOG), &line);
+        let _ = ferris_idea_core::logs::append_line(&dir.join(CLASSIC_KEX_LOG), &line);
     }
     let (pq, pq_notice) = kex_result(&reports);
     let refusal = if ok { None } else { ssh_refusal(&stderr) };
@@ -929,9 +934,9 @@ mod tests {
 
     #[test]
     fn classical_exchanges_are_reported_and_logged_without_details() {
-        let stderr = "idecraft-git-ssh: host=ssh.dev.azure.com kex=diffie-hellman-group18-sha512\n\
+        let stderr = "ferris-idea-git-ssh: host=ssh.dev.azure.com kex=diffie-hellman-group18-sha512\n\
                       Everything up-to-date\n";
-        let (reports, rest) = idecraft_remote::take_kex_reports(stderr);
+        let (reports, rest) = ferris_idea_remote::take_kex_reports(stderr);
         assert_eq!(rest.trim(), "Everything up-to-date");
         let (pq, notice) = kex_result(&reports);
         assert_eq!(pq, Some(false));
@@ -947,8 +952,8 @@ mod tests {
         assert!(line.contains("pq=false"), "{line}");
         assert!(!line.contains("secret") && !line.contains("main"), "{line}");
         // A post-quantum connection to Azure (once it offers one) needs no notice.
-        let pq = idecraft_remote::take_kex_reports(
-            "idecraft-git-ssh: host=ssh.dev.azure.com kex=mlkem768x25519-sha256",
+        let pq = ferris_idea_remote::take_kex_reports(
+            "ferris-idea-git-ssh: host=ssh.dev.azure.com kex=mlkem768x25519-sha256",
         )
         .0;
         assert_eq!(kex_result(&pq), (Some(true), None));
@@ -972,15 +977,15 @@ mod tests {
             .and_then(|(_, v)| *v)
             .and_then(|v| v.to_str())
             .unwrap();
-        assert_eq!(ssh, idecraft_remote::SshCommand::git_ssh_command());
+        assert_eq!(ssh, ferris_idea_remote::SshCommand::git_ssh_command());
         // The stand-in, which runs the strict options for every host but Azure DevOps and routes
-        // jump hosts through IDECraft's hop stand-in, or the strict command with the route pinned.
+        // jump hosts through Ferris IDEA's hop stand-in, or the strict command with the route pinned.
         let text = if ssh.starts_with("ssh ") {
             ssh.to_owned()
         } else {
             std::fs::read_to_string(ssh).unwrap()
         };
-        let strict = idecraft_remote::testing::shared_options("ssh").join(" ");
+        let strict = ferris_idea_remote::testing::shared_options("ssh").join(" ");
         assert!(text.contains(&strict), "{text}");
         assert!(text.contains("-o KexAlgorithms="), "{text}");
         assert!(text.contains("ProxyCommand"), "{text}");

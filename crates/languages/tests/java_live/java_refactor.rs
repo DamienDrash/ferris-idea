@@ -4,14 +4,14 @@
 
 use std::time::{Duration, Instant};
 
-use idecraft_languages::actions::{
+use ferris_idea_languages::actions::{
     Refactoring, introduced_name, plan_code_action_in, refactoring_targets,
 };
-use idecraft_languages::insight::Range;
-use idecraft_languages::java_refactor::{
+use ferris_idea_languages::insight::Range;
+use ferris_idea_languages::java_refactor::{
     INLINE_ALL_KEEP, INLINE_ALL_REMOVE, INLINE_METHOD, INLINE_THIS,
 };
-use idecraft_languages::rename::apply_edits;
+use ferris_idea_languages::rename::apply_edits;
 
 const DEADLINE: Duration = Duration::from_secs(300);
 
@@ -30,15 +30,16 @@ fn range(line: u64, start: u64, end: u64) -> Range {
 #[tokio::test]
 async fn constants_are_named_after_the_parameter_and_inline_method_has_variants() {
     crate::pooled();
-    if idecraft_languages::servers::resolve(idecraft_languages::LanguageId::Java).is_err() {
+    if ferris_idea_languages::servers::resolve(ferris_idea_languages::LanguageId::Java).is_err() {
         assert!(
-            std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+            ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
             "required tool missing: jdtls"
         );
         eprintln!("skipped: jdtls not installed");
         return;
     }
-    let root = std::env::temp_dir().join(format!("idecraft-java-refactor-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-java-refactor-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src/main/java/lab/inventory")).unwrap();
     let root = root.canonicalize().unwrap();

@@ -9,7 +9,7 @@
   `RunToCursor` with ⌥F9 / Alt+F9, `XDebugger.SetValue` with F2, `Rerun` with ⌘R / Ctrl+F5,
   `XDebugger.MuteBreakpoints`, `ViewBreakpoints` with ⇧⌘F8 / Ctrl+Shift+F8 in the ported keymaps,
   `JetBrains/intellij-community`), OBS (OBS-0014: the reference's debug toolbar offers rerun, pause,
-  run to cursor, mute and view breakpoints, IDECraft only resume, three steps and stop), SPEC-0039,
+  run to cursor, mute and view breakpoints, Ferris IDEA only resume, three steps and stop), SPEC-0039,
   SPEC-0054, SPEC-0091, SPEC-0127, IMP-0022, ADR-0008
 - **Feature matrix rows:** F-070
 
@@ -21,7 +21,7 @@ try a different value without restarting.
 1. **Pause** (`Pause`, Run menu): while the program runs, the session asks the adapter to pause the
    thread shown last, or the first thread the adapter lists. The program then stops like at any other
    stop (reason `pause`) with stack and variables. Xcode's lldb-dap reports that stop as the signal
-   `SIGSTOP`; right after a pause request IDECraft reports it as `pause`. While paused or not debugging
+   `SIGSTOP`; right after a pause request Ferris IDEA reports it as `pause`. While paused or not debugging
    it does nothing. [STD]
 2. **Run to Cursor** (`RunToCursor`, ⌥F9 / Alt+F9): while paused, the session adds a breakpoint on the
    caret line of the active editor to that file's breakpoints, continues the shown thread and, at the
@@ -63,7 +63,7 @@ try a different value without restarting.
    the window, not across restarts. [GEN, OSS]
 9. **View Breakpoints** in the toolbar opens the Breakpoints dialog (`ViewBreakpoints`, SPEC-0127).
    [OSS]
-10. The toolbar's own icons (pause, run to cursor, rerun, mute, view breakpoints) are IDECraft's own
+10. The toolbar's own icons (pause, run to cursor, rerun, mute, view breakpoints) are Ferris IDEA's own
    16 px drawings in the style of the open New UI icons; the platform's open icons can replace them
    when the bundled icon set is next updated. [ADR-0009]
 11. **Tooltips (v4).** Every toolbar button shows its action's name and its shortcut in the keymap in
@@ -79,7 +79,7 @@ try a different value without restarting.
 - **AK-2** The container of a row (local scope or parent reference) and the refusal without
   `supportsSetVariable` are unit tests.
 - **AK-3** The MCP tools are listed and refused without the `debug` right (protocol test).
-- **AK-4** In a real window (`idecraft ui --selftest`, with lldb-dap): ⌥F9 from the first breakpoint
+- **AK-4** In a real window (`ferris-idea ui --selftest`, with lldb-dap): ⌥F9 from the first breakpoint
   stops on the caret line; F2 on `x`, typing 42 and Enter shows 42 in the Variables list.
 - **AK-5** Use by hand: Pause on a busy program, Run to Cursor, Set Value on a nested field.
 - **AK-6 (v3)** The toolbar's enabled states per session state and the breakpoints sent while muted
@@ -100,6 +100,6 @@ Force Run to Cursor (ignoring breakpoints on the way), Smart Step Into and Force
 and disassembly views, data breakpoints, `runInTerminal`, muting kept across restarts.
 
 ## Known deviations from the reference
-The reference edits a value inline in the tree; IDECraft uses the expression field above the list.
+The reference edits a value inline in the tree; Ferris IDEA uses the expression field above the list.
 Rerun ends a running program before starting again without asking. The toolbar was compared side by
-side for Java in OBS-0014; its icons are IDECraft's own (behaviour 10).
+side for Java in OBS-0014; its icons are Ferris IDEA's own (behaviour 10).

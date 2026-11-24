@@ -1,6 +1,6 @@
 # SPEC-0072: Code completion in the editor
 
-- **Version:** 17 · **Date:** 2026-11-17 (v17: the server's list is ranked before it is cut to the number asked for, behaviour 54, AK-38; headless check of F-038, OBS-0081; v15 and v16 are taken by open changes); 2026-11-16 (v16 (v15 is taken by #878): Tab expands a Python live template named as typed, behaviour 53, AK-37 (behaviour 52 and AK-36 are taken by #878, AK-35 by #887); eleventh package of docs/research/KEYMAP_COVERAGE.md); 2026-11-16 (v15: in the `class` and `id` values of an HTML file the list opens while typing and the typed name includes `-`, behaviour 52, AK-36; OBS-0069 G1, with SPEC-0042 v22 behaviour 39); 2026-11-15 (v14: Insert Live Template, behaviour 50, and Next and Previous Template Variable, behaviour 51, AK-33 and AK-34; tenth package of docs/research/KEYMAP_COVERAGE.md); 2026-11-14 (v13: Class name completion, behaviour 48, and inserting a suggestion with a dot, behaviour 49, AK-31 and AK-32; eighth package of docs/research/KEYMAP_COVERAGE.md; v12: the documentation panel prefers the right side of the list and
+- **Version:** 21 · **Date:** 2026-11-19 (v21: among the names the server ranks alike, those declared in the file come first, then those declared in the project, and in a call position the callables; sort text made of a class and the label counts as that class; behaviours 56 and 57, AK-42; side-by-side comparison of 2026-11-19, F-038 gap PH1); 2026-11-18 (v20: the documentation of the item selected when the list opens or after it narrows is shown at once, behaviour 13, AK-41; side-by-side comparison of 2026-11-18, F-036/F-031 gap TC1); 2026-11-18 (v19: Tab or Enter on the name list of a template's place takes the name and goes on to the next place, behaviours 32 and 51; ⇧Tab at the first place stays in the template, behaviour 51; AK-40; OBS-0086 K2, K3); 2026-11-17 (v18: `complete_code` narrows by the typed prefix with the editor list's matcher and answers in pages, behaviour 55, AK-39; OBS-0081 L7; v17: the server's list is ranked before it is cut to the number asked for, behaviour 54, AK-38; headless check of F-038, OBS-0081); 2026-11-16 (v16 (v15 is taken by #878): Tab expands a Python live template named as typed, behaviour 53, AK-37 (behaviour 52 and AK-36 are taken by #878, AK-35 by #887); eleventh package of docs/research/KEYMAP_COVERAGE.md); 2026-11-16 (v15: in the `class` and `id` values of an HTML file the list opens while typing and the typed name includes `-`, behaviour 52, AK-36; OBS-0069 G1, with SPEC-0042 v22 behaviour 39); 2026-11-15 (v14: Insert Live Template, behaviour 50, and Next and Previous Template Variable, behaviour 51, AK-33 and AK-34; tenth package of docs/research/KEYMAP_COVERAGE.md); 2026-11-14 (v13: Class name completion, behaviour 48, and inserting a suggestion with a dot, behaviour 49, AK-31 and AK-32; eighth package of docs/research/KEYMAP_COVERAGE.md; v12: the documentation panel prefers the right side of the list and
   stays inside the editor area on the left, behaviour 16, AK-35; second window check of 2026-11-14; v11: Enter and Tab of the list are the keymap actions
   `EditorChooseLookupItem` and `EditorChooseLookupItemReplace`, behaviour 47; v10 2026-11-12; v2: ⌥Esc on macOS, IMP-0032; v3: the list opens by itself while typing;
   v4: every row is one line, long details are cut off with an ellipsis; v5: icons, highlighted prefix,
@@ -21,7 +21,7 @@
   `nodes/template` of `JetBrains/intellij-community`), OBS-0017 (defects F031-1 to F031-4), OBS-0021
   (Python), OSS (typeshed stubs of the standard library that ship with pyright, read at run time);
   v10: OBS-0034 item 36 (after `item.` the reference names for every member the class it comes
-  from, `Item` or `object`; IDECraft names none and `complete_code` leaves `detail` empty), STD
+  from, `Item` or `object`; Ferris IDEA names none and `complete_code` leaves `detail` empty), STD
   (LSP `completionItem/resolve`, `labelDetails`, `textDocument/typeDefinition`,
   `textDocument/definition`; The Python Language Reference: attribute lookup follows the method
   resolution order, the C3 linearisation of the base classes, and every class without bases
@@ -32,8 +32,11 @@
   the first 100 of intelephense's items for `gr`), STD (LSP: a client sorts completion items by `sortText`, the
   label where it is missing; the order of the list as sent means nothing), OSS (rust-analyzer and intelephense
   send their lists in an order of their own, not by sort text); v15: OBS-0069 G1 (the
-  reference lists the stylesheets' classes in an empty `class` value; IDECraft listed nothing, by
-  hand or while typing), STD (CSS identifiers hold `-`; HTML attribute values are quoted text)
+  reference lists the stylesheets' classes in an empty `class` value; Ferris IDEA listed nothing, by
+  hand or while typing), STD (CSS identifiers hold `-`; HTML attribute values are quoted text);
+  v18: OBS-0081 item L7 (after `<sec` the HTML server's list came from `complete_code` with
+  `html`, `head`, `title` first and `section` further down; the window narrowed it, the tool did
+  not)
 - **Feature matrix rows:** F-031, F-038
 
 ## Purpose
@@ -72,7 +75,7 @@ editor.
    whitespace in a server's label or detail are shown as single spaces; the label keeps its width and the
    detail takes what is left of the row, cut off at the right edge with "…" when longer. Details never
    wrap, spill into the next row or lie over each other. [GEN; OBS-0012: long Java details overlapped in
-   IDECraft]
+   Ferris IDEA]
 
 10. **v5 – Row layout:** a row shows, left to right: the kind as a 16 px symbol icon (the same icons as
    the Structure view, SPEC-0079; database items use the schema, table and column icons; kinds without an
@@ -88,12 +91,19 @@ editor.
    then by the server's sort text, then the server's own order. Narrowing keeps that ranking among the
    prefix matches; items without sort text (plugins, SQL) are ranked shorter first as before; fuzzy
    matches follow. [STD; OBS-0012: the reference put the varargs overload of `List.of` first while
-   IDECraft sorted the shortest label first]
+   Ferris IDEA sorted the shortest label first]
 13. **v5 – Documentation beside the list:** next to the right edge of the list a panel shows the
    documentation of the selected item (Markdown rendered like the documentation popup, SPEC-0077) and
    follows the selection. Documentation that the server leaves out of the list is asked for with
    `completionItem/resolve` in the background, once per item; a selection that has none shows no panel.
-   [STD; OBS-0012]
+   [STD; OBS-0012] (v20) This holds for every selected item, not only after moving the selection:
+   the item selected when the list opens and the one selected after the list narrows by typing show
+   their documentation as soon as it is known, without a key press. Signature and type that the
+   server adds later for the same item (behaviour 28) do not make it a different item: the
+   documentation already asked for, or brought along with them, stays shown. [Side-by-side
+   comparison of 2026-11-18 with typescript-language-server: after `xs.` on `const xs = [1, 2, 3]`
+   the reference showed the documentation of the first item `at` at once; Ferris IDEA showed it only
+   after moving down and back up]
 14. **v5 – Hint line and Tab:** the bottom of the list shows one grey line naming the two ways to accept,
    "⏎ insert  ·  ⇥ replace". Enter inserts in front of the rest of the identifier after the caret (as in
    behaviour 4); Tab replaces the prefix and the rest of the identifier after the caret. [GEN; OBS-0012]
@@ -165,7 +175,7 @@ editor.
    says so and no list opens. [GEN, STD; OBS-0017 step 4]
 26. **v8 – What fits:** a suggestion's type is its label description (LSP `labelDetails.description`),
    else the part after the last ` : ` of its detail; TypeScript items without one are resolved first
-   (behaviour 28, at most 100). A type fits when it is assignable as far as IDECraft can tell without a
+   (behaviour 28, at most 100). A type fits when it is assignable as far as Ferris IDEA can tell without a
    compiler: equal after dropping package names and spaces; type variables (`E`, `T`, …) fit anything
    and type arguments are compared only when both sides name concrete types; Java primitive widening
    and boxing; `Object`, `any` and `unknown` take everything; a union takes each member; `T[]` equals
@@ -179,7 +189,7 @@ editor.
    4: the reference lists `names` first, then the static factories of `List`]
 27. **v8 – Java documentation repaired:** jdtls turns some Javadoc into broken Markdown (an inline
    `{@return …}` with nested tags gives stray `}` and links whose text runs into the next sentence;
-   OBS-0017 step 11). When the documentation of a Java item has a `}` or `{@` outside code, IDECraft
+   OBS-0017 step 11). When the documentation of a Java item has a `}` or `{@` outside code, Ferris IDEA
    renders the Javadoc itself from the source jdtls refers to: the JDK's `lib/src.zip` next to the
    `jrt-fs.jar` named in its `jdt://` links, or the project file of the declaring type. The comment
    before the member of that name (for methods: with that parameter count) is converted by an own
@@ -198,7 +208,7 @@ editor.
    the caret inside, unless the text after the name already starts with `(` or the name is completed
    inside the braces of an `import`/`export` list. [GEN; OBS-0017 step 9: `bySku()` with the caret
    inside]
-30. **v8 – Postfix templates (TypeScript, JavaScript):** typescript-language-server has none, so IDECraft
+30. **v8 – Postfix templates (TypeScript, JavaScript):** typescript-language-server has none, so Ferris IDEA
    adds its own after `expression.`: `const`, `let`, `var` (a variable named by behaviour 32), `if`,
    `else` (`if (!x)`), `not` (`!x`), `null` (`if (x === null)`), `notnull` (`if (x !== null && x !==
    undefined)`), `return`, `for` (`for (const item of x)`), `forin`, `fori` (`for (let i = 0; i <
@@ -212,7 +222,8 @@ editor.
 32. **v8 – Name suggestions at a placeholder:** when the selected tab stop names a new variable (an
    identifier placeholder followed by `=`, `:`, `of` or `in`, after a type, `const`, `let` or `var`), the
    list opens with suggested names; typing narrows it, Enter or Tab puts the chosen name in all places
-   of the stop, and the next Tab goes on to the next stop. Names come from the expression (the last call
+   of the stop, and the next Tab goes on to the next stop. (v19: Enter or Tab on the list puts the
+   name in and goes on to the next stop at once, behaviour 51.) Names come from the expression (the last call
    or field: `getName()` → `name`, `s.length()` → `length`; the singular of a plural collection: `names`
    → `name`, `entries` → `entry`), then from the type (`List<String>` → `strings`, `list`; `Item` →
    `item`; `int` → `i`; `String` → `s`, `str`), without keywords and duplicates. When the server's
@@ -238,7 +249,7 @@ editor.
    8); an automatic answer that arrives for a text typed on meanwhile is dropped and asked again
    when the typed name no longer fits it. While a Python server has been running for less than 30 s
    and answers with an empty list, the list is asked for again every 0.5 s for up to 10 s (as for
-   TypeScript). Deviation: where the reference's analysis stays silent, IDECraft answers or names the
+   TypeScript). Deviation: where the reference's analysis stays silent, Ferris IDEA answers or names the
    cause (IMP-0316). [GEN; OBS-0021 item 1: `os.` typed right after opening showed no list]
 37. **v9 – Python call parentheses:** a function or method is inserted as `name()` (snippet
    `name($0)`), unless the text after the name already starts with `(`, the name follows `def`,
@@ -247,7 +258,7 @@ editor.
    goes after the parentheses (`os.getcwd()|`), else inside, and parameter info opens as after typing
    `(` (SPEC-0080). [GEN; OBS-0021 items 2, 3, 7, 9]
 38. **v9 – Python postfix templates:** after `expression.` (the expression as in behaviour 30, not
-   `self` alone, not in import lines) IDECraft adds its own templates, replacing expression and name
+   `self` alone, not in import lines) Ferris IDEA adds its own templates, replacing expression and name
    with tab stops: `if` (`if x:`), `ifn` (`if x is None:`), `ifnn` (`if x is not None:`), `not`,
    `var` (`name = x`), `for` (`for item in x:`), `fori` (`for i, item in enumerate(x):`), `while`,
    `with` (`with x as name:`), `print`, `return`, `yield`, `raise`, `par`, `len`, `str`, `list`, `set`,
@@ -260,7 +271,7 @@ editor.
    (a read-only property) and `super` (`super().__init__()`); the template named exactly as typed is
    preselected; the documentation beside the list shows the template's text. [GEN; OBS-0021 item 6]
 40. **v9 – Standard library names:** pyright offers imports only from modules it has already seen.
-   IDECraft reads the public top-level names (classes, functions, annotated or assigned names, not
+   Ferris IDEA reads the public top-level names (classes, functions, annotated or assigned names, not
    starting with `_`, not only inside `if` blocks) of the standard library stubs that come with the
    Python language server (`typeshed-fallback/stdlib` next to pyright or basedpyright; private modules
    and `builtins` left out) once per process. For a name of at least two characters, not after `.`,
@@ -296,7 +307,7 @@ editor.
      dot (`textDocument/typeDefinition`). Exactly one place that is the name of a `class`
      statement gives the class; no place, several places (a union) or another place (a module, a
      variable) give no origin for the list.
-   - **What a class declares:** read from the class's source or stub with IDECraft's syntax tree:
+   - **What a class declares:** read from the class's source or stub with Ferris IDEA's syntax tree:
      the methods and nested classes of its body, the names assigned or annotated there (also
      inside `if`/`else` and `try` blocks of the body, as stubs have them), and the attributes its
      methods assign through their first parameter (`self.extra = 1`).
@@ -365,24 +376,32 @@ editor.
     `snippet`: rust-analyzer's `tfn`, `tmod`, jdtls's `sout`, `main`, …), in the server's order,
     with the list's keys and filtering; Enter inserts one with its places (behaviour 18). Without a
     template the status bar says "No live templates here", in a SQL file and in a file without a
-    language too. IDECraft has no template library of its own yet: the templates are the
+    language too. Ferris IDEA has no template library of its own yet: the templates are the
     language server's (Out of scope). [OSS: id, key and title of the open platform; GEN]
 51. **v14 – Next and Previous Template Variable:** the places of an inserted template (behaviour 18)
     are walked with the keys of `NextTemplateVariable` (Tab and Enter in the bundled keymaps) and
     `PreviousTemplateVariable` (⇧Tab) of the keymap in use, no longer with fixed keys. ⇧Tab
     selects the place visited before the current one with what was typed there, also from the last
-    place; at the first place, and once Escape or leaving the text ended the template, ⇧Tab is the
-    editor's again (unindent), as in the reference where the action is then not available. [OSS:
-    ids and keys of the bundled keymaps; GEN]
+    place; once Escape or leaving the text ended the template, ⇧Tab is the editor's again
+    (unindent). (v19) At the first place ⇧Tab stays there: the place stays selected and the line
+    is not unindented (before v19 the line was unindented, OBS-0086 K3). With the list of
+    suggested names of a place open (behaviour 32), the keys of `NextTemplateVariable` that also
+    choose from the list (Tab and Enter in the bundled keymaps) put the selected name into every
+    place of the stop and go on to the next place in one press, as in the reference; before v19
+    the first Tab only took the name and a second one was needed (OBS-0086 K2). ⇧Tab with that
+    list open closes it and goes to the place before (or stays at the first). Escape with the
+    list open closes only the list. Lists the server opens while typing in a place are not such
+    a list: their keys stay those of behaviour 47. [OSS: ids and keys of the bundled keymaps; GEN;
+    OBS-0086 for Tab; Enter by the same rule, not observed]
 52. **v15 – Class names and ids in HTML:** in the value of a `class` or an `id` attribute of an
-    HTML file the suggestions are IDECraft's own (SPEC-0042 v22 behaviour 39). There the list
+    HTML file the suggestions are Ferris IDEA's own (SPEC-0042 v22 behaviour 39). There the list
     opens while typing as in behaviour 8 although the value is a string, the typed name (behaviour
     2) reaches back to the start of the word in the value and includes `-` (`card-w`), and the list
     narrows over `-` as over letters (behaviour 3); it closes when white space or the closing quote
     is typed. The chosen name replaces the whole typed name. Elsewhere behaviours 2, 3 and 8 stay
     as they are. [OBS-0069 G1; STD: CSS class names hold `-`]
 53. **v16 – Expand Live Template by Tab:** in a Python file, Tab with one caret and no
-    selection, list or template expands IDECraft's Python live template (behaviour 39) whose
+    selection, list or template expands Ferris IDEA's Python live template (behaviour 39) whose
     name is exactly the word before the caret, at the start of a statement, as if it were chosen
     in the list; a template whose name only starts with the word is not taken, and Tab then does
     what it did. Only where the keymap in use binds Tab to `ExpandLiveTemplateByTab`. [OSS, GEN]
@@ -395,11 +414,47 @@ editor.
     the type's own members came after methods of every type, and with intelephense a project
     function could be cut off behind a hundred built-in ones (OBS-0081). [STD, OBS-0081]
 
+55. **v18 – `complete_code` gives the list people see:** the MCP tool asks the server as the
+    editor does (behaviour 1, up to as many items as the editor takes) and narrows the answer by the
+    typed prefix (behaviour 2: the identifier part left of the position, read from the file) with
+    the same matcher function as the editor's list (behaviours 3, 12, 23 and 35: case-insensitive
+    prefix matches first in the server's ranking, the exact name first, shorter first, then fuzzy
+    matches; with nothing typed the whole list in the server's ranking). One code path serves both,
+    so an agent and a person see the same suggestions in the same order. The answer is one page:
+    `prefix`, `total` (matching items), `offset`, `items` (at most `limit`, default 50, at most
+    500) and `next_offset` only when more follow; a further call with that `offset` gives the next
+    page. Details and origins (behaviours 28 and 46) are resolved for the page only. Configuration
+    keys (SPEC-0115 v7) and the class names and ids of an HTML value (SPEC-0042 v22) go through the
+    same narrowing; in such a value the typed prefix is the typed name of behaviour 52, `-`
+    included. The answer shape changes from a bare list to
+    this object. [GEN; ADR-0008]
+56. **v21 – The project's names first among equals:** each item whose name the project declares
+    is marked with where: `file` when the edited file declares it, else `project` when another
+    project file of the same extension declares it (at most 2000 files, read for at most 300 ms;
+    each file's names kept by its modification time and size, so a second list reads only the
+    changed files). Keywords, snippets and text items are never marked. The list and
+    `complete_code` (`declared_in`) order the items first by the server's rank class, then the
+    marked items before the others — the file's before the project's — then by the server's full
+    ranking and the rules of behaviours 12 and 55. The rank class is the sort text without the
+    item's label at its end, ignoring case: intelephense sends `0002` + the label for every name,
+    which only orders by the alphabet, so its `greet` declared in the file came 15th behind the
+    built-in `GRAPHEME_EXTR_*` constants and `grapheme_*` functions; now it comes first. Where a
+    server ranks items apart (another class, preselect), its order stays: a built-in it ranks
+    first stays first. Declared names come from the syntax tree (the tags query and the `name`
+    of every declaring node), so the rule works for every language with a grammar. [F-038 PH1,
+    GEN]
+57. **v21 – Callables first in a call position:** when `(` follows the identifier at the caret
+    (the rest of the identifier and blanks skipped, `echo gr|eet("you");`), items that are no
+    function, method, constructor, class or struct come after those that are, before the
+    server's rank class and the order of behaviour 56: a server may rank a constant ahead of the
+    functions (intelephense on Linux ranked `GROUPING` second for `gr`). They stay in the list.
+    [F-038 PH1, GEN]
+
 ## Acceptance criteria
 - **AK-1** Completion and definition on unsaved text that differs from the file on disk (integration
   test with clangd).
 - **AK-2** Prefix start, snippet text, prefix-then-fuzzy filtering (unit tests).
-- **AK-3** In a real window (`idecraft ui --selftest`, with clangd): Ctrl+Space on `he|lper` lists
+- **AK-3** In a real window (`ferris-idea ui --selftest`, with clangd): Ctrl+Space on `he|lper` lists
   `helper`; Escape closes without changes; Enter replaces the prefix.
 - **AK-4** Use by hand: typing narrows, Tab, many suggestions, other languages.
 - **AK-5** The macOS keymap maps ⌥Esc to `CodeCompletion` (unit test `completion_also_on_alt_escape_on_macos`); the self-test opens the list a second time with ⌥Esc on macOS.
@@ -422,7 +477,7 @@ editor.
   do not fit is the type cut (unit test `long_signature_gives_way_to_the_type`). Placement: the panel
   goes right when there is room, left when only the left has room, narrows on the wider side, is
   left out when no side has 160 px, and the list moves inside the window (unit test
-  `documentation_panel_stays_in_the_window`). In a real window (`idecraft ui --selftest`) the
+  `documentation_panel_stays_in_the_window`). In a real window (`ferris-idea ui --selftest`) the
   painted completion list and documentation panel lie inside the window.
 - **AK-13 (v7)** With jdtls (integration test `java_completion`): the varargs overload of `List.of` is
   a snippet `of(${0})`; `s.length().var` brings a postfix item whose range starts at `s`; `sout` is a
@@ -452,7 +507,7 @@ editor.
   the type stop goes after the name stop (unit tests in `completion_model`); name suggestions from
   expression and type (unit tests in `names`).
 - **AK-21 (v8)** MCP `smart_complete_code`, `suggest_names` and `complete_code` with `details` (protocol
-  test listing the tools; headless `idecraft call` on a Java and a TypeScript project).
+  test listing the tools; headless `ferris-idea call` on a Java and a TypeScript project).
 - **AK-22 (v9, behaviours 34, 42)** The first declaration of a pyright documentation on one line,
   its signature and type, the passed parameter count, overloads collapsed (unit tests
   `declaration_from_documentation`, `passed_parameter_count`,
@@ -481,7 +536,7 @@ editor.
   `__class__` and `__sizeof__` from `object`, `__eq__` has no origin; after `s.` of a class with
   two bases the members come from the class, its two bases and `object`; after `e.` of a subclass
   of `ValueError` `args` comes from `BaseException`; a union and a module give none; resolving
-  within a budget fills the items with their declaration, a generated `__eq__` gets none. `idecraft call <folder> complete_code`
+  within a budget fills the items with their declaration, a generated `__eq__` gets none. `ferris-idea call <folder> complete_code`
   on a Python file returns `detail`, `description` and `origin` without `details`.
 - **AK-29 (v10, behaviour 45)** The row's right column with type and origin, origin alone, and
   cut when too long (unit test `completion_model::tests::row_shows_the_origin_after_the_type`).
@@ -514,8 +569,8 @@ editor.
   (`tenth_package_keymap.rs::insert_live_template_lists_the_servers_templates`, skipped without
   rust-analyzer). With jdtls: not checked.
 - **AK-34 (v14, behaviour 51)** Tab and ⇧Tab walk an inserted template's places both ways, ⇧Tab
-  selects what was typed into a place and goes back from the end; after Escape Tab is the
-  editor's (`tenth_package_keymap.rs::tab_and_shift_tab_walk_a_templates_places`).
+  selects what was typed into a place and goes back from the end (v19: and stays at the first
+  place); after Escape Tab is the editor's (`tenth_package_keymap.rs::tab_and_shift_tab_walk_a_templates_places`).
 - **AK-36 (v15, behaviour 52)** `completion_model::tests::css_names_keep_their_hyphen`: the typed
   name of an HTML class value takes `-` along and white space ends it; in a window
   (`crates/workbench/tests/it/f038_window.rs::obs_0069_class_names_are_offered_in_html`): typing `s`
@@ -531,9 +586,49 @@ editor.
   after `r.` in a Rust file lists `w`, `h`, `area()` before `into()`; in a PHP file `greet` is among
   the first 40 items for `gr`.
 
+- **AK-39 (v18, behaviour 55)** The prefix left of a position and the narrowing of a server's
+  list by it (`completion_filter::tests::{the_typed_prefix, a_server_list_is_narrowed_by_the_prefix}`:
+  `<sec` keeps `section`, `sectionHeader`, then `select`; `the_typed_prefix_in_an_html_class_value`:
+  `card-w` in a `class` value); the editor's list uses that function
+  (`completion_model::filter` is it); through MCP, the configuration keys after `gre` come as
+  `prefix` `gre`, `total` 2, and with `limit` 1 page by page with `next_offset`
+  (`protocol.rs::configuration_keys_complete_and_quarkus_starts_in_dev_mode`). With a language
+  server: an HTML file with `<sec` and a Rust file after `r.ar`, through `ferris-idea call` (agent
+  run in PR).
+
+- **AK-40 (v19, behaviour 51)** In a window of the test harness
+  (`crates/workbench/tests/it/window_check_gaps_1118.rs::tab_on_a_places_name_list_goes_on`):
+  a Java template `for (int ${1:i} = 0; ${1:i} < ${2:n}; ${1:i}++)` inserted with Enter selects
+  `i` with the name list open; Tab takes the selected name and selects `n` with one press;
+  ⇧Tab goes back to `i`, another ⇧Tab keeps `i` selected and the line's indentation unchanged;
+  with the list open again, ⇧Tab at the first place keeps the place too. AK-34's test now expects
+  ⇧Tab at the first place to stay.
+- **AK-41 (v20, behaviour 13)** The documentation shown for the selected item is found again
+  after the server added signature, type and documentation to it (behaviour 28): asked for
+  before, answered before or after that, or brought along by the details answer
+  (`completion_model::tests::the_first_items_documentation_survives_its_details`); an item
+  without the server's own item keeps one entry per signature (overloads), and an item that has
+  none shows no panel. In a window of the test harness with typescript-language-server
+  (`crates/workbench/tests/completion_doc_first_item.rs::the_first_items_documentation_shows_at_once`,
+  skipped without the server): after `xs.` on `const xs = [1, 2, 3]` Code Completion opens with
+  `at` selected and its documentation beside the list without a key press; after typing `fil` the
+  selected item shows its documentation too. Before v20 the documentation asked for at the
+  opening was kept under a key made of label, signature and detail; when the details answer
+  (behaviour 28) came first it changed that key and the answer was never shown.
+
+- **AK-42 (v21, behaviours 56 and 57)** The rank class, the marks and the order with
+  intelephense's sort texts, a call position and a server that ranks a built-in first
+  (`completion_filter::tests::project_names_and_callables_first_among_ties`); the project's names
+  from the other files of the same extension, read again after a change
+  (`declared_names::tests::project_names_from_the_other_files`); declared names in Rust, Go and PHP
+  (`declared_names::tests::declarations_in_three_languages`); with intelephense, `gr` in
+  `echo gr|eet("you");` lists `greet` first, marked `file`, and the functions before the
+  constants (`crates/languages/tests/it/side_by_side_f038.rs::intelephense_ranks_the_files_function_first`,
+  skipped without intelephense). Not checked in a window.
+
 ## Out of scope
-Parameter info (SPEC-0080), a live template library of IDECraft's own with its settings page,
-Surround with Live Template (⌥⌘J) and expanding a template's abbreviation by Tab (v14), IDECraft's own Java live and postfix templates (Java names are the
+Parameter info (SPEC-0080), a live template library of Ferris IDEA's own with its settings page,
+Surround with Live Template (⌥⌘J) and expanding a template's abbreviation by Tab (v14), Ferris IDEA's own Java live and postfix templates (Java names are the
 server's: `sysout` and `nnull`, reached from `.sout` and `.nn` by behaviour 24), suggestions with
 prefilled arguments (`toLowerCase(Locale.ROOT)`), sorting by usage, a scroll bar in the list,
 smart type completion for Python (the reference has none either, OBS-0021 item 10); the origin of
@@ -541,11 +636,11 @@ members for other languages and other Python servers, for names that are not mem
 the window of a remote project.
 
 ## Known deviations from the reference
-The reference ranks by its own analysis; IDECraft follows the language server's ranking (behaviour 12), so
+The reference ranks by its own analysis; Ferris IDEA follows the language server's ranking (behaviour 12), so
 the order can differ where the server ranks differently. With the language server
 pool (SPEC-0090) only the first list of a session waits for the server to start. First compared side by
 side in OBS-0012 (2026-11-05, Java, `List.o`); the whole row (Java behaviour, TypeScript; Python only
-in IDECraft, the reference installation has no Python support) in OBS-0017.
+in Ferris IDEA, the reference installation has no Python support) in OBS-0017.
 
 Smart type completion (v8, behaviours 25–26) decides assignability from type names, not with a
 compiler as the reference does. Subtypes outside the built-in JDK table and outside the open file are
@@ -561,18 +656,21 @@ parameters, because the server gives the parameters only on resolve. The Java do
 
 Python (v9, compared in OBS-0021): the right column shows the type, not the module that declares
 the name as in the reference, whose column can name a module of another platform (`ntpath` for
-`os.path.join` on a Mac; IMP-0315); importable names show their module in both. IDECraft's postfix
+`os.path.join` on a Mac; IMP-0315); importable names show their module in both. Ferris IDEA's postfix
 `for` is offered for every expression, the reference's only for iterable ones. The live template
 `main` writes `"__main__"` with double quotes. Standard library imports need the typeshed stubs of
 pyright or basedpyright; with another Python server only the server's own imports are offered.
 
 Python origin (v10, compared in OBS-0034 item 36): the reference names the origin of every member
-from its own analysis; IDECraft has only what pyright answers and what the sources declare, so
+from its own analysis; Ferris IDEA has only what pyright answers and what the sources declare, so
 some rows stay without an origin (behaviour 44: receivers that are not a plain name, unions,
 hierarchies it cannot read completely, generated methods of decorated classes, where the
-reference shows `object`). The reference shows a method's parameters as `(self)`; IDECraft shows
-pyright's bound signature `()`. IDECraft keeps the type in the right column and adds the origin
+reference shows `object`). The reference shows a method's parameters as `(self)`; Ferris IDEA shows
+pyright's bound signature `()`. Ferris IDEA keeps the type in the right column and adds the origin
 after it (IMP-0315). The origin arrives a moment after the list instead of with it.
-- **Expand Live Template by Tab (v16):** only IDECraft's own Python templates expand on Tab.
+- **Call position (v21):** the reference lists only functions in a call position; Ferris IDEA
+  keeps the other names below the callables, so a constant or variable holding a closure can
+  still be chosen.
+- **Expand Live Template by Tab (v16):** only Ferris IDEA's own Python templates expand on Tab.
   The templates of other languages come from their language servers (behaviour 50), and Tab
   does not wait for a server's answer; there ⌘J lists them.

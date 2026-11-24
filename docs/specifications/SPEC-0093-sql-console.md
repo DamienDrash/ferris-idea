@@ -28,7 +28,7 @@ Run SQL from the editor and look at the rows without leaving the IDE.
    comment's tie and the console says there is no statement at the caret. Until v6 a comment line
    right before a statement always said so. [GEN, OSS]
 2. **Connection:** the statements run against the connection selected in the Database tool window
-   (SPEC-0089), else the only profile of `.idecraft/connections.toml`. Without one the status bar says
+   (SPEC-0089), else the only profile of `.ferris-idea/connections.toml`. Without one the status bar says
    "Choose a connection in the Database tool window" and nothing runs. The editor tab is unchanged; the
    Services window names the connection. [GEN]
 3. **Background:** connecting and running happen off the UI thread. While they run, the Services
@@ -91,7 +91,7 @@ Run SQL from the editor and look at the rows without leaving the IDE.
     early (MySQL `SLEEP`), which Output shows, and the session stays usable. SQL Server, Oracle and
     DuckDB have no cancel yet (■ stays grey). MCP `cancel_sql` (connection) cancels a running
     `run_sql` of that connection and says whether something ran. [GEN, STD, ADR-0008]
-13. **v3 – History:** every statement run in one of the connection's consoles (`.idecraft/consoles/`)
+13. **v3 – History:** every statement run in one of the connection's consoles (`.ferris-idea/consoles/`)
     is kept in the connection's query history, newest first, at most 500, a repeat of the newest only
     moves its time, with whether it failed. History opens the list (failed ones in the error colour); a
     click puts the statement at the caret. The history lives in the user's settings folder
@@ -116,7 +116,7 @@ Run SQL from the editor and look at the rows without leaving the IDE.
 - **AK-1** Statement at the caret (inside, after the `;`, between statements, last without `;`),
   grid column widths, NULL text, row limit and the summary and output texts (unit tests of
   `sql_console_model`).
-- **AK-2** In a real window (`idecraft ui --selftest`), with the SQLite connection of the workspace: a
+- **AK-2** In a real window (`ferris-idea ui --selftest`), with the SQLite connection of the workspace: a
   `.sql` file with two statements, ⌘↩ on the second shows its rows in the Services window ("2 rows"),
   a failing statement selects Output with the error, ⌘8 hides the window.
 - **AK-3** By hand: grid look and scrolling with a larger table of the reference databases, side by side
@@ -169,7 +169,7 @@ inspections in the editor (SPEC-0015).
 
 ## Known deviations from the reference
 The reference attaches a console to a data source and keeps many result tabs and a full data editor.
-IDECraft runs any `.sql` file against the connection selected in the Database window and shows the
+Ferris IDEA runs any `.sql` file against the connection selected in the Database window and shows the
 results of the last run. **v3:** the console bar has transaction mode, Commit/Rollback, cancel and
 history like the reference's toolbar (OBS-0026 item 1), without its parameter and settings buttons;
 leaving Manual with an open transaction rolls back and says so instead of asking; the history never

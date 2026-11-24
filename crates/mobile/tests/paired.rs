@@ -7,11 +7,11 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use idecraft_mobile::{
+use ferris_idea_mobile::{
     EntryKind, MAX_FILE_BYTES, MobileCore, MobileError, SecretVault, VaultError,
 };
-use idecraft_pairing::{Console, Limits, ListenOptions, Running, Side, Store, Timing, listen};
-use idecraft_session::{Backend, BackendConfig, Right};
+use ferris_idea_pairing::{Console, Limits, ListenOptions, Running, Side, Store, Timing, listen};
+use ferris_idea_session::{Backend, BackendConfig, Right};
 
 #[derive(Default)]
 struct MapVault {

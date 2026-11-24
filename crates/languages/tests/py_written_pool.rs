@@ -6,23 +6,23 @@
 
 use std::time::Duration;
 
-use idecraft_languages::pool;
-use idecraft_languages::rename::{apply_edits, plan_rename_in};
+use ferris_idea_languages::pool;
+use ferris_idea_languages::rename::{apply_edits, plan_rename_in};
 
 #[tokio::test]
 async fn a_second_rename_sees_what_the_first_wrote() {
-    let python = idecraft_languages::servers::resolve(idecraft_languages::LanguageId::Python)
+    let python = ferris_idea_languages::servers::resolve(ferris_idea_languages::LanguageId::Python)
         .ok()
-        .filter(|r| idecraft_languages::python_server::is_python_server(r.candidate.program));
+        .filter(|r| ferris_idea_languages::python_server::is_python_server(r.candidate.program));
     if python.is_none() {
         assert!(
-            std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+            ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
             "required tool missing: pyright-langserver"
         );
         eprintln!("skipped: no pyright or basedpyright installed");
         return;
     }
-    let root = std::env::temp_dir().join(format!("idecraft-py-written-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-py-written-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     let root = root.canonicalize().unwrap();

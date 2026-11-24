@@ -3,8 +3,8 @@
 
 use std::ops::Range;
 
-pub use idecraft_database::ExportFormat;
-use idecraft_database::{Dialect, ExportOptions, export, summarize_loaded};
+pub use ferris_idea_database::ExportFormat;
+use ferris_idea_database::{Dialect, ExportOptions, export, summarize_loaded};
 
 use crate::sql_console_model::NULL_TEXT;
 

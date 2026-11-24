@@ -19,8 +19,8 @@ put aside, the operation runs, and the changes come back.
    (stash, check out, unstash)" or "Smart Merge (stash, merge, unstash)", selected, and "Cancel". [OBS,
    GEN]
 2. **Put aside:** Smart stashes all local changes including untracked files with the message
-   `IDECraft smart checkout: <from> → <to>` (or `smart merge`) and records the stash's commit id in
-   `.git/idecraft/smart-stash`. Nothing to stash: the operation runs directly. A failing stash leaves
+   `Ferris IDEA smart checkout: <from> → <to>` (or `smart merge`) and records the stash's commit id in
+   `.git/ferris-idea/smart-stash`. Nothing to stash: the operation runs directly. A failing stash leaves
    everything as it was and reports why. [STD, IMP-0080]
 3. **Bring back:** after the checkout, or after a merge that finished, the recorded stash is applied and
    then dropped — found by its commit id, so stashes made meanwhile do not matter. When applying it
@@ -48,7 +48,7 @@ put aside, the operation runs, and the changes come back.
 - **AK-3** Smart merge that stops on a conflict keeps the stash; after resolving and continuing the
   local change is back (integration test).
 - **AK-4** `git_switch_branch` with and without `smart` (protocol test).
-- **AK-5** In a real window (`idecraft ui --selftest`): checkout of a branch with a local change in the
+- **AK-5** In a real window (`ferris-idea ui --selftest`): checkout of a branch with a local change in the
   way asks, Smart Checkout switches and the change is still in the file.
 - **AK-6** Hand test next to the reference (merge and checkout with local changes).
 
@@ -62,5 +62,5 @@ single files to put aside.
 
 ## Known deviations from the reference
 The changes go into a named `git stash` entry instead of an IDE-internal shelf, so they stay visible and
-recoverable with Git itself (`git stash list`) if IDECraft is closed in between (IMP-0080). The question
+recoverable with Git itself (`git stash list`) if Ferris IDEA is closed in between (IMP-0080). The question
 is a short popup instead of a dialog with a file tree.

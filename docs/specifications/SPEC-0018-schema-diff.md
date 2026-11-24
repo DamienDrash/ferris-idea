@@ -320,7 +320,7 @@ indexes.
   (OBS-0070 C1).
 - Compared with a connection (OBS-0070 C2, C3): the reference drops a sequence and tables before the
   objects that depend on them, keeps a new table's `nextval('…'::regclass)` default unqualified and
-  opens the script in a console of the source; IDECraft's script creates the sequence in the target
+  opens the script in a console of the source; Ferris IDEA's script creates the sequence in the target
   schema with the search path set there (IMP-0055, IMP-0415).
 - Since v6 (IMP-0415): in view bodies, names qualified with the source schema are rewritten to the
   target schema (behaviour 18), which closes OBS-0068 L7; the reference leaves view bodies

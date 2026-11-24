@@ -1,4 +1,4 @@
-// Modified by IDECraft: prompts keep their focused answer (see ../../../IDECRAFT.md).
+// Modified by Ferris IDEA: prompts keep their focused answer and can be withdrawn (see ../../../FERRIS_IDEA.md).
 use crate::{
     AnyWindowHandle, BackgroundExecutor, ClipboardItem, CursorStyle, DevicePixels,
     DummyKeyboardMapper, ForegroundExecutor, Keymap, NoopTextSystem, Platform, PlatformDisplay,
@@ -82,7 +82,7 @@ struct TestPrompt {
     msg: String,
     detail: Option<String>,
     answers: Vec<String>,
-    /// IDECraft change: the answer that holds the keyboard focus (`crate::prompt_focused_answer`).
+    /// Ferris IDEA change: the answer that holds the keyboard focus (`crate::prompt_focused_answer`).
     focused: Option<usize>,
     tx: oneshot::Sender<usize>,
 }
@@ -158,6 +158,16 @@ impl TestPlatform {
         prompt.tx.send(ix).ok();
     }
 
+    /// Ferris IDEA change: drops the prompt shown when it is the latest one; its receiver hears that
+    /// nobody answered (`PlatformWindow::withdraw_prompt`).
+    pub(crate) fn withdraw_prompt(&self) {
+        let mut prompts = self.prompts.borrow_mut();
+        if prompts.multiple_choice.len() == 1 {
+            prompts.multiple_choice.pop_front();
+            self.background_executor().set_waiting_hint(None);
+        }
+    }
+
     pub(crate) fn has_pending_prompt(&self) -> bool {
         !self.prompts.borrow().multiple_choice.is_empty()
     }
@@ -171,7 +181,7 @@ impl TestPlatform {
         ))
     }
 
-    /// IDECraft change: the label of the pending prompt's answer that holds the keyboard focus.
+    /// Ferris IDEA change: the label of the pending prompt's answer that holds the keyboard focus.
     pub(crate) fn pending_prompt_focused_answer(&self) -> Option<String> {
         let prompts = self.prompts.borrow();
         let prompt = prompts.multiple_choice.front()?;

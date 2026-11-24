@@ -42,7 +42,7 @@ layout survives a restart.
    tool windows still open from the keyboard and the menu, and run again it shows the stripes. [OSS,
    GEN]
 8. **Kept per project:** sides, order and the stripes setting are saved in
-   `.idecraft/tool-windows.json` (machine-local, ignored by Git) after every change and read at the
+   `.ferris-idea/tool-windows.json` (machine-local, ignored by Git) after every change and read at the
    start; unknown entries are skipped and missing windows get their default side. [GEN]
 9. **MCP `tool_windows`:** lists the tool windows with id, title, side, order, default side and
    activation action, and whether the stripes are shown; with `move` (id and side) or `stripes`
@@ -132,5 +132,5 @@ Python Packages, Containers, Profiler, Remote Host keep the bottom), the "More t
 Bottom windows stack instead of replacing each other, so two outputs can be seen at once (as before;
 v4: they replace each other as in the reference, and ⌥-click shows a window in the other half of its
 side without moving it, IMP-0311).
-The layout is a small JSON file in `.idecraft/` instead of the reference's workspace file. The MCP
+The layout is a small JSON file in `.ferris-idea/` instead of the reference's workspace file. The MCP
 tool changes the saved layout, not a running window. Not compared side by side yet.

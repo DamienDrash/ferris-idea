@@ -6,8 +6,8 @@
 
 #![cfg(target_os = "macos")]
 
+use ferris_idea_workbench::{EditorView, WorkbenchView};
 use gpui::{Entity, TestAppContext, VisualTestContext};
-use idecraft_workbench::{EditorView, WorkbenchView};
 
 /// Runs timers and the look at the disk until `done` holds; panics after 200 rounds.
 fn wait(
@@ -71,7 +71,7 @@ fn tab_inserts(
 
 #[gpui::test]
 fn an_open_file_follows_its_editorconfig_on_disk(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("idecraft-ec-live-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-ec-live-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("sub")).unwrap();
     let config = root.join(".editorconfig");

@@ -6,7 +6,7 @@ use std::time::Duration;
 
 fn skip(reason: &str) {
     assert!(
-        std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+        ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
         "required tool missing: {reason}"
     );
     eprintln!("skipped: {reason}");
@@ -49,7 +49,7 @@ fn main() {
 
 /// A Cargo project whose `src/main.rs` on disk is empty: every answer comes from the editor text.
 fn project(name: &str) -> (PathBuf, PathBuf) {
-    let root = std::env::temp_dir().join(format!("idecraft-ra-{name}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-ra-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src")).unwrap();
     std::fs::write(
@@ -71,7 +71,7 @@ const WAIT: Duration = Duration::from_secs(120);
 
 #[tokio::test]
 async fn rust_analyzer_navigation_and_insight() {
-    use idecraft_languages::insight::{
+    use ferris_idea_languages::insight::{
         CallDirection, LocationKind, call_hierarchy_in, hover_in, locations_in, signature_help_in,
         symbols_in,
     };
@@ -81,7 +81,7 @@ async fn rust_analyzer_navigation_and_insight() {
     }
     let (root, file) = project("nav");
     let text = Some(MAIN);
-    let lines = |found: &[idecraft_languages::insight::Location]| -> Vec<u64> {
+    let lines = |found: &[ferris_idea_languages::insight::Location]| -> Vec<u64> {
         let mut v: Vec<u64> = found.iter().map(|l| l.range.start_line).collect();
         v.sort();
         v
@@ -166,10 +166,10 @@ async fn rust_analyzer_navigation_and_insight() {
 
 #[tokio::test]
 async fn rust_analyzer_editing() {
-    use idecraft_languages::actions::code_actions_in;
-    use idecraft_languages::format::{FormatOptions, plan_format_in};
-    use idecraft_languages::insight::{Range, complete_in};
-    use idecraft_languages::rename::plan_rename_in;
+    use ferris_idea_languages::actions::code_actions_in;
+    use ferris_idea_languages::format::{FormatOptions, plan_format_in};
+    use ferris_idea_languages::insight::{Range, complete_in};
+    use ferris_idea_languages::rename::plan_rename_in;
     if !available() {
         skip("rust-analyzer not installed");
         return;
@@ -233,9 +233,9 @@ async fn rust_analyzer_editing() {
 /// the chosen one before it is previewed (SPEC-0041 v2 AK-4).
 #[tokio::test]
 async fn rust_analyzer_resolves_lazy_code_actions() {
-    use idecraft_languages::actions::{code_actions_in, plan_code_action_in};
-    use idecraft_languages::insight::Range;
-    use idecraft_languages::rename::apply_edits;
+    use ferris_idea_languages::actions::{code_actions_in, plan_code_action_in};
+    use ferris_idea_languages::insight::Range;
+    use ferris_idea_languages::rename::apply_edits;
     if !available() {
         skip("rust-analyzer not installed");
         return;
@@ -266,7 +266,11 @@ async fn rust_analyzer_resolves_lazy_code_actions() {
 }
 
 /// The range of `needle` in `text`, or with `caret` the empty range `caret` characters into it.
-fn range_of(text: &str, needle: &str, caret: Option<usize>) -> idecraft_languages::insight::Range {
+fn range_of(
+    text: &str,
+    needle: &str,
+    caret: Option<usize>,
+) -> ferris_idea_languages::insight::Range {
     let start = text.find(needle).unwrap_or_else(|| panic!("{needle:?}"));
     let (a, b) = match caret {
         Some(c) => (start + c, start + c),
@@ -279,7 +283,7 @@ fn range_of(text: &str, needle: &str, caret: Option<usize>) -> idecraft_language
         (line, column)
     };
     let ((start_line, start_character), (end_line, end_character)) = (pos(a), pos(b));
-    idecraft_languages::insight::Range {
+    ferris_idea_languages::insight::Range {
         start_line,
         start_character,
         end_line,
@@ -291,14 +295,14 @@ fn range_of(text: &str, needle: &str, caret: Option<usize>) -> idecraft_language
 /// expressions around it, inside out), Extract Method on a line, Inline at a caret on a variable.
 #[tokio::test]
 async fn rust_analyzer_refactoring_shortcuts() {
-    use idecraft_languages::actions::{Refactoring, plan_code_action_in, refactoring_targets};
-    use idecraft_languages::rename::apply_edits;
+    use ferris_idea_languages::actions::{Refactoring, plan_code_action_in, refactoring_targets};
+    use ferris_idea_languages::rename::apply_edits;
     if !available() {
         skip("rust-analyzer not installed");
         return;
     }
     let (root, file) = project("refactor");
-    let targets = async |range: idecraft_languages::insight::Range, r| {
+    let targets = async |range: ferris_idea_languages::insight::Range, r| {
         refactoring_targets(&root, &file, Some(MAIN), &range, r, WAIT).await
     };
 
@@ -338,11 +342,11 @@ async fn rust_analyzer_refactoring_shortcuts() {
         .await
         .unwrap();
     let with_function = apply_edits(MAIN, &plan[0].edits).unwrap();
-    let name = idecraft_languages::actions::introduced_name(MAIN, &with_function).unwrap();
+    let name = ferris_idea_languages::actions::introduced_name(MAIN, &with_function).unwrap();
     assert_eq!(name.name, "fun_name", "{with_function}");
 
     // Refactor This on a name: rust-analyzer lists its own actions there but no Rename (a rename is
-    // no code action), so IDECraft adds it (SPEC-0095 v5 behaviour 4a).
+    // no code action), so Ferris IDEA adds it (SPEC-0095 v5 behaviour 4a).
     let found = targets(range_of(MAIN, "total = add", Some(2)), Refactoring::Any)
         .await
         .unwrap();
@@ -353,7 +357,14 @@ async fn rust_analyzer_refactoring_shortcuts() {
             .iter()
             .all(|a| !a.title.to_lowercase().starts_with("rename"))
     );
-    let own = idecraft_languages::actions::refactor_this_own(&actions, true);
+    let own = ferris_idea_languages::actions::refactor_this_own(
+        &actions,
+        &ferris_idea_languages::actions::RefactorSpot {
+            on_name: true,
+            in_code: true,
+            ..Default::default()
+        },
+    );
     assert_eq!(own[0].title, "Rename…", "{own:?}");
 
     let found = targets(range_of(MAIN, "let total", Some(5)), Refactoring::Inline)
@@ -366,5 +377,51 @@ async fn rust_analyzer_refactoring_shortcuts() {
             .any(|a| a.title.to_lowercase().starts_with("inline")),
         "{found:?}"
     );
+    cleanup(&root);
+}
+
+// SPEC-0292 AK-16 (v8): rust-analyzer's reference lenses give the counts of a struct and a
+// function, references those of a field; an unused function shows nothing; a line range counts
+// only its declarations.
+#[tokio::test]
+async fn usage_counts_from_reference_lenses() {
+    use ferris_idea_languages::usages::{FROM_CODE_LENS, Plan, usage_counts_planned};
+    if !available() {
+        skip("rust-analyzer not installed");
+        return;
+    }
+    let (root, file) = project("lens");
+    let text = format!("{MAIN}\nfn unused() {{}}\n");
+    let start = std::time::Instant::now();
+    let counted = loop {
+        let counted = usage_counts_planned(&root, &file, Some(&text), WAIT, &Plan::default())
+            .await
+            .unwrap();
+        if counted.counts.iter().any(|c| c.name == "Square") || start.elapsed() > WAIT {
+            break counted;
+        }
+        tokio::time::sleep(Duration::from_secs(2)).await;
+    };
+    assert!(counted.complete, "{counted:?}");
+    let count = |name: &str| counted.counts.iter().find(|c| c.name == name);
+    let square = count("Square").unwrap_or_else(|| panic!("{counted:?}"));
+    // The struct literal in `main`; whether the server's lens counts the `impl` header too is its
+    // own choice (rust-analyzer leaves it to its implementations lens).
+    assert_eq!(square.kind, "struct", "{counted:?}");
+    assert!(square.count >= 1, "{counted:?}");
+    assert_eq!(square.source, FROM_CODE_LENS, "{counted:?}");
+    // Fields have no lens: their usages come from the references (`self.side` twice, the literal).
+    let side = count("side").unwrap_or_else(|| panic!("{counted:?}"));
+    assert_eq!((side.count, side.source), (3, "references"), "{counted:?}");
+    let add = count("add").unwrap_or_else(|| panic!("{counted:?}"));
+    assert_eq!((add.count, add.source), (1, FROM_CODE_LENS), "{counted:?}");
+    assert!(count("unused").is_none(), "{counted:?}");
+    assert!(count("main").is_none(), "{counted:?}");
+    // Only the lines of `add` (16..=19).
+    let some = usage_counts_planned(&root, &file, Some(&text), WAIT, &Plan::lines(16, 19))
+        .await
+        .unwrap();
+    let names: Vec<&str> = some.counts.iter().map(|c| c.name.as_str()).collect();
+    assert_eq!(names, ["add"], "{some:?}");
     cleanup(&root);
 }

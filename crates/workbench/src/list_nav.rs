@@ -7,7 +7,7 @@
 //! The chords come from the keymap in use (⌥↑, ⌥↓, ⌥⇧↑ and ⌥⇧↓ in the bundled macOS keymap, none
 //! in the default one); Home, End, ⇧Home and ⇧End are fixed, as ↑ and ↓ are.
 
-use idecraft_ui::keymap::{Keymap, Keystroke};
+use ferris_idea_ui::keymap::{Keymap, Keystroke};
 
 /// The keymap action that selects the first row of the focused list.
 pub const SELECT_FIRST_ROW: &str = "List-selectFirstRow";

@@ -12,7 +12,7 @@ Agent rights have been kept outside the project since SPEC-0053 v1, so that a cl
 cannot give an agent the right to run its code. Two things did not follow that rule:
 
 - The four permissions of a database connection were stored in the project file
-  `.idecraft/connections.toml`, and reading was on by default. A repository could ship a profile
+  `.ferris-idea/connections.toml`, and reading was on by default. A repository could ship a profile
   with all four, and an agent ran `CREATE TABLE` and `INSERT` through it in a folder that was not
   trusted, with an empty settings folder, without a preview and without a log line. A profile
   with an absolute `path` read a database file outside the workspace that `read_file` refuses.
@@ -41,7 +41,7 @@ cannot give an agent the right to run its code. Two things did not follow that r
    row decides the line of the agent log (SPEC-0053 v7 behaviour 11) and the right (v8 behaviour
    13), so a new tool cannot satisfy one rule and miss the other; the tests fail for a tool
    without a row and for a change without a right. The emergency stop of the UI driver (ADR-0027)
-   and `local_history`, which writes only IDECraft's own record, are the two marked exceptions.
+   and `local_history`, which writes only Ferris IDEA's own record, are the two marked exceptions.
 7. **The person at the window is not an agent.** None of this changes what the window does for
    its user.
 

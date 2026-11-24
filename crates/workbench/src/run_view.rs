@@ -6,12 +6,12 @@ use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use ferris_idea_core::{
+    RunConfig, RunConfigs, RunEvent, RunHandle, TestReport, TestStatus, start_run,
+};
 use gpui::{
     Context, EventEmitter, FocusHandle, KeyDownEvent, UniformListScrollHandle, Window, div, font,
     prelude::*, px, rgb, uniform_list,
-};
-use idecraft_core::{
-    RunConfig, RunConfigs, RunEvent, RunHandle, TestReport, TestStatus, start_run,
 };
 
 use crate::icon_images::icon;
@@ -27,7 +27,7 @@ use crate::test_tree_model::{
 };
 use crate::tips::{Tipped, declared};
 use crate::workbench_view::c;
-use idecraft_ui::tooltip::Tip;
+use ferris_idea_ui::tooltip::Tip;
 
 /// How often running consoles take the new output.
 const POLL: Duration = Duration::from_millis(50);
@@ -90,7 +90,7 @@ struct TestTree {
     /// The order of the tree (v3 behaviour 8).
     sort: crate::test_tree_model::Sort,
     /// The configuration's last runs, newest first, this one included (v3 behaviour 9).
-    history: Vec<idecraft_core::HistoryEntry>,
+    history: Vec<ferris_idea_core::HistoryEntry>,
     /// The remembered run shown instead of the last one.
     shown: Option<usize>,
     /// The history list is open.
@@ -234,22 +234,22 @@ impl TestTree {
 
 /// Remembers a finished test run of `config` in the settings folder and returns the history, or
 /// only this run when it cannot be written (`SPEC-0088` v3 behaviour 9).
-fn remember(root: &Path, config: &str, report: &TestReport) -> Vec<idecraft_core::HistoryEntry> {
+fn remember(root: &Path, config: &str, report: &TestReport) -> Vec<ferris_idea_core::HistoryEntry> {
     let time = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());
     let this = || {
-        vec![idecraft_core::HistoryEntry {
+        vec![ferris_idea_core::HistoryEntry {
             time,
             config: config.to_owned(),
-            report: idecraft_core::tree_only(report),
+            report: ferris_idea_core::tree_only(report),
         }]
     };
-    let Some(settings) = idecraft_core::user_config_dir() else {
+    let Some(settings) = ferris_idea_core::user_config_dir() else {
         return this();
     };
-    let dir = idecraft_core::history_dir(&settings);
-    idecraft_core::record_history(&dir, root, config, report, time).unwrap_or_else(|_| this())
+    let dir = ferris_idea_core::history_dir(&settings);
+    ferris_idea_core::record_history(&dir, root, config, report, time).unwrap_or_else(|_| this())
 }
 
 /// The Run tool window: one tab per configuration that was run (behaviour 6).
@@ -374,7 +374,7 @@ impl RunView {
             .filter(|t| t.console.running)
             .map(|t| t.name.clone())
             .collect();
-        let title = idecraft_core::instance_title(name, &busy);
+        let title = ferris_idea_core::instance_title(name, &busy);
         self.run_in_tab(configs, name, &title, cx)?;
         Ok(title)
     }
@@ -551,7 +551,7 @@ impl RunView {
         let tabs = self
             .tabs
             .iter()
-            .map(|t| idecraft_ai::live::RunTab {
+            .map(|t| ferris_idea_ai::live::RunTab {
                 name: t.name.clone(),
                 running: t.console.running,
                 exit_code: t.console.exit_code,
@@ -563,11 +563,11 @@ impl RunView {
                     .unwrap_or_default(),
             })
             .collect();
-        idecraft_ai::live::Live::global().set_runs(&self.root, tabs);
+        ferris_idea_ai::live::Live::global().set_runs(&self.root, tabs);
     }
 
     /// The selected test when it failed (`SPEC-0313` behaviour 3).
-    pub fn selected_failed_test(&self) -> Option<idecraft_ai::live::FailedTest> {
+    pub fn selected_failed_test(&self) -> Option<ferris_idea_ai::live::FailedTest> {
         let tree = self.tabs.get(self.selected)?.tests.as_ref()?;
         let row = tree.rows().into_iter().nth(tree.selected)?;
         if !row.is_test || !matches!(row.status, TestStatus::Failed | TestStatus::Error) {
@@ -578,7 +578,7 @@ impl RunView {
         Some(
             all.into_iter()
                 .find(|f| f.name.ends_with(&case.name))
-                .unwrap_or_else(|| idecraft_ai::live::FailedTest {
+                .unwrap_or_else(|| ferris_idea_ai::live::FailedTest {
                     name: row.label.clone(),
                     message: case.message.clone().unwrap_or_default(),
                     details: test_details(case),
@@ -865,7 +865,7 @@ impl Render for RunView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // The "More" tooltip stayed next to the open ⋮ menu (SPEC-0294 v4 behaviour 11).
         if self.menu_open.is_some() {
-            idecraft_ui::tooltip::hold_this_frame();
+            ferris_idea_ui::tooltip::hold_this_frame();
         }
         let p = Palette::current();
         let color = |kind: LineKind| {
@@ -1110,7 +1110,7 @@ impl RunView {
             crate::metrics::header_button("run-rerun")
                 .tip(declared!(RUN_TOOLBAR, "run-rerun"))
                 .when(!any, |d| d.opacity(0.4))
-                .child(icon("idecraft/debugRerun"))
+                .child(icon("ferris-idea/debugRerun"))
                 .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
                     this.rerun_selected(cx);
                 }))
@@ -1166,23 +1166,24 @@ impl RunView {
         if tree.shown.is_some() {
             return Err("Shows a remembered run; choose the last run in the history".into());
         }
-        let config = idecraft_core::RunConfig {
+        let config = ferris_idea_core::RunConfig {
             name: tab.name.clone(),
             command: tab.command.clone().unwrap_or_default(),
             cwd: None,
             env: Default::default(),
-            kind: idecraft_core::RunKind::Test,
+            kind: ferris_idea_core::RunKind::Test,
             report: None,
             report_file: None,
             before: Vec::new(),
             timeout: None,
             url: None,
             verbatim: false,
+            http: None,
             folder: None,
             allow_multiple: false,
             before_launch: Vec::new(),
         };
-        idecraft_core::rerun_failed(&config, &tree.current).map(|_| ())
+        ferris_idea_core::rerun_failed(&config, &tree.current).map(|_| ())
     }
 
     /// Rerun Failed Tests of the selected tab (v3 behaviour 7); `false` when it cannot.
@@ -1271,7 +1272,7 @@ impl RunView {
             button("test-rerun-failed")
                 .tip_text("test-rerun-failed", rerun_tip)
                 .when(rerun.is_err(), |d| d.opacity(0.4))
-                .child(icon("idecraft/debugRerun"))
+                .child(icon("ferris-idea/debugRerun"))
                 .child(icon("run/testFailed"))
                 .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
                     this.rerun_failed_selected(cx);
@@ -1306,7 +1307,7 @@ impl RunView {
                 .when(tree.history_open || tree.shown.is_some(), |d| {
                     d.bg(c(p.tree_selection))
                 })
-                .child(icon("idecraft/history"))
+                .child(icon("ferris-idea/history"))
                 .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
                     if let Some(t) = this.tree_mut() {
                         t.history_open = !t.history_open;
@@ -1878,7 +1879,7 @@ crate::committed_text::committed_text_input!(RunChooser, take_committed);
 impl Render for RunChooser {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if self.menu.is_some() {
-            idecraft_ui::tooltip::hold_this_frame();
+            ferris_idea_ui::tooltip::hold_this_frame();
         }
         let p = Palette::current();
         let rows = self.rows.clone();
@@ -2062,7 +2063,7 @@ impl Render for RunChooser {
                             // A click target for checks (no tooltip).
                             .tip_text(
                                 format!("run-choice-{i}"),
-                                idecraft_ui::tooltip::Tip::default(),
+                                ferris_idea_ui::tooltip::Tip::default(),
                             )
                             .h(px(26.))
                             .px_2()
@@ -2097,7 +2098,7 @@ impl Render for RunChooser {
                                     .child(icon("status/warning"))
                                     .tip_text(
                                         format!("run-choice-warning-{i}"),
-                                        idecraft_ui::tooltip::Tip {
+                                        ferris_idea_ui::tooltip::Tip {
                                             title: why,
                                             shortcut: String::new(),
                                             details: Vec::new(),

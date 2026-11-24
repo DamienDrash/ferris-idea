@@ -5,10 +5,10 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use idecraft_languages::LanguageId;
-use idecraft_languages::context::UsageKind;
-use idecraft_languages::find_usages::{UsageSource, find_usages_in};
-use idecraft_languages::usages::usage_counts_in;
+use ferris_idea_languages::LanguageId;
+use ferris_idea_languages::context::UsageKind;
+use ferris_idea_languages::find_usages::{UsageSource, find_usages_in};
+use ferris_idea_languages::usages::usage_counts_in;
 
 /// The files of OBS-0028 item 7.
 const SHAPE: &str = "export interface Shape {\n  area(): number;\n}\n\nexport abstract class Base implements Shape {\n  abstract area(): number;\n\n  describe(): string {\n    return `area ${this.area()}`;\n  }\n}\n";
@@ -25,15 +25,15 @@ impl Drop for Project {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn usages_of_an_interface_method_are_its_calls() {
-    let Ok(server) = idecraft_languages::servers::resolve(LanguageId::TypeScript) else {
+    let Ok(server) = ferris_idea_languages::servers::resolve(LanguageId::TypeScript) else {
         assert!(
-            std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+            ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
             "required tool missing: a TypeScript language server"
         );
         eprintln!("skipped: no TypeScript language server");
         return;
     };
-    let root = std::env::temp_dir().join(format!("idecraft-ts-usages-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-ts-usages-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src")).unwrap();
     let p = Project(root.canonicalize().unwrap());
@@ -87,15 +87,15 @@ async fn usages_of_an_interface_method_are_its_calls() {
 /// area` in `Base` — and the types keep their counts (`1 usage · 3 inheritors` at `Shape`).
 #[tokio::test(flavor = "multi_thread")]
 async fn usage_counts_say_what_find_usages_lists() {
-    let Ok(server) = idecraft_languages::servers::resolve(LanguageId::TypeScript) else {
+    let Ok(server) = ferris_idea_languages::servers::resolve(LanguageId::TypeScript) else {
         assert!(
-            std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+            ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
             "required tool missing: a TypeScript language server"
         );
         eprintln!("skipped: no TypeScript language server");
         return;
     };
-    let root = std::env::temp_dir().join(format!("idecraft-ts-counts-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-ts-counts-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src")).unwrap();
     let p = Project(root.canonicalize().unwrap());

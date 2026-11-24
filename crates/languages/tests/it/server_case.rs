@@ -4,29 +4,29 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use idecraft_languages::insight::{
+use ferris_idea_languages::insight::{
     CallDirection, Location, LocationKind, call_hierarchy_in, complete_in, hover_in, locations_in,
     signature_help_in, symbols_in,
 };
-use idecraft_languages::rename::plan_rename_in;
+use ferris_idea_languages::rename::plan_rename_in;
 
 pub(crate) const WAIT: Duration = Duration::from_secs(120);
 
 pub(crate) fn skip(reason: &str) {
     assert!(
-        std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+        ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
         "required tool missing: {reason}"
     );
     eprintln!("skipped: {reason}");
 }
 
-/// Whether IDECraft would start `program`: on the `PATH` and usable (typescript-language-server
+/// Whether Ferris IDEA would start `program`: on the `PATH` and usable (typescript-language-server
 /// with TypeScript 7 next to it is not, `SPEC-0042` v12 behaviour 21).
 pub(crate) fn installed(program: &str) -> bool {
     std::env::var_os("PATH").is_some_and(|paths| {
         matches!(
-            idecraft_languages::servers::find_in(&paths, program),
-            idecraft_languages::servers::Availability::Ready(_)
+            ferris_idea_languages::servers::find_in(&paths, program),
+            ferris_idea_languages::servers::Availability::Ready(_)
         )
     })
 }
@@ -61,7 +61,8 @@ pub(crate) struct Case {
 }
 
 pub(crate) fn project(case: &Case) -> (PathBuf, PathBuf) {
-    let root = std::env::temp_dir().join(format!("idecraft-{}-{}", case.name, std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-{}-{}", case.name, std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     for (path, content) in case.files {
@@ -188,6 +189,6 @@ pub(crate) async fn check(case: &Case) {
     }
 
     // A server of the language server pool, where a test program switched it on, is stopped.
-    idecraft_languages::pool::restart_root(&root);
+    ferris_idea_languages::pool::restart_root(&root);
     let _ = std::fs::remove_dir_all(&root);
 }

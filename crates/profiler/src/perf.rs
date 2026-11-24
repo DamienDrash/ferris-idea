@@ -19,9 +19,39 @@ pub const PERF_FIELDS: &str = "comm,tid,ip,sym,dso";
 pub const PERF_REFUSED: &str = "the kernel did not allow perf to record (kernel.perf_event_paranoid \
 is above 2); allow it with `sudo sysctl kernel.perf_event_paranoid=2` or ask the machine's owner";
 
+/// Whether the kernel keeps this process from sampling its own programs with `perf`
+/// (`SPEC-0252` v3 behaviour 1): `level` is `kernel.perf_event_paranoid`, `cap_eff` the effective
+/// capabilities of the process (`CapEff` in `/proc/self/status`). Above 2 an unprivileged process
+/// may not record; `CAP_PERFMON` (38) or `CAP_SYS_ADMIN` (21) lift that, and so does a level that
+/// cannot be read (the run then reports what `perf` says).
+pub fn perf_blocked_by(level: &str, cap_eff: Option<u64>) -> bool {
+    let privileged = cap_eff.is_some_and(|c| c & (1 << 38 | 1 << 21) != 0);
+    let level: Option<i64> = level.trim().parse().ok();
+    !privileged && level.is_some_and(|l| l > 2)
+}
+
+/// [`perf_blocked_by`] for this machine and process; always `false` outside Linux.
+pub fn perf_blocked() -> bool {
+    if !cfg!(target_os = "linux") {
+        return false;
+    }
+    let Ok(level) = std::fs::read_to_string("/proc/sys/kernel/perf_event_paranoid") else {
+        return false;
+    };
+    let cap_eff = std::fs::read_to_string("/proc/self/status")
+        .ok()
+        .and_then(|s| {
+            s.lines()
+                .find_map(|l| l.strip_prefix("CapEff:"))
+                .and_then(|v| u64::from_str_radix(v.trim(), 16).ok())
+        });
+    perf_blocked_by(&level, cap_eff)
+}
+
 /// Packages that bring `perf`.
 pub const PERF_MISSING: &str = "native programs are profiled with `perf` on Linux, which is not \
-installed: install `linux-perf` (Debian), `linux-tools-common` (Ubuntu) or `perf` (Fedora, Arch)";
+installed or does not run: install `linux-perf` (Debian), `linux-tools-common` and \
+`linux-tools-generic` (Ubuntu) or `perf` (Fedora, Arch)";
 
 /// One frame line: `55d1c2a0b139 inner+0x19 (/tmp/busy)`.
 fn perf_frame(line: &str) -> Option<StackFrame> {
@@ -131,7 +161,7 @@ pub fn gradle_init_script(out: &Path) -> String {
         })
         .collect();
     format!(
-        "// Written by IDECraft's profiler (SPEC-0252): records the application's JVM.\nallprojects {{\n    tasks.withType(JavaExec).configureEach {{\n        jvmArgs({})\n    }}\n}}\n",
+        "// Written by Ferris IDEA's profiler (SPEC-0252): records the application's JVM.\nallprojects {{\n    tasks.withType(JavaExec).configureEach {{\n        jvmArgs({})\n    }}\n}}\n",
         args.join(", ")
     )
 }
@@ -139,6 +169,19 @@ pub fn gradle_init_script(out: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// SPEC-0252 v3 AK-7 (behaviour 1): above level 2 an unprivileged process is refused before
+    /// the run; CAP_PERFMON or CAP_SYS_ADMIN lift it; an unreadable level does not refuse.
+    #[test]
+    fn the_kernels_level_refuses_perf_before_the_run() {
+        assert!(perf_blocked_by("4\n", Some(0)));
+        assert!(perf_blocked_by("3", None));
+        assert!(!perf_blocked_by("2\n", Some(0)));
+        assert!(!perf_blocked_by("-1", Some(0)));
+        assert!(!perf_blocked_by("4", Some(1 << 38)));
+        assert!(!perf_blocked_by("4", Some(1 << 21)));
+        assert!(!perf_blocked_by("", Some(0)));
+    }
 
     const SCRIPT: &str = "            busy 4321
 \t    5581d1a0b139 inner+0x19 (/tmp/busy)

@@ -30,10 +30,10 @@ them the machine.
    the project (not granted)" or "reads the project (granted)"; Space on the selected plugin grants
    or withdraws it. Grants are kept in `permissions.json` of the user's plugins folder and dropped
    when the plugin is removed. [GEN, ADR-0016]
-4. **Host functions** (import module `idecraft`): `list_files() -> i64` (JSON list of the project's
+4. **Host functions** (import module `ferris-idea`): `list_files() -> i64` (JSON list of the project's
    files as the project tree lists them, at most 50 000) and `read_file(path_ptr, path_len) -> i64`
    (the file's bytes), both returning a packed pointer and length written through the plugin's
-   `idecraft_alloc`, or `-1` without the grant, `-2` for a path that is not a project file (absolute,
+   `ferris_idea_alloc`, or `-1` without the grant, `-2` for a path that is not a project file (absolute,
    `..`, outside after resolving links, missing), `-3` over 4 MiB. Other imports do not link. The
    sandbox limits of SPEC-0104 stay. [STD, ADR-0016]
 5. **MCP:** `plugins` lists each plugin's `permissions` and `granted`; `run_plugin_action` runs an
@@ -50,15 +50,15 @@ them the machine.
 7. **`read_file` reads only the project's own sources (v3; decision of the implementing agent of
    2026-11-13 under the Project Owner's general authority, security first, CLAUDE.md rule 12).**
    Until v2 a plugin with `project-read` could read any regular file below the project folder by
-   naming it: a file Git ignores such as `.env`, a private key, IDECraft's own data under
-   `.idecraft`, the files inside `.git` (remote URLs, sometimes with a token), an installed package.
+   naming it: a file Git ignores such as `.env`, a private key, Ferris IDEA's own data under
+   `.ferris-idea`, the files inside `.git` (remote URLs, sometimes with a token), an installed package.
    Since v3 the path must pass every check below, in this order; the first that fails decides.
    1. *Form:* UTF-8, at most 4096 bytes, relative, made of plain names only (no `..`, no `.`, no
       empty part), without a control character, a backslash or a colon, and no part ending in a dot
       or a space. The last three close other spellings of one file on Windows (alternate data
       streams, `secret.pem.`). Answer `-2`.
    2. *Data of version control or of an IDE by name:* no part of the path is `.git`, `.hg`, `.svn`,
-      `.jj`, `CVS`, `.idecraft` or `.idea`, in any spelling of upper and lower case, as a folder or
+      `.jj`, `CVS`, `.ferris-idea` or `.idea`, in any spelling of upper and lower case, as a folder or
       as a file (the `.git` file of a linked working tree names a folder outside the project).
       Answer `-2`.
    3. *Deny list:* behaviour 8. Answer `-5`.
@@ -108,7 +108,7 @@ them the machine.
    secrets"; it depends on the name alone (behaviour 8), so it reveals nothing either, and a plugin
    can tell its user why `.env` was not read. `-1` (no grant), `-3` (over 4 MiB, only for a file
    the plugin may read) and `-4` (the plugin's memory could not be written) are unchanged.
-   `idecraft_plugins::file_answer_meaning` gives each code's sentence for hosts and plugin
+   `ferris_idea_plugins::file_answer_meaning` gives each code's sentence for hosts and plugin
    authors. [GEN]
 10. **Refusals are logged (v3).** Every refusal of behaviours 7 and 11, and every call of
     `list_files` or `read_file` without the grant (reason `reading the project is not granted`,
@@ -193,7 +193,7 @@ them the machine.
   own files (`crates/plugins/tests/runtime.rs`:
   `project_access_needs_the_grant_and_stays_in_the_project`).
 - **AK-6 (v3)** With the grant, a plugin built from WebAssembly text reads an own file; `.env`, a
-  `config/prod.pem`, a file an ignore rule matches, `.git/config`, `.idecraft/state.json`, a file in
+  `config/prod.pem`, a file an ignore rule matches, `.git/config`, `.ferris-idea/state.json`, a file in
   `node_modules`, a path through a symbolic link to a folder outside, a symbolic link to a file,
   `../outside.txt`, an absolute path and (where the disk ignores case) another case of an own
   file's name are refused, the deny list with `-5` and the others with `-2`; a missing own file
@@ -212,7 +212,7 @@ them the machine.
   (`crates/plugins/tests/runtime.rs`: `open_requests_follow_the_read_rule`).
 - **AK-9 (v4)** The guard: an own file and a file not saved yet are not guarded, relative and
   absolute; `.env`, `deploy/.ENV.production`, `config/prod.pem`, a file an ignore rule matches,
-  `.git/config`, `.idecraft/state.json`, a file in `node_modules`, a folder, a file outside the
+  `.git/config`, `.ferris-idea/state.json`, a file in `node_modules`, a folder, a file outside the
   project and a symbolic link are, each with its reason; asking logs nothing, handing over on
   purpose logs one line without the file's content
   (`crates/plugins/tests/runtime.rs`: `guarded_files_are_what_read_file_refuses`). The question
@@ -246,7 +246,7 @@ Writing files, network, other extension points (inspections, completion, tool wi
 save), a marketplace, signing.
 
 ## Known deviations from the reference
-The reference's plugins run with full access to the IDE and the machine; IDECraft's see only the
+The reference's plugins run with full access to the IDE and the machine; Ferris IDEA's see only the
 editor context they are given and, if granted, read the project (IMP-0037).
 Since v2 `list_files` leaves out what is not the project's own (behaviour 6); since v3 `read_file`
 and the `open` request refuse it too, and files that commonly hold secrets by name (behaviours 7 to

@@ -5,10 +5,10 @@
 
 #![cfg(target_os = "macos")]
 
+use ferris_idea_workbench::WorkbenchView;
+use ferris_idea_workbench::appearance::{IdeSettingsFile, THEME_LOG, ThemeFile, ThemeLog};
+use ferris_idea_workbench::palette::{ThemeId, current_theme, set_current_theme};
 use gpui::{Modifiers, TestAppContext, VisualTestContext, point, px};
-use idecraft_workbench::WorkbenchView;
-use idecraft_workbench::appearance::{IdeSettingsFile, THEME_LOG, ThemeFile, ThemeLog};
-use idecraft_workbench::palette::{ThemeId, current_theme, set_current_theme};
 
 /// SPEC-0275 AK-33 (v14, behaviour 28b): a click on a row of the Quick Switch Scheme popup
 /// chooses the theme and does not reach the editor under the popup; a click on the popup beside
@@ -16,7 +16,7 @@ use idecraft_workbench::palette::{ThemeId, current_theme, set_current_theme};
 /// under the clicked row.
 #[gpui::test]
 fn a_click_in_the_theme_popup_does_not_reach_the_editor(cx: &mut TestAppContext) {
-    let dir = std::env::temp_dir().join(format!("idecraft-popup-clicks-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-popup-clicks-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let root = dir.join("project");
     std::fs::create_dir_all(&root).unwrap();

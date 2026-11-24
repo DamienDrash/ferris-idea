@@ -1,6 +1,6 @@
 //! The texts the window shows for open files with unsaved changes, while a change that can touch
 //! several files is planned (`SPEC-0220` v4 behaviour 13): the language server gets each of them
-//! (`didOpen`, or `didChange` with a higher version) when it serves the file, and IDECraft's own
+//! (`didOpen`, or `didChange` with a higher version) when it serves the file, and Ferris IDEA's own
 //! planners read them in place of the disk, so every edit of the change refers to the text the
 //! window shows.
 //!
@@ -25,7 +25,7 @@ fn key(path: &Path) -> PathBuf {
 }
 
 /// Runs `planning` with `texts` (file, shown text) as the files' content for the language
-/// servers it asks and for IDECraft's own planners (`SPEC-0220` v4 behaviour 13).
+/// servers it asks and for Ferris IDEA's own planners (`SPEC-0220` v4 behaviour 13).
 pub async fn scope<F: Future>(texts: Vec<(PathBuf, String)>, planning: F) -> F::Output {
     let map: HashMap<PathBuf, String> = texts.into_iter().map(|(p, t)| (key(&p), t)).collect();
     SHOWN.scope(Arc::new(map), planning).await
@@ -61,7 +61,7 @@ mod tests {
     /// the resolved path; outside it the disk is read.
     #[tokio::test]
     async fn planners_read_the_given_texts() {
-        let root = std::env::temp_dir().join(format!("idecraft-shown-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("ferris-idea-shown-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("src")).unwrap();
         let file = root.join("src/a.c");

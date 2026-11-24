@@ -52,7 +52,7 @@ fn tables_after_from_and_columns_of_aliases() {
 #[test]
 fn completion_against_postgresql() {
     let p = Project::empty();
-    if !live_connection(&p, "pg", "IDECRAFT_TEST_PG") {
+    if !live_connection(&p, "pg", "FERRIS_IDEA_TEST_PG") {
         return;
     }
     let mut ide = Ide::stdio(&p);

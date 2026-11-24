@@ -41,7 +41,7 @@ Find classes, methods and fields that nothing in the project uses, without askin
 server about every member, and keep the knowledge needed for that cheap to update.
 
 ## Behaviour
-1. **Index:** IDECraft keeps a project-wide reference index. For each Java file it holds the
+1. **Index:** Ferris IDEA keeps a project-wide reference index. For each Java file it holds the
    declarations of types (class, interface, enum, record, annotation type), methods and fields with
    their name, kind, enclosing type, position, the facts of behaviour 4, and the supertypes named by
    each type; and the number of uses of every name in the file: each identifier and type name that
@@ -50,13 +50,13 @@ server about every member, and keep the knowledge needed for that cheap to updat
    `.gradle`, `.xml`, `.properties`, `.yml`, `.yaml` and files below `META-INF/services/`; v4:
    also `.conf`, and `.kt` files are indexed by behaviour 9 instead) it holds
    the number of uses of each word. Files over 1 MiB, unreadable and non-UTF-8 files are left out.
-   The index is built from IDECraft's own Java syntax trees, because asking the language server for
+   The index is built from Ferris IDEA's own Java syntax trees, because asking the language server for
    the references of every member costs one request per member and needs a running server. [GEN]
 2. **Incremental and cached:** each file's entry carries the file's modification time and size. A
    refresh lists the project files, reads and parses only files that are new or whose time or size
    changed, and drops entries of files that are gone. The index lives in memory for the process and
-   is saved to IDECraft's user cache folder (`reference-index/<hash of the project path>.json`), so a
-   new process (a window or a one-shot `idecraft call`) starts from the saved state; a saved index
+   is saved to Ferris IDEA's user cache folder (`reference-index/<hash of the project path>.json`), so a
+   new process (a window or a one-shot `ferris-idea call`) starts from the saved state; a saved index
    of another format version is ignored. Saving removes cached indexes whose project folder no
    longer exists. Every refresh reports how many files are indexed, how many were read and removed,
    and whether the saved index was used. [GEN]
@@ -86,14 +86,14 @@ server about every member, and keep the knowledge needed for that cheap to updat
        `@Deprecated` and `@FunctionalInterface` of `java.lang` (TestNG's class-level `@Test`, a
        JAX-RS `@Path`, a Spring `@RestController`: the framework calls them; before v3 only the
        type itself was kept);
-     - **API folders of a library (configured):** the file `.idecraft/entry-points.toml` of the
+     - **API folders of a library (configured):** the file `.ferris-idea/entry-points.toml` of the
        project may list folders, relative to the project, whose code is a library used from outside
        the project: `api = ["lib/src/main/java"]`. In files below them every `public` or
        `protected` declaration and every member of an interface or annotation type is an entry
        point. Without the file, or with an unreadable one, there are no API folders; a folder that
        is absolute, contains `..` or lies behind a symbolic link is ignored (security first). The
        file is read at every run, so a change applies at the next one without a refresh.
-5. **Global inspection:** the finding is IDECraft inspection `java.unused-declaration` ("Unused
+5. **Global inspection:** the finding is Ferris IDEA inspection `java.unused-declaration` ("Unused
    declaration", warning by default, short name `unused`). It is a global inspection: it runs in
    Inspect Code (SPEC-0098) and for agents, never in the editor while typing. Inspect Code refreshes
    the index over the whole project, whatever the scope, and reports the unused declarations of the
@@ -141,7 +141,7 @@ server about every member, and keep the knowledge needed for that cheap to updat
    [GEN]
 
 9. **Kotlin declarations and uses across the languages (v4):** for each Kotlin file (`.kt`; Kotlin
-   scripts `.kts` stay word files of behaviour 1) the index holds, from IDECraft's Kotlin syntax
+   scripts `.kts` stay word files of behaviour 1) the index holds, from Ferris IDEA's Kotlin syntax
    tree, the declarations of classes (also `data`, `sealed`, `value`, `enum` and `annotation`
    classes), interfaces, named objects, functions (members, top-level, extension functions, in
    objects and companion objects) and properties (members, top-level, extension properties, and
@@ -163,7 +163,7 @@ server about every member, and keep the knowledge needed for that cheap to updat
    - a Kotlin use of a Java declaration by its name counts; a name `name` that a Kotlin file
      reads or writes as a property (not called) also counts for `getName` and `setName`, and
      `isOn` for `setOn`, because Kotlin reads Java getters and setters as properties.
-   The finding of a Kotlin declaration is IDECraft inspection `kotlin.unused-declaration`
+   The finding of a Kotlin declaration is Ferris IDEA inspection `kotlin.unused-declaration`
    ("Unused declaration", Kotlin, warning by default, short name `unused`), with the messages
    "Class 'Name' is never used" (Interface, Enum class, Annotation class, Object), "Function
    'name' is never used" and "Property 'name' is never used". Inspect Code reports it as behaviour
@@ -216,7 +216,7 @@ server about every member, and keep the knowledge needed for that cheap to updat
   files outside it; turned off in the profile it is not reported (unit test `inspections::tests`).
 - **AK-4** MCP: `reference_index` statistics, `name`, `unused` and its `path` scope, a second call
   that reads no file; `inspect_code` lists the unused method (`crates/mcp/tests/it/protocol.rs`:
-  `reference_index_tool`); `idecraft call <folder> reference_index` on `java-basic`.
+  `reference_index_tool`); `ferris-idea call <folder> reference_index` on `java-basic`.
 - **AK-5** Window self-test (`java_inspection_steps`, written): Inspect Code over the project lists
   the node "Unused declaration" with the unused method of the fixture.
 - **AK-6 (v2)** The files read: own sources and merely ignored files, not `.venv`,
@@ -232,7 +232,7 @@ server about every member, and keep the knowledge needed for that cheap to updat
   method, `serialPersistentFields`, a public method of an annotated class are not reported; a
   public method and a protected field below a configured API folder are not reported, the same
   declarations elsewhere and a package-private one there are; an absolute or `..` folder in
-  `.idecraft/entry-points.toml` is ignored (unit tests `reference_index::tests::{more_entry_points,
+  `.ferris-idea/entry-points.toml` is ignored (unit tests `reference_index::tests::{more_entry_points,
   api_folders_of_a_library}`).
 - **AK-9 (v3, behaviour 8)** As SPEC-0098 AK-16 (unit tests `reference_index::tests::{editor_findings_of_the_unsaved_text,
   editor_findings_wait_for_the_index_and_stop_when_cancelled}`, window test
@@ -255,7 +255,7 @@ entry-point annotations to configure), "Safe delete" as a fix in the Inspect Cod
 the editor it is one), uses from reflection strings.
 
 ## Known deviations from the reference
-The reference resolves every use to its declaration; IDECraft counts uses by simple name and
+The reference resolves every use to its declaration; Ferris IDEA counts uses by simple name and
 therefore keeps a declaration whose name is used for something else (fewer findings, never a wrong
 one for a name that has no use at all). A recursive call counts as a use. Entry points are decided
 by annotation and supertype instead of the reference's framework knowledge. Improvement: the index

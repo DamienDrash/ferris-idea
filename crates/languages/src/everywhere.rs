@@ -6,8 +6,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::SystemTime;
 
-use idecraft_core::{hump_match, hump_words_match, rank};
-use idecraft_ui::keymap::Keymap;
+use ferris_idea_core::{hump_match, hump_words_match, rank};
+use ferris_idea_ui::keymap::Keymap;
 use serde::{Deserialize, Serialize};
 
 use crate::LanguageId;
@@ -187,9 +187,11 @@ pub struct TextHit {
     pub text: String,
 }
 
-/// Actions IDECraft carries out that have no shortcut in the keymaps, so Search Everywhere still finds
+/// Actions Ferris IDEA carries out that have no shortcut in the keymaps, so Search Everywhere still finds
 /// them (`SPEC-0085`).
 pub const UNBOUND_ACTIONS: &[&str] = &[
+    // Add Comment of the project room (SPEC-0323 v8 behaviour 54): the editor's menu only.
+    "Room.AddComment",
     // Folding the documentation comments has no key in the keymaps (SPEC-0083 v8 behaviour 23).
     "ExpandDocComments",
     "CollapseDocComments",
@@ -275,6 +277,10 @@ pub const UNBOUND_ACTIONS: &[&str] = &[
     "Debugger.AddToWatch",
     // SPEC-0194 v3 behaviour 8.
     "XDebugger.MuteBreakpoints",
+    // SPEC-0127 v15 behaviours 31 and 32.
+    "ToggleBreakpointEnabled",
+    "Debugger.RemoveAllBreakpoints",
+    "Debugger.RemoveAllBreakpointsInFile",
     "Git.Stash",
     "Git.Unstash",
     "Git.Interactive.Rebase",
@@ -333,23 +339,23 @@ pub const UNBOUND_ACTIONS: &[&str] = &[
     "Switcher",
     "TabList",
     "MaximizeEditorInSplit",
-    "IDECraft.ConfigureEditorTabs",
+    "FerrisIDEA.ConfigureEditorTabs",
     "ViewToolButtons",
     "Spring.ToolWindow",
     "Spring.GotoBean",
-    "IDECraft.AiChat",
-    "IDECraft.AiExplainCode",
-    "IDECraft.AiExplainTerminal",
-    "IDECraft.AiAttachTerminalSelection",
-    "IDECraft.AiAttachTerminalCommand",
-    "IDECraft.AiAttachTerminalLines",
-    "IDECraft.AiShareTerminal",
-    "IDECraft.AiExplainRun",
-    "IDECraft.AiAttachRun",
-    "IDECraft.AiExplainTest",
-    "IDECraft.AiAttachTest",
-    "IDECraft.AiAttachProblems",
-    "IDECraft.AiAttachGitDiff",
+    "FerrisIDEA.AiChat",
+    "FerrisIDEA.AiExplainCode",
+    "FerrisIDEA.AiExplainTerminal",
+    "FerrisIDEA.AiAttachTerminalSelection",
+    "FerrisIDEA.AiAttachTerminalCommand",
+    "FerrisIDEA.AiAttachTerminalLines",
+    "FerrisIDEA.AiShareTerminal",
+    "FerrisIDEA.AiExplainRun",
+    "FerrisIDEA.AiAttachRun",
+    "FerrisIDEA.AiExplainTest",
+    "FerrisIDEA.AiAttachTest",
+    "FerrisIDEA.AiAttachProblems",
+    "FerrisIDEA.AiAttachGitDiff",
     "ActivatePythonPackagesToolWindow",
     "Python.SelectInterpreter",
     "Python.CreateVirtualEnv",
@@ -362,19 +368,25 @@ pub const UNBOUND_ACTIONS: &[&str] = &[
     "Remote.OpenTerminal",
     // Remote Development… (SPEC-0317 v3 behaviour 1).
     "Remote.OpenProject",
+    // Share Project… (SPEC-0323 v6 behaviour 37).
+    "Remote.ShareProject",
+    // Join Project by Link… (SPEC-0323 v7 behaviour 48).
+    "Remote.JoinByLink",
+    // Room History… (SPEC-0323 v9 behaviour 61).
+    "Room.ShowHistory",
     "Javascript.Linters.EsLint.Fix",
     "ActivatePluginsToolWindow",
     "OpenResourceBundleEditor",
-    "IDECraft.KeyboardDiagnostics",
+    "FerrisIDEA.KeyboardDiagnostics",
     // File › Plugins… (SPEC-0124 v8 behaviour 11).
-    "IDECraft.SettingsPlugins",
+    "FerrisIDEA.SettingsPlugins",
     // File › Manage IDE Settings (SPEC-0105 v9 behaviour 14).
     "ImportSettings",
     "ExportSettings",
     // The emergency stop of UI automation (SPEC-0319 behaviour 37).
-    "IDECraft.StopUiAutomation",
+    "FerrisIDEA.StopUiAutomation",
     // Every request of a `.http` file (SPEC-0096 v5 behaviour 8).
-    "IDECraft.HttpRunAllRequests",
+    "FerrisIDEA.HttpRunAllRequests",
     "About",
     // Window › Minimize and Zoom have keys only in the macOS keymap (SPEC-0124 v3 behaviour 6).
     "MinimizeCurrentWindow",
@@ -405,6 +417,19 @@ pub struct ActionHit {
 /// Everywhere matches and shows the title, so "Show History" finds `LocalHistory.ShowHistory`
 /// first, as Find Action does in the reference (hand test 6 of round 4).
 pub const ACTION_TITLES: &[(&str, &str, &str)] = &[
+    // SPEC-0323 v8 behaviour 54: the project room's comments.
+    ("Room.AddComment", "Add Comment", "Editor"),
+    // SPEC-0127 v15 behaviour 32: not in a menu.
+    (
+        "Debugger.RemoveAllBreakpoints",
+        "Remove All Breakpoints",
+        "Run",
+    ),
+    (
+        "Debugger.RemoveAllBreakpointsInFile",
+        "Remove All Breakpoints in File",
+        "Run",
+    ),
     // The default layout is titled "Default" in its menu; alone that says too little (SPEC-0333
     // behaviour 13).
     (
@@ -471,15 +496,15 @@ pub const ACTION_TITLES: &[(&str, &str, &str)] = &[
     ("TodoViewGroupByShowPackages", "Group by Packages", "TODO"),
     ("TodoViewGroupByFlattenPackage", "Flatten Packages", "TODO"),
     (
-        "IDECraft.KeyboardDiagnostics",
+        "FerrisIDEA.KeyboardDiagnostics",
         "Keyboard Diagnostics",
         "Diagnostics",
     ),
-    ("IDECraft.StopUiAutomation", "Stop UI Automation", "Tools"),
+    ("FerrisIDEA.StopUiAutomation", "Stop UI Automation", "Tools"),
     // D3b (hand test 28): the theme switcher under its menu title, and "theme" finds it.
     ("QuickChangeScheme", "Quick Switch Scheme…", "View"),
     ("ChangeLaf", "Theme…", "Quick Switch Scheme"),
-    ("About", "About IDECraft", "Help"),
+    ("About", "About Ferris IDEA", "Help"),
     ("CommentByLineComment", "Comment with Line Comment", "Code"),
     (
         "CommentByBlockComment",
@@ -782,11 +807,11 @@ fn tool_window_title(id: &str) -> Option<String> {
 }
 
 /// Title and group of an action: from [`ACTION_TITLES`], else its menu label and menu
-/// ([`idecraft_ui::menus::menu_title`]), else its id as words without a group.
+/// ([`ferris_idea_ui::menus::menu_title`]), else its id as words without a group.
 pub fn action_title(id: &str) -> (String, Option<&'static str>) {
     match ACTION_TITLES.iter().find(|(i, _, _)| *i == id) {
         Some((_, title, group)) => ((*title).to_owned(), Some(*group)),
-        None => match (idecraft_ui::menus::menu_title(id), tool_window_title(id)) {
+        None => match (ferris_idea_ui::menus::menu_title(id), tool_window_title(id)) {
             // The menu label is the title, as in the reference (hand test 39: "Split Right").
             (Some((label, menu)), _) => (label.to_owned(), Some(menu)),
             (None, Some(title)) => (title, Some("Tool Windows")),
@@ -1156,7 +1181,7 @@ fn class_like(kind: &str) -> bool {
 /// Reads a file for the text category: `None` for binary files and files over 10 MiB.
 fn text_of(full: &Path) -> Option<String> {
     let meta = std::fs::metadata(full).ok()?;
-    if meta.len() > idecraft_core::MAX_SEARCH_BYTES {
+    if meta.len() > ferris_idea_core::MAX_SEARCH_BYTES {
         return None;
     }
     let bytes = std::fs::read(full).ok()?;
@@ -1360,7 +1385,7 @@ pub fn search_everywhere(
                         shortcut: shortcuts
                             .iter()
                             .filter(|s| keymap.shown_shortcuts(id).contains(s))
-                            .find(|s| !matches!(s, idecraft_ui::keymap::Shortcut::Mouse { .. }))
+                            .find(|s| !matches!(s, ferris_idea_ui::keymap::Shortcut::Mouse { .. }))
                             .map(|s| s.display(macos)),
                         positions: title.map(|m| m.positions).unwrap_or_default(),
                     },
@@ -1415,13 +1440,13 @@ fn search_text(
     limit: usize,
     cancel: Option<&AtomicBool>,
 ) -> Vec<TextHit> {
-    let q = idecraft_core::Query {
+    let q = ferris_idea_core::Query {
         pattern: query.to_owned(),
         regex: options.regex,
         match_case: options.match_case,
         whole_words: options.whole_words,
     };
-    let Ok(finder) = idecraft_core::Finder::new(&q) else {
+    let Ok(finder) = ferris_idea_core::Finder::new(&q) else {
         return Vec::new();
     };
     let known: std::collections::HashSet<&PathBuf> = files.iter().collect();
@@ -1533,7 +1558,7 @@ mod tests {
         assert_eq!(params_of("def f(a,", "f", Path::new("a.py")), None);
 
         let dir =
-            std::env::temp_dir().join(format!("idecraft-everywhere-v4-{}", std::process::id()));
+            std::env::temp_dir().join(format!("ferris-idea-everywhere-v4-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("src/main/java/lab/shop/model")).unwrap();
         std::fs::create_dir_all(dir.join("src/main/java/lab/shop/service")).unwrap();
@@ -1649,7 +1674,8 @@ mod tests {
     fn words_and_cancelled_search() {
         assert_eq!(action_words("GotoDeclaration"), "Goto Declaration");
         assert_eq!(action_words("Vcs.Push"), "Vcs Push");
-        let dir = std::env::temp_dir().join(format!("idecraft-everywhere-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("ferris-idea-everywhere-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("main.rs"), "fn main() {}\nstruct Mainframe;\n").unwrap();
@@ -1831,7 +1857,7 @@ mod tests {
     #[test]
     fn reference_comparison_items_have_titles_and_groups() {
         for (id, title, group) in [
-            ("IDECraft.SettingsPlugins", "Plugins…", "File"),
+            ("FerrisIDEA.SettingsPlugins", "Plugins…", "File"),
             // SPEC-0105 AK-15 (v9).
             ("ImportSettings", "Import Settings…", "Manage IDE Settings"),
             ("ExportSettings", "Export Settings…", "Manage IDE Settings"),
@@ -2325,7 +2351,7 @@ mod tests {
     /// with either keymap and has no shortcut.
     #[test]
     fn endpoint_search_has_its_title() {
-        use idecraft_ui::keymap::Keymap;
+        use ferris_idea_ui::keymap::Keymap;
         assert_eq!(
             action_title("GotoUrlAction"),
             ("Endpoint…".to_owned(), Some("Navigate"))
@@ -2367,7 +2393,7 @@ mod tests {
     /// actions have their titles and a shortcut in both bundled keymaps.
     #[test]
     fn fourth_package_actions_have_titles() {
-        use idecraft_ui::keymap::Keymap;
+        use ferris_idea_ui::keymap::Keymap;
         for (id, title, group) in [
             ("ExpandTreeNode", "Expand Tree Node", "Tree"),
             ("CollapseTreeNode", "Collapse Tree Node", "Tree"),
@@ -2516,7 +2542,7 @@ mod tests {
     /// recently opened files; symbols still come from all files.
     #[test]
     fn the_files_category_searches_its_own_list_and_recent_files() {
-        let root = std::env::temp_dir().join(format!("idecraft-ew-own-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("ferris-idea-ew-own-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         for (rel, text) in [
             ("app/shop.py", "class Shop:\n    pass\n"),
@@ -2662,7 +2688,7 @@ mod tests {
             ("alt shift meta BACK_QUOTE", "PreviousProjectWindow"),
             ("control meta F", "ToggleFullScreen"),
         ] {
-            let stroke = idecraft_ui::keymap::Keystroke::parse(chord).unwrap();
+            let stroke = ferris_idea_ui::keymap::Keystroke::parse(chord).unwrap();
             assert_eq!(mac.actions_for(&stroke, None), [id], "{chord}");
         }
     }
@@ -2732,7 +2758,8 @@ mod tests {
                 assert_eq!(bound, !key.is_empty(), "{id}: {key:?}");
                 assert!(!UNBOUND_ACTIONS.contains(&id), "{id}");
                 if !key.is_empty() {
-                    let stroke = idecraft_ui::keymap::Keystroke::parse(key).expect("a keystroke");
+                    let stroke =
+                        ferris_idea_ui::keymap::Keystroke::parse(key).expect("a keystroke");
                     assert!(
                         keymap.actions_for(&stroke, None).contains(&id),
                         "{id} on {key}"
@@ -2881,7 +2908,8 @@ mod tests {
                     "{id} is not offered"
                 );
                 if !key.is_empty() {
-                    let stroke = idecraft_ui::keymap::Keystroke::parse(key).expect("a keystroke");
+                    let stroke =
+                        ferris_idea_ui::keymap::Keystroke::parse(key).expect("a keystroke");
                     assert!(
                         keymap.actions_for(&stroke, None).contains(&id),
                         "{id} on {key}"
@@ -2928,7 +2956,7 @@ mod tests {
         ] {
             assert_eq!(action_title(id), (title.to_owned(), Some(group)), "{id}");
             for (keymap, key) in [(&mac, mac_key), (&default, default_key)] {
-                let stroke = idecraft_ui::keymap::Keystroke::parse(key).expect("a keystroke");
+                let stroke = ferris_idea_ui::keymap::Keystroke::parse(key).expect("a keystroke");
                 assert!(
                     keymap.actions_for(&stroke, None).contains(&id),
                     "{id} on {key}"
@@ -3057,7 +3085,7 @@ mod tests {
                 if key.contains(',') {
                     continue;
                 }
-                let stroke = idecraft_ui::keymap::Keystroke::parse(first).expect("a keystroke");
+                let stroke = ferris_idea_ui::keymap::Keystroke::parse(first).expect("a keystroke");
                 assert!(
                     keymap.actions_for(&stroke, None).contains(&id),
                     "{id} on {key}"

@@ -1,0 +1,12 @@
+# Tests in quarantine (ADR-0030, decision 11): left out of the run that decides a merge, run
+# separately after it and reported in the result line (`quarantine=…`), never blocking.
+#
+# One test or group per line, four fields separated by a tab:
+#   <nextest filter>	<reason>	<date entered, YYYY-MM-DD>	<owner issue, #N>
+# Example (commented out):
+#   test(=lsp::a_slow_server_answers)	fails about once in thirty runs under load (log of 2026-11-18)	2026-11-18	#960
+#
+# A test enters only with a reason, a date and an issue that owns the fix, and leaves as soon as the
+# fix is merged. A test that fails every time is not flaky: fix it, or leave it out of the Linux
+# run with its reason (the build server's skip list). scripts/ci-quarantine.py checks this file
+# (it is part of scripts/check-docs.sh).

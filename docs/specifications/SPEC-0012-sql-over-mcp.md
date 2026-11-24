@@ -17,8 +17,8 @@ exactly which permission is missing and where the user can grant it. A project f
 permissions away but never give one.
 
 ## Terms
-- **Connection:** a profile of `.idecraft/connections.toml` (SPEC-0008) or a store of
-  `.idecraft/stores.toml` (SPEC-0310). Both are files of the project: whoever wrote the repository
+- **Connection:** a profile of `.ferris-idea/connections.toml` (SPEC-0008) or a store of
+  `.ferris-idea/stores.toml` (SPEC-0310). Both are files of the project: whoever wrote the repository
   wrote them.
 - **Target:** what a connection reaches, as one line: its URL without password (and `via ssh
   <host>` for a tunnel), followed by `#` and
@@ -168,7 +168,7 @@ permissions away but never give one.
     `LOAD DATA INFILE`) are not files of this computer; such statements are of a modify class
     (behaviour 2). [DOC, rule 12]
 16. **Agent log (v3).** Every call of an agent that names a connection or store writes exactly one
-    line to `.idecraft/agent-log.jsonl`: the call's line of SPEC-0053 v7 behaviour 11, also for a
+    line to `.ferris-idea/agent-log.jsonl`: the call's line of SPEC-0053 v7 behaviour 11, also for a
     tool that only reads. Each decision on the permissions is an entry of its `database` list:
     `connection` (the name), `permissions` (the ones the call needs), `dry_run` (true for a
     preview of behaviour 14), `ok` (true: allowed and handed to the database; false: refused),
@@ -189,10 +189,10 @@ permissions away but never give one.
     keeps its own grant per plugin, host and port; behaviour 12 holds for it too. [SPEC-0314]
 20. **Keychain entry (v3).** The project file names the keychain entry of a connection's
     password. For agents a connection or store is usable only when it names none or the entry
-    IDECraft keeps for it (service `idecraft`, account `connection:<id>`, SPEC-0008); with any
+    Ferris IDEA keeps for it (service `ferris-idea`, account `connection:<id>`, SPEC-0008); with any
     other entry every use is refused before anything connects and logged as `keychain`. So a
     repository cannot have an agent's call send another password of the user to a host it names.
-    `remove_connection` removes only IDECraft's own entry and refuses a connection that names
+    `remove_connection` removes only Ferris IDEA's own entry and refuses a connection that names
     another one. The window is unchanged. [rule 12]
 21. **What runs or connects besides the call's own statements (v3).** The project file can make
     a connection do more than the agent's statement says; for an agent's call it counts:
@@ -260,7 +260,7 @@ permissions away but never give one.
 - **AK-15 (v3) Stores.** A store without a grant refuses `browse_store`; a changing command returns
   the preview without `apply: true`.
 - **AK-16 (v3) Keychain.** A connection whose project file names a keychain entry that is not
-  IDECraft's own for it is refused for `list_tables` and `remove_connection`, with every
+  Ferris IDEA's own for it is refused for `list_tables` and `remove_connection`, with every
   permission granted; the profile stays in the file.
 - **AK-17 (v3) Startup script and tunnel.** The refusal for a connection with a startup script
   says that it has one and that it changes something (`create table …`) or only reads; a changed
@@ -270,7 +270,7 @@ permissions away but never give one.
 
 ## Out of scope
 Per-table permissions, row limits on the server side, a permissions section in the connection
-dialog (the upper limit is edited in `.idecraft/connections.toml`, the grant is given through the
+dialog (the upper limit is edited in `.ferris-idea/connections.toml`, the grant is given through the
 question or in the grant file), a list of the grants in the settings with a way to revoke them
 (the file is edited by hand), functions and views of a database that change data when read
 (behaviour 2), files a database server reads on its own machine, attaching files outside the

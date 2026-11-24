@@ -13,7 +13,7 @@
 - **Sources:** GEN (database IDEs show the plan of the statement at the caret as a tree with costs and
   rows, optionally measured, and compare two data sources, list the differences and offer the
   migration script to run; F-058, F-059), SPEC-0018 (comparison and DDL), SPEC-0020 (plans),
-  SPEC-0093 (SQL console and Services window), SPEC-0094 (machine state under `.idecraft/`), ADR-0008,
+  SPEC-0093 (SQL console and Services window), SPEC-0094 (machine state under `.ferris-idea/`), ADR-0008,
   OBS (OBS-0010 A2: the reference shows source and target and can exchange them; OBS-0026 L4, L11 and
   L32: plan values cut off, the plan command not yet compared, the comparison missing from the
   Database window; v6: OBS-0051 L3, a selected word was explained and refused with a wrong reason; v7:
@@ -52,7 +52,7 @@ migration script that the SQL console can run.
    statements that can lose data preceded by a comment saying so. [GEN, SPEC-0018]
    **v10:** a changed table also lists its check and unique constraints added (+) and removed (−),
    `constraint <name> <definition>` (SPEC-0018 v6 behaviour 16). [GEN]
-5. **Script file:** the script is also written to `.idecraft/migrations/<source>-to-<target>.sql`
+5. **Script file:** the script is also written to `.ferris-idea/migrations/<source>-to-<target>.sql`
    (names made file-safe) and the status bar names it; `Sql.OpenMigrationScript` opens it in the editor,
    where the console runs it on the target after choosing that connection. **v8:** the script file
    is bound to the target connection as its data source (SPEC-0192), so running it in the editor

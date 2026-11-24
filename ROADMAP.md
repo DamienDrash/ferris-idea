@@ -115,7 +115,7 @@ Work in this phase, all **In progress**:
 ## Later: the AI-native phase
 
 **Planned, after the database tools.** QG-1 opens this phase. The direction is described in
-[ADR-0023](docs/adr/0023-idecraft-as-agent-harness.md) (accepted on 2026-11-17) and
+[ADR-0023](docs/adr/0023-ferris-idea-as-agent-harness.md) (accepted on 2026-11-17) and
 [the vision](docs/architecture/AI_NATIVE_VISION.md). The rule stays that Ferris IDEA ships no agent
 loop and no model of its own.
 
@@ -136,13 +136,13 @@ Plan: [REMOTE_AND_MOBILE.md](docs/architecture/REMOTE_AND_MOBILE.md). Network ru
 
 | Item | State |
 |---|---|
-| Remote projects over SSH with `idecraft serve` on the host | Experimental |
+| Remote projects over SSH with `ferris-idea serve` on the host | Experimental |
 | Remote debugging; containers, pods, WSL and hosts without SSH as project hosts | In progress |
 | Paired devices: pairing, rights per device, device log, revoke | In progress |
 | Remote access to projects, runs, terminals and agent tasks from a paired device | Planned |
 | Mobile apps: pair, browse, read a file (simulator and emulator) | In progress |
 | Mobile apps: editing, search, run, debug, terminal, Git; a local mode | Planned |
-| WebSocket endpoint over TLS 1.3 in `idecraft serve` | In progress; never run in a real browser |
+| WebSocket endpoint over TLS 1.3 in `ferris-idea serve` | In progress; never run in a real browser |
 | Web client, workspaces from `devcontainer.json`, self-hosting | Planned |
 
 ## Platforms and distribution

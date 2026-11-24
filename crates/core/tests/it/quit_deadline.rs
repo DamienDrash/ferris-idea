@@ -4,7 +4,7 @@
 use std::process::Command;
 use std::time::{Duration, Instant};
 
-const CHILD: &str = "IDECRAFT_QUIT_DEADLINE_CHILD";
+const CHILD: &str = "FERRIS_IDEA_QUIT_DEADLINE_CHILD";
 
 /// In the child: arms the deadline and then hangs, as a quit the platform never carries out.
 #[test]
@@ -12,7 +12,7 @@ fn hanging_quit_child() {
     if std::env::var_os(CHILD).is_none() {
         return;
     }
-    assert!(idecraft_core::arm_quit_deadline());
+    assert!(ferris_idea_core::arm_quit_deadline());
     std::thread::sleep(Duration::from_secs(60));
     // Reaching this line means the deadline did not end the process.
     std::process::exit(3);
@@ -33,7 +33,10 @@ fn a_quit_that_hangs_ends_the_process_within_the_deadline() {
         .unwrap();
     let took = start.elapsed();
     assert_eq!(out.status.code(), Some(0), "{out:?}");
-    assert!(took >= idecraft_core::QUIT_DEADLINE, "ended after {took:?}");
+    assert!(
+        took >= ferris_idea_core::QUIT_DEADLINE,
+        "ended after {took:?}"
+    );
     assert!(took < Duration::from_secs(20), "ended after {took:?}");
     assert!(
         String::from_utf8_lossy(&out.stderr).contains("quitting did not finish within 5 s"),

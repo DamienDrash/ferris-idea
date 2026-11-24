@@ -6,9 +6,9 @@ use crate::common;
 use std::time::{Duration, Instant};
 
 use common::*;
-use idecraft_uidriver::engine::{Command, Engine, Op, Request, Target};
-use idecraft_uidriver::expect::Matcher;
-use idecraft_uidriver::{
+use ferris_idea_uidriver::engine::{Command, Engine, Op, Request, Target};
+use ferris_idea_uidriver::expect::Matcher;
+use ferris_idea_uidriver::{
     Action, Button, ErrorCode, Input, Level, Locator, Modifier, Role, Semantics,
 };
 
@@ -35,7 +35,7 @@ fn act(locator: &str, action: Action) -> Op {
 #[test]
 fn ak1_exact_names_match_one_and_substrings_are_ambiguous() {
     let t = tree(1, commit_window());
-    let view = idecraft_uidriver::View::in_process();
+    let view = ferris_idea_uidriver::View::in_process();
     let exact = Locator::parse(r#"role=button[name="Commit"]"#).unwrap();
     assert_eq!(exact.resolve(&t, &view).unwrap().len(), 1);
     let mut engine = Engine::new();
@@ -190,8 +190,8 @@ fn ak7_actionability() {
             Semantics::new(Role::Button)
                 .name("Moving")
                 .test_id("moving")
-                .action(idecraft_uidriver::AxAction::Click)
-                .effects(&[idecraft_uidriver::Effect::None]),
+                .action(ferris_idea_uidriver::AxAction::Click)
+                .effects(&[ferris_idea_uidriver::Effect::None]),
             r(x, 100., 50., 20.),
         ));
         tree(f, els)
@@ -347,7 +347,7 @@ fn ak10_async_api_without_a_screen() {
 
     let now = Rc::new(Cell::new(Instant::now()));
     let clock = now.clone();
-    let driver = idecraft_uidriver::Driver::new(WINDOW, move || clock.get());
+    let driver = ferris_idea_uidriver::Driver::new(WINDOW, move || clock.get());
     let mut pool = futures::executor::LocalPool::new();
     let result = Rc::new(Cell::new(None));
     let d = driver.clone();
@@ -356,7 +356,7 @@ fn ak10_async_api_without_a_screen() {
         .spawn_local(async move {
             let commit = d.role(Role::Button).name("Commit");
             let clicked = commit.click().await.is_ok();
-            let disabled = idecraft_uidriver::expect(d.id("disabled-button"))
+            let disabled = ferris_idea_uidriver::expect(d.id("disabled-button"))
                 .to_be_disabled()
                 .await
                 .is_ok();
@@ -412,7 +412,7 @@ fn snapshots_are_limited() {
     let outline = v["outline"].as_str().unwrap();
     assert_eq!(outline.lines().count(), 3, "{outline}");
     assert!(
-        outline.starts_with("window \"IDECraft\" #window"),
+        outline.starts_with("window \"Ferris IDEA\" #window"),
         "{outline}"
     );
     assert!(

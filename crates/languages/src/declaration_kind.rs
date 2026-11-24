@@ -28,9 +28,9 @@ impl DeclarationKind {
             Self::Class => "nodes/class",
             Self::Interface => "nodes/interface",
             Self::Enum => "nodes/enum",
-            Self::Record => "idecraft/record",
-            Self::Annotation => "idecraft/annotation",
-            Self::Object => "idecraft/object",
+            Self::Record => "ferris-idea/record",
+            Self::Annotation => "ferris-idea/annotation",
+            Self::Object => "ferris-idea/object",
         }
     }
 }
@@ -402,15 +402,21 @@ mod tests {
     fn icons_are_bundled_and_long_files_are_cut() {
         use DeclarationKind::*;
         for k in [Class, Interface, Enum, Record, Annotation, Object] {
-            assert!(idecraft_ui::icons::svg(k.icon(), true).is_some(), "{k:?}");
-            assert!(idecraft_ui::icons::svg(k.icon(), false).is_some(), "{k:?}");
+            assert!(
+                ferris_idea_ui::icons::svg(k.icon(), true).is_some(),
+                "{k:?}"
+            );
+            assert!(
+                ferris_idea_ui::icons::svg(k.icon(), false).is_some(),
+                "{k:?}"
+            );
         }
         let long = format!("class Big {{\n{}}}\n", "    // filler line\n".repeat(8000));
         assert!(long.len() > SCAN_BYTES);
         assert_eq!(kind("Big.java", &long), Some(Class));
         // Kotlin needs the whole top level, so a cut text gives the file icon.
         assert_eq!(kind("Big.kt", &long), None);
-        let dir = std::env::temp_dir().join(format!("idecraft-declkind-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-declkind-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("Pet.java");
         std::fs::write(&file, "public interface Pet {}\n").unwrap();

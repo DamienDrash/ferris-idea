@@ -1,11 +1,11 @@
 //! SPEC-0089 v3 (schemas), SPEC-0014 v2 (fingerprint) and SPEC-0192 (default schema, row counts)
-//! against SQLite (always) and PostgreSQL/MySQL/MariaDB when `IDECRAFT_TEST_PG` /
-//! `IDECRAFT_TEST_MYSQL` / `IDECRAFT_TEST_MARIADB` are set. Work happens in a scratch schema that
+//! against SQLite (always) and PostgreSQL/MySQL/MariaDB when `FERRIS_IDEA_TEST_PG` /
+//! `FERRIS_IDEA_TEST_MYSQL` / `FERRIS_IDEA_TEST_MARIADB` are set. Work happens in a scratch schema that
 //! is dropped afterwards.
 
 use crate::common;
 
-use idecraft_database::{
+use ferris_idea_database::{
     ConnectionProfile, OnError, Outcome, Session, complete, count_rows, current_schema, introspect,
     introspect_schema, list_schemas, object_definition, schema_fingerprint, schema_objects,
     sequences, show_ddl_in,
@@ -77,7 +77,7 @@ async fn exercise(watcher: &Session, other: &Session, scratch: &str, default: &s
 
 #[tokio::test]
 async fn sqlite_schemas_fingerprint_and_counts() {
-    let dir = std::env::temp_dir().join(format!("idecraft-catalog-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-catalog-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("main.db");
@@ -116,11 +116,12 @@ async fn sqlite_schemas_fingerprint_and_counts() {
 
 #[tokio::test]
 async fn postgres_schemas_fingerprint_and_counts() {
-    let Ok(url) = std::env::var("IDECRAFT_TEST_PG") else {
+    let Ok(url) = ferris_idea_core::product_var("FERRIS_IDEA_TEST_PG") else {
         return;
     };
-    let scratch = format!("idecraft_cat_{}", std::process::id());
+    let scratch = format!("ferris_idea_cat_{}", std::process::id());
     let watcher = connect(&url).await;
+    common::drop_leftovers(&watcher, &["ferris_idea_cat_"]).await;
     let other = connect(&url).await;
     run(
         &watcher,
@@ -139,20 +140,21 @@ async fn postgres_schemas_fingerprint_and_counts() {
 
 #[tokio::test]
 async fn mysql_schemas_fingerprint_and_counts() {
-    server_like_mysql("IDECRAFT_TEST_MYSQL").await;
+    server_like_mysql("FERRIS_IDEA_TEST_MYSQL").await;
 }
 
 #[tokio::test]
 async fn mariadb_schemas_fingerprint_and_counts() {
-    server_like_mysql("IDECRAFT_TEST_MARIADB").await;
+    server_like_mysql("FERRIS_IDEA_TEST_MARIADB").await;
 }
 
 async fn server_like_mysql(var: &str) {
     let Ok(url) = std::env::var(var) else {
         return;
     };
-    let scratch = format!("idecraft_cat_{}", std::process::id());
+    let scratch = format!("ferris_idea_cat_{}", std::process::id());
     let watcher = connect(&url).await;
+    common::drop_leftovers(&watcher, &["ferris_idea_cat_"]).await;
     let other = connect(&url).await;
     run(
         &watcher,
@@ -189,7 +191,7 @@ async fn exercise_switching(
 /// SQLite has none.
 #[tokio::test]
 async fn sequences_of_a_schema() {
-    let dir = std::env::temp_dir().join(format!("idecraft-seq-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-seq-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("main.db");
@@ -204,11 +206,12 @@ async fn sequences_of_a_schema() {
     drop(s);
     let _ = std::fs::remove_dir_all(&dir);
 
-    let Ok(url) = std::env::var("IDECRAFT_TEST_PG") else {
+    let Ok(url) = ferris_idea_core::product_var("FERRIS_IDEA_TEST_PG") else {
         return;
     };
-    let scratch = format!("idecraft_seq_{}", std::process::id());
+    let scratch = format!("ferris_idea_seq_{}", std::process::id());
     let pg = connect(&url).await;
+    common::drop_leftovers(&pg, &["ferris_idea_seq_"]).await;
     run(
         &pg,
         &format!(
@@ -228,7 +231,7 @@ async fn sequences_of_a_schema() {
 /// and when they fire; reading them changes nothing.
 #[tokio::test]
 async fn triggers_of_a_sqlite_schema() {
-    let dir = std::env::temp_dir().join(format!("idecraft-objects-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-objects-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("main.db");
@@ -320,16 +323,17 @@ const PG_OBJECTS: &str =
     create type price_range as range (subtype = numeric);
     create type address as (street text, zip varchar(10), \"House No\" integer)";
 
-/// SPEC-0013 v6 AK-14 (live, `IDECRAFT_TEST_PG`; skipped without it): every kind of a PostgreSQL
+/// SPEC-0013 v6 AK-14 (live, `FERRIS_IDEA_TEST_PG`; skipped without it): every kind of a PostgreSQL
 /// schema with arguments, tables and timings; the routines PostgreSQL makes itself for a range
 /// type and the row type of the table are not listed.
 #[tokio::test]
 async fn postgres_schema_objects() {
-    let Ok(url) = std::env::var("IDECRAFT_TEST_PG") else {
+    let Ok(url) = ferris_idea_core::product_var("FERRIS_IDEA_TEST_PG") else {
         return;
     };
-    let scratch = format!("idecraft_obj_{}", std::process::id());
+    let scratch = format!("ferris_idea_obj_{}", std::process::id());
     let pg = connect(&url).await;
+    common::drop_leftovers(&pg, &["ferris_idea_obj_"]).await;
     run(
         &pg,
         &format!(
@@ -413,24 +417,25 @@ fn mysql_objects(scratch: &str) -> String {
     )
 }
 
-/// SPEC-0013 v6 AK-14 (live, `IDECRAFT_TEST_MYSQL` / `IDECRAFT_TEST_MARIADB`; skipped without
+/// SPEC-0013 v6 AK-14 (live, `FERRIS_IDEA_TEST_MYSQL` / `FERRIS_IDEA_TEST_MARIADB`; skipped without
 /// them): the functions, procedures and triggers of a database with table and timing.
 #[tokio::test]
 async fn mysql_schema_objects() {
-    server_like_mysql_objects("IDECRAFT_TEST_MYSQL").await;
+    server_like_mysql_objects("FERRIS_IDEA_TEST_MYSQL").await;
 }
 
 #[tokio::test]
 async fn mariadb_schema_objects() {
-    server_like_mysql_objects("IDECRAFT_TEST_MARIADB").await;
+    server_like_mysql_objects("FERRIS_IDEA_TEST_MARIADB").await;
 }
 
 async fn server_like_mysql_objects(var: &str) {
     let Ok(url) = std::env::var(var) else {
         return;
     };
-    let scratch = format!("idecraft_obj_{}", std::process::id());
+    let scratch = format!("ferris_idea_obj_{}", std::process::id());
     let my = connect(&url).await;
+    common::drop_leftovers(&my, &["ferris_idea_obj_"]).await;
     run(
         &my,
         &format!(
@@ -484,17 +489,18 @@ async fn first_cell(s: &Session, sql: &str) -> String {
     }
 }
 
-/// SPEC-0013 v7 AK-16 (live, `IDECRAFT_TEST_PG`; skipped without it): the definition of every
+/// SPEC-0013 v7 AK-16 (live, `FERRIS_IDEA_TEST_PG`; skipped without it): the definition of every
 /// object of a PostgreSQL schema — routines and triggers as the server's own functions give them,
 /// the overload chosen by its arguments, aggregates and types written from the catalogue; none for
 /// a sequence.
 #[tokio::test]
 async fn postgres_object_definitions() {
-    let Ok(url) = std::env::var("IDECRAFT_TEST_PG") else {
+    let Ok(url) = ferris_idea_core::product_var("FERRIS_IDEA_TEST_PG") else {
         return;
     };
-    let scratch = format!("idecraft_def_{}", std::process::id());
+    let scratch = format!("ferris_idea_def_{}", std::process::id());
     let pg = connect(&url).await;
+    common::drop_leftovers(&pg, &["ferris_idea_def_"]).await;
     run(
         &pg,
         &format!(
@@ -621,24 +627,25 @@ async fn postgres_object_definitions() {
     );
 }
 
-/// SPEC-0013 v7 AK-16 (live, `IDECRAFT_TEST_MYSQL` / `IDECRAFT_TEST_MARIADB`; skipped without
+/// SPEC-0013 v7 AK-16 (live, `FERRIS_IDEA_TEST_MYSQL` / `FERRIS_IDEA_TEST_MARIADB`; skipped without
 /// them): functions, procedures and triggers as the server's `SHOW CREATE` states them.
 #[tokio::test]
 async fn mysql_object_definitions() {
-    server_like_mysql_definitions("IDECRAFT_TEST_MYSQL").await;
+    server_like_mysql_definitions("FERRIS_IDEA_TEST_MYSQL").await;
 }
 
 #[tokio::test]
 async fn mariadb_object_definitions() {
-    server_like_mysql_definitions("IDECRAFT_TEST_MARIADB").await;
+    server_like_mysql_definitions("FERRIS_IDEA_TEST_MARIADB").await;
 }
 
 async fn server_like_mysql_definitions(var: &str) {
     let Ok(url) = std::env::var(var) else {
         return;
     };
-    let scratch = format!("idecraft_def_{}", std::process::id());
+    let scratch = format!("ferris_idea_def_{}", std::process::id());
     let my = connect(&url).await;
+    common::drop_leftovers(&my, &["ferris_idea_def_"]).await;
     run(
         &my,
         &format!(
@@ -689,7 +696,7 @@ async fn server_like_mysql_definitions(var: &str) {
 
 /// The foreign keys of `table` as `(columns, on delete, on update)`, sorted by columns.
 fn actions(
-    tables: &[idecraft_database::Table],
+    tables: &[ferris_idea_database::Table],
     table: &str,
 ) -> Vec<(String, Option<String>, Option<String>)> {
     let t = tables.iter().find(|t| t.name == table).unwrap();
@@ -715,7 +722,7 @@ fn some(text: &str) -> Option<String> {
 /// SPEC-0013 v8 AK-18: the actions of foreign keys on SQLite, from `foreign_key_list`.
 #[tokio::test]
 async fn sqlite_foreign_key_actions() {
-    let dir = std::env::temp_dir().join(format!("idecraft-fk-actions-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-fk-actions-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("main.db");
@@ -745,14 +752,15 @@ async fn sqlite_foreign_key_actions() {
 
 /// SPEC-0013 v8 AK-18, AK-19: live on PostgreSQL in a throwaway schema, the actions of foreign
 /// keys, the condition of a partial index (no key of the table) and a GIN index's method, kept by
-/// Show DDL; skipped without `IDECRAFT_TEST_PG`.
+/// Show DDL; skipped without `FERRIS_IDEA_TEST_PG`.
 #[tokio::test]
 async fn postgres_foreign_key_actions_and_index_details() {
-    let Ok(url) = std::env::var("IDECRAFT_TEST_PG") else {
+    let Ok(url) = ferris_idea_core::product_var("FERRIS_IDEA_TEST_PG") else {
         return;
     };
-    let scratch = format!("idecraft_fk_{}", std::process::id());
+    let scratch = format!("ferris_idea_fk_{}", std::process::id());
     let pg = connect(&url).await;
+    common::drop_leftovers(&pg, &["ferris_idea_fk_"]).await;
     run(
         &pg,
         &format!(
@@ -814,16 +822,16 @@ async fn postgres_foreign_key_actions_and_index_details() {
 }
 
 /// SPEC-0013 v8 AK-18, AK-20: live on MySQL, the actions of foreign keys and the check
-/// constraints with their definitions, kept by Show DDL; skipped without `IDECRAFT_TEST_MYSQL`.
+/// constraints with their definitions, kept by Show DDL; skipped without `FERRIS_IDEA_TEST_MYSQL`.
 #[tokio::test]
 async fn mysql_foreign_key_actions_and_checks() {
-    server_like_mysql_checks("IDECRAFT_TEST_MYSQL").await;
+    server_like_mysql_checks("FERRIS_IDEA_TEST_MYSQL").await;
 }
 
-/// The same on MariaDB; skipped without `IDECRAFT_TEST_MARIADB`.
+/// The same on MariaDB; skipped without `FERRIS_IDEA_TEST_MARIADB`.
 #[tokio::test]
 async fn mariadb_foreign_key_actions_and_checks() {
-    server_like_mysql_checks("IDECRAFT_TEST_MARIADB").await;
+    server_like_mysql_checks("FERRIS_IDEA_TEST_MARIADB").await;
 }
 
 async fn server_like_mysql_checks(var: &str) {
@@ -831,8 +839,9 @@ async fn server_like_mysql_checks(var: &str) {
         return;
     };
     let mariadb = var.contains("MARIADB");
-    let scratch = format!("idecraft_fk_{}", std::process::id());
+    let scratch = format!("ferris_idea_fk_{}", std::process::id());
     let my = connect(&url).await;
+    common::drop_leftovers(&my, &["ferris_idea_fk_"]).await;
     run(
         &my,
         &format!(
@@ -905,7 +914,10 @@ async fn attempt(s: &Session, sql: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn table<'a>(tables: &'a [idecraft_database::Table], name: &str) -> &'a idecraft_database::Table {
+fn table<'a>(
+    tables: &'a [ferris_idea_database::Table],
+    name: &str,
+) -> &'a ferris_idea_database::Table {
     tables
         .iter()
         .find(|t| t.name == name)
@@ -915,15 +927,16 @@ fn table<'a>(tables: &'a [idecraft_database::Table], name: &str) -> &'a idecraft
 /// SPEC-0013 v9 AK-23, AK-25, AK-26 (OBS-0076 D4, D6–D8): live on PostgreSQL in throwaway schemas,
 /// the sort order and collation of index terms, identity and generated columns and comments are
 /// read and kept by Show DDL: its script run in a second schema reads the same; a schema that does
-/// not exist is named as such. Skipped without `IDECRAFT_TEST_PG`.
+/// not exist is named as such. Skipped without `FERRIS_IDEA_TEST_PG`.
 #[tokio::test]
 async fn postgres_index_orders_identity_generated_and_comments() {
-    let Ok(url) = std::env::var("IDECRAFT_TEST_PG") else {
+    let Ok(url) = ferris_idea_core::product_var("FERRIS_IDEA_TEST_PG") else {
         return;
     };
-    let scratch = format!("idecraft_d4_{}", std::process::id());
+    let scratch = format!("ferris_idea_d4_{}", std::process::id());
     let again = format!("{scratch}_b");
     let pg = connect(&url).await;
+    common::drop_leftovers(&pg, &["ferris_idea_d4_"]).await;
     let made = attempt(
         &pg,
         &format!(
@@ -952,8 +965,8 @@ async fn postgres_index_orders_identity_generated_and_comments() {
     let replayed_tables = introspect_schema(&pg, Some(&again)).await;
     let _ = attempt(&pg, &format!("drop table {again}.child")).await;
     let empty_schema = introspect_schema(&pg, Some(&again)).await;
-    let missing = introspect_schema(&pg, Some("idecraft_no_such_schema")).await;
-    let missing_ddl = show_ddl_in(&pg, Some("idecraft_no_such_schema"), "child").await;
+    let missing = introspect_schema(&pg, Some("ferris_idea_no_such_schema")).await;
+    let missing_ddl = show_ddl_in(&pg, Some("ferris_idea_no_such_schema"), "child").await;
     run(
         &pg,
         &format!("drop schema {scratch} cascade; drop schema {again} cascade"),
@@ -1015,36 +1028,37 @@ async fn postgres_index_orders_identity_generated_and_comments() {
     assert_eq!(empty_schema.unwrap(), []);
     assert_eq!(
         missing.unwrap_err().message,
-        "schema `idecraft_no_such_schema` does not exist"
+        "schema `ferris_idea_no_such_schema` does not exist"
     );
     assert_eq!(
         missing_ddl.unwrap_err().message,
-        "schema `idecraft_no_such_schema` does not exist"
+        "schema `ferris_idea_no_such_schema` does not exist"
     );
 }
 
 /// SPEC-0013 v9 AK-23, AK-25, AK-26 (OBS-0076 D4–D8): live on MySQL in throwaway databases, the
 /// sort order and prefix length of index terms, `AUTO_INCREMENT`, generated columns and comments
 /// are read and kept by Show DDL: its script run in a second database reads the same; a database
-/// that does not exist is named as such. Skipped without `IDECRAFT_TEST_MYSQL`.
+/// that does not exist is named as such. Skipped without `FERRIS_IDEA_TEST_MYSQL`.
 #[tokio::test]
 async fn mysql_index_details_identity_generated_and_comments() {
-    server_like_mysql_details("IDECRAFT_TEST_MYSQL").await;
+    server_like_mysql_details("FERRIS_IDEA_TEST_MYSQL").await;
 }
 
-/// The same on MariaDB; skipped without `IDECRAFT_TEST_MARIADB`.
+/// The same on MariaDB; skipped without `FERRIS_IDEA_TEST_MARIADB`.
 #[tokio::test]
 async fn mariadb_index_details_identity_generated_and_comments() {
-    server_like_mysql_details("IDECRAFT_TEST_MARIADB").await;
+    server_like_mysql_details("FERRIS_IDEA_TEST_MARIADB").await;
 }
 
 async fn server_like_mysql_details(var: &str) {
     let Ok(url) = std::env::var(var) else {
         return;
     };
-    let scratch = format!("idecraft_d4_{}", std::process::id());
+    let scratch = format!("ferris_idea_d4_{}", std::process::id());
     let again = format!("{scratch}_b");
     let my = connect(&url).await;
+    common::drop_leftovers(&my, &["ferris_idea_d4_"]).await;
     let made = attempt(
         &my,
         &format!(
@@ -1070,8 +1084,8 @@ async fn server_like_mysql_details(var: &str) {
     let replayed_tables = introspect_schema(&my, Some(&again)).await;
     let _ = attempt(&my, &format!("drop table {again}.child")).await;
     let empty_schema = introspect_schema(&my, Some(&again)).await;
-    let missing = introspect_schema(&my, Some("idecraft_no_such_schema")).await;
-    let missing_ddl = show_ddl_in(&my, Some("idecraft_no_such_schema"), "child").await;
+    let missing = introspect_schema(&my, Some("ferris_idea_no_such_schema")).await;
+    let missing_ddl = show_ddl_in(&my, Some("ferris_idea_no_such_schema"), "child").await;
     run(
         &my,
         &format!("drop database {scratch}; drop database {again}"),
@@ -1120,11 +1134,11 @@ async fn server_like_mysql_details(var: &str) {
     assert_eq!(empty_schema.unwrap(), []);
     assert_eq!(
         missing.unwrap_err().message,
-        "schema `idecraft_no_such_schema` does not exist"
+        "schema `ferris_idea_no_such_schema` does not exist"
     );
     assert_eq!(
         missing_ddl.unwrap_err().message,
-        "schema `idecraft_no_such_schema` does not exist"
+        "schema `ferris_idea_no_such_schema` does not exist"
     );
 }
 
@@ -1133,7 +1147,7 @@ async fn server_like_mysql_details(var: &str) {
 /// an attached one without tables are no error.
 #[tokio::test]
 async fn an_unknown_schema_is_named() {
-    let dir = std::env::temp_dir().join(format!("idecraft-no-schema-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-no-schema-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("main.db");

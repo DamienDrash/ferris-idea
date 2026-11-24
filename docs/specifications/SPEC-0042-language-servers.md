@@ -1,6 +1,6 @@
 # SPEC-0042: Language server registry
 
-- **Version:** 25 · **Date:** 2026-11-17 (v25: a PHP file opened in a running intelephense after its indexing gets its diagnostics at once, behaviour 43, AK-47; ruby-lsp's diagnostics are asked for, behaviour 44, AK-48; headless check of F-038, OBS-0081, where both took 30 s and Ruby's syntax errors were never shown; v24: files IDECraft writes on disk outside an editor are told to the servers at once, behaviour 42, AK-46; headless check of F-011, OBS-0075, where the second of two renames over MCP left the other file with the old name); 2026-11-16 (v23: typescript-language-server's diagnostics come in steps and the last list is the answer, behaviour 41, AK-45; headless check of F-033, OBS-0072, where one in four `code_actions` calls missed "Add import" because only the syntax check's list had come; v22 is taken by an open change; v22: next to the reference, OBS-0069 G1 to G3: renaming a class or
+- **Version:** 27 · **Date:** 2026-11-18 (v27: colour swatches in the gutter of CSS, SCSS, Less and HTML files and the MCP tool `document_colors`, behaviour 48, AK-52 to AK-54; OBS-0097 HC3; v26: the CSS server's obsolete alias values are left out of value completion and `flow` is offered for `display`, behaviour 45, AK-49; Find Usages and Quick Documentation on a class or id name in HTML, behaviours 46 and 47, AK-50 and AK-51; OBS-0087 W1, L5, L6); 2026-11-17 (v25: a PHP file opened in a running intelephense after its indexing gets its diagnostics at once, behaviour 43, AK-47; ruby-lsp's diagnostics are asked for, behaviour 44, AK-48; headless check of F-038, OBS-0081, where both took 30 s and Ruby's syntax errors were never shown; v24: files Ferris IDEA writes on disk outside an editor are told to the servers at once, behaviour 42, AK-46; headless check of F-011, OBS-0075, where the second of two renames over MCP left the other file with the old name); 2026-11-16 (v23: typescript-language-server's diagnostics come in steps and the last list is the answer, behaviour 41, AK-45; headless check of F-033, OBS-0072, where one in four `code_actions` calls missed "Add import" because only the syntax check's list had come; v22 is taken by an open change; v22: next to the reference, OBS-0069 G1 to G3: renaming a class or
   id from a stylesheet or an HTML file keeps the `.` or `#` and changes every use in one step, a new name that is
   no CSS identifier is refused, a `class` or `id` value offers the names of the stylesheets with file and line,
   and Go to Declaration lands on the name, behaviours 28, 38–40, AK-39 to AK-44); 2026-11-14 (v21: definitions, references, type definitions and
@@ -10,11 +10,11 @@
   its stored index, behaviour 25; v18: bash-language-server gets the opened text again after it has
   read the saved files, behaviour 34; v17: next to the reference, OBS-0039 W1 to W3: a class or id of an HTML
   file leads to its rules in the stylesheets, a jump link to the element with that id, a class or id selector lists
-  its uses in HTML files, and the structure of an HTML file is nested and names id and classes, all from IDECraft's
+  its uses in HTML files, and the structure of an HTML file is nested and names id and classes, all from Ferris IDEA's
   own syntax trees, behaviours 28–33; v16: found by asking every language feature of small Go, Rust, C, C++, PHP,
   HTML and CSS projects without a window: rustup installs nothing and its message names the toolchain, clangd is asked after it has
   parsed the file, intelephense after its indexing, the CSS server gets its validation settings, and rust-analyzer's
-  diagnostics wait for its background check, behaviours 23–27; v15: a rustup proxy is checked in the project folder, whose toolchain decides whether the component exists, behaviour 2a, headless run for F-039; v14, 2026-11-12: pyright and basedpyright are asked only after they have listed the project's files, so Find Usages, references and rename cover the other files from the first question on, OBS-0034 L8, behaviour 22; v13: TypeScript 7's server is asked for a file's diagnostics, found by the server CI; v12: TypeScript 7, which has no `tsserver.js`, is recognised and its own language server started, or what is missing is said, behaviour 21; v11: files changed on disk outside IDECraft reach the running
+  diagnostics wait for its background check, behaviours 23–27; v15: a rustup proxy is checked in the project folder, whose toolchain decides whether the component exists, behaviour 2a, headless run for F-039; v14, 2026-11-12: pyright and basedpyright are asked only after they have listed the project's files, so Find Usages, references and rename cover the other files from the first question on, OBS-0034 L8, behaviour 22; v13: TypeScript 7's server is asked for a file's diagnostics, found by the server CI; v12: TypeScript 7, which has no `tsserver.js`, is recognised and its own language server started, or what is missing is said, behaviour 21; v11: files changed on disk outside Ferris IDEA reach the running
   servers, OBS-0027 L35; v10: typescript-language-server without its syntax-only
   server, OBS-0028 item 5; v2: waiting for servers that load the workspace first; v3: TypeScript
   fallback, all language features checked with pyright, typescript-language-server, gopls, intelephense,
@@ -52,7 +52,7 @@
   number, then publishes the diagnostics of the opened file; `textDocument/references` and
   `textDocument/rename` answered before the listing cover the opened file only, the same requests
   after it all files), STD (LSP `textDocument/publishDiagnostics`); v15: headless finding of
-  2026-11-13 (`format_file` on a Rust file of a project outside the IDECraft repository answered
+  2026-11-13 (`format_file` on a Rust file of a project outside the Ferris IDEA repository answered
   "the language server stopped: error: Unknown binary 'rust-analyzer' in official toolchain …",
   because the check of behaviour 2 had run in another folder than the server), STD (rustup: a
   proxy runs the program of the toolchain selected for the folder it is started in —
@@ -82,7 +82,7 @@
   inside a `class` attribute opens the stylesheet at the rule of that class, W1; on the fragment of a jump link it
   puts the caret on the `id` attribute of that name in the same file, W2; the structure lists the elements nested
   as in the document, each named with its id and classes, `link` and `img` with their address beside them, W3;
-  IDECraft found nothing at the first two places and listed the elements flat and without id and classes), STD
+  Ferris IDEA found nothing at the first two places and listed the elements flat and without id and classes), STD
   (HTML: the `class` attribute is a list of words separated by white space, `id` names one element, the fragment
   of an `href` names an id, `<link rel="stylesheet" href>` and `<style>` bring stylesheets; CSS selectors: `.name`
   selects a class, `#name` an id, names are case-sensitive; URLs: scheme, host, query, fragment and percent
@@ -99,8 +99,8 @@
   announce pulled diagnostics), STD (LSP `textDocument/diagnostic`, full report with `items`);
   v22: OBS-0069 (side by side 2026-11-16 on `index.html` linking `style.css` with the rules `.card`, `#hello`
   and `.side`: completion in an empty `class` value lists `card` and `side`, each with file and line, G1; Go to
-  Declaration on `card` puts the caret on the name in the rule, where IDECraft put it before the dot, G3; Rename
-  on `.card` to `box` gives `.box` in the stylesheet and `class="box"` in the HTML file, where IDECraft wrote
+  Declaration on `card` puts the caret on the name in the rule, where Ferris IDEA put it before the dot, G3; Rename
+  on `.card` to `box` gives `.box` in the stylesheet and `class="box"` in the HTML file, where Ferris IDEA wrote
   `box {` without the dot and left the HTML file as it was, although Find Usages lists it, G2), STD (CSS Syntax
   Module Level 3: an identifier is an optional `-` followed by a second `-` or an identifier-start character,
   then identifier characters — letters, digits, `_`, `-` and the non-ASCII ranges the module lists; a
@@ -116,13 +116,13 @@ one — instead of failing with "command not found" in the middle of a feature.
 
 ## Behaviour
 1. Each language has an ordered list of candidate servers with command line and an install hint. SQL has
-   none: IDECraft's own SQL support (SPEC-0014/0015) serves it. [STD]
+   none: Ferris IDEA's own SQL support (SPEC-0014/0015) serves it. [STD]
 2. A candidate is available when its program is an executable file on the `PATH`. A rustup proxy (a
    program in the same directory as `rustup` and identical to it) counts only if `rustup which <program>`
    succeeds; otherwise it is reported as "rustup proxy without the component". [STD, improvement IMP-0019]
    2a. **Checked where the server runs (v15):** a server is started in the project folder, and rustup
    selects the toolchain by that folder. So for a server of a project `rustup which <program>` is
-   run in the project folder, not in the folder IDECraft was started from: a project whose
+   run in the project folder, not in the folder Ferris IDEA was started from: a project whose
    toolchain lacks the component is told so before the server is started ("… is a rustup proxy,
    and the toolchain rustup selects in <project folder> has no rust-analyzer component", with the
    install hint), instead of the server's last words after it stopped; and a project whose
@@ -197,9 +197,9 @@ one — instead of failing with "command not found" in the middle of a feature.
 16. **Declarations outside files (v7):** a declaration the server reports at a non-file address
     (jdtls: `jdt://` for classes of the JDK and of libraries) is not dropped silently: when it is
     the only one, the status bar says that the declaration is in a library class and names it, and
-    that IDECraft cannot open library sources yet. [STD]
+    that Ferris IDEA cannot open library sources yet. [STD]
 17. **Source roots without a build file (v8):** when the project folder has no `pom.xml`,
-    `build.gradle`, `build.gradle.kts`, `settings.gradle` or `settings.gradle.kts`, IDECraft infers
+    `build.gradle`, `build.gradle.kts`, `settings.gradle` or `settings.gradle.kts`, Ferris IDEA infers
     the Java source roots before it starts jdtls and gives them to it as `java.project.sourcePaths`
     (relative to the project folder):
     - the convention folders `src/main/java` and `src/test/java`, those that exist;
@@ -218,9 +218,9 @@ one — instead of failing with "command not found" in the middle of a feature.
     safe mode the same roots are given (reading files runs no project code). [STD, GEN]
 18. **Workspace data of jdtls (v9):** jdtls keeps what it imported for a project in its workspace
     data folder and reuses it on the next start, so roots given later would not reach a project it
-    already knows. IDECraft therefore starts every jdtls with its own data folder for the project:
-    `jdtls/<hash of the canonical project path>` in IDECraft's user cache folder
-    (`$XDG_CACHE_HOME/idecraft`, else `~/Library/Caches/idecraft` on macOS, else `~/.cache/idecraft`;
+    already knows. Ferris IDEA therefore starts every jdtls with its own data folder for the project:
+    `jdtls/<hash of the canonical project path>` in Ferris IDEA's user cache folder
+    (`$XDG_CACHE_HOME/ferris-idea`, else `~/Library/Caches/ferris-idea` on macOS, else `~/.cache/ferris-idea`;
     the system's temporary folder when there is no home or the project itself lies there). The
     folder records the source roots it was created with (behaviour 17; none for a project with a build file). When the roots inferred
     at the start differ from the recorded ones, or nothing is recorded, the folder is emptied before
@@ -233,7 +233,7 @@ one — instead of failing with "command not found" in the middle of a feature.
     (OBS-0028 item 5). [OBS, STD]
 
 20. **Files changed on disk reach the servers (v11):** a file below the project folder that is
-    created, changed or deleted by something other than an IDECraft editor buffer (a checkout, a
+    created, changed or deleted by something other than a Ferris IDEA editor buffer (a checkout, a
     generator, another editor, a terminal command) is told to the running language servers of that
     project with `workspace/didChangeWatchedFiles`, change type 1 (created), 2 (changed) or 3
     (deleted). A server that indexes the disk (jdtls) then knows a new class without the file being
@@ -245,7 +245,7 @@ one — instead of failing with "command not found" in the middle of a feature.
       the host of a remote project the backend's own watcher (SPEC-0026 behaviour 3) hands its
       batches on. The first look after a server appears is the baseline and reports nothing: the
       server reads the disk itself when it starts. A rename is told as deleted plus created. [GEN]
-    - **Which server gets which file (static interest):** IDECraft does not honour watchers that
+    - **Which server gets which file (static interest):** Ferris IDEA does not honour watchers that
       servers register dynamically and therefore does not announce
       `workspace.didChangeWatchedFiles.dynamicRegistration`; `client/registerCapability` stays
       answered without effect. Instead a server gets the files of the languages it serves
@@ -258,7 +258,7 @@ one — instead of failing with "command not found" in the middle of a feature.
       `go.sum` and `go.work` for the Go server. Other files are told to nobody. Only servers whose
       workspace folder contains the file get it. [STD, GEN]
     - **Folders that are never told:** version-control and IDE folders (`.git`, `.hg`, `.svn`,
-      `.idea`, `.idecraft`), build output and caches (`target`, `node_modules`, `__pycache__`,
+      `.idea`, `.ferris-idea`), build output and caches (`target`, `node_modules`, `__pycache__`,
       `.gradle`, and `build` and `out` unless a folder named `src` lies above them — a package
       may be called `build`), and virtual environments (`.venv`, `venv`, and any folder that holds
       a `pyvenv.cfg`). The window's look at the disk does not even descend into them. [GEN]
@@ -278,7 +278,7 @@ one — instead of failing with "command not found" in the middle of a feature.
       tree), that server gets none of them and is stopped instead; the next question starts it
       again and it reads the disk afresh (as SPEC-0278 behaviour 7 does after a trust change).
       [GEN]
-    - **Own saves:** a save from an IDECraft editor is also a change on disk and is told as
+    - **Own saves:** a save from a Ferris IDEA editor is also a change on disk and is told as
       changed, in addition to the document notifications. For an open document the server keeps
       the editor's text as the truth (LSP), so this is harmless; servers that index the disk need
       it for files saved by a refactoring that are not open. [STD]
@@ -292,7 +292,7 @@ one — instead of failing with "command not found" in the middle of a feature.
       version and the fix (`npm install -g typescript@5` next to it). Before v12 it was started,
       failed at `initialize` and the language stayed without a server.
     - A third candidate after vtsls is `tsc --lsp --stdio`: usable only when its package is
-      TypeScript 7 or later. IDECraft starts the package's native program for this system
+      TypeScript 7 or later. Ferris IDEA starts the package's native program for this system
       (`@typescript/typescript-<os>-<arch>/lib/tsc`, inside the package or hoisted beside it)
       directly. Without that program the reason names the package and the fix
       (`npm install -g typescript@7`); a `tsc` of TypeScript 5 or older is said to have no language
@@ -302,7 +302,7 @@ one — instead of failing with "command not found" in the middle of a feature.
     - The language-server overview (`language_servers`) and the status bar's missing-server
       message (behaviour 15) give these reasons. [STD, GEN]
     - **(v13)** TypeScript 7's server does not publish a file's diagnostics; it gives them when
-      asked (LSP 3.17 `textDocument/diagnostic`, its `diagnosticProvider`). IDECraft asks for them
+      asked (LSP 3.17 `textDocument/diagnostic`, its `diagnosticProvider`). Ferris IDEA asks for them
       as it does for vue-language-server (SPEC-0141 v4 behaviour 9), so errors reach the editor and
       `file_diagnostics`. Before v13 a file checked by it showed no problems at all. [STD]
 
@@ -313,7 +313,7 @@ one — instead of failing with "command not found" in the middle of a feature.
     servers publish the diagnostics of the first opened file after the listing. A candidate marked
     as listing its files first is therefore asked only after those diagnostics have arrived (at most
     the request's time limit; the diagnostics stay for the feature that needs them):
-    - a server started for one question (`idecraft call`, MCP without a running window): after the
+    - a server started for one question (`ferris-idea call`, MCP without a running window): after the
       diagnostics of the opened file;
     - a server of the pool (SPEC-0090): after the diagnostics of the first file opened in it; later
       files are asked at once, because the listing is done.
@@ -330,14 +330,14 @@ one — instead of failing with "command not found" in the middle of a feature.
     `rustup which` with `RUSTUP_AUTO_INSTALL=0`. Without it rustup downloads the toolchain a
     project's `rust-toolchain.toml` names when that toolchain is missing; with it the check fails
     instead, and because a server whose check fails is not started, the proxy does not download
-    one either: a project file never makes IDECraft fetch a toolchain, in safe mode or not. When
+    one either: a project file never makes Ferris IDEA fetch a toolchain, in safe mode or not. When
     rustup's answer names the toolchain it chose for the folder, the message names it with the
     folder and the command for exactly that toolchain ("… is a rustup proxy without the component
     in the toolchain <name> chosen for <project folder> (rustup component add rust-analyzer
     --toolchain <name>)"), or says that the toolchain is not installed and names `rustup toolchain
     install <name> --component rust-analyzer`; otherwise the message of behaviour 2a stands. The
     MCP tool `language_servers` and the host's `lsp.status` answer for their workspace folder
-    instead of the folder IDECraft runs in. [STD, OSS, GEN]
+    instead of the folder Ferris IDEA runs in. [STD, OSS, GEN]
 24. **clangd after it has parsed the file (v16):** clangd is a candidate that is asked about an
     opened file only after it has published that file's diagnostics (behaviour 9): until it has
     built the file's syntax tree it completes from the words in the file, so `shape.` offered
@@ -382,7 +382,7 @@ one — instead of failing with "command not found" in the middle of a feature.
     it shows every publication as it comes. [OSS, STD]
 28. **A class or an id leads to its rules (v17, OBS-0039 W1):** in an HTML file (`.html`, `.htm`),
     Go to Declaration (SPEC-0071) and the MCP tool `find_symbol_locations` with kind `definition`
-    answer from IDECraft's own syntax trees when the caret stands in, directly before or directly
+    answer from Ferris IDEA's own syntax trees when the caret stands in, directly before or directly
     after a word of a `class` attribute's value, or the value of an `id` attribute: the targets are
     all class selectors `.name` of that word, for an id all id selectors `#name`. Each target
     is the name after the `.` or `#`, so the caret lands on the name (v22, OBS-0069 G3; until v21
@@ -416,14 +416,14 @@ one — instead of failing with "command not found" in the middle of a feature.
     `find_usages` on a class selector of a CSS, SCSS or Less file keep what the stylesheet's
     language server answers and add every word of a `class` attribute that equals the name in
     the HTML files among the project's own sources; on an id selector, every `id` value. A place
-    is listed once. The added usages are marked as found by IDECraft's own index: the search
+    is listed once. The added usages are marked as found by Ferris IDEA's own index: the search
     carries a note that says how many of the usages come from it, and each of them has
     `source: "own_index"` in the answer of `find_usages`. When the server cannot be asked at all,
     the search fails as before; when it is too slow, the added usages stand beside the text
     occurrences. [GEN, STD]
 31. **The structure of an HTML file is nested (v17, OBS-0039 W3):** the symbols of an HTML file
     (the File Structure popup and the Structure tool window of SPEC-0079, the MCP tool
-    `document_symbols`, and everything else that asks for a file's symbols) come from IDECraft's
+    `document_symbols`, and everything else that asks for a file's symbols) come from Ferris IDEA's
     own syntax tree of the text, saved or not, and no language server is asked: one symbol of kind
     `element` per element, in the order of the document and nested like it (`head` below `html`
     with its children, `body` with its children and theirs). An element is named by its tag as
@@ -436,7 +436,7 @@ one — instead of failing with "command not found" in the middle of a feature.
     parser still reads as elements. Breadcrumbs and sticky lines (from the syntax tree's
     declarations) and Go to Symbol (from the search index) do not read these symbols and stay as
     they are. [OBS-0039, OSS]
-32. **Bounds and safe reading (v17):** for one question of behaviours 28 to 30 IDECraft reads at
+32. **Bounds and safe reading (v17):** for one question of behaviours 28 to 30 Ferris IDEA reads at
     most 200 stylesheets (the linked ones first, then the others by path) and at most 500 HTML
     files, each of at most 1 MiB; a larger file and the files beyond the bound are left out
     without a message. Only the project's own sources are read (SPEC-0148): nothing in installed
@@ -494,7 +494,7 @@ one — instead of failing with "command not found" in the middle of a feature.
     the wait under load; the pooled server keeps building it, so a question asked again is
     answered. [GEN]
 38. **Renaming a class or an id (v22, OBS-0069 G2):** Rename (SPEC-0074, ⇧F6), the MCP tool
-    `rename_symbol` and the host's `lsp.rename` answer from IDECraft's own syntax trees, and ask no
+    `rename_symbol` and the host's `lsp.rename` answer from Ferris IDEA's own syntax trees, and ask no
     language server, when the caret stands
     - in a CSS, SCSS or Less file on a class selector `.name` or an id selector `#name`: on the mark,
       in the name or directly after it;
@@ -549,7 +549,7 @@ one — instead of failing with "command not found" in the middle of a feature.
        server is asked as before. [OBS-0069, STD, GEN]
 39. **Class names and ids offered in HTML (v22, OBS-0069 G1):** in an HTML file, Code Completion
     (SPEC-0072 behaviour 1), the list that opens while typing (SPEC-0072 v15 behaviour 52) and the MCP
-    tool `complete_code` answer from IDECraft's own syntax trees, and ask no language server, when
+    tool `complete_code` answer from Ferris IDEA's own syntax trees, and ask no language server, when
     the caret stands in the value of a `class` attribute — also an empty one (`class=""`), and
     between two words — or of an `id` attribute. The suggestions are the class names (for `id`: the
     ids) of the stylesheets of behaviour 28 in its order — the linked ones in the order of the links,
@@ -578,9 +578,9 @@ one — instead of failing with "command not found" in the middle of a feature.
     so `code_actions` on `helper(2)` without its import missed "Add import from "./util"" in one
     of four calls (OBS-0072). [OSS (typescript-language-server, Apache-2.0: one list per check
     kind, published 50 ms after the last change), STD (LSP `textDocument/publishDiagnostics`)]
-42. **What IDECraft wrote reaches the servers at once (v24):** when IDECraft itself writes files
+42. **What Ferris IDEA wrote reaches the servers at once (v24):** when Ferris IDEA itself writes files
     on disk that no editor holds — a rename, code action or other refactoring, `undo_refactoring`
-    or `redo_refactoring` over MCP, also through `idecraft mcp` and `idecraft call`, where no
+    or `redo_refactoring` over MCP, also through `ferris-idea mcp` and `ferris-idea call`, where no
     window looks at the disk — it tells the running servers of the project that these files
     changed (`workspace/didChangeWatchedFiles`, type 2, with the paths, servers and folders of
     behaviour 20) before the tool answers, waiting at most 5 s. The next question then works on
@@ -605,12 +605,65 @@ one — instead of failing with "command not found" in the middle of a feature.
     `file_diagnostics` waited 30 s for a publication that never came and showed no problem, also
     for a syntax error (OBS-0081). solargraph publishes its diagnostics and is unchanged. [OSS,
     STD, OBS-0081]
+45. **CSS values without obsolete aliases (v26, OBS-0087 W1):** in a CSS, SCSS or Less file the
+    list of vscode-css-language-server is cleaned before it is shown and before `complete_code`
+    returns it: an item the server marks as deprecated (LSP tag 1 or `deprecated: true`) is left
+    out, and so is a value whose documentation says it was standardized under another name (the
+    server writes "Standardized as 'flex'" for `flexbox`, `-ms-flexbox`, `-ms-inline-flexbox`,
+    `inline-flexbox`, `-webkit-box`, `-webkit-inline-box`). The server (version in use on
+    2026-11-18) marks none of its values with a tag; that sentence is the only sign it gives. The
+    current prefixed forms (`-webkit-flex`, `-webkit-inline-flex`) stay, as in the reference. The
+    server's data lacks `flow`, a value of CSS Display Level 3; where the list holds the values of
+    `display` (it has `flow-root`) and no `flow`, Ferris IDEA adds `flow` right before `flow-root`
+    with the same kind. Items of other languages are not touched: a deprecated Java method stays
+    in its list. [STD: CSS Display Level 3; LSP `CompletionItemTag`; OBS-0087: `display: fl` lists
+    `flex`, `flow`, `flow-root`, `inline-flex` and two prefixed forms in the reference]
+
+46. **Find Usages on a class or id in HTML (v26, OBS-0087 L5):** Find Usages (⌥F7, SPEC-0293)
+    and the MCP tool `find_usages` on a word of a `class` attribute or on an `id` value of an
+    HTML file answer from Ferris IDEA's own index, with the lookup Rename uses (behaviour 38) and
+    without asking a language server: the target is the name, its declaration the first rule
+    that defines it (as Go to Declaration finds it, behaviour 28); the usages are those rules and
+    every use of the name in the project's own HTML files (behaviour 30), sorted by path and
+    place, each marked as found by Ferris IDEA's own index; the note says how many. Before v26 the
+    HTML server was asked and the result was "no usages", although Rename from the same place
+    changed the page and the stylesheet. [OBS-0087; GEN]
+47. **Quick Documentation on a class or id in HTML (v26, OBS-0087 L6):** Quick Documentation
+    (F1, SPEC-0077) and `hover_symbol` on such a name show what the stylesheet's server shows on
+    the first rule that defines it (for vscode-css-language-server: an example element and the
+    selector's specificity), asked at the rule's name in the stylesheet as saved. A name no rule
+    defines asks the HTML server as before. [OBS-0087: the reference shows the same as in the
+    stylesheet; GEN]
+48. **Colour swatches in the gutter (v27, OBS-0097 HC3):** in a CSS, SCSS, Less or HTML file
+    every line on which a colour is written shows a small square filled with that colour in the
+    gutter, in a lane of its own left of the other marks (SPEC-0320, SPEC-0115) and right of the
+    line numbers; the lane is there only while the file has a colour. Colours are hex colours
+    with 3, 4, 6 or 8 digits, `rgb()`, `rgba()`, `hsl()` and `hsla()` with numbers, percentages
+    and angle units (comma or space separated, alpha after `/` or as fourth value), and the 148
+    named colours of CSS Color Level 4 (`transparent` and `currentcolor` are none). They count
+    only in the value of a declaration — inside a rule, of a SCSS (`$x:`) or Less (`@x:`)
+    variable, in an HTML file's `<style>` blocks and `style` attributes; never in a selector
+    (`.red`, `#fff`, `a:hover`), a media query, a comment (also `//` in SCSS and Less), a string,
+    a `url(…)`, a variable's name (`$red`), inside `<script>` or an HTML comment; named colours
+    not in the values of properties that hold names (`font-family`, `animation-name`,
+    `grid-area`, `content` and the like). A value whose parts are not literal (`rgb(var(--r), 0,
+    0)`) gives no colour. The square is drawn for the first colour of a line, with a thin frame in
+    the line-number colour so that a colour close to the background stays visible, and with the
+    colour's alpha. Its tooltip names the colour as written and as hex (`red (#ff0000)`). Ferris IDEA
+    reads the colours itself from the editor's text, without a language server, again after
+    every edit; files over 2 MB are not read. The MCP tool `document_colors` (path) returns
+    `known` and the colours of the file (open files as the editor shows them) with 0-based
+    `line`, char columns `start` and `end`, `text` and `hex` (`#rrggbb`, or `#rrggbbaa` when not
+    opaque); it reads only. [STD: CSS Color Level 4, LSP `textDocument/documentColor` (its shape
+    of answer); OBS-0097 HC3: the reference shows a square in the gutter beside `color: red` and
+    `color: blue`; ADR-0008]
+
 ## Acceptance criteria
 - **AK-1** With a crafted `PATH`: the first available candidate wins over later ones; a missing program is
   skipped; a non-executable file is skipped; a rustup proxy whose `rustup which` fails is reported as such,
   one whose `rustup which` succeeds is used.
 - **AK-2** The error for a language without a usable server lists candidates, reasons and install hints;
-  SQL reports that IDECraft serves it itself.
+  SQL reports that Ferris IDEA serves it itself.
 - **AK-3** Existing LSP features still work with `clangd` through the registry (existing tests).
 - **AK-4** The MCP tool lists languages and candidates with availability.
 - **AK-5** With rust-analyzer on a Cargo project and unsaved text: hover, definition, references, type
@@ -649,7 +702,7 @@ one — instead of failing with "command not found" in the middle of a feature.
   the same roots and emptied when the roots change or none are recorded; the jdtls command line
   carries `-data` with it, other servers' do not. With jdtls, a copy of `java-basic` whose data
   folder was first filled by a jdtls without source roots (as before v8): after the next start
-  through IDECraft `Inventory.java` has no package diagnostic (`tests/java_source_roots.rs`,
+  through Ferris IDEA `Inventory.java` has no package diagnostic (`tests/java_source_roots.rs`,
   skipped without jdtls).
 - **AK-15 (v10)** The first Find Usages after opening a `.ts` file lists the use in another file
   (`crates/languages/tests/it/servers.rs`: `typescript_inlay_hints`, skipped without the server).
@@ -667,7 +720,7 @@ one — instead of failing with "command not found" in the middle of a feature.
   hierarchy of `Animal` lists both subclasses, and after deleting the file only the first
   (`crates/languages/tests/java_watched_files.rs`, skipped without jdtls).
 - **AK-18 (v11)** The snapshot of a workspace skips the folders the caller excludes in addition to
-  the standard ones (unit test in `idecraft-core`).
+  the standard ones (unit test in `ferris-idea-core`).
 
 - **AK-19 (v12)** `servers::tests::typescript_7_starts_its_own_server` (npm layouts as `npm install -g`
   makes them: TypeScript 7 with its native program gives `tsc --lsp --stdio` with that program, also in
@@ -675,8 +728,8 @@ one — instead of failing with "command not found" in the middle of a feature.
   native program the error names its package and `npm install -g typescript@7`; TypeScript 5 keeps
   typescript-language-server and its `tsc` is no server).
 - **AK-20 (v12)** With TypeScript 7.0.2 installed (`crates/languages/tests/it/servers.rs::typescript_7_brings_its_own_server`):
-  IDECraft resolves `tsc --lsp --stdio` and Find Usages through it finds the use in another file.
-  Tests that need typescript-language-server's behaviour run only when IDECraft picks it.
+  Ferris IDEA resolves `tsc --lsp --stdio` and Find Usages through it finds the use in another file.
+  Tests that need typescript-language-server's behaviour run only when Ferris IDEA picks it.
 
 - **AK-21 (v13)** With TypeScript 7.0.2 installed: `file_diagnostics` on `const n: number = "x";` gives an
   error at line 1 (`tests/functional/f036_javascript.rs::typescript_errors_come_from_the_language_server`);
@@ -696,7 +749,7 @@ one — instead of failing with "command not found" in the middle of a feature.
   folders: the proxy is available for the project in the first and unusable for the project in
   the second, the reason names that folder and the missing component, and the error of the
   registry carries the install hint (`servers::tests::rustup_proxy_is_checked_in_the_project`).
-  By hand: `idecraft call <folder> format_file` on a Rust file of a project whose toolchain has
+  By hand: `ferris-idea call <folder> format_file` on a Rust file of a project whose toolchain has
   rust-analyzer while the default toolchain has not, and the other way round.
 - **AK-24 (v16)** `servers::tests::rustup_proxy_is_asked_in_the_project_folder`: with a rustup
   stand-in that has the component only in one folder, the server resolves for that folder (also in
@@ -727,7 +780,7 @@ one — instead of failing with "command not found" in the middle of a feature.
   `class="card"`, also directly before and after the word, gives the rules `.card` and
   `.card:hover` of `css/site.css`; the second word of `class="button primary"` its rule; an `id`
   value its `#` rule; a tag name, the address of the stylesheet and the attribute name give no
-  answer of IDECraft's own. `several_definitions_linked_first`: the linked stylesheet (written as
+  answer of Ferris IDEA's own. `several_definitions_linked_first`: the linked stylesheet (written as
   `./css/../css/site.css?v=3#top` in a `LINK` with `REL="alternate StyleSheet"`) comes first, then
   the `<style>` block, then an SCSS and a Less file by path; `.Card` and `.card-wide` do not
   count; a stylesheet in `node_modules`, in an ignored folder, outside the project (`../`) and
@@ -736,7 +789,7 @@ one — instead of failing with "command not found" in the middle of a feature.
   fragment of `href="#prices"` gives the value of `id="prices"` in the same file;
   `docs/other.html#top` the element with `id="top"` of that file and not the one with `id="Top"`
   or `class="top"`; the path before the `#` and an `href` without fragment give no answer of
-  IDECraft's own; a fragment no element has, an address with `https:` and one outside the project
+  Ferris IDEA's own; a fragment no element has, an address with `https:` and one outside the project
   give no target.
 - **AK-31 (v17, behaviour 31; OBS-0039 W3)** `html_css::tests::structure_is_nested_and_named`: the
   thirteen elements of the sample with their depths, `header#masthead.banner`, `main#prices.card`,
@@ -798,7 +851,7 @@ one — instead of failing with "command not found" in the middle of a feature.
   the same: `#prices` to `#offers` changes the rule and `id="prices"`, and the jump link
   `href="#prices"` keeps its fragment. The popup's name is `card-wide` on `.card-wide` and `card` on
   its dot.
-  A property, a tag selector and the address of a link give no answer of IDECraft's own.
+  A property, a tag selector and the address of a link give no answer of Ferris IDEA's own.
 - **AK-40 (v22, behaviour 38b)** `html_css::tests::new_names_must_be_css_identifiers`: `box`, `-box`,
   `--box`, `_b1`, `card-2`, `café`, `日本` are accepted, `.box` for a class and `#main` for an id lose
   their mark; the empty name, `1box`, `-1box`, `-`, `a b`, `a.b`, `a:b`, `a\:b`, `"a"`, `<a>`, `a&b`,
@@ -812,7 +865,7 @@ one — instead of failing with "command not found" in the middle of a feature.
   `class=""` the classes of the linked stylesheet come first in rule order, then those of the
   `<style>` block, then the other stylesheets', each once and with `file:line`; between two words and
   after a typed `car-` the same list with the typed part from the word's start; in `id=""` the ids;
-  outside a `class` or `id` value nothing of IDECraft's own.
+  outside a `class` or `id` value nothing of Ferris IDEA's own.
 - **AK-43 (v22, behaviour 28; OBS-0069 G3)** `html_css::tests::class_and_id_lead_to_their_rules`: the
   rule `.card` is the target from character 1 to 5 of its line, the id rule `#masthead` from 1;
   `crates/languages/tests/it/html_css.rs::html_answers_without_a_server` and MCP
@@ -837,7 +890,7 @@ one — instead of failing with "command not found" in the middle of a feature.
   `a_second_rename_sees_what_the_first_wrote`): two renames in a row, each written on disk and
   told with `pool::files_written`, both change the other file; without the notification the
   second plan has only the file it started from. Headless (OBS-0075): two `rename_symbol` calls
-  and `undo_refactoring`/`redo_refactoring` in one `idecraft mcp` session change both files each
+  and `undo_refactoring`/`redo_refactoring` in one `ferris-idea mcp` session change both files each
   time.
 - **AK-47 (v25, behaviour 43)** With intelephense in the pool (`crates/languages/tests/php_pool.rs`:
   `a_file_opened_after_the_indexing_is_answered_at_once`): after a first file has started the server
@@ -850,6 +903,36 @@ one — instead of failing with "command not found" in the middle of a feature.
   `servers::tests::only_vue_typescript_7_and_ruby_lsp_pull_diagnostics`. Headless (OBS-0081): seven
   problems for the broken file in 5 s.
 
+- **AK-49 (v26, behaviour 45)** Unit test `html_css::tests::obsolete_css_values_are_left_out`:
+  of `flex`, `flexbox`, `-ms-flexbox`, `-ms-inline-flexbox`, `-webkit-flex`, `flow-root`,
+  `inline-flex` and a tagged item, `flexbox`, both `-ms-` forms and the tagged item go, `flow` comes
+  before `flow-root`; a list without `flow-root` gets no `flow`. With the server
+  (`crates/languages/tests/it/html_css.rs::display_values_without_obsolete_aliases`, skipped without
+  vscode-css-language-server): `display: fl` lists `flex`, `flow`, `flow-root`, `inline-flex` and no
+  `flexbox`.
+
+- **AK-50 (v26, behaviour 46)** `crates/languages/tests/it/html_css.rs::find_usages_of_a_class_in_html`:
+  on `card` of `class="card"` in the sample page, with no time for a server, the target is `card`
+  with its declaration in `css/site.css`, the usages hold the page's line and the stylesheet's
+  rule, all from the own index.
+- **AK-51 (v26, behaviour 47)** `crates/languages/tests/it/html_css.rs::documentation_of_a_class_in_html`
+  (skipped without vscode-css-language-server): F1's hover on `card` in the page names the
+  selector and its specificity (0, 1, 0).
+- **AK-52 (v27, behaviour 48)** Unit tests `css_colors::tests` (`colour_values`,
+  `colours_of_a_stylesheet`, `colours_of_scss_and_less`, `colours_of_html`,
+  `columns_count_chars`): the forms of a colour and their values, 148 named colours; colours in
+  values only, not in selectors, media queries, comments, strings, `url(…)`, `font-family`, SCSS
+  or Less variable names, `<script>` or HTML comments; char columns.
+- **AK-53 (v27, behaviour 48)** MCP protocol test
+  `document_colors_of_stylesheets_and_pages`: the colours of a stylesheet and of a page's `style`
+  attribute with line, columns, text and hex; a Rust file is not known; a path outside the
+  workspace is refused.
+- **AK-54 (v27, behaviour 48)** Window test (macOS)
+  `crates/workbench/tests/it/css_swatches.rs::colour_swatches_in_the_gutter`: the CSS file shows
+  swatches on the lines of `red`, `#0000ff` and `rgb(0 128 0)` in the gutter with "red (#ff0000)"
+  as the tooltip, a colour typed on another line gets its swatch, the page's `style` attribute
+  shows white, a Rust file none.
+
 ## Out of scope
 Installing servers automatically, per-project server settings, servers over TCP, version checks;
 showing the sources of library classes (`java/classFileContents`); Java files outside the project
@@ -857,7 +940,7 @@ folder; marking source roots by hand (v8: they are inferred only); updating the 
 server when folders are added (v9: the next start renews the data); removing the data folders of
 projects that are no longer opened; v11: watchers registered by servers (glob patterns and kinds
 of `client/registerCapability`), native file events, folders as such (only files are told), and
-holding back the change event of IDECraft's own saves. v17: Find Usages started on a class or id in the HTML
+holding back the change event of Ferris IDEA's own saves. v17: Find Usages started on a class or id in the HTML
 file, problems for a class no stylesheet defines, and the same navigation in Vue, Svelte, JSX and template
 files (v22: completion of class names and ids in HTML and renaming a class or id across HTML and stylesheets
 are behaviours 38 and 39). v22: a preview of a class rename before it is written, a warning when the new
@@ -866,8 +949,13 @@ jump link (`href="#prices"`) when its id is renamed (the text search of SPEC-014
 in Vue, Svelte, JSX and template files, and completion of class names in a stylesheet or a script.
 
 ## Known deviations from the reference
-The reference bundles its own analysis for many languages; IDECraft uses external servers and reports
+The reference bundles its own analysis for many languages; Ferris IDEA uses external servers and reports
 missing ones explicitly.
+
+v27: a click on a colour swatch opens no colour picker (the reference offers one to change the
+value); a line with several colours shows the first. Colours in Vue, Svelte, JSX and template
+files, in `color-mix()`, `lab()`, `lch()`, `oklch()`, `hwb()` and in SCSS or Less variables used
+in a value (`color: $brand`) get no swatch.
 
 v12: with TypeScript 7 the native server answers with its own defaults: the inlay-hint settings that
 typescript-language-server gets (SPEC-0291) are not sent to it, and a project's own TypeScript 5 in
@@ -898,12 +986,12 @@ different from the reference:
   a class bound in Vue, Svelte or JSX) is not resolved; only words written in a `class` attribute
   of an HTML file count.
 - Which rule the reference opens when several stylesheets define a class was not observed
-  (OBS-0039, open question). IDECraft offers all of them, the linked stylesheets first.
+  (OBS-0039, open question). Ferris IDEA offers all of them, the linked stylesheets first.
 - A stylesheet that is reached only through `@import` of a linked one does not count as linked; its
   rules are found among the project's other stylesheets, after the linked ones.
 - A selector built by nesting in SCSS or Less (`&-wide` below `.card`) is not found under its
   resulting name, and a selector that escapes a character by its code point is compared as written.
-- The reference shows the text of a button beside it in the structure; IDECraft shows no text.
+- The reference shows the text of a button beside it in the structure; Ferris IDEA shows no text.
   Elements have one icon for all tags.
 - Stylesheets and other HTML files count with their saved content, also while a tab holds unsaved
   changes of them.
@@ -911,18 +999,18 @@ different from the reference:
   compared next to the reference.
 
 v22 (OBS-0069): what stays different from the reference or was not compared:
-- The reference renames from a dialog with a scope and a preview button; IDECraft renames from its
+- The reference renames from a dialog with a scope and a preview button; Ferris IDEA renames from its
   popup at once, one undo step, and shows a preview only when comments, strings or text files are
   searched (behaviour 38c). OBS-0069 noted that the missing preview hid the G2 defect; the spec keeps
   the popup and relies on the status bar's file count and on the single undo.
 - The reference was seen to rename the use in one HTML file; renaming the same class in a second
-  stylesheet, in a `<style>` block, from the HTML side and for an id was not observed there. IDECraft
+  stylesheet, in a `<style>` block, from the HTML side and for an id was not observed there. Ferris IDEA
   renames every place of behaviour 38a.
-- Whether the reference refuses a new name that is no CSS identifier was not observed; IDECraft
+- Whether the reference refuses a new name that is no CSS identifier was not observed; Ferris IDEA
   refuses it (behaviour 38b).
 - Completion of a tag, a CSS property and a value was not compared; they stay the servers' answers.
   Which suggestion the reference shows for a name defined in several stylesheets, and whether it
-  leaves out names already written in the same `class` value, was not observed; IDECraft names the
+  leaves out names already written in the same `class` value, was not observed; Ferris IDEA names the
   first place and offers every name.
 
 v25: found in the same headless run (OBS-0081) and left as they are, limits of the servers: ruby-lsp

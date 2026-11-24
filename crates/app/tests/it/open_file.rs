@@ -1,26 +1,26 @@
-//! SPEC-0303 AK-7: `idecraft open --print <file>` prints an exchange file's import preview and says
-//! by its exit status whether it can be imported; `idecraft open <directory>` is unchanged.
+//! SPEC-0303 AK-7: `ferris-idea open --print <file>` prints an exchange file's import preview and says
+//! by its exit status whether it can be imported; `ferris-idea open <directory>` is unchanged.
 
 use std::process::Command;
 
 #[test]
 fn open_print_shows_the_preview() {
-    let dir = std::env::temp_dir().join(format!("idecraft-open-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-open-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("config")).unwrap();
     let good = dir.join("light.idctheme");
     std::fs::write(
         &good,
-        "[idecraft]\nkind = \"theme\"\nformat = 1\nname = \"Light\"\n\n[theme]\nname = \"IDECraft Light\"\n",
+        "[ferris-idea]\nkind = \"theme\"\nformat = 1\nname = \"Light\"\n\n[theme]\nname = \"Ferris IDEA Light\"\n",
     )
     .unwrap();
     let newer = dir.join("newer.idcrun");
-    std::fs::write(&newer, "[idecraft]\nkind = \"run\"\nformat = 2\n").unwrap();
+    std::fs::write(&newer, "[ferris-idea]\nkind = \"run\"\nformat = 2\n").unwrap();
     let run = |args: &[&std::ffi::OsStr]| {
-        Command::new(env!("CARGO_BIN_EXE_idecraft"))
+        Command::new(env!("CARGO_BIN_EXE_ferris-idea"))
             .args(args)
             .current_dir(&dir)
-            .env("IDECRAFT_CONFIG_DIR", dir.join("config"))
+            .env("FERRIS_IDEA_CONFIG_DIR", dir.join("config"))
             .output()
             .unwrap()
     };
@@ -32,7 +32,9 @@ fn open_print_shows_the_preview() {
         "{text}"
     );
     assert!(
-        text.contains("  replace appearance.theme in IDE settings: IDECraft Dark → IDECraft Light"),
+        text.contains(
+            "  replace appearance.theme in IDE settings: Ferris IDEA Dark → Ferris IDEA Light"
+        ),
         "{text}"
     );
     assert!(
@@ -43,7 +45,7 @@ fn open_print_shows_the_preview() {
     let text = String::from_utf8_lossy(&out.stdout);
     assert_eq!(out.status.code(), Some(1), "{text}");
     assert!(
-        text.contains("written by a newer IDECraft (format 2)"),
+        text.contains("written by a newer Ferris IDEA (format 2)"),
         "{text}"
     );
     let other = dir.join("notes.txt");

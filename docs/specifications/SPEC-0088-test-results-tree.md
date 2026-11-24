@@ -95,7 +95,7 @@ See at a glance which tests failed and why, without reading the whole output.
 ## Acceptance criteria
 - **AK-1** Rows, subtree status, the passed filter, collapsing, the summary line, durations, the test of a
   row and its details (unit tests of `test_tree_model`).
-- **AK-2** In a real window (`idecraft ui --selftest`): a TAP test configuration shows the tree, the
+- **AK-2** In a real window (`ferris-idea ui --selftest`): a TAP test configuration shows the tree, the
   summary "Tests failed: 1, passed: 1, ignored: 1 of 3 tests" and the message of the selected failed test;
   hiding passed tests removes the passed one.
 - **AK-3** Use by hand next to the reference.
@@ -137,8 +137,8 @@ Live updates while the tests run (the tree appears at the end), exporting result
 source of a test of other runners (JUnit of Maven and Gradle, Go, libtest, TAP) — later.
 
 ## Known deviations from the reference
-The reference fills the tree while tests run through its own runner integrations; IDECraft reads the
+The reference fills the tree while tests run through its own runner integrations; Ferris IDEA reads the
 report when the run ends (SPEC-0045), so the tree appears at the end.
-v4: the reference reruns the runs its test runners registered; IDECraft takes the tabs of test
+v4: the reference reruns the runs its test runners registered; Ferris IDEA takes the tabs of test
 configurations, which is what it can tell a test run by. Which runs the reference registers was not
 compared in a window.

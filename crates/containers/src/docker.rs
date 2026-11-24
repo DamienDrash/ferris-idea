@@ -9,7 +9,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 /// Time allowed to connect and for each read (stopping waits up to 10 s inside the daemon).
-const TIMEOUT: Duration = Duration::from_secs(30);
+pub(crate) const TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Where the Docker daemon listens.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -26,7 +26,7 @@ pub enum DockerHost {
         destination: String,
         /// SSH port, when not the default.
         port: Option<u16>,
-        /// Extra `ssh` arguments placed after IDECraft's own options, so they cannot weaken them
+        /// Extra `ssh` arguments placed after Ferris IDEA's own options, so they cannot weaken them
         /// (tests: a private configuration).
         #[serde(skip)]
         extra: Vec<String>,
@@ -83,8 +83,10 @@ pub struct Container {
     pub id: String,
     /// Name without the leading `/`.
     pub name: String,
-    /// Image it runs.
+    /// Image it runs, as it was named.
     pub image: String,
+    /// Short id of that image (12 characters), empty when unknown.
+    pub image_id: String,
     /// `running`, `exited`, `created`, `paused`, …
     pub state: String,
     /// Human status, e.g. `Up 2 hours`.
@@ -95,6 +97,10 @@ pub struct Container {
     pub compose_project: Option<String>,
     /// Compose service, if the container belongs to one (`SPEC-0242`).
     pub compose_service: Option<String>,
+    /// Folder the Compose project was started from (its `working_dir` label), if any.
+    pub compose_dir: Option<String>,
+    /// Networks the container is attached to.
+    pub networks: Vec<String>,
 }
 
 /// An image.
@@ -106,6 +112,8 @@ pub struct Image {
     pub tags: Vec<String>,
     /// Size in bytes.
     pub size: u64,
+    /// When it was built, Unix seconds (0 when unknown).
+    pub created: i64,
 }
 
 /// What can be done to a container (behaviour 2).
@@ -154,12 +162,18 @@ pub(crate) trait Conn: Read + Write + Send {
     fn split(self: Box<Self>) -> (Box<dyn Read + Send>, Box<dyn Write + Send>);
     /// No read timeout: for exec output and interactive shells, which may be quiet for long.
     fn wait_forever(&self) {}
+    /// Sets the read timeout where the connection has one (streams look at their stop flag
+    /// between reads); an SSH connection has none.
+    fn read_timeout(&self, _t: Option<Duration>) {}
 }
 
 #[cfg(unix)]
 impl Conn for std::os::unix::net::UnixStream {
     fn wait_forever(&self) {
         let _ = self.set_read_timeout(None);
+    }
+    fn read_timeout(&self, t: Option<Duration>) {
+        let _ = self.set_read_timeout(t);
     }
     fn split(self: Box<Self>) -> (Box<dyn Read + Send>, Box<dyn Write + Send>) {
         match self.try_clone() {
@@ -172,6 +186,9 @@ impl Conn for std::os::unix::net::UnixStream {
 impl Conn for std::net::TcpStream {
     fn wait_forever(&self) {
         let _ = self.set_read_timeout(None);
+    }
+    fn read_timeout(&self, t: Option<Duration>) {
+        let _ = self.set_read_timeout(t);
     }
     fn split(self: Box<Self>) -> (Box<dyn Read + Send>, Box<dyn Write + Send>) {
         match self.try_clone() {
@@ -191,7 +208,7 @@ struct SshConn {
     stderr: std::sync::Arc<std::sync::Mutex<String>>,
     got: bool,
     /// The command line, for the messages of a refused jump host.
-    line: idecraft_remote::SshLine,
+    line: ferris_idea_remote::SshLine,
 }
 
 impl SshConn {
@@ -218,7 +235,7 @@ impl SshConn {
             }
             std::thread::sleep(Duration::from_millis(10));
         };
-        Some(idecraft_remote::classify(&self.host, &self.line.messages(&text)).to_string())
+        Some(ferris_idea_remote::classify(&self.host, &self.line.messages(&text)).to_string())
     }
 }
 
@@ -285,7 +302,7 @@ impl Conn for SshConn {
 /// limited to about 100 bytes.
 fn control_dir() -> Option<PathBuf> {
     let user = std::env::var("USER").unwrap_or_else(|_| "user".into());
-    let dir = PathBuf::from(format!("/tmp/idecraft-docker-ssh-{user}"));
+    let dir = PathBuf::from(format!("/tmp/ferris-idea-docker-ssh-{user}"));
     std::fs::create_dir_all(&dir).ok()?;
     #[cfg(unix)]
     {
@@ -343,7 +360,7 @@ impl ExecSession {
 }
 
 /// `id` is a container id or name the API accepts in a path.
-fn checked_id(id: &str) -> Result<&str, DockerError> {
+pub(crate) fn checked_id(id: &str) -> Result<&str, DockerError> {
     if !id.is_empty()
         && id
             .chars()
@@ -420,17 +437,17 @@ impl DockerHost {
             DockerHost::Ssh {
                 program: Some(p), ..
             } => p.display().to_string(),
-            _ => idecraft_remote::SSH_PROGRAM.to_owned(),
+            _ => ferris_idea_remote::SSH_PROGRAM.to_owned(),
         }
     }
 
     /// The `ssh` command line of an SSH engine (`SPEC-0243` behaviour 3), from the one start
-    /// point `idecraft_remote::SshCommand`: the client check, the shared options (batch mode,
+    /// point `ferris_idea_remote::SshCommand`: the client check, the shared options (batch mode,
     /// strict host keys, post-quantum key exchange) and the route over jump hosts first, then the
     /// shared connection and the engine's extra arguments. `None` for other engines.
     pub fn ssh_line(
         &self,
-    ) -> Option<Result<idecraft_remote::SshLine, idecraft_remote::RemoteError>> {
+    ) -> Option<Result<ferris_idea_remote::SshLine, ferris_idea_remote::RemoteError>> {
         let DockerHost::Ssh {
             destination,
             port,
@@ -440,7 +457,7 @@ impl DockerHost {
         else {
             return None;
         };
-        let mut cmd = idecraft_remote::SshCommand::new(idecraft_remote::SshPurpose::Docker)
+        let mut cmd = ferris_idea_remote::SshCommand::new(ferris_idea_remote::SshPurpose::Docker)
             .program(self.ssh_program());
         if let Some(dir) = control_dir() {
             cmd = cmd
@@ -535,7 +552,7 @@ impl DockerHost {
         }
     }
 
-    fn send(
+    pub(crate) fn send(
         &self,
         method: &str,
         path: &str,
@@ -554,7 +571,7 @@ impl DockerHost {
             "Connection: close\r\n"
         };
         let request = format!(
-            "{method} {path} HTTP/1.1\r\nHost: docker\r\nUser-Agent: IDECraft\r\n{kind}Content-Length: {}\r\n{connection}\r\n{body}",
+            "{method} {path} HTTP/1.1\r\nHost: docker\r\nUser-Agent: FerrisIDEA\r\n{kind}Content-Length: {}\r\n{connection}\r\n{body}",
             body.len()
         );
         let mut conn = self.connect()?;
@@ -745,7 +762,7 @@ impl DockerHost {
     }
 
     /// Sends a request; a status of 300 or more is an error with the daemon's message.
-    fn call(&self, method: &str, path: &str) -> Result<Vec<u8>, DockerError> {
+    pub(crate) fn call(&self, method: &str, path: &str) -> Result<Vec<u8>, DockerError> {
         let (status, body) = self.request(method, path)?;
         if status >= 300 {
             return Err(DockerError::Http(status, message(&body)));
@@ -753,7 +770,7 @@ impl DockerHost {
         Ok(body)
     }
 
-    fn json(&self, path: &str) -> Result<Value, DockerError> {
+    pub(crate) fn json(&self, path: &str) -> Result<Value, DockerError> {
         let body = self.call("GET", path)?;
         serde_json::from_slice(&body).map_err(|e| DockerError::Parse(e.to_string()))
     }
@@ -808,6 +825,7 @@ impl DockerHost {
                     })
                     .unwrap_or_default(),
                 size: i.get("Size").and_then(Value::as_u64).unwrap_or(0),
+                created: i.get("Created").and_then(Value::as_i64).unwrap_or(0),
             })
             .collect();
         out.sort_by(|a, b| (a.tags.is_empty(), &a.tags).cmp(&(b.tags.is_empty(), &b.tags)));
@@ -850,7 +868,7 @@ impl DockerHost {
 }
 
 /// The daemon's error message in a body.
-fn message(body: &[u8]) -> String {
+pub(crate) fn message(body: &[u8]) -> String {
     serde_json::from_slice::<Value>(body)
         .ok()
         .and_then(|v| v.get("message").and_then(Value::as_str).map(str::to_owned))
@@ -879,7 +897,7 @@ fn exec_body(command: &[String], tty: bool, options: &ExecOptions) -> Value {
 }
 
 /// Status of an answer head and the bytes after it (not de-chunked).
-fn parse_head(raw: &[u8]) -> Result<(u16, &[u8]), DockerError> {
+pub(crate) fn parse_head(raw: &[u8]) -> Result<(u16, &[u8]), DockerError> {
     let end = raw
         .windows(4)
         .position(|w| w == b"\r\n\r\n")
@@ -894,7 +912,7 @@ fn parse_head(raw: &[u8]) -> Result<(u16, &[u8]), DockerError> {
     Ok((status, &raw[end + 4..]))
 }
 
-fn short_id(id: &str) -> String {
+pub(crate) fn short_id(id: &str) -> String {
     id.trim_start_matches("sha256:").chars().take(12).collect()
 }
 
@@ -943,16 +961,23 @@ fn container(c: &Value) -> Container {
             .trim_start_matches('/')
             .to_owned(),
         image: s("Image"),
+        image_id: short_id(&s("ImageID")),
         state: s("State"),
         status: s("Status"),
         ports,
         compose_project: label("com.docker.compose.project"),
         compose_service: label("com.docker.compose.service"),
+        compose_dir: label("com.docker.compose.project.working_dir"),
+        networks: c
+            .pointer("/NetworkSettings/Networks")
+            .and_then(Value::as_object)
+            .map(|n| n.keys().cloned().collect())
+            .unwrap_or_default(),
     }
 }
 
 /// Status and body of an HTTP/1.1 response; chunked bodies are joined.
-fn parse_response(raw: &[u8]) -> Result<(u16, Vec<u8>), DockerError> {
+pub(crate) fn parse_response(raw: &[u8]) -> Result<(u16, Vec<u8>), DockerError> {
     let (status, body) = parse_head(raw)?;
     let end = raw.len() - body.len() - 4;
     let head = String::from_utf8_lossy(&raw[..end]);
@@ -1020,7 +1045,8 @@ mod tests {
             Some(DockerHost::Tcp("10.0.0.2:2375".into()))
         );
         assert_eq!(find_host(Some("npipe:////./pipe/x"), None), None);
-        let home = std::env::temp_dir().join(format!("idecraft-dockhome-{}", std::process::id()));
+        let home =
+            std::env::temp_dir().join(format!("ferris-idea-dockhome-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
         std::fs::create_dir_all(home.join(".colima/default")).unwrap();
         std::fs::write(home.join(".colima/default/docker.sock"), "").unwrap();
@@ -1055,7 +1081,7 @@ mod tests {
         let args = line.args();
         // The shared options come first, so extra arguments cannot weaken them; the route is
         // pinned after them (ADR-0025 v5).
-        let shared = idecraft_remote::testing::shared_options("ssh");
+        let shared = ferris_idea_remote::testing::shared_options("ssh");
         assert_eq!(args[..shared.len()], shared[..]);
         assert_eq!(
             args[shared.len()..shared.len() + 2],
@@ -1067,7 +1093,10 @@ mod tests {
             .iter()
             .find_map(|a| a.strip_prefix("KexAlgorithms="))
             .unwrap();
-        assert!(kex.split(',').all(|a| idecraft_remote::PQ_KEX.contains(&a)));
+        assert!(
+            kex.split(',')
+                .all(|a| ferris_idea_remote::PQ_KEX.contains(&a))
+        );
         assert!(args.windows(2).any(|w| w == ["-o", "BatchMode=yes"]));
         assert!(
             args.windows(2)

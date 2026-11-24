@@ -1380,6 +1380,7 @@ fn config(
         allow_multiple: false,
         before_launch: Vec::new(),
         verbatim: false,
+        http: None,
     }
 }
 
@@ -1478,24 +1479,29 @@ pub fn suggest_run_configs(model: &ProjectModel) -> Vec<RunConfig> {
                             "vitest",
                             "run",
                             "--reporter=json",
-                            "--outputFile=.idecraft/vitest.json",
+                            "--outputFile=.ferris-idea/vitest.json",
                         ],
                         &m.dir,
                         RunKind::Test,
                         Some("jest"),
                     );
-                    test.report_file = Some(in_dir(&m.dir, ".idecraft/vitest.json"));
+                    test.report_file = Some(in_dir(&m.dir, ".ferris-idea/vitest.json"));
                     out.push(test);
                 }
                 if uses("jest") {
                     let mut test = config(
                         label(m, "jest"),
-                        &["npx", "jest", "--json", "--outputFile=.idecraft/jest.json"],
+                        &[
+                            "npx",
+                            "jest",
+                            "--json",
+                            "--outputFile=.ferris-idea/jest.json",
+                        ],
                         &m.dir,
                         RunKind::Test,
                         Some("jest"),
                     );
-                    test.report_file = Some(in_dir(&m.dir, ".idecraft/jest.json"));
+                    test.report_file = Some(in_dir(&m.dir, ".ferris-idea/jest.json"));
                     out.push(test);
                 }
             }
@@ -1567,12 +1573,17 @@ pub fn suggest_run_configs(model: &ProjectModel) -> Vec<RunConfig> {
             {
                 let mut test = config(
                     label(m, "pytest"),
-                    &["python3", "-m", "pytest", "--junitxml=.idecraft/pytest.xml"],
+                    &[
+                        "python3",
+                        "-m",
+                        "pytest",
+                        "--junitxml=.ferris-idea/pytest.xml",
+                    ],
                     &m.dir,
                     RunKind::Test,
                     Some("junit"),
                 );
-                test.report_file = Some(in_dir(&m.dir, ".idecraft/pytest.xml"));
+                test.report_file = Some(in_dir(&m.dir, ".ferris-idea/pytest.xml"));
                 out.push(test);
             }
             _ => {}

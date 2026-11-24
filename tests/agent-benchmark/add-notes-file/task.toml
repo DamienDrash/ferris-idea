@@ -1,0 +1,17 @@
+id = "add-notes-file"
+title = "Add a notes file in a new folder"
+prompt = "Create docs/notes.md with the line \"# Notes\" and leave README.md as it is."
+grants = ["write"]
+max_tool_calls = 10
+max_seconds = 60
+
+[[check]]
+file = "docs/notes.md"
+contains = "# Notes"
+
+[[check]]
+file = "README.md"
+equals = "project/README.md"
+
+[[check]]
+command = ["test", "-f", "docs/notes.md"]

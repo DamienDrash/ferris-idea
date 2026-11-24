@@ -1,14 +1,14 @@
-//! SPEC-0010 against a real server. Set `IDECRAFT_TEST_MYSQL` to a SPEC-0008 URL of the reference
+//! SPEC-0010 against a real server. Set `FERRIS_IDEA_TEST_MYSQL` to a SPEC-0008 URL of the reference
 //! database (e.g. `mysql://idecraft@127.0.0.1:33069/inventory?ssl-mode=DISABLED`); without it these
-//! tests pass without doing anything. The password comes from `IDECRAFT_TEST_MYSQL_PASSWORD` or the
-//! file named by `IDECRAFT_TEST_MYSQL_PASSWORD_FILE` (`tests/common`).
+//! tests pass without doing anything. The password comes from `FERRIS_IDEA_TEST_MYSQL_PASSWORD` or the
+//! file named by `FERRIS_IDEA_TEST_MYSQL_PASSWORD_FILE` (`tests/common`).
 
 use crate::common;
 
-use idecraft_database::{ConnectionProfile, MySqlSession, OnError, Outcome};
+use ferris_idea_database::{ConnectionProfile, MySqlSession, OnError, Outcome};
 
 async fn session(read_only: bool) -> Option<MySqlSession> {
-    let url = std::env::var("IDECRAFT_TEST_MYSQL").ok()?;
+    let url = ferris_idea_core::product_var("FERRIS_IDEA_TEST_MYSQL").ok()?;
     let mut profile = ConnectionProfile::from_url("reference", &url).unwrap();
     profile.read_only = read_only;
     Some(

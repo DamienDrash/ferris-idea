@@ -1,5 +1,5 @@
 [package]
-name = "idecraft-ai"
+name = "ferris-idea-ai"
 description = "Optional AI Assistant: chat with an OpenAI-compatible endpoint the user names (off by default)"
 version.workspace = true
 edition.workspace = true
@@ -9,13 +9,17 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
-idecraft-core.workspace = true
-idecraft-database.workspace = true
-idecraft-http.workspace = true
+ferris-idea-core.workspace = true
+ferris-idea-database.workspace = true
+ferris-idea-http.workspace = true
+ferris-idea-vault.workspace = true
 regex = "1"
 serde.workspace = true
 serde_json = "1"
+sha2 = "0.10"
 thiserror.workspace = true
+# The provider register (SPEC-0350).
+toml.workspace = true
 
 [lints]
 workspace = true

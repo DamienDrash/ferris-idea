@@ -39,11 +39,11 @@ controller.
    button. ↑/↓ select, Enter or a double click opens the declaration, Esc hides. [GEN]
 3. **Generate Request** adds `### handler` and `METHOD http://localhost:port/path` (the first method
    of the row, GET for a row without a method; nothing for a client row, behaviour 7) to
-   `.idecraft/generated-requests.http` and opens it on the new request, ready for ⌘↩. The port is
+   `.ferris-idea/generated-requests.http` and opens it on the new request, ready for ⌘↩. The port is
    `server.port` (or `micronaut.server.port`) from `src/main/resources/application.properties`/`.yml`,
    else the framework's default: 8080 (Spring, JAX-RS, Micronaut), 8000 (FastAPI), 5000 (Flask), 3000
    (Express, NestJS). The generated file and the test runners' report files are listed in the
-   generated `.idecraft/.gitignore`. [GEN]
+   generated `.ferris-idea/.gitignore`. [GEN]
 4. Agents get the same list with a ready request per endpoint from `endpoints`; its fields:
    behaviour 7. [ADR-0008]
 5. **Only the project's own sources (v2; decision of the Project Owner of 2026-11-12: Endpoints
@@ -91,7 +91,7 @@ controller.
    - **One row per mapping and path (EP1):** a mapping with several HTTP methods
      (`@RequestMapping(method = {POST, PUT})`, Flask `methods=["GET", "POST"]`) is one row that
      names them all in the mapping's order, each once, joined with `|` (`POST|PUT`). The reference
-     showed such a mapping in one row; IDECraft showed two. Several paths still give one row each
+     showed such a mapping in one row; Ferris IDEA showed two. Several paths still give one row each
      (behaviour 6), as on both sides. Rows are sorted by path, then by their methods. [OBS-0037
      EP1]
    - **The slash at the end (EP2):** when the handler's own path ends in `/`, the shown path does
@@ -105,7 +105,7 @@ controller.
      reference does, instead of `ANY`. [OBS-0037 EP3]
    - **Client interfaces (EP4):** the methods of an interface annotated `@RegisterRestClient`,
      Micronaut's `@Client` or `@FeignClient` are listed again, as rows of kind client: the
-     reference lists the REST client of the Quarkus sample, and since v3 IDECraft left it out. A
+     reference lists the REST client of the Quarkus sample, and since v3 Ferris IDEA left it out. A
      client row has the path the interface writes — its class-level `@Path`, the `path` of
      `@FeignClient` or of `@Client`, or a `@Client` value that starts with `/`; an address or a
      service name is no path — without the application path of behaviour 6, since another service
@@ -136,7 +136,7 @@ controller.
   `endpoints_view::tests::request_for_an_endpoint`).
 - **AK-2** MCP: a Spring controller with a configured port (`crates/mcp/tests/it/protocol.rs`:
   `endpoints_tool`).
-- **AK-3** In a real window (`idecraft ui --selftest`): the window lists `GET /ep/ping EpApi.ping` and
+- **AK-3** In a real window (`ferris-idea ui --selftest`): the window lists `GET /ep/ping EpApi.ping` and
   `POST /ep EpApi.add`; Generate Request opens the request.
 - **AK-4** By hand: a Spring Boot and a FastAPI project next to the reference.
 - **AK-5 (v2)** In a project with a route in `.venv/lib/python3.12/site-packages/x.py`, in
@@ -189,4 +189,4 @@ shown as written. Compared side by side for the Spring, Jakarta EE and Quarkus s
 Micronaut sample (the reference's list stayed empty), the row `PATCH /api/products/{id}/price`
 (not read off in the reference), how the reference marks a client row and what it generates for
 it, the slash at the end outside Spring, FastAPI and Flask projects next to the reference.
-IDECraft does not group the rows by module.
+Ferris IDEA does not group the rows by module.

@@ -4,11 +4,11 @@
 
 use std::time::Duration;
 
-use idecraft_languages::move_file::{apply_move, plan_move};
+use ferris_idea_languages::move_file::{apply_move, plan_move};
 
 #[tokio::test]
 async fn moving_files_keeps_includes_and_imports_working() {
-    let root = std::env::temp_dir().join(format!("idecraft-move-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-move-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src")).unwrap();
     let root = root.canonicalize().unwrap();
@@ -71,7 +71,7 @@ async fn moving_files_keeps_includes_and_imports_working() {
 /// and moved back the `#[path]` goes again. Skipped without `cargo`.
 #[tokio::test]
 async fn moving_a_rust_module_keeps_the_crate_building() {
-    let root = std::env::temp_dir().join(format!("idecraft-move-rs-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-move-rs-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src")).unwrap();
     let root = root.canonicalize().unwrap();
@@ -151,9 +151,9 @@ fn git(dir: &std::path::Path, args: &[&str]) -> bool {
 /// although an ignore rule matches it. Entries asked for by index are changed too.
 #[tokio::test]
 async fn a_move_changes_only_the_projects_own_files() {
-    use idecraft_core::NotOwn;
-    use idecraft_languages::move_file::include_outside;
-    let root = std::env::temp_dir().join(format!("idecraft-move-own-{}", std::process::id()));
+    use ferris_idea_core::NotOwn;
+    use ferris_idea_languages::move_file::include_outside;
+    let root = std::env::temp_dir().join(format!("ferris-idea-move-own-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     let root = root.canonicalize().unwrap();
@@ -236,5 +236,57 @@ async fn a_move_changes_only_the_projects_own_files() {
         read("node_modules/z/w.c"),
         "#include \"../../src/main.c\"\n"
     );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// SPEC-0114 v5 AK-9 (window check A12 V1): moving `Inventory.java` from `lab.inventory` to
+/// `lab.stock` rewrites its package line, the import in `Main.java` (a file another program wrote,
+/// which a running server may not have indexed) and gives a neighbour in the old package an
+/// import. Passes with or without jdtls: where the server gives no edits for a file, Ferris IDEA's
+/// own rewriting does; the short wait keeps a cold jdtls out.
+#[tokio::test]
+async fn moving_a_java_class_updates_its_imports() {
+    let root = std::env::temp_dir().join(format!("ferris-idea-move-java-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let java = root.join("src/main/java/lab");
+    std::fs::create_dir_all(java.join("inventory")).unwrap();
+    std::fs::create_dir_all(java.join("app")).unwrap();
+    let root = root.canonicalize().unwrap();
+    let write = |rel: &str, text: &str| std::fs::write(root.join(rel), text).unwrap();
+    write(
+        "src/main/java/lab/inventory/Inventory.java",
+        "package lab.inventory;\n\npublic class Inventory {\n    Shelf shelf;\n}\n",
+    );
+    write(
+        "src/main/java/lab/inventory/Shelf.java",
+        "package lab.inventory;\n\npublic class Shelf {\n    Inventory owner;\n}\n",
+    );
+    write(
+        "src/main/java/lab/app/Main.java",
+        "package lab.app;\n\nimport lab.inventory.Inventory;\n\npublic class Main {\n    Inventory i = new Inventory();\n}\n",
+    );
+    let plan = plan_move(
+        &root,
+        &root.join("src/main/java/lab/inventory/Inventory.java"),
+        "src/main/java/lab/stock",
+        Duration::from_secs(3),
+    )
+    .await
+    .unwrap();
+    apply_move(&plan).unwrap();
+    let read = |rel: &str| std::fs::read_to_string(root.join(rel)).unwrap();
+    assert!(
+        !root
+            .join("src/main/java/lab/inventory/Inventory.java")
+            .exists()
+    );
+    let moved = read("src/main/java/lab/stock/Inventory.java");
+    assert!(moved.starts_with("package lab.stock;\n"), "{moved}");
+    assert!(moved.contains("import lab.inventory.Shelf;"), "{moved}");
+    let main = read("src/main/java/lab/app/Main.java");
+    assert!(main.contains("import lab.stock.Inventory;"), "{main}");
+    assert!(!main.contains("lab.inventory"), "{main}");
+    let shelf = read("src/main/java/lab/inventory/Shelf.java");
+    assert!(shelf.contains("import lab.stock.Inventory;"), "{shelf}");
     let _ = std::fs::remove_dir_all(&root);
 }

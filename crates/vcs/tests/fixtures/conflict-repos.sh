@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds throwaway Git repositories that stop on real conflicts, one per case and operation, so the
-# same conflicts can be opened in IDECraft and next to the reference (F-075, SPEC-0037, SPEC-0101).
+# same conflicts can be opened in Ferris IDEA and next to the reference (F-075, SPEC-0037, SPEC-0101).
 #
 #   crates/vcs/tests/fixtures/conflict-repos.sh <target dir> [case ...]
 #

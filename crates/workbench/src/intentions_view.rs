@@ -3,10 +3,10 @@
 
 use std::ops::Range;
 
+use ferris_idea_languages::actions::CodeAction;
 use gpui::{
     Context, EventEmitter, FocusHandle, KeyDownEvent, Window, div, prelude::*, px, uniform_list,
 };
-use idecraft_languages::actions::CodeAction;
 
 use crate::icon_images::icon;
 use crate::intentions_model::{filter, first_enabled, is_fix, order};
@@ -54,7 +54,18 @@ pub struct IntentionsView {
     options: Vec<RowOptions>,
     /// The open submenu: shown row and selected option.
     submenu: Option<(usize, usize)>,
+    /// The popup's left edge in window coordinates, set by the workbench where it places the popup;
+    /// decides the submenu's side (`SPEC-0076` v13 behaviour 19).
+    left: f32,
 }
+
+/// Width of the list.
+const LIST_WIDTH: f32 = 420.;
+/// Space between the list and a row's submenu.
+const SUBMENU_GAP: f32 = 4.;
+
+/// Width of a row's submenu.
+const SUBMENU_WIDTH: f32 = 380.;
 
 impl EventEmitter<IntentionsEvent> for IntentionsView {}
 
@@ -73,6 +84,7 @@ impl IntentionsView {
             preview: None,
             options: Vec::new(),
             submenu: None,
+            left: 0.,
         }
     }
 
@@ -82,9 +94,18 @@ impl IntentionsView {
         self
     }
 
+    /// Where the workbench put the popup's left edge, in window coordinates.
+    pub fn set_left(&mut self, x: f32) {
+        self.left = x;
+    }
+
+    /// The submenu of `row`; none when it would hold no option, so no key or click ever opens an
+    /// empty submenu (`SPEC-0163` v3 behaviour 3, OBS-0117 G7).
     fn options_of(&self, row: usize) -> Option<&RowOptions> {
         let title = &self.actions[*self.shown.get(row)?].title;
-        self.options.iter().find(|o| &o.title == title)
+        self.options
+            .iter()
+            .find(|o| &o.title == title && !o.labels.is_empty())
     }
 
     /// The labels of the open submenu, if any (tests).
@@ -141,6 +162,19 @@ impl IntentionsView {
         }
     }
 
+    /// Selects the row titled `title` (tests); the preview follows.
+    pub fn select_title(&mut self, title: &str, cx: &mut Context<Self>) {
+        if let Some(at) = self
+            .shown
+            .iter()
+            .position(|&i| self.actions[i].title == title)
+        {
+            self.selected = at;
+            self.follow_preview(cx);
+            cx.notify();
+        }
+    }
+
     /// Turns the preview of the selected action on or off (behaviour 7).
     pub fn toggle_preview(&mut self, cx: &mut Context<Self>) {
         if self.preview.take().is_none() {
@@ -183,9 +217,46 @@ impl IntentionsView {
         self.preview.as_ref().and_then(|(_, r)| r.clone())
     }
 
+    /// The list's footer (`SPEC-0076` v11 behaviour 16): the key that toggles the preview, and
+    /// "→ options" when the selected row has a submenu.
+    pub fn footer(&self) -> String {
+        let key = crate::keymaps::label("QuickJavaDoc");
+        let mut out = if key.is_empty() {
+            "Preview: QuickJavaDoc".to_owned()
+        } else {
+            format!("{key} toggles preview")
+        };
+        if self.options_of(self.selected).is_some() {
+            out.push_str(" · → options");
+        }
+        out
+    }
+
     /// The speed-search text.
     pub fn query(&self) -> &str {
         &self.query
+    }
+
+    /// Adds actions that came later (the language server's, `SPEC-0076` v12 behaviour 18): the
+    /// list keeps its order rules, the typed filter and the selected row.
+    pub fn add_actions(&mut self, more: Vec<CodeAction>, cx: &mut Context<Self>) {
+        let selected = self
+            .shown
+            .get(self.selected)
+            .map(|&i| self.actions[i].title.clone());
+        let mut all = std::mem::take(&mut self.actions);
+        all.extend(more);
+        self.actions = order(all);
+        self.refilter();
+        if let Some(title) = selected
+            && let Some(row) = self
+                .shown
+                .iter()
+                .position(|&i| self.actions[i].title == title)
+        {
+            self.selected = row;
+        }
+        cx.notify();
     }
 
     fn refilter(&mut self) {
@@ -238,7 +309,7 @@ impl IntentionsView {
     fn on_key(&mut self, event: &KeyDownEvent, _window: &mut Window, cx: &mut Context<Self>) {
         let k = &event.keystroke;
         let m = &k.modifiers;
-        let stroke = idecraft_ui::keymap::Keystroke::from_platform(
+        let stroke = ferris_idea_ui::keymap::Keystroke::from_platform(
             &k.key, m.control, m.alt, m.shift, m.platform,
         );
         if stroke.is_some_and(|s| {
@@ -313,7 +384,7 @@ impl IntentionsView {
 crate::committed_text::committed_text_input!(IntentionsView, take_committed);
 
 impl Render for IntentionsView {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = Palette::current();
         let rows: Vec<CodeAction> = self
             .shown
@@ -343,11 +414,7 @@ impl Render for IntentionsView {
                             .h(px(crate::metrics::MENU_ITEM_HEIGHT))
                             .overflow_hidden()
                             .when(!enabled, |d| d.text_color(c(p.ui_dim)))
-                            .child(icon(if is_fix(a) {
-                                "codeInsight/quickfixBulb"
-                            } else {
-                                "codeInsight/intentionBulb"
-                            }))
+                            .child(icon(row_icon(a)))
                             .when(Some(i) == first_other, |d| {
                                 d.border_t_1().border_color(c(p.separator))
                             })
@@ -370,7 +437,14 @@ impl Render for IntentionsView {
         .h(px(
             (count.clamp(1, 12) as f32) * crate::metrics::MENU_ITEM_HEIGHT
         ));
-        // The submenu beside the list (SPEC-0125 v2 behaviour 8).
+        // The submenu beside the list (SPEC-0125 v2 behaviour 8), left of it when the window's right
+        // edge would cut it off (SPEC-0076 v13 behaviour 19).
+        let on_left = crate::popup_place::submenu_left(
+            self.left,
+            LIST_WIDTH,
+            SUBMENU_WIDTH,
+            f32::from(window.viewport_size().width),
+        );
         let open = self
             .submenu
             .and_then(|(row, option)| Some((row, option, self.options_of(row)?.clone())));
@@ -389,18 +463,24 @@ impl Render for IntentionsView {
                         })),
                 );
             }
-            submenu = Some(
-                crate::metrics::menu_frame()
-                    .bg(c(p.island))
-                    .id("intentions-submenu")
-                    .ml_1()
-                    .mt(px((row.min(11) as f32) * crate::metrics::MENU_ITEM_HEIGHT))
-                    .w(px(380.))
-                    .flex()
-                    .flex_col()
-                    .children(items),
-            );
+            let top = px((row.min(11) as f32) * crate::metrics::MENU_ITEM_HEIGHT);
+            let frame = crate::metrics::menu_frame()
+                .bg(c(p.island))
+                .id("intentions-submenu")
+                .w(px(SUBMENU_WIDTH))
+                .flex()
+                .flex_col()
+                .children(items);
+            // In the flow beside the list on either side, so it is laid out and drawn as on the
+            // right; on the left the whole popup moves left by the submenu's width, the list stays
+            // where it was (OBS-0117 G7: the absolutely placed submenu came out empty).
+            submenu = Some(if on_left {
+                frame.mr(px(SUBMENU_GAP)).mt(top)
+            } else {
+                frame.ml(px(SUBMENU_GAP)).mt(top)
+            });
         }
+        let left_submenu = on_left && submenu.is_some();
         let frame = crate::metrics::menu_frame()
             .bg(c(p.island))
             .id("intentions-popup")
@@ -409,7 +489,7 @@ impl Render for IntentionsView {
             // Typed text from the text input (`SPEC-0004` v8 behaviour 17b).
             .relative()
             .child(crate::committed_text::input_area(&self.focus, cx.entity()))
-            .w(px(420.))
+            .w(px(LIST_WIDTH))
             .flex()
             .flex_col()
             .overflow_hidden()
@@ -433,43 +513,142 @@ impl Render for IntentionsView {
                         .child("Nothing matches"),
                 )
             })
-            .when_some(self.preview.as_ref(), |d, (_, result)| {
-                let body: Vec<gpui::AnyElement> = match result {
-                    None => vec![div().child("Planning…").into_any_element()],
-                    Some(Err(why)) => vec![div().child(why.clone()).into_any_element()],
-                    Some(Ok(lines)) => lines
-                        .iter()
-                        .map(|l| {
-                            let color = if l.starts_with("- ") {
-                                Some(p.console_ansi_text[1])
-                            } else if l.starts_with("+ ") {
-                                Some(p.console_ansi_text[2])
-                            } else {
-                                None
-                            };
-                            div()
-                                .whitespace_nowrap()
-                                .when_some(color, |d, rgb| d.text_color(gpui::rgb(rgb)))
-                                .when(color.is_none(), |d| d.text_color(c(p.ui_muted)))
-                                .child(l.clone())
-                                .into_any_element()
-                        })
-                        .collect(),
-                };
-                d.child(
-                    div()
-                        .id("intention-preview")
-                        .border_t_1()
-                        .border_color(c(p.separator))
-                        .px_3()
-                        .py_1()
-                        .max_h(px(260.))
-                        .overflow_hidden()
-                        .font_family(crate::fonts::EDITOR_FONT)
-                        .text_color(c(p.ui_dim))
-                        .children(body),
-                )
-            });
-        div().flex().items_start().child(frame).children(submenu)
+            .child(
+                div()
+                    .id("intentions-footer")
+                    .border_t_1()
+                    .border_color(c(p.separator))
+                    .px_3()
+                    .py_1()
+                    .text_xs()
+                    .text_color(c(p.ui_dim))
+                    .child(self.footer()),
+            );
+        // The preview beside the list, before and after side by side (v11 behaviour 16).
+        let preview = self
+            .preview
+            .as_ref()
+            .map(|(_, result)| preview_pane(result.as_ref(), p));
+        let (before, after) = if left_submenu {
+            (submenu, None)
+        } else {
+            (None, submenu)
+        };
+        div()
+            .relative()
+            .flex()
+            .items_start()
+            .when(left_submenu, |d| d.ml(px(-(SUBMENU_WIDTH + SUBMENU_GAP))))
+            .children(before)
+            .child(frame)
+            .children(after)
+            .children(preview)
     }
+}
+
+/// The icon of a row: Run, Debug or Profiler for a run row (`SPEC-0076` v11 behaviour 14), the red
+/// bulb for a quick fix, the yellow one for the rest.
+fn row_icon(a: &CodeAction) -> &'static str {
+    if ferris_idea_languages::context_actions::is_run(a) {
+        if a.title.starts_with("Debug '") {
+            "run/debug"
+        } else if a.title.starts_with("Profile '") {
+            "ferris-idea/profiler"
+        } else {
+            "run/run"
+        }
+    } else if is_fix(a) {
+        "codeInsight/quickfixBulb"
+    } else {
+        "codeInsight/intentionBulb"
+    }
+}
+
+/// The preview pane beside the list (`SPEC-0076` v11 behaviour 16): per file its path, then each
+/// changed block with the lines before (left) and after (right).
+fn preview_pane(result: Option<&Preview>, p: &Palette) -> gpui::AnyElement {
+    use ferris_idea_languages::context_actions::{PreviewBlock, blocks_of_lines};
+    let line = |text: &str, rgb: Option<u32>| {
+        div()
+            .whitespace_nowrap()
+            .overflow_hidden()
+            .when_some(rgb, |d, rgb| d.text_color(gpui::rgb(rgb)))
+            .child(if text.is_empty() {
+                " ".to_owned()
+            } else {
+                text.to_owned()
+            })
+    };
+    let (removed, added) = (p.console_ansi_text[1], p.console_ansi_text[2]);
+    let body: Vec<gpui::AnyElement> = match result {
+        None => vec![div().child("Planning…").into_any_element()],
+        Some(Err(why)) => vec![div().child(why.clone()).into_any_element()],
+        Some(Ok(lines)) => blocks_of_lines(lines)
+            .into_iter()
+            .map(|block| match block {
+                PreviewBlock::File(path) => div()
+                    .pt_1()
+                    .text_color(c(p.ui_muted))
+                    .child(path)
+                    .into_any_element(),
+                PreviewBlock::Note(note) => {
+                    div().text_color(c(p.ui_dim)).child(note).into_any_element()
+                }
+                PreviewBlock::Change { before, after } => div()
+                    .flex()
+                    .gap_2()
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .flex()
+                            .flex_col()
+                            .children(before.iter().map(|l| line(l, Some(removed)))),
+                    )
+                    .child(
+                        div()
+                            .border_l_1()
+                            .border_color(c(p.separator))
+                            .pl_2()
+                            .flex_1()
+                            .min_w_0()
+                            .flex()
+                            .flex_col()
+                            .children(after.iter().map(|l| line(l, Some(added)))),
+                    )
+                    .into_any_element(),
+            })
+            .collect(),
+    };
+    crate::metrics::menu_frame()
+        .bg(c(p.island))
+        .id("intention-preview")
+        .ml_1()
+        .w(px(560.))
+        .max_h(px(360.))
+        .overflow_hidden()
+        .flex()
+        .flex_col()
+        .child(
+            div()
+                .flex()
+                .gap_2()
+                .px_3()
+                .pt_1()
+                .text_xs()
+                .text_color(c(p.ui_dim))
+                .child(div().flex_1().child("Before"))
+                .child(div().flex_1().child("After")),
+        )
+        .child(
+            div()
+                .px_3()
+                .py_1()
+                .flex()
+                .flex_col()
+                .font_family(crate::fonts::EDITOR_FONT)
+                .text_color(c(p.ui_dim))
+                .children(body),
+        )
+        .into_any_element()
 }

@@ -1,6 +1,6 @@
 //! Before-launch tasks other than configurations, and the instances of a configuration that run
 //! (`SPEC-0047` v3 behaviours 7–10, v4 behaviour 13: "Open browser" may wait for a port): "Build", "Run external tool" and "Open browser" as written
-//! in `before_launch` of `.idecraft/run.toml`, the URLs "Open browser" may open, the system's
+//! in `before_launch` of `.ferris-idea/run.toml`, the URLs "Open browser" may open, the system's
 //! opener, and the rule for starting a configuration that is already running.
 
 use std::path::{Path, PathBuf};
@@ -584,7 +584,7 @@ mod tests {
              or a control character into it"
         );
         // An unset variable leaves no host behind.
-        assert!(browser_url(root, "http://${env:IDECRAFT_NO_SUCH_VARIABLE_XYZ}/").is_err());
+        assert!(browser_url(root, "http://${env:FERRIS_IDEA_NO_SUCH_VARIABLE_XYZ}/").is_err());
         assert_eq!(
             browser_url(Path::new("/w"), "https://example.org/x?y=${workspace}").unwrap(),
             "https://example.org/x?y=/w"

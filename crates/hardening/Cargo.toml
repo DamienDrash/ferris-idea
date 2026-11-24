@@ -1,6 +1,6 @@
 [package]
-name = "idecraft-hardening"
-description = "Fuzz targets and the long-session soak test for IDECraft (M8.2)"
+name = "ferris-idea-hardening"
+description = "Fuzz targets and the long-session soak test for Ferris IDEA (M8.2)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,19 +9,19 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
-idecraft-ai.workspace = true
-idecraft-core.workspace = true
-idecraft-database.workspace = true
-idecraft-debugger.workspace = true
-idecraft-editor.workspace = true
-idecraft-http.workspace = true
-idecraft-languages.workspace = true
-idecraft-mcp.workspace = true
-idecraft-plugins.workspace = true
-idecraft-profiler.workspace = true
-idecraft-terminal.workspace = true
-idecraft-ui.workspace = true
-idecraft-vcs.workspace = true
+ferris-idea-ai.workspace = true
+ferris-idea-core.workspace = true
+ferris-idea-database.workspace = true
+ferris-idea-debugger.workspace = true
+ferris-idea-editor.workspace = true
+ferris-idea-http.workspace = true
+ferris-idea-languages.workspace = true
+ferris-idea-mcp.workspace = true
+ferris-idea-plugins.workspace = true
+ferris-idea-profiler.workspace = true
+ferris-idea-terminal.workspace = true
+ferris-idea-ui.workspace = true
+ferris-idea-vcs.workspace = true
 rusqlite.workspace = true
 rmcp = { version = "3.9", features = ["server"] }
 serde_json = "1"

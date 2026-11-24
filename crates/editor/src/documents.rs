@@ -264,7 +264,7 @@ mod tests {
     #[test]
     fn a_stale_edit_is_refused() {
         let reg = DocumentRegistry::default();
-        let key = PathBuf::from("/nowhere/idecraft-stale.txt");
+        let key = PathBuf::from("/nowhere/ferris-idea-stale.txt");
         reg.open(&key, TextSnapshot::from_text("a"), false);
         let edit = DocumentEdit {
             path: key.clone(),
@@ -285,7 +285,7 @@ mod tests {
 
     #[test]
     fn revisions_modified_flag_and_shared_views() {
-        let dir = std::env::temp_dir().join(format!("idecraft-docs-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-docs-{}", std::process::id()));
         std::fs::create_dir_all(dir.join("sub")).unwrap();
         std::fs::write(dir.join("a.txt"), "disk").unwrap();
         let reg = DocumentRegistry::default();

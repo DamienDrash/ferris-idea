@@ -9,8 +9,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::SystemTime;
 
-use idecraft_editor::TextSnapshot;
-use idecraft_editor::documents::DocumentRegistry;
+use ferris_idea_editor::TextSnapshot;
+use ferris_idea_editor::documents::DocumentRegistry;
 use ropey::Rope;
 use serde_json::{Value, json};
 
@@ -1049,7 +1049,7 @@ impl DocStore {
         }
         let mode = std::fs::metadata(&d.path).ok().map(|m| m.permissions());
         let mut name = d.path.file_name().unwrap_or_default().to_os_string();
-        name.push(format!(".idecraft-save-{}", std::process::id()));
+        name.push(format!(".ferris-idea-save-{}", std::process::id()));
         let tmp = d.path.with_file_name(name);
         let text = d.text.to_string();
         let write = std::fs::write(&tmp, text.as_bytes())
@@ -1075,7 +1075,7 @@ impl DocStore {
             false,
         );
         // A room's journal is the history (SPEC-0323 behaviour 24); autosaving must not flood it.
-        if !in_room && let Ok(mut history) = idecraft_core::LocalHistory::open(&root) {
+        if !in_room && let Ok(mut history) = ferris_idea_core::LocalHistory::open(&root) {
             let _ = history.record(doc);
         }
         Ok(d.revision)
@@ -1235,7 +1235,8 @@ mod tests {
     use crate::testing::Rng;
 
     fn scratch(tag: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("idecraft-docs-{tag}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("ferris-idea-docs-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::canonicalize(dir).unwrap()
@@ -1356,7 +1357,7 @@ mod tests {
         assert!(store.unsaved("c1").is_empty());
         // A save without a change keeps the revision.
         assert_eq!(store.save("run.sh", 2, false).unwrap(), 2);
-        let history = idecraft_core::LocalHistory::open(&root).unwrap();
+        let history = ferris_idea_core::LocalHistory::open(&root).unwrap();
         assert!(!history.revisions("run.sh").is_empty());
         // Our own save is not a disk change.
         assert_eq!(store.disk_check("run.sh"), None);

@@ -20,7 +20,7 @@ decision 10): up to four tips of the same kind (documents only, or code) merged 
 and checked once. Each member gets its own result, marked `batch=<id> members=<…>`, so pull
 requests are still merged one by one. A red batch is halved until the single failing branch is
 found; only that branch gets `failure`. A branch that conflicts with another member waits for the
-next round. `IDECRAFT_CI_BATCH=1` in the server's `env` checks every branch alone.
+next round. `FERRIS_IDEA_CI_BATCH=1` in the server's `env` checks every branch alone.
 
 ## Checking a pull request before the merge
 
@@ -56,32 +56,32 @@ scripts/check-batch.sh BRANCH…             # merge them on a temporary branch,
 
 ## The window self-test
 
-`idecraft ui --selftest` opens the window on a temporary folder, presses keys and clicks in it and
+`ferris-idea ui --selftest` opens the window on a temporary folder, presses keys and clicks in it and
 checks what they did (steps in `crates/app/src/workbench.rs`). It takes over the screen for a few
 minutes (a full run of the release bundle on 2026-11-16: under 3 minutes, its groups summed to
 149 s). Its last line on stdout is the result, in the form
 `{"checks":988,"failed":[],"skipped":[]}` (the number is an example, not the current count): the
 number of checks, the names of the failed checks and the groups left out on request. A group whose tools are not installed prints
 `<name> steps skipped: <what is missing>` on stderr and has no steps. A few steps click a control
-by its test id and run only with `IDECRAFT_SELFTEST_DRIVER=1` (the UI driver of SPEC-0319);
-without it the group prints a line naming `IDECRAFT_SELFTEST_DRIVER=1` on stderr, leaves those
+by its test id and run only with `FERRIS_IDEA_SELFTEST_DRIVER=1` (the UI driver of SPEC-0319);
+without it the group prints a line naming `FERRIS_IDEA_SELFTEST_DRIVER=1` on stderr, leaves those
 steps out, and the result line does not list them.
 
 The steps are in named groups that run in a fixed order:
 
 ```sh
-idecraft ui --selftest --list-groups                        # the groups with their step counts; no window
-IDECRAFT_SELFTEST_ONLY=mouse,tabs idecraft ui --selftest    # only these groups
-IDECRAFT_SELFTEST_SKIP=debuggers idecraft ui --selftest     # everything but these groups
+ferris-idea ui --selftest --list-groups                        # the groups with their step counts; no window
+FERRIS_IDEA_SELFTEST_ONLY=mouse,tabs ferris-idea ui --selftest    # only these groups
+FERRIS_IDEA_SELFTEST_SKIP=debuggers ferris-idea ui --selftest     # everything but these groups
 ```
 
-- `IDECRAFT_SELFTEST_ONLY` and `IDECRAFT_SELFTEST_SKIP` take comma-separated names of groups and
+- `FERRIS_IDEA_SELFTEST_ONLY` and `FERRIS_IDEA_SELFTEST_SKIP` take comma-separated names of groups and
   meta groups. With both set, the run takes the groups of `ONLY` without those of `SKIP`. An
   unknown name ends the run before the window opens and lists the names. Many groups build on
   what earlier groups left in the folder or the window, so a group that passes in a full run can
   fail when it runs alone; the names listed as meta groups and `mouse`, `tabs`, `tooltips`,
   `build-tools` and `containers` run alone.
-- Each group left out by `SKIP` prints `<name> steps skipped: IDECRAFT_SELFTEST_SKIP` on stderr,
+- Each group left out by `SKIP` prints `<name> steps skipped: FERRIS_IDEA_SELFTEST_SKIP` on stderr,
   and the result line names it under `skipped`. A run with skipped groups is not a full run.
 - The meta group **`debuggers`** is every group that starts a debug adapter (lldb-dap, debugpy,
   java-debug, js-debug for Node.js and Chrome, kotlin-debug-adapter), attaches to a running
@@ -89,13 +89,13 @@ IDECRAFT_SELFTEST_SKIP=debuggers idecraft ui --selftest     # everything but the
   process needs the "Developer Tools Access" right. In the session of a standard user the system
   asks for an administrator in a dialog, and while that dialog is open, debugging hangs in every
   session of the Mac. A self-test that runs in a second user's session, so that it does not
-  disturb the person at the Mac, therefore sets `IDECRAFT_SELFTEST_SKIP=debuggers`. Adapters that
+  disturb the person at the Mac, therefore sets `FERRIS_IDEA_SELFTEST_SKIP=debuggers`. Adapters that
   only talk to a port of a program they started themselves are in the group as well, so one
   switch turns off everything that debugs.
 - A second user's session that is not the one on screen (fast user switching) does not run the
   self-test at all: the window gets no frames there, and the run stops at its first step until
-  the time limit (seen on 2026-11-12 with `IDECRAFT_SELFTEST_TRACE=1`, also with
-  `IDECRAFT_SELFTEST_SKIP=debuggers`). The self-test needs the session on screen.
+  the time limit (seen on 2026-11-12 with `FERRIS_IDEA_SELFTEST_TRACE=1`, also with
+  `FERRIS_IDEA_SELFTEST_SKIP=debuggers`). The self-test needs the session on screen.
 - At the end the run prints one line per group on stderr with its duration, slowest first
-  (`self-test group <name>: <seconds> s (<n> steps)`), and their sum. `IDECRAFT_SELFTEST_TRACE=1`
+  (`self-test group <name>: <seconds> s (<n> steps)`), and their sum. `FERRIS_IDEA_SELFTEST_TRACE=1`
   names every group and step as it starts, to find where a run hangs.

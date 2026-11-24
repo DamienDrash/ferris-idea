@@ -1,10 +1,10 @@
-//! `mcp.*` (`SPEC-0318` behaviour 29): IDECraft's MCP tools for the host project, run on the host
+//! `mcp.*` (`SPEC-0318` behaviour 29): Ferris IDEA's MCP tools for the host project, run on the host
 //! with the host project's agent rights, permissions file and safe mode (`SPEC-0053`), never the
-//! window's. `idecraft serve` passes the MCP server as a [`McpBridge`].
+//! window's. `ferris-idea serve` passes the MCP server as a [`McpBridge`].
 
 use std::path::Path;
 
-use idecraft_session::{Backend, ErrorCode, Right, RpcError};
+use ferris_idea_session::{Backend, ErrorCode, Right, RpcError};
 use serde_json::{Value, json};
 
 use crate::{HostOptions, add, text};

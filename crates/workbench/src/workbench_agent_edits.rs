@@ -6,10 +6,10 @@
 
 use std::path::PathBuf;
 
-use gpui::Entity;
-use idecraft_editor::documents::{
+use ferris_idea_editor::documents::{
     DiskChange, DocumentChange, DocumentEdit, DocumentEdited, DocumentRegistry,
 };
+use gpui::Entity;
 
 use super::WorkbenchView;
 use crate::editor_view::EditorView;
@@ -105,7 +105,7 @@ impl WorkbenchView {
         on_disk: &[DiskChange],
         cx: &mut gpui::App,
     ) {
-        use idecraft_languages::undo_group::{Group, Part};
+        use ferris_idea_languages::undo_group::{Group, Part};
         let Some(bench) = steps.first().map(|s| s.0.clone()) else {
             return;
         };

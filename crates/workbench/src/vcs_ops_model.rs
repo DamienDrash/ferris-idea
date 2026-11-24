@@ -1,6 +1,8 @@
 //! The VCS operations popup and the status of fetch, pull and push (`SPEC-0109`), without drawing.
 
-use idecraft_vcs::{GitError, MergeKind, Outgoing, PullOutcome, RemoteOutcome, Stash, UpdateInfo};
+use ferris_idea_vcs::{
+    GitError, MergeKind, Outgoing, PullOutcome, RemoteOutcome, Stash, UpdateInfo,
+};
 
 /// The entries of the VCS operations popup: title and action, in the reference's order; the first
 /// ten carry the digits 1–9 and 0 (`SPEC-0109` v2 behaviour 6, OBS-0022 L13).
@@ -101,7 +103,7 @@ pub fn reset_choice_label(ahead: usize, macos: bool) -> String {
         1 => "Reset the current branch to its upstream, giving up 1 local commit (⌥E)".into(),
         n => format!("Reset the current branch to its upstream, giving up {n} local commits (⌥E)"),
     };
-    idecraft_ui::keymap::local_keys(&text, macos)
+    ferris_idea_ui::keymap::local_keys(&text, macos)
 }
 
 /// Status text after a reset to the upstream (`SPEC-0144` v4 behaviour 9).
@@ -299,7 +301,7 @@ fn pull_text(done: &Result<PullOutcome, GitError>) -> String {
 
 /// The rows of a stash's diff (`SPEC-0145`): per file a header row (line 0) with its path and
 /// whether it is new or deleted, then its side-by-side rows.
-pub fn stash_diff_rows(files: &[idecraft_vcs::StashFile]) -> Vec<idecraft_vcs::DiffRow> {
+pub fn stash_diff_rows(files: &[ferris_idea_vcs::StashFile]) -> Vec<ferris_idea_vcs::DiffRow> {
     let mut rows = Vec::new();
     for f in files {
         let what = match (f.old.is_empty(), f.new.is_empty()) {
@@ -308,12 +310,12 @@ pub fn stash_diff_rows(files: &[idecraft_vcs::StashFile]) -> Vec<idecraft_vcs::D
             _ => "",
         };
         let header = format!("── {}{what}", f.path);
-        rows.push(idecraft_vcs::DiffRow {
+        rows.push(ferris_idea_vcs::DiffRow {
             kind: None,
             left: Some((0, header.clone())),
             right: Some((0, header)),
         });
-        rows.extend(idecraft_vcs::side_by_side(&f.old, &f.new));
+        rows.extend(ferris_idea_vcs::side_by_side(&f.old, &f.new));
     }
     rows
 }
@@ -354,10 +356,78 @@ fn push_text(done: &Result<RemoteOutcome, GitError>, count: usize) -> String {
     }
 }
 
+/// The files Rollback (`ChangesView.Revert`, ⌥⌘Z) lists (`SPEC-0109` v4 behaviour 12): every
+/// changed file Git knows, staged or not, in path order; never an untracked file. The second
+/// value checks the file `current` (repository-relative) when it is listed, and only it.
+pub fn rollback_rows(
+    status: &[ferris_idea_vcs::FileStatus],
+    current: Option<&str>,
+) -> (Vec<String>, Vec<bool>) {
+    use ferris_idea_vcs::ChangeKind;
+    let mut paths: Vec<String> = status
+        .iter()
+        .filter(|f| f.staged.is_some() || f.unstaged.is_some_and(|k| k != ChangeKind::Added))
+        .map(|f| f.path.clone())
+        .collect();
+    paths.sort();
+    paths.dedup();
+    let checked = paths.iter().map(|p| Some(p.as_str()) == current).collect();
+    (paths, checked)
+}
+
+/// The confirmation of Rollback, naming the number of files (behaviour 12); one file by name.
+pub fn rollback_question(paths: &[String]) -> String {
+    match paths {
+        [one] => format!("Roll back the changes of {one}?"),
+        _ => format!("Roll back the changes of {} files?", paths.len()),
+    }
+}
+
+/// The first row of the confirmation (behaviour 12).
+pub fn rollback_button(n: usize) -> String {
+    match n {
+        1 => "Rollback 1 file".into(),
+        n => format!("Rollback {n} files"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    /// SPEC-0109 v4 AK-10 (behaviour 12, OBS-0119 K4): the changed files with the current one
+    /// checked, no untracked file; the confirmation names the number.
+    #[test]
+    fn rollback_lists_the_changed_files_with_the_current_one_checked() {
+        use ferris_idea_vcs::{ChangeKind, FileStatus};
+        let f = |path: &str, staged, unstaged| FileStatus {
+            path: path.into(),
+            staged,
+            unstaged,
+        };
+        let status = [
+            f("src/b.txt", None, Some(ChangeKind::Modified)),
+            f("new.txt", None, Some(ChangeKind::Added)),
+            f("src/a.txt", Some(ChangeKind::Added), None),
+            f("gone.txt", None, Some(ChangeKind::Deleted)),
+        ];
+        let (rows, checked) = rollback_rows(&status, Some("src/b.txt"));
+        assert_eq!(rows, ["gone.txt", "src/a.txt", "src/b.txt"]);
+        assert_eq!(checked, [false, false, true]);
+        let (_, none) = rollback_rows(&status, Some("new.txt"));
+        assert!(none.iter().all(|c| !c));
+        assert_eq!(
+            rollback_question(&["a".into()]),
+            "Roll back the changes of a?"
+        );
+        assert_eq!(
+            rollback_question(&["a".into(), "b".into()]),
+            "Roll back the changes of 2 files?"
+        );
+        assert_eq!(rollback_button(1), "Rollback 1 file");
+        assert_eq!(rollback_button(3), "Rollback 3 files");
+    }
+
     use super::*;
-    use idecraft_vcs::RefUpdate;
+    use ferris_idea_vcs::RefUpdate;
 
     fn outcome(ok: bool, updates: &[(&str, &str)], messages: &str) -> RemoteOutcome {
         RemoteOutcome {
@@ -496,7 +566,7 @@ mod tests {
         let info = UpdateInfo {
             from: "a".into(),
             to: "b".into(),
-            commits: vec![idecraft_vcs::CommitInfo {
+            commits: vec![ferris_idea_vcs::CommitInfo {
                 id: "0123456789".into(),
                 short_id: "0123456".into(),
                 summary: "b1".into(),
@@ -506,7 +576,7 @@ mod tests {
                 parents: Vec::new(),
                 committer: None,
             }],
-            files: vec![idecraft_vcs::ChangedPath {
+            files: vec![ferris_idea_vcs::ChangedPath {
                 status: "A".into(),
                 path: "b.txt".into(),
             }],
@@ -518,7 +588,7 @@ mod tests {
 
     #[test]
     fn reset_reports_name_what_was_given_up() {
-        let op = |ok: bool, conflicts: &[&str]| idecraft_vcs::OpOutcome {
+        let op = |ok: bool, conflicts: &[&str]| ferris_idea_vcs::OpOutcome {
             ok,
             conflicts: conflicts.iter().map(|c| (*c).to_owned()).collect(),
             in_progress: None,
@@ -555,12 +625,12 @@ mod tests {
     #[test]
     fn stash_rows_have_a_header_per_file() {
         let files = [
-            idecraft_vcs::StashFile {
+            ferris_idea_vcs::StashFile {
                 path: "a.txt".into(),
                 old: "one\n".into(),
                 new: "two\n".into(),
             },
-            idecraft_vcs::StashFile {
+            ferris_idea_vcs::StashFile {
                 path: "new.txt".into(),
                 old: String::new(),
                 new: "x\n".into(),
@@ -578,7 +648,7 @@ mod tests {
 
     #[test]
     fn rebase_reports() {
-        let op = |ok: bool, conflicts: &[&str], output: &str| idecraft_vcs::OpOutcome {
+        let op = |ok: bool, conflicts: &[&str], output: &str| ferris_idea_vcs::OpOutcome {
             ok,
             conflicts: conflicts.iter().map(|c| (*c).to_owned()).collect(),
             in_progress: None,

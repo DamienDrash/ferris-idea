@@ -6,8 +6,8 @@
   Context Protocol (MCP) is the common interface; the reference platform ships
   an open-source MCP server plugin (`plugins/mcp-server`, Apache-2.0) whose
   tool grouping serves as a logic template.
-- **Decision:** New crate `idecraft-mcp` built on the official Rust SDK `rmcp`
-  (Apache-2.0). Transport first: stdio (`idecraft mcp <workspace>`); later
+- **Decision:** New crate `ferris-idea-mcp` built on the official Rust SDK `rmcp`
+  (Apache-2.0). Transport first: stdio (`ferris-idea mcp <workspace>`); later
   streamable HTTP on localhost for a running UI instance. Tools mirror IDE
   capabilities and grow with them; every tool works on one workspace root and
   refuses paths outside it. Write tools edit through the editor model so undo

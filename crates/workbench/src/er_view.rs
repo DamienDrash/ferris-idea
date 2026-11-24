@@ -9,15 +9,15 @@ use std::cell::Cell;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
+use ferris_idea_database::ErModel;
+use ferris_idea_database::er_layout::{
+    self, DiagramLayout, HEADER_HEIGHT, LABEL_CHAR_WIDTH, LINE_HEIGHT, fit_zoom, layout, move_box,
+    zoom_in, zoom_out,
+};
 use gpui::{
     ClipboardItem, Context, EventEmitter, FocusHandle, KeyDownEvent, MouseButton, MouseDownEvent,
     MouseMoveEvent, PathBuilder, Pixels, Point, ScrollWheelEvent, Window, canvas, div, point,
     prelude::*, px, rgb,
-};
-use idecraft_database::ErModel;
-use idecraft_database::er_layout::{
-    self, DiagramLayout, HEADER_HEIGHT, LABEL_CHAR_WIDTH, LINE_HEIGHT, fit_zoom, layout, move_box,
-    zoom_in, zoom_out,
 };
 
 use crate::palette::Palette;
@@ -94,7 +94,7 @@ impl ErExport {
     }
 }
 
-/// Where an export of `connection` goes: `.idecraft/diagrams/<connection>.<ext>`, the name made
+/// Where an export of `connection` goes: `.ferris-idea/diagrams/<connection>.<ext>`, the name made
 /// file-safe.
 pub fn export_path(root: &Path, connection: &str, export: ErExport) -> PathBuf {
     let safe: String = connection
@@ -107,7 +107,7 @@ pub fn export_path(root: &Path, connection: &str, export: ErExport) -> PathBuf {
             }
         })
         .collect();
-    root.join(".idecraft/diagrams")
+    root.join(".ferris-idea/diagrams")
         .join(format!("{safe}.{}", export.extension()))
 }
 
@@ -123,7 +123,7 @@ enum ZoomKey {
 /// The zoom command of `key` pressed with ⌘ (Ctrl). The system reports ⇧⌘0 as `0` with shift, or
 /// as the character the layout types with ⇧0 and without shift: `)` on US layouts, `=` on German
 /// ones. `us` is the US key in the place of `key` on the current layout
-/// ([`idecraft_ui::keymap::us_key_for`]); where it is `)` the key is ⇧0 and fits, although its
+/// ([`ferris_idea_ui::keymap::us_key_for`]); where it is `)` the key is ⇧0 and fits, although its
 /// character alone would zoom in (`SPEC-0111` v4, hand test 120).
 fn zoom_key(key: &str, shift: bool, us: Option<char>) -> Option<ZoomKey> {
     match key {
@@ -383,8 +383,8 @@ impl ErView {
 
     /// Writes `export` to its file (and text formats to the clipboard); the path written.
     pub fn export(&mut self, export: ErExport, cx: &mut Context<Self>) -> Result<PathBuf, String> {
-        use idecraft_database::er_editors::{to_drawio, to_graphml};
-        use idecraft_database::{to_dot, to_mermaid, to_plantuml};
+        use ferris_idea_database::er_editors::{to_drawio, to_graphml};
+        use ferris_idea_database::{to_dot, to_mermaid, to_plantuml};
         self.export_menu = false;
         let path = export_path(&self.root, &self.connection, export);
         let bytes = match export {
@@ -468,7 +468,7 @@ impl ErView {
                 let us = cx
                     .keyboard_mapper()
                     .get_key_equivalents()
-                    .and_then(|e| idecraft_ui::keymap::us_key_for(key, e));
+                    .and_then(|e| ferris_idea_ui::keymap::us_key_for(key, e));
                 match zoom_key(key, k.modifiers.shift, us) {
                     Some(ZoomKey::Fit) => self.fit(cx),
                     Some(ZoomKey::In) => self.zoom_in(cx),
@@ -947,26 +947,26 @@ mod tests {
         let root = Path::new("/w");
         assert_eq!(
             export_path(root, "ref pg/local", ErExport::Mermaid),
-            Path::new("/w/.idecraft/diagrams/ref_pg_local.mmd")
+            Path::new("/w/.ferris-idea/diagrams/ref_pg_local.mmd")
         );
         assert_eq!(
             export_path(root, "a", ErExport::Png(2.)),
-            Path::new("/w/.idecraft/diagrams/a.2x.png")
+            Path::new("/w/.ferris-idea/diagrams/a.2x.png")
         );
         assert_eq!(
             export_path(root, "a", ErExport::Png(1.)),
-            Path::new("/w/.idecraft/diagrams/a.png")
+            Path::new("/w/.ferris-idea/diagrams/a.png")
         );
         assert_eq!(ErExport::ALL.len(), 9);
         assert_eq!(ErExport::Png(4.).label(), "PNG 4×");
         assert_eq!(ErExport::ALL[3], ErExport::Svg, "↓ ↓ ↓ still marks SVG");
         assert_eq!(
             export_path(root, "a", ErExport::GraphMl),
-            Path::new("/w/.idecraft/diagrams/a.graphml")
+            Path::new("/w/.ferris-idea/diagrams/a.graphml")
         );
         assert_eq!(
             export_path(root, "a", ErExport::DrawIo),
-            Path::new("/w/.idecraft/diagrams/a.drawio")
+            Path::new("/w/.ferris-idea/diagrams/a.drawio")
         );
         assert_eq!(ErExport::GraphMl.label(), "yEd GraphML");
         assert_eq!(ErExport::DrawIo.label(), "draw.io");
@@ -975,7 +975,7 @@ mod tests {
     /// SPEC-0111/AK-11 (v5).
     #[test]
     fn tab_follows_the_layout_and_the_export_mark_wraps() {
-        use idecraft_database::{Entity, ErModel};
+        use ferris_idea_database::{Entity, ErModel};
         let e = |name: &str, layer: usize, row: usize| Entity {
             name: name.into(),
             columns: vec![],
@@ -1006,7 +1006,7 @@ mod tests {
     /// would otherwise zoom in from 100 % to 125 %.
     #[test]
     fn shift_cmd_zero_fits_on_every_layout() {
-        use idecraft_ui::keymap::us_key_for;
+        use ferris_idea_ui::keymap::us_key_for;
         // US: no equivalents; the system reports `)` or `0` with shift.
         assert_eq!(zoom_key(")", false, None), Some(ZoomKey::Fit));
         assert_eq!(zoom_key("0", true, None), Some(ZoomKey::Fit));

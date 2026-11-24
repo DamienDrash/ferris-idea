@@ -5,13 +5,13 @@
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 
+use ferris_idea_vcs::{
+    DiffRow, LineChange, LineChangeKind, UnifiedRow, WordRanges, change_of_rows, change_starts,
+    changed_words, unified_rows,
+};
 use gpui::{
     Context, EventEmitter, FocusHandle, HighlightStyle, KeyDownEvent, ScrollStrategy,
     UniformListScrollHandle, Window, div, prelude::*, px, uniform_list,
-};
-use idecraft_vcs::{
-    DiffRow, LineChange, LineChangeKind, UnifiedRow, WordRanges, change_of_rows, change_starts,
-    changed_words, unified_rows,
 };
 
 use crate::diff_actions::{self, Pane};
@@ -71,11 +71,21 @@ pub struct DiffView {
     /// The header has Previous Difference and Next Difference buttons (`SPEC-0085` v2
     /// behaviour 12).
     stepping: bool,
+    /// The header has Accept and Reject buttons: the right side is a proposed change the user
+    /// decides on (`SPEC-0358` behaviour 18).
+    decision: bool,
     scroll: UniformListScrollHandle,
     focus: FocusHandle,
 }
 
 impl EventEmitter<DiffEvent> for DiffView {}
+
+/// The user's answer to a proposed change (`SPEC-0358` behaviour 18): `true` accepts the right
+/// side, `false` rejects it. Only a viewer made [`DiffView::with_decision`] sends it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DiffDecided(pub bool);
+
+impl EventEmitter<DiffDecided> for DiffView {}
 
 /// Changed words of every row (behaviour 8).
 fn words_of(rows: &[DiffRow]) -> Vec<WordRanges> {
@@ -115,6 +125,7 @@ impl DiffView {
             syntax_path: None,
             filler_marks: false,
             stepping: false,
+            decision: false,
             scroll: UniformListScrollHandle::new(),
             focus: cx.focus_handle(),
         };
@@ -139,6 +150,19 @@ impl DiffView {
     pub fn with_stepping(mut self) -> Self {
         self.stepping = true;
         self
+    }
+
+    /// Puts Accept and Reject buttons into the header (`SPEC-0358` behaviour 18).
+    pub fn with_decision(mut self) -> Self {
+        self.decision = true;
+        self
+    }
+
+    /// Accepts (`true`) or rejects the proposed change, as a click on its button.
+    pub fn decide(&mut self, accept: bool, cx: &mut Context<Self>) {
+        if self.decision {
+            cx.emit(DiffDecided(accept));
+        }
     }
 
     /// Names the two columns, e.g. a local history revision and "Current" (SPEC-0085).
@@ -192,7 +216,7 @@ impl DiffView {
     /// Shows the rows of `old` and `new` after a side changed, coloured as before and at the same
     /// place (v5 behaviour 18).
     pub fn refresh(&mut self, old: &str, new: &str) {
-        let rows = idecraft_vcs::side_by_side(old, new);
+        let rows = ferris_idea_vcs::side_by_side(old, new);
         match self.syntax_path.clone() {
             Some(path) => self.set_rows(rows, &path, old, new),
             None => {
@@ -397,7 +421,7 @@ struct Look {
     inserted: u32,
     deleted: u32,
     modified: u32,
-    number: idecraft_ui::theme::Rgba,
+    number: ferris_idea_ui::theme::Rgba,
 }
 
 /// The text of one side of a row: syntax colours and changed words as highlights (behaviours 7–8).
@@ -686,6 +710,33 @@ impl Render for DiffView {
                         .effects(&[Effect::None]),
                 )
         };
+        let decision = self.decision;
+        let decide_button =
+            |id: &'static str, label: &'static str, accept: bool, cx: &mut Context<Self>| {
+                div()
+                    .id(id)
+                    .px_2()
+                    .rounded(px(4.))
+                    .cursor_pointer()
+                    .border_1()
+                    .border_color(c(p.separator))
+                    .text_color(c(p.ui_text))
+                    .hover(|s| s.bg(c(p.toolbar_hover)))
+                    .child(label)
+                    .on_click(cx.listener(move |this, _, _, cx| this.decide(accept, cx)))
+                    .semantics(
+                        Semantics::new(Role::Button)
+                            .name(label)
+                            .test_id(id)
+                            .action(AxAction::Click)
+                            // Accepting writes the file (behaviour 18).
+                            .effects(if accept {
+                                &[Effect::Write]
+                            } else {
+                                &[Effect::None]
+                            }),
+                    )
+            };
         let switch = |id: &'static str, label: &'static str, on: bool, cx: &mut Context<Self>| {
             div()
                 .id(id)
@@ -756,6 +807,10 @@ impl Render for DiffView {
                             ),
                     )
                     .child(div().flex_1())
+                    .when(decision, |d| {
+                        d.child(decide_button("diff-accept", "Accept", true, cx))
+                            .child(decide_button("diff-reject", "Reject", false, cx))
+                    })
                     .child(switch(
                         "diff-side-by-side",
                         "Side-by-side",
@@ -811,7 +866,7 @@ impl Render for DiffView {
 #[cfg(test)]
 mod tests {
     use super::{Look, fainter, row_marks, stronger};
-    use idecraft_vcs::LineChangeKind;
+    use ferris_idea_vcs::LineChangeKind;
 
     // SPEC-0085 v2 AK-5: with filler marks the empty side of an added or deleted line is marked
     // in a lighter shade; without them (the diff viewer) it stays unmarked.
@@ -821,7 +876,7 @@ mod tests {
             inserted: 0x294436,
             deleted: 0x484a4a,
             modified: 0x385570,
-            number: idecraft_ui::theme::Rgba { rgb: 0, alpha: 255 },
+            number: ferris_idea_ui::theme::Rgba { rgb: 0, alpha: 255 },
         };
         let added = Some(LineChangeKind::Added);
         assert_eq!(

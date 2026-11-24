@@ -4,7 +4,7 @@
   SPEC-0027 v6; v3: Kotlin keys and corrections, asking a starting server again, OBS-0035 L8)
 - **Sources:** OBS-0011 step 2, finding 3 (in an opened Java file the reference colours method names in
   declarations, gives fields and record components their own colour and sets static calls and static
-  fields in italics; IDECraft colours by syntax only), STD (LSP 3.17 `textDocument/semanticTokens/full`:
+  fields in italics; Ferris IDEA colours by syntax only), STD (LSP 3.17 `textDocument/semanticTokens/full`:
   legend of token types and modifiers, relative five-number encoding, standard type names such as
   `method`, `property`, `parameter`, and modifiers such as `declaration`, `static`, `readonly`), OSS
   (colour-scheme keys of the open Java highlighter `JavaHighlightingColors` with their fallbacks to the
@@ -21,7 +21,7 @@ static member. The language server knows this; the syntax tree does not.
 ## Behaviour
 1. **Request:** for a file whose language server offers full semantic tokens
    (`semanticTokensProvider.full`), the editor asks for them when the file is opened and again after
-   the text the server has changed (the pool's sync, SPEC-0090). IDECraft announces the client
+   the text the server has changed (the pool's sync, SPEC-0090). Ferris IDEA announces the client
    capability with the relative format. Servers without the capability, and files without a server,
    keep plain syntax colours. [STD]
 1a. **Asking again (v3):** a question the server does not answer in time (30 s), answers with an error, or
@@ -102,17 +102,17 @@ static member. The language server knows this; the syntax tree does not.
   non-ASCII text and with UTF-16 positions (unit tests).
 - **AK-2** Mapping: every row of the table maps to its key; Java keys fall back to the neutral keys in
   the bundled schemes, and a static field and a static method come out italic in Islands Dark (unit
-  tests in `idecraft-ui`).
+  tests in `ferris-idea-ui`).
 - **AK-3** Layering and edits: tokens override syntax runs only inside their range; an insert before a
   token moves it, an edit inside drops it; a stale answer is ignored (unit tests of the render model).
-- **AK-4** In a real window (`idecraft ui --selftest`): opening a Java file with jdtls installed paints
+- **AK-4** In a real window (`ferris-idea ui --selftest`): opening a Java file with jdtls installed paints
   the declared method name in the method-declaration colour and the static field in italics.
 - **AK-5** The MCP tool returns tokens with keys for a C file when clangd is installed, limited to the
   requested lines (protocol test, skipped without clangd).
 - **AK-6 (v2)** In JavaScript and TypeScript files a `variable` or `property` token with `defaultLibrary`
   maps to `JS.GLOBAL_VARIABLE` and a `typeParameter` token to `TYPE_PARAMETER_NAME_ATTRIBUTES`; in `Dark`
   they resolve to the same style as the syntax roles `variable.global.js` and `type.parameter`, while
-  other languages keep the v1 mapping (unit tests in `idecraft-ui`). Checked in the window with the
+  other languages keep the v1 mapping (unit tests in `ferris-idea-ui`). Checked in the window with the
   TypeScript server running as part of SPEC-0027/AK-9.
 - **AK-7 (v3)** Kotlin: `.kt` and `.kts` files take the Java keys for every token type the server sends
   (`theme::tests::kotlin_tokens_take_the_java_roles`); an answer in the server's legend and shapes decodes
@@ -135,7 +135,7 @@ Delta and range requests (`full/delta`, `range`), `workspace/semanticTokens/refr
 colouring of local variables, strike-through for `deprecated`, the per-language colour settings page.
 
 ## Known deviations from the reference
-The reference computes meaning itself; IDECraft relies on the language server, so colouring arrives a
+The reference computes meaning itself; Ferris IDEA relies on the language server, so colouring arrives a
 moment after opening a file and depends on what each server reports. Not compared side by side yet
 after the change.
 

@@ -3,11 +3,11 @@
 
 use std::ops::Range;
 
+use ferris_idea_core::Revision;
 use gpui::{
     Context, Entity, EventEmitter, FocusHandle, KeyDownEvent, Window, div, prelude::*, px,
     uniform_list,
 };
-use idecraft_core::Revision;
 
 use crate::DiffView;
 use crate::history_model::{before_of, label, matching, patch, stamp};
@@ -81,7 +81,7 @@ impl HistoryView {
         cx: &mut Context<Self>,
     ) -> Entity<DiffView> {
         let before = before_of(contents, i);
-        let rows = idecraft_vcs::side_by_side(&before, current);
+        let rows = ferris_idea_vcs::side_by_side(&before, current);
         let left = revisions
             .get(i)
             .map(|r| format!("Before {}", stamp(r.time, zone)))

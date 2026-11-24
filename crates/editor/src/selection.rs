@@ -797,7 +797,7 @@ mod tests {
 
     /// SPEC-0025 v3 AK-9: added carets keep the caret's offset within the first selection — at
     /// the start from a caret at the word's start or a backward selection, at the end from a
-    /// caret at the word's end or inside it (the latter IDECraft's choice, not observed).
+    /// caret at the word's end or inside it (the latter Ferris IDEA's choice, not observed).
     #[test]
     fn occurrence_carets_keep_their_offset() {
         let buf = TextBuffer::from_text("foo one foo\nbar foo two\nfoo three");

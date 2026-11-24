@@ -8,8 +8,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use ferris_idea_session::{Backend, Peer, Right, Transport};
 use futures_util::{SinkExt, StreamExt};
-use idecraft_session::{Backend, Peer, Right, Transport};
 use ring::digest;
 use ring::rand::{SecureRandom, SystemRandom};
 use serde_json::{Value, json};
@@ -216,7 +216,7 @@ pub fn listen(config: WebConfig, backend: Backend) -> Result<Running, WebError> 
     SystemRandom::new()
         .fill(secret.as_mut())
         .map_err(|_| WebError::Random)?;
-    let secret = Zeroizing::new(idecraft_session::hello::hex(secret.as_ref()));
+    let secret = Zeroizing::new(ferris_idea_session::hello::hex(secret.as_ref()));
     let owner_hash = hash(&secret);
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
@@ -363,7 +363,7 @@ impl Inner {
             SystemRandom::new().fill(&mut random).ok()?;
             return Some((
                 Peer {
-                    name: format!("web-guest:{}", idecraft_session::hello::hex(&random)),
+                    name: format!("web-guest:{}", ferris_idea_session::hello::hex(&random)),
                     rights: vec![Right::View],
                 },
                 "guest",

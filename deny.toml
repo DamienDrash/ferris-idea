@@ -50,19 +50,19 @@ allow = ["CC0-1.0"]
 [advisories]
 ignore = [
   # GPUI's HTTP crate.
-  { id = "RUSTSEC-2025-0052", reason = "2026-11-09 async-std: only through zed-async-tar, used by gpui_http_client's GitHub download helper; no IDECraft crate calls gpui_http_client. Goes away only with a GPUI change." },
+  { id = "RUSTSEC-2025-0052", reason = "2026-11-09 async-std: only through zed-async-tar, used by gpui_http_client's GitHub download helper; no Ferris IDEA crate calls gpui_http_client. Goes away only with a GPUI change." },
   { id = "RUSTSEC-2026-0441", reason = "2026-11-09 pin-utils: only through async-std, see RUSTSEC-2025-0052." },
-  { id = "RUSTSEC-2025-0134", reason = "2026-11-09 rustls-pemfile: only through zed-reqwest in gpui_http_client; no IDECraft crate calls gpui_http_client. Goes away only with a GPUI change." },
+  { id = "RUSTSEC-2025-0134", reason = "2026-11-09 rustls-pemfile: only through zed-reqwest in gpui_http_client; no Ferris IDEA crate calls gpui_http_client. Goes away only with a GPUI change." },
   # Not compiled on any platform we ship.
   { id = "RUSTSEC-2024-0384", reason = "2026-11-09 instant: only through fastrand 1.9 on wasm targets; absent from the macOS, Linux and Windows dependency trees." },
   # Compile-time proc macros: nothing of them is in the binary.
   { id = "RUSTSEC-2024-0436", reason = "2026-11-09 paste: compile-time macro only, through metal, rav1e, pulp (GPUI and its image stack) and oracle 0.6.3, the newest driver release." },
   { id = "RUSTSEC-2026-0173", reason = "2026-11-09 proc-macro-error2: compile-time macro only, through stacksafe-macro in GPUI." },
   # Font shaping and parsing, in the running product. Input is installed system fonts, not project content.
-  { id = "RUSTSEC-2026-0206", reason = "2026-11-09 rustybuzz 0.14 and 0.20: through cosmic-text (GPUI, Linux) and usvg 0.45 (GPUI, resvg for ER diagram export). GPUI fixes usvg 0.45, so raising our resvg would not remove it. Revisit if an IDECraft path ever loads fonts from untrusted files." },
+  { id = "RUSTSEC-2026-0206", reason = "2026-11-09 rustybuzz 0.14 and 0.20: through cosmic-text (GPUI, Linux) and usvg 0.45 (GPUI, resvg for ER diagram export). GPUI fixes usvg 0.45, so raising our resvg would not remove it. Revisit if a Ferris IDEA path ever loads fonts from untrusted files." },
   { id = "RUSTSEC-2026-0192", reason = "2026-11-09 ttf-parser 0.20, 0.21 and 0.25: same paths and same limit as RUSTSEC-2026-0206." },
   # Linux desktop integration of GPUI (portals, secret service) and, since 2026-11-10, the Secret
-  # Service key store of idecraft-pairing (oo7 0.5, the release GPUI uses, so one copy); not built on
+  # Service key store of ferris-idea-pairing (oo7 0.5, the release GPUI uses, so one copy); not built on
   # macOS or Windows. Informational (unmaintained), no known vulnerability. oo7 0.7 is on zbus 6 but
   # needs Rust 1.95 (workspace: 1.89) and would add a second oo7 beside GPUI's; move with GPUI.
   { id = "RUSTSEC-2026-0371", reason = "2026-11-10 zbus_names: through zbus 5 in ashpd and oo7 (GPUI and the pairing key store, Linux only). Merged into zbus 6, which those crates do not use yet." },

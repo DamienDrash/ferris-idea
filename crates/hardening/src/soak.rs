@@ -1,4 +1,4 @@
-//! Long-session soak test (M8.2): drives a real `idecraft mcp <workspace>` process for minutes or
+//! Long-session soak test (M8.2): drives a real `ferris-idea mcp <workspace>` process for minutes or
 //! hours and watches it from outside.
 //!
 //! Each round saves a workspace file from outside (as another editor would), reads it back, types
@@ -22,7 +22,7 @@ use serde_json::{Value, json};
 /// What to run and how strictly to judge it.
 #[derive(Debug, Clone)]
 pub struct Config {
-    /// The `idecraft` binary.
+    /// The `ferris-idea` binary.
     pub server: PathBuf,
     /// How long the long-lived server is driven.
     pub duration: Duration,
@@ -120,7 +120,7 @@ impl Rng {
     }
 }
 
-/// One `idecraft mcp` process and its stdio.
+/// One `ferris-idea mcp` process and its stdio.
 struct Server {
     child: Child,
     stdin: ChildStdin,
@@ -147,9 +147,9 @@ impl Server {
         let mut child = Command::new(binary)
             .arg("mcp")
             .arg(root)
-            .env("IDECRAFT_CONFIG_DIR", config_dir)
+            .env("FERRIS_IDEA_CONFIG_DIR", config_dir)
             // The soak project is trusted, so its tools run (SPEC-0278 behaviour 10).
-            .env("IDECRAFT_TRUST_PROJECTS", "all")
+            .env("FERRIS_IDEA_TRUST_PROJECTS", "all")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(log)
@@ -401,7 +401,7 @@ fn prepare(root: &Path) -> Result<PathBuf, String> {
     std::fs::create_dir_all(&config_dir).map_err(io)?;
     let canonical = root.canonicalize().map_err(io)?;
     std::fs::write(
-        config_dir.join(idecraft_core::GRANT_FILE),
+        config_dir.join(ferris_idea_core::GRANT_FILE),
         format!(
             "[[workspace]]\npath = {:?}\nallow = [\"run\", \"write\"]\n",
             canonical.display().to_string()
@@ -552,7 +552,7 @@ fn median(mut v: Vec<u64>) -> u64 {
 pub fn run(config: &Config, mut progress: impl FnMut(&Sample)) -> Outcome {
     let mut outcome = Outcome::default();
     let root = config.workspace.clone().unwrap_or_else(|| {
-        std::env::temp_dir().join(format!("idecraft-soak-{}", std::process::id()))
+        std::env::temp_dir().join(format!("ferris-idea-soak-{}", std::process::id()))
     });
     if config.workspace.is_none() {
         let _ = std::fs::remove_dir_all(&root);
@@ -586,15 +586,15 @@ pub fn run(config: &Config, mut progress: impl FnMut(&Sample)) -> Outcome {
     }
     // The user's grant for the connection (SPEC-0012 v3): reading rows, for the target the
     // saved profile has. What the project file says grants an agent nothing.
-    let granted = idecraft_database::load_profiles(&root)
+    let granted = ferris_idea_database::load_profiles(&root)
         .map_err(|e| e.to_string())
         .and_then(|profiles| {
             let soak = profiles
                 .iter()
                 .find(|p| p.name == "soak")
                 .ok_or_else(|| "no connection `soak` was saved".to_owned())?;
-            idecraft_core::add_connection_grant(
-                &config_dir.join(idecraft_core::GRANT_FILE),
+            ferris_idea_core::add_connection_grant(
+                &config_dir.join(ferris_idea_core::GRANT_FILE),
                 &root,
                 &soak.id,
                 &soak.agent_target(),

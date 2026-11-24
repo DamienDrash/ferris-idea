@@ -2,8 +2,8 @@
 //! behaviours 13 and 16): copying, the Git operations behind the entries, Edit Commit Message
 //! through the interactive rebase dialog, checking out and fetching from the branches pane.
 
+use ferris_idea_vcs::{CommitAction, Repo, ResetMode};
 use gpui::{Context, Window};
-use idecraft_vcs::{CommitAction, Repo, ResetMode};
 
 use super::WorkbenchView;
 
@@ -137,7 +137,7 @@ impl WorkbenchView {
         let done = Repo::discover(&self.root).and_then(|r| r.checkout(&name, false));
         self.status = Some(match done {
             Ok(out) => format!("Checked out {}", out.branch),
-            Err(idecraft_vcs::GitError::Rejected(m))
+            Err(ferris_idea_vcs::GitError::Rejected(m))
                 if m.starts_with("local changes would be overwritten") =>
             {
                 let files = m.split_once(": ").map(|(_, f)| f).unwrap_or_default();
@@ -163,7 +163,7 @@ impl WorkbenchView {
         }
         self.remote_operation(
             "Fetch".into(),
-            |r| crate::vcs_ops_model::fetch_report(&r.fetch(None, idecraft_vcs::REMOTE_TIMEOUT)),
+            |r| crate::vcs_ops_model::fetch_report(&r.fetch(None, ferris_idea_vcs::REMOTE_TIMEOUT)),
             cx,
         );
     }

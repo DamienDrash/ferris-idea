@@ -1,5 +1,5 @@
 //! Show DDL of the Database tool window (`SPEC-0089` v5 behaviour 11): the selected table's or
-//! view's definition, generated from IDECraft's own introspection, in a read-only editor tab
+//! view's definition, generated from Ferris IDEA's own introspection, in a read-only editor tab
 //! `<name> (DDL).sql`; since v13 also the definition of a routine, trigger or type as the database
 //! states it (behaviour 18).
 
@@ -9,7 +9,7 @@ use gpui::{Context, Window};
 
 use super::WorkbenchView;
 
-/// Where the DDL of `table` of connection `id` is written: a file in IDECraft's cache, named
+/// Where the DDL of `table` of connection `id` is written: a file in Ferris IDEA's cache, named
 /// `<table> (DDL).sql`, so the tab shows the name and the editor highlights SQL.
 pub fn ddl_path(id: &str, table: &str) -> Option<PathBuf> {
     let clean = |s: &str| {
@@ -24,7 +24,7 @@ pub fn ddl_path(id: &str, table: &str) -> Option<PathBuf> {
             .collect::<String>()
     };
     Some(
-        idecraft_core::user_cache_dir()?
+        ferris_idea_core::user_cache_dir()?
             .join("ddl")
             .join(clean(id))
             .join(format!("{} (DDL).sql", clean(table))),
@@ -33,7 +33,7 @@ pub fn ddl_path(id: &str, table: &str) -> Option<PathBuf> {
 
 /// The name of the tab of an object's definition: a routine with its arguments, so overloads get
 /// their own tabs (`SPEC-0089` v13 behaviour 25).
-pub fn object_ddl_name(object: &idecraft_database::SchemaObject) -> String {
+pub fn object_ddl_name(object: &ferris_idea_database::SchemaObject) -> String {
     match object.kind.as_str() {
         "function" | "procedure" | "aggregate" => {
             format!(
@@ -52,8 +52,8 @@ impl WorkbenchView {
     /// a missing privilege, go to the status line.
     pub fn open_object_ddl(
         &mut self,
-        profile: idecraft_database::ConnectionProfile,
-        object: idecraft_database::SchemaObject,
+        profile: ferris_idea_database::ConnectionProfile,
+        object: ferris_idea_database::SchemaObject,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -66,7 +66,7 @@ impl WorkbenchView {
             p.read_only = true;
             let (rt, session) = super::connect(&p)?;
             let ddl = rt.block_on(async {
-                idecraft_database::object_definition(&session, None, &object)
+                ferris_idea_database::object_definition(&session, None, &object)
                     .await
                     .map_err(|e| format!("{}: {e}", p.name))?
                     .ok_or_else(|| format!("{} has no {} `{name}`", p.name, object.kind))
@@ -106,7 +106,7 @@ impl WorkbenchView {
     /// read-only tab; failures go to the status line.
     pub fn open_ddl(
         &mut self,
-        profile: idecraft_database::ConnectionProfile,
+        profile: ferris_idea_database::ConnectionProfile,
         table: String,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -119,7 +119,7 @@ impl WorkbenchView {
             p.read_only = true;
             let (rt, session) = super::connect(&p)?;
             let ddl = rt.block_on(async {
-                idecraft_database::show_ddl(&session, &name)
+                ferris_idea_database::show_ddl(&session, &name)
                     .await
                     .map_err(|e| format!("{}: {e}", p.name))?
                     .map(|object| object.ddl)

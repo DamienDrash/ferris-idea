@@ -11,7 +11,7 @@
 
 ## Purpose
 Projects that check code before each commit (formatters, linters, ticket ids in messages) keep working
-when the user commits from IDECraft: the same hooks run as on the command line, and a failing check stops
+when the user commits from Ferris IDEA: the same hooks run as on the command line, and a failing check stops
 the commit with its output in view.
 
 ## Behaviour
@@ -58,13 +58,13 @@ the commit with its output in view.
 - **AK-4** `core.hooksPath` and a non-executable hook file (ignored) (integration test).
 - **AK-5** `git_commit` with a failing hook returns `hook_failed`; the dry run lists the hooks (protocol
   test).
-- **AK-6** In a real window (`idecraft ui --selftest`): a failing `pre-commit` hook leaves the message and
+- **AK-6** In a real window (`ferris-idea ui --selftest`): a failing `pre-commit` hook leaves the message and
   shows the hook's output; unticking "Run Git hooks" commits.
 - **AK-7** Hand test with a real hook framework (pre-commit or husky) next to the reference.
 
 ## Out of scope
 `pre-push` (the push already runs the `git` program, which runs it), `pre-merge-commit` for merge commits
-written by IDECraft itself (SPEC-0036; merges that stop with conflicts and are finished through the `git`
+written by Ferris IDEA itself (SPEC-0036; merges that stop with conflicts and are finished through the `git`
 program run it), `pre-rebase` and other hooks the `git` program runs itself, amending commits, signing.
 
 ## Known deviations from the reference

@@ -4,9 +4,9 @@
 //! The adapter starts the program as soon as it is connected, then registers the breakpoints and
 //! only then passes on what the program reports. A program that is at its first breakpoint or at
 //! its end within that time runs past the breakpoint, or its stop or its end is never reported.
-//! IDECraft therefore starts the program with a small Java agent of its own
-//! (`kotlin_gate/IdecraftGate.java`): it waits, where the JVM is about to define the main class,
-//! until a file is gone, and IDECraft removes the file when the adapter has answered `launch`.
+//! Ferris IDEA therefore starts the program with a small Java agent of its own
+//! (`kotlin_gate/FerrisIdeaGate.java`): it waits, where the JVM is about to define the main class,
+//! until a file is gone, and Ferris IDEA removes the file when the adapter has answered `launch`.
 //! The agent is built once per user with the JDK's `javac` and `jar` and kept in the user's cache
 //! folder; without them the program starts as before.
 
@@ -17,8 +17,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use sha2::{Digest, Sha256};
 
 /// The agent's source.
-const SOURCE: &str = include_str!("kotlin_gate/IdecraftGate.java");
-const CLASS: &str = "IdecraftGate";
+const SOURCE: &str = include_str!("kotlin_gate/FerrisIdeaGate.java");
+const CLASS: &str = "FerrisIdeaGate";
 
 /// The file the program waits for; removed when dropped.
 #[derive(Debug)]
@@ -30,8 +30,12 @@ impl Drop for Flag {
     }
 }
 
-/// A folder only the user can enter.
+/// A folder only the user can enter; none off Unix, where it cannot be made private yet
+/// (`SPEC-0321` v6 behaviour 8a).
 fn private_dir(dir: &Path) -> Option<()> {
+    if cfg!(not(unix)) {
+        return None;
+    }
     std::fs::create_dir_all(dir).ok()?;
     #[cfg(unix)]
     {
@@ -99,7 +103,7 @@ fn jar_in(cache: &Path) -> Option<PathBuf> {
                     arg(release),
                     arg("-d"),
                     arg("classes"),
-                    arg("IdecraftGate.java"),
+                    arg("FerrisIdeaGate.java"),
                 ],
                 &build,
             )
@@ -131,7 +135,7 @@ fn jar_in(cache: &Path) -> Option<PathBuf> {
 /// and the file it waits for. `None` when the agent cannot be built (no JDK tools, no cache
 /// folder) or a name cannot be passed on.
 pub(crate) fn prepare(main_class: &str) -> Option<(String, Flag)> {
-    prepare_in(&idecraft_core::user_cache_dir()?, main_class)
+    prepare_in(&ferris_idea_core::user_cache_dir()?, main_class)
 }
 
 fn prepare_in(cache: &Path, main_class: &str) -> Option<(String, Flag)> {
@@ -171,7 +175,7 @@ mod tests {
 
     #[test]
     fn the_agent_is_built_once_and_the_flag_goes_with_its_guard() {
-        let cache = std::env::temp_dir().join(format!("idecraft-ktgate-{}", std::process::id()));
+        let cache = std::env::temp_dir().join(format!("ferris-idea-ktgate-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&cache);
         // Names that cannot be passed on need no JDK to be refused.
         assert!(prepare_in(&cache, "app/zoo.MainKt").is_none());

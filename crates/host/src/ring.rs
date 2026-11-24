@@ -5,7 +5,7 @@
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
-use idecraft_session::StreamOut;
+use ferris_idea_session::StreamOut;
 
 /// Bytes kept per output.
 pub const KEPT: usize = 1 << 20;

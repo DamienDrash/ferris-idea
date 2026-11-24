@@ -15,7 +15,7 @@ typical IDE features: navigation, rename, extract, run, test, debug, SQL.
 | `http-requests` | HTTP request file | requests against `spring-basic` |
 | `flask-basic` | Python, Flask | web endpoint reading the reference SQLite database |
 | `angular-basic` | TypeScript, Angular 20 | a standalone component with an external template, for the Angular language server (`js.sh install-angular` of the reference environment) |
-| `sqlite-catalogue` | SQL (SQLite) | one object per feature of the SQLite catalogue (affinities, generated columns, constraints, every foreign key action, index kinds, views, triggers, FTS5, R-Tree, names that need quoting) and files that cannot be opened; `sqlite-catalogue/build.sh <new folder>` builds the databases and an IDECraft project around them |
+| `sqlite-catalogue` | SQL (SQLite) | one object per feature of the SQLite catalogue (affinities, generated columns, constraints, every foreign key action, index kinds, views, triggers, FTS5, R-Tree, names that need quoting) and files that cannot be opened; `sqlite-catalogue/build.sh <new folder>` builds the databases and a Ferris IDEA project around them |
 
 Reference databases for `sql-basic`: `db.sh` of the reference environment (PostgreSQL, MySQL, SQLite;
 MySQL uses `sql-basic/mysql/schema.sql`; `seed-movements.*.sql` adds 10 000 rows).

@@ -21,7 +21,7 @@
 #   notadb.db           a text file that is not a database
 #   broken-view.db      two tables and two views, one view over a table that was dropped
 #   (missing.db)        is deliberately not created
-#   .idecraft/connections.toml  IDECraft profiles for all of them (open <target-folder> as project)
+#   .ferris-idea/connections.toml  Ferris IDEA profiles for all of them (open <target-folder> as project)
 #
 # Before deleting the folder: chmod -R u+w <target-folder>
 set -euo pipefail
@@ -37,7 +37,7 @@ if [ -e "$target" ] && [ -n "$(ls -A "$target" 2>/dev/null)" ]; then
     echo "target folder is not empty: $target" >&2
     exit 1
 fi
-mkdir -p "$target/readonly" "$target/.idecraft"
+mkdir -p "$target/readonly" "$target/.ferris-idea"
 target="$(cd "$target" && pwd)"
 
 sqlite3 "$target/catalogue.db" < "$here/catalogue.sql"
@@ -93,7 +93,7 @@ profile() { # id, name, path, extra lines
     printf '\n[[connection]]\nid = "%s"\nname = "%s"\ndialect = "sqlite"\npath = "%s"\n%s' "$1" "$2" "$3" "${4:-}"
 }
 {
-    printf '[idecraft]\nkind = "connections"\nformat = 1\n'
+    printf '[ferris-idea]\nkind = "connections"\nformat = 1\n'
     profile catalogue "catalogue" "catalogue.db"
     profile catalogue-ro "catalogue read-only" "catalogue.db" $'read_only = true\n'
     profile with-archive "with archive" "catalogue.db" \
@@ -108,6 +108,6 @@ profile() { # id, name, path, extra lines
     profile notadb "not a database" "notadb.db"
     profile broken-view "broken view" "broken-view.db"
     profile missing "missing" "missing.db"
-} > "$target/.idecraft/connections.toml"
+} > "$target/.ferris-idea/connections.toml"
 
 echo "built in $target"

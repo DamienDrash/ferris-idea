@@ -28,7 +28,7 @@ fn junit_tap_and_libtest_reports_become_trees() {
 fn a_test_configuration_attaches_its_report() {
     let p = Project::empty();
     p.write(
-        ".idecraft/run.toml",
+        ".ferris-idea/run.toml",
         "[[run]]\nname = \"t\"\nkind = \"test\"\nreport = \"tap\"\ncommand = [\"sh\", \"-c\", \"printf '1..2\\\\nok 1 - a\\\\nnot ok 2 - b\\\\n'\"]\n",
     )
     .grant(&["run"]);

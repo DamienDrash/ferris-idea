@@ -1,5 +1,5 @@
 [package]
-name = "idecraft-refactoring"
+name = "ferris-idea-refactoring"
 description = "Code analysis and refactorings (planned)"
 version.workspace = true
 edition.workspace = true

@@ -5,12 +5,13 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::Duration;
 
-use idecraft_profiler::{
+use ferris_idea_profiler::{
     Engine, Kind, ProfileTarget, Unit, attach, hot_spots, last_profile, plan, profile_kind,
 };
 
 fn scratch(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("idecraft-profmem-{name}-{}", std::process::id()));
+    let dir =
+        std::env::temp_dir().join(format!("ferris-idea-profmem-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     dir

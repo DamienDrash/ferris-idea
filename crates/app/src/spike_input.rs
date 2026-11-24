@@ -194,7 +194,7 @@ impl Render for InputSpike {
                     cx.notify();
                 }
             }))
-            .child("IDECraft input spike — type: Grüße, ´ then e (é), ^ then a (â), Japanese 'nihongo' + Space + Enter. Close the window when done.")
+            .child("Ferris IDEA input spike — type: Grüße, ´ then e (é), ^ then a (â), Japanese 'nihongo' + Space + Enter. Close the window when done.")
             .child(
                 div()
                     .relative()
@@ -244,7 +244,7 @@ pub fn input() -> Result<(), Box<dyn std::error::Error>> {
                 ..Default::default()
             },
             |window, cx| {
-                idecraft_workbench::x11_wake::until_first_frame(window);
+                ferris_idea_workbench::x11_wake::until_first_frame(window);
                 let view = cx.new(|cx| InputSpike {
                     content: String::new(),
                     marked: None,

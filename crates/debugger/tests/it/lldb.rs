@@ -5,16 +5,16 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
-use idecraft_debugger::native::{MAX_INSTRUCTIONS, hex_address, parse_address};
-use idecraft_debugger::{
+use ferris_idea_debugger::native::{MAX_INSTRUCTIONS, hex_address, parse_address};
+use ferris_idea_debugger::{
     DapError, DebugSession, Event, SourceBreakpoint, can_debug_unattended, lldb_dap,
 };
 use serde_json::json;
 
-/// Skips a test whose tool is missing; with `IDECRAFT_REQUIRE_TOOLS` set (CI) it fails instead.
+/// Skips a test whose tool is missing; with `FERRIS_IDEA_REQUIRE_TOOLS` set (CI) it fails instead.
 fn skip(reason: &str) {
     assert!(
-        std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+        ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
         "required tool missing: {reason}"
     );
     eprintln!("skipped: {reason}");
@@ -79,7 +79,7 @@ fn debug_a_c_program_with_lldb_dap() {
         skip("debugging needs Developer Mode on this Mac");
         return;
     }
-    let dir = std::env::temp_dir().join(format!("idecraft-dap-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-dap-{}", std::process::id()));
     let Some(binary) = build(&dir) else {
         skip("no C compiler");
         return;
@@ -178,7 +178,7 @@ fn stops_with(tag: &str, bp: SourceBreakpoint) -> Option<(Vec<String>, String)> 
     if !can_debug_unattended() {
         return None;
     }
-    let dir = std::env::temp_dir().join(format!("idecraft-dap-{tag}-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-dap-{tag}-{}", std::process::id()));
     let binary = build_program(&dir, LOOP)?;
     let source = std::fs::canonicalize(dir.join("prog.c")).unwrap();
     let breakpoints = BTreeMap::from([(source, vec![bp])]);
@@ -265,7 +265,7 @@ fn breakpoints_through_a_symbolic_link() {
     }
     let base = std::fs::canonicalize(std::env::temp_dir())
         .unwrap()
-        .join(format!("idecraft-dap-link-{}", std::process::id()));
+        .join(format!("ferris-idea-dap-link-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
     let real = base.join("real");
     std::fs::create_dir_all(&real).unwrap();
@@ -298,7 +298,7 @@ fn breakpoints_through_a_symbolic_link() {
     )
     .unwrap();
     match session.wait_state(WAIT, 20).unwrap() {
-        idecraft_debugger::StopState::Exited {
+        ferris_idea_debugger::StopState::Exited {
             pending_breakpoints,
             ..
         } => {
@@ -324,7 +324,7 @@ fn breakpoints_through_a_symbolic_link() {
     )
     .unwrap();
     match session.wait_state(WAIT, 20).unwrap() {
-        idecraft_debugger::StopState::Stopped {
+        ferris_idea_debugger::StopState::Stopped {
             frames,
             pending_breakpoints,
             ..
@@ -350,13 +350,13 @@ fn function_and_exception_breakpoints_with_lldb_dap() {
         skip("debugging needs Developer Mode on this Mac");
         return;
     }
-    let dir = std::env::temp_dir().join(format!("idecraft-dap-special-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-dap-special-{}", std::process::id()));
     let Some(binary) = build(&dir) else {
         skip("no C compiler");
         return;
     };
-    let special = idecraft_debugger::SpecialBreakpoints {
-        functions: vec![idecraft_debugger::FunctionBreakpoint {
+    let special = ferris_idea_debugger::SpecialBreakpoints {
+        functions: vec![ferris_idea_debugger::FunctionBreakpoint {
             name: "add".into(),
             condition: None,
             ..Default::default()
@@ -389,7 +389,7 @@ fn function_and_exception_breakpoints_with_lldb_dap() {
         skip("no C++ compiler");
         return;
     }
-    let special = idecraft_debugger::SpecialBreakpoints {
+    let special = ferris_idea_debugger::SpecialBreakpoints {
         caught: true,
         ..Default::default()
     };
@@ -432,7 +432,7 @@ int main(void) {
     return 0;
 }
 "#;
-    let dir = std::env::temp_dir().join(format!("idecraft-dap-pause-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-dap-pause-{}", std::process::id()));
     let Some(binary) = build_program(&dir, BUSY) else {
         skip("no C compiler");
         return;
@@ -486,7 +486,7 @@ int main(void) {
 
 const BUFFER: &str = r#"#include <stdio.h>
 
-static char marker[32] = "IDECRAFT-MEMORY-0123456789";
+static char marker[32] = "IDEA-FERRIS-MEM-0123456789";
 
 int main(void) {
     marker[0] = 'I';
@@ -511,7 +511,7 @@ fn registers_memory_and_disassembly_with_lldb_dap() {
         skip("debugging needs Developer Mode on this Mac");
         return;
     }
-    let dir = std::env::temp_dir().join(format!("idecraft-dap-native-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-dap-native-{}", std::process::id()));
     let Some(binary) = build_program(&dir, BUFFER) else {
         skip("no C compiler");
         return;
@@ -555,8 +555,8 @@ fn registers_memory_and_disassembly_with_lldb_dap() {
     assert_eq!(block.address, hex_address(address));
     assert_eq!((block.requested, block.read), (32, 32), "{block:?}");
     assert_eq!(block.rows.len(), 2);
-    assert_eq!(block.rows[0].ascii, "IDECRAFT-MEMORY-");
-    assert!(block.rows[0].hex.starts_with("49 44 45 43"), "{block:?}");
+    assert_eq!(block.rows[0].ascii, "IDEA-FERRIS-MEM-");
+    assert!(block.rows[0].hex.starts_with("49 44 45 41"), "{block:?}");
     assert!(block.rows[1].ascii.starts_with("0123456789"), "{block:?}");
 
     // Disassembly around the program counter: instructions before it, it, and after it.

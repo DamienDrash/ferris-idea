@@ -7,7 +7,7 @@
 #                                           (default 300 s each, all targets, low priority)
 #
 # Crashing inputs: fuzz-crashes/ (smoke) or fuzz/artifacts/<target>/ (libFuzzer). Replay one with
-#   cargo run -p idecraft-hardening --bin idecraft-fuzz -- replay TARGET FILE
+#   cargo run -p ferris-idea-hardening --bin ferris-idea-fuzz -- replay TARGET FILE
 set -eu
 cd "$(dirname "$0")/.."
 mode="${1:-smoke}"
@@ -16,8 +16,8 @@ mode="${1:-smoke}"
 case "$mode" in
   smoke)
     secs="${1:-3}"
-    cargo build -q -p idecraft-hardening --bin idecraft-fuzz
-    "${CARGO_TARGET_DIR:-target}/debug/idecraft-fuzz" run --secs "$secs" --corpus fuzz/corpus
+    cargo build -q -p ferris-idea-hardening --bin ferris-idea-fuzz
+    "${CARGO_TARGET_DIR:-target}/debug/ferris-idea-fuzz" run --secs "$secs" --corpus fuzz/corpus
     ;;
   libfuzzer)
     secs="${1:-300}"
@@ -26,13 +26,13 @@ case "$mode" in
       echo "needs the nightly toolchain and cargo-fuzz: rustup toolchain install nightly; cargo install cargo-fuzz" >&2
       exit 2
     fi
-    cargo build -q -p idecraft-hardening --bin idecraft-fuzz
+    cargo build -q -p ferris-idea-hardening --bin ferris-idea-fuzz
     targets="$*"
     if [ -z "$targets" ]; then
-      targets=$("${CARGO_TARGET_DIR:-target}/debug/idecraft-fuzz" list | awk '{print $1}')
+      targets=$("${CARGO_TARGET_DIR:-target}/debug/ferris-idea-fuzz" list | awk '{print $1}')
     fi
     # Seeds into the (git-ignored) working corpus; libFuzzer adds what it finds.
-    "${CARGO_TARGET_DIR:-target}/debug/idecraft-fuzz" seeds fuzz/corpus
+    "${CARGO_TARGET_DIR:-target}/debug/ferris-idea-fuzz" seeds fuzz/corpus
     cd fuzz
     failed=0
     for t in $targets; do

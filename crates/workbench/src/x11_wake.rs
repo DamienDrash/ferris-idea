@@ -25,7 +25,7 @@ pub const LIMIT: Duration = Duration::from_secs(10);
 /// Pause between two wake-ups.
 pub const INTERVAL: Duration = Duration::from_millis(100);
 /// The property that is changed; its only content is a counter.
-pub const PROPERTY: &str = "_IDECRAFT_WAKE";
+pub const PROPERTY: &str = "_FERRIS_IDEA_WAKE";
 
 /// Whether gpui talks to an X server in this environment: `DISPLAY` is set and `WAYLAND_DISPLAY`
 /// is not (gpui prefers Wayland when both are there).
@@ -142,7 +142,7 @@ mod tests {
         assert_eq!(uses_x11(x, Some(OsStr::new(""))), linux);
     }
 
-    /// Live on an X server (`xvfb-run cargo test -p idecraft-workbench x11_wake`); returns early
+    /// Live on an X server (`xvfb-run cargo test -p ferris-idea-workbench x11_wake`); returns early
     /// without `DISPLAY`. A window that carries this process's `_NET_WM_PID` gets a PropertyNotify
     /// on its own connection, a window of another process is left alone.
     #[cfg(target_os = "linux")]

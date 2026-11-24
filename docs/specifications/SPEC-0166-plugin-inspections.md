@@ -7,7 +7,7 @@
 
 ## Purpose
 The first extension point beyond actions: a plugin checks files and its findings show like
-IDECraft's own, with quick fixes, without running anything outside its sandbox.
+Ferris IDEA's own, with quick fixes, without running anything outside its sandbox.
 
 ## Behaviour
 1. **ABI:** an action of kind `inspect` (optional `files`: extensions it checks; empty for all)
@@ -19,7 +19,7 @@ IDECraft's own, with quick fixes, without running anything outside its sandbox.
 2. **Editor:** 600 ms after typing stops, and when a file opens, every enabled plugin's matching
    inspection runs in the background; its findings are shown as `<plugin>: <message>` with their
    level while the text is the one checked. A failing plugin is named in the status bar. [GEN]
-3. **Quick fixes:** ⌥↩ on a finding offers its fix beside IDECraft's own; choosing it applies the
+3. **Quick fixes:** ⌥↩ on a finding offers its fix beside Ferris IDEA's own; choosing it applies the
    edits as one undo step. [GEN]
 4. **MCP:** `plugin_inspections` runs them on a workspace file and returns the findings with line
    and column, and the plugins' errors; `plugins` shows the action kind. [ADR-0008]

@@ -1,11 +1,34 @@
-//! Hosts from the user's SSH configuration (behaviour 1).
+//! Hosts from the user's SSH configuration (behaviour 1) and Ferris IDEA's own (`SPEC-0121` v5
+//! behaviour 1b), each with its source.
 
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
+/// Where a listed host comes from (`SPEC-0121` v5 behaviour 1b).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum HostSource {
+    /// The user's SSH configuration (`~/.ssh/config`, or a `-F` file); Ferris IDEA never changes it.
+    #[default]
+    SshConfig,
+    /// Ferris IDEA's own host list, which the window and `remote_host_add` change.
+    #[serde(rename = "ferris-idea")]
+    FerrisIdea,
+}
+
+impl HostSource {
+    /// How the window names the source.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::SshConfig => "~/.ssh/config",
+            Self::FerrisIdea => "Ferris IDEA",
+        }
+    }
+}
+
 /// A host the user configured, with what `ssh -G` resolves it to.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Default)]
 pub struct HostInfo {
     /// Alias from `Host`.
     pub alias: String,
@@ -15,6 +38,10 @@ pub struct HostInfo {
     pub hostname: Option<String>,
     /// Port.
     pub port: Option<u16>,
+    /// Where the host comes from (v5).
+    pub source: HostSource,
+    /// The configuration file it comes from (v5).
+    pub config: Option<String>,
 }
 
 fn expand(path: &str, home: &Path) -> PathBuf {
@@ -113,16 +140,69 @@ pub fn ssh_config_file(extra: &[String], home: &Path) -> PathBuf {
 }
 
 /// The hosts of the configuration [`ssh_config_file`] names for `extra` (home folder from `HOME`),
-/// each with what `ssh -G` resolves for it: the one source of the Remote Host window's and the
-/// `remote_hosts` tool's host list.
+/// each with what `ssh -G` resolves for it and its source: the one source of the Remote Host
+/// window's and the `remote_hosts` tool's host list. Without a `-F` among `extra` and with
+/// Ferris IDEA's own files set ([`crate::set_host_files`]), Ferris IDEA's own hosts come first, then
+/// those of the user's `~/.ssh/config`; an alias in both is listed once, as Ferris IDEA's
+/// (`SPEC-0121` v5 behaviour 1b). A `-F` file replaces both lists (tests).
 pub fn host_list(extra: &[String]) -> Vec<HostInfo> {
     let home = std::env::var_os("HOME")
         .map(PathBuf::from)
         .unwrap_or_default();
-    config_hosts_in(&ssh_config_file(extra, &home), &home)
-        .iter()
-        .map(|a| describe(a, extra))
-        .collect()
+    let files = crate::own_hosts::host_files();
+    list_hosts(extra, files.as_ref(), &home, describe)
+}
+
+/// [`host_list`] with Ferris IDEA's files `files`, the home folder `home` and `describe` for what
+/// `ssh -G` resolves.
+fn list_hosts(
+    extra: &[String],
+    files: Option<&crate::HostFiles>,
+    home: &Path,
+    describe: impl Fn(&str, &[String]) -> HostInfo,
+) -> Vec<HostInfo> {
+    let files = files.filter(|_| crate::jump::config_file(extra).is_none());
+    let mut out: Vec<HostInfo> = Vec::new();
+    let (user_file, user_home) = match files {
+        Some(files) => {
+            let own = files.own.display().to_string();
+            for h in crate::own_hosts::own_hosts(files) {
+                let mut info = describe(&h.alias, extra);
+                info.source = HostSource::FerrisIdea;
+                info.config = Some(own.clone());
+                out.push(info);
+            }
+            let user_home = files
+                .user
+                .parent()
+                .and_then(Path::parent)
+                .unwrap_or(home)
+                .to_path_buf();
+            (files.user.clone(), user_home)
+        }
+        None => (ssh_config_file(extra, home), home.to_path_buf()),
+    };
+    let config = user_file.display().to_string();
+    // Resolved as a connection reaches them: without `-F` from the user's `~/.ssh/config`; a user
+    // file set elsewhere (tests) is named with `-F`.
+    let user_extra: Vec<String> = match files {
+        Some(f) if f.user != home.join(".ssh/config") => {
+            let mut e = vec!["-F".to_owned(), config.clone()];
+            e.extend(extra.iter().cloned());
+            e
+        }
+        _ => extra.to_vec(),
+    };
+    for alias in config_hosts_in(&user_file, &user_home) {
+        if out.iter().any(|h| h.alias == alias) {
+            continue;
+        }
+        let mut info = describe(&alias, &user_extra);
+        info.source = HostSource::SshConfig;
+        info.config = Some(config.clone());
+        out.push(info);
+    }
+    out
 }
 
 /// What `ssh -G` makes of `alias` (no connection is made), with the shared options, so it shows
@@ -130,9 +210,7 @@ pub fn host_list(extra: &[String]) -> Vec<HostInfo> {
 pub fn describe(alias: &str, extra: &[String]) -> HostInfo {
     let mut info = HostInfo {
         alias: alias.to_owned(),
-        user: None,
-        hostname: None,
-        port: None,
+        ..HostInfo::default()
     };
     let Ok(line) = crate::SshCommand::new(crate::SshPurpose::Describe)
         .args(["-G"])
@@ -161,7 +239,7 @@ mod tests {
 
     #[test]
     fn aliases_from_config_and_includes() {
-        let home = std::env::temp_dir().join(format!("idecraft-sshcfg-{}", std::process::id()));
+        let home = std::env::temp_dir().join(format!("ferris-idea-sshcfg-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
         std::fs::create_dir_all(home.join(".ssh/config.d")).unwrap();
         std::fs::write(
@@ -191,7 +269,7 @@ mod tests {
             ssh_config_file(&["-F/t/other".to_owned()], home),
             PathBuf::from("/t/other")
         );
-        let dir = std::env::temp_dir().join(format!("idecraft-sshcfg-f-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-sshcfg-f-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("cfg"), "Host only-this\n").unwrap();
         let file = dir.join("cfg");
@@ -204,7 +282,7 @@ mod tests {
     #[test]
     fn a_test_config_lies_in_the_temporary_folder() {
         use crate::testing::is_test_config;
-        let tmp = std::env::temp_dir().join("idecraft-x/ssh_config");
+        let tmp = std::env::temp_dir().join("ferris-idea-x/ssh_config");
         assert!(is_test_config(&tmp));
         assert!(is_test_config(Path::new("/tmp/idc-remote-1/ssh_config")));
         if let Some(home) = std::env::var_os("HOME").map(PathBuf::from)
@@ -216,6 +294,73 @@ mod tests {
         assert!(!is_test_config(
             &std::env::temp_dir().join("../etc/ssh_config")
         ));
+    }
+
+    /// Ferris IDEA's hosts first, then the user's, each with its source; an alias in both once; a
+    /// `-F` file replaces both (`SPEC-0121` v5 behaviour 1b).
+    #[test]
+    fn the_list_names_each_hosts_source() {
+        let dir =
+            std::env::temp_dir().join(format!("ferris-idea-sshcfg-src-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let files = crate::HostFiles::in_folders(&dir.join("settings"), &dir.join("home"));
+        std::fs::create_dir_all(dir.join("home/.ssh")).unwrap();
+        std::fs::write(&files.user, "Host theirs both\n").unwrap();
+        crate::add_host(
+            &files,
+            &crate::OwnHost {
+                alias: "mine".into(),
+                hostname: "10.0.0.9".into(),
+                ..Default::default()
+            },
+            false,
+        )
+        .unwrap();
+        // "both" is in the user's file only; written into Ferris IDEA's by hand it is listed once.
+        let text = std::fs::read_to_string(&files.own).unwrap();
+        std::fs::write(
+            &files.own,
+            text.replace("Match all", "Host both\n  HostName b\n\nMatch all"),
+        )
+        .unwrap();
+        let stub = |alias: &str, _: &[String]| HostInfo {
+            alias: alias.to_owned(),
+            ..HostInfo::default()
+        };
+        let list = list_hosts(&[], Some(&files), Path::new("/nowhere"), stub);
+        let got: Vec<(&str, HostSource)> =
+            list.iter().map(|h| (h.alias.as_str(), h.source)).collect();
+        assert_eq!(
+            got,
+            [
+                ("mine", HostSource::FerrisIdea),
+                ("both", HostSource::FerrisIdea),
+                ("theirs", HostSource::SshConfig)
+            ]
+        );
+        assert_eq!(
+            list[0].config.as_deref(),
+            Some(files.own.display().to_string().as_str())
+        );
+        assert_eq!(
+            list[2].config.as_deref(),
+            Some(files.user.display().to_string().as_str())
+        );
+        let json = serde_json::to_value(&list[0]).unwrap();
+        assert_eq!(json["source"], "ferris-idea");
+        assert_eq!(
+            serde_json::to_value(&list[2]).unwrap()["source"],
+            "ssh_config"
+        );
+        std::fs::write(dir.join("other"), "Host only\n").unwrap();
+        let f = ["-F".to_owned(), dir.join("other").display().to_string()];
+        let list = list_hosts(&f, Some(&files), Path::new("/nowhere"), stub);
+        assert_eq!(list.len(), 1);
+        assert_eq!(
+            (list[0].alias.as_str(), list[0].source),
+            ("only", HostSource::SshConfig)
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     fn test_roots_hold(home: &Path) -> bool {

@@ -99,14 +99,14 @@ is written outside the project.
     UTF-16BE (always with their byte order mark), ISO-8859-1, windows-1252 and US-ASCII. No other
     encoding is offered. [STD; ours: the list]
 11. **Which encoding a file is read in.** In this order: a byte order mark decides (UTF-8,
-    UTF-16LE, UTF-16BE); else the encoding chosen for this file earlier in this run of IDECraft
+    UTF-16LE, UTF-16BE); else the encoding chosen for this file earlier in this run of Ferris IDEA
     (behaviours 13, 14), when the bytes are valid in it; else UTF-8 when the bytes are valid
     UTF-8; else windows-1252, which then counts as chosen. Bytes with a NUL and without a UTF-16
     mark are not text. A file that opened with an error before because it was not UTF-8 now opens
     in windows-1252 and is saved in it. The byte order mark is not part of the editor's text and
     is written back on saving. The status bar shows the encoding of the active editor ("UTF-8",
     "UTF-8 BOM", "UTF-16LE", …). [OSS: mark first, then the file's own setting; ours: the
-    fallback and that a choice lasts until IDECraft quits]
+    fallback and that a choice lasts until Ferris IDEA quits]
 12. **`ChangeFileEncodingAction`, "File Encoding",** lists the encodings for the file of the
     active editor, the current one selected, with "Add BOM" or "Remove BOM" first when that
     applies (behaviour 15). Choosing the current encoding changes nothing. For another encoding
@@ -248,7 +248,7 @@ is written outside the project.
   the File Properties group).
 - Encodings beyond behaviour 10; guessing an encoding from the content beyond behaviour 11;
   project and IDE default encodings; an encoding per folder; keeping a file's chosen encoding
-  after IDECraft quits.
+  after Ferris IDEA quits.
 - Converting the files of a selected folder recursively.
 - Remote project files (behaviour 4).
 - Typing a line break in a CRLF or CR file inserts `\n` as before; the file then has mixed
@@ -258,13 +258,13 @@ is written outside the project.
 
 ## Known deviations from the reference
 - **Folders are not converted** (behaviour 1): the open action walks a selected folder and
-  rewrites every text file below it without a preview. IDECraft converts selected files only.
+  rewrites every text file below it without a preview. Ferris IDEA converts selected files only.
 - **Open editors are changed, not rewritten** (behaviour 8): the conversion of line separators is
   an undo step in the editor and reaches the disk with the next save, where the open platform
   saves and rewrites at once.
 - **No forced reload** (behaviour 12, IMP-0404): the open dialog offers to reload "anyway" in an
   encoding the bytes are not valid in; the text then holds replacement characters, and the next
-  save writes them over the original bytes. IDECraft offers Reload only when every byte is valid
+  save writes them over the original bytes. Ferris IDEA offers Reload only when every byte is valid
   in the chosen encoding.
 - **A lossy conversion shows its result** (behaviour 14): the characters that could not be written
   become `?` in the editor as an undo step, so text and file agree; the count and the first such

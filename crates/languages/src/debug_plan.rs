@@ -4,7 +4,7 @@
 
 use std::path::{Path, PathBuf};
 
-use idecraft_debugger::Kind;
+use ferris_idea_debugger::Kind;
 
 /// The arguments of a package manager command that runs a `package.json` script: `run <script>
 /// …` of npm, pnpm, yarn and bun, and npm's `start`/`test` shorthands (as `run start`).
@@ -86,7 +86,7 @@ pub fn plan(command: &[String], cwd: &Path) -> Option<DebugPlan> {
     // packages) instead of debugging the go tool itself.
     if name == "go" || name == "go.exe" {
         let words = command[1..].to_vec();
-        let target = idecraft_debugger::go_command(&words)
+        let target = ferris_idea_debugger::go_command(&words)
             .map(|c| c.target)
             .unwrap_or_default();
         return Some((Kind::Go, None, cwd.join(target), words));
@@ -141,8 +141,112 @@ pub fn plan(command: &[String], cwd: &Path) -> Option<DebugPlan> {
         };
         return Some((Kind::Python, None, script, args));
     }
+    // `cargo run [--bin n | --example n] [-- args]`: the built program under lldb-dap, not cargo
+    // (`SPEC-0097` v3 behaviour 9); the build is the launch's preparation ([`cargo_run`]).
+    if let Some(run) = cargo_run(command, cwd) {
+        return Some((Kind::Native, None, run.program, run.args));
+    }
     let (program, args) = program_of(command, cwd)?;
     Some((Kind::Native, None, program, args))
+}
+
+/// What debugging `cargo run …` means (`SPEC-0097` v3 behaviour 9).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CargoRun {
+    /// The shell command that builds the target first: `cargo build` with the same selection.
+    pub build: String,
+    /// The program it builds: `<target>/debug/<name>` or `<target>/debug/examples/<name>`.
+    pub program: PathBuf,
+    /// The program's arguments: the words after `--`.
+    pub args: Vec<String>,
+}
+
+/// The build and the program of a `cargo run` command run in `cwd`, or `None` for another command
+/// or options Ferris IDEA does not follow (`--release`, `--profile`, `--target`, `-p`, `--package`,
+/// `--manifest-path`; the plain program would be the wrong one). The target folder is
+/// `CARGO_TARGET_DIR` (relative to `cwd`), else `target` in the topmost folder from `cwd` up
+/// whose `Cargo.toml` has a `[workspace]` table, else in `cwd`. The name is the `--bin` or
+/// `--example`, else the package's `default-run`, else its `name`.
+pub fn cargo_run(command: &[String], cwd: &Path) -> Option<CargoRun> {
+    let first = Path::new(command.first()?).file_name()?.to_string_lossy();
+    if first != "cargo" || command.get(1).map(String::as_str) != Some("run") {
+        return None;
+    }
+    let rest = &command[2..];
+    let split = rest.iter().position(|w| w == "--").unwrap_or(rest.len());
+    let (options, args) = (&rest[..split], rest.get(split + 1..).unwrap_or_default());
+    let mut selection: Option<(&str, String)> = None;
+    let mut words = options.iter();
+    while let Some(w) = words.next() {
+        let (flag, value) = match w.split_once('=') {
+            Some((f, v)) => (f, Some(v.to_owned())),
+            None => (w.as_str(), None),
+        };
+        match flag {
+            "--bin" | "--example" => {
+                let value = value.or_else(|| words.next().cloned())?;
+                selection = Some((flag, value));
+            }
+            "-q" | "--quiet" | "-v" | "--verbose" | "--locked" | "--offline" | "--frozen" => {}
+            _ => return None,
+        }
+    }
+    let name = match &selection {
+        Some((_, n)) => n.clone(),
+        None => package_binary(&std::fs::read_to_string(cwd.join("Cargo.toml")).ok()?)?,
+    };
+    let target = match std::env::var_os("CARGO_TARGET_DIR") {
+        Some(d) => cwd.join(d),
+        None => cwd
+            .ancestors()
+            .filter(|d| {
+                std::fs::read_to_string(d.join("Cargo.toml"))
+                    .is_ok_and(|t| t.lines().any(|l| l.trim() == "[workspace]"))
+            })
+            .last()
+            .unwrap_or(cwd)
+            .join("target"),
+    };
+    let mut build = "cargo build".to_owned();
+    let mut program = target.join("debug");
+    if let Some((flag, n)) = &selection {
+        build.push_str(&format!(" {flag} '{}'", n.replace('\'', "'\\''")));
+        if *flag == "--example" {
+            program.push("examples");
+        }
+    }
+    program.push(format!("{name}{}", std::env::consts::EXE_SUFFIX));
+    Some(CargoRun {
+        build,
+        program,
+        args: args.to_vec(),
+    })
+}
+
+/// The binary `cargo run` runs in a package: its `default-run`, else its `name` (`[package]` of
+/// a `Cargo.toml`).
+fn package_binary(manifest: &str) -> Option<String> {
+    let mut in_package = false;
+    let (mut name, mut default_run) = (None, None);
+    for line in manifest.lines().map(str::trim) {
+        if line.starts_with('[') {
+            in_package = line == "[package]";
+            continue;
+        }
+        if !in_package {
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        let value = value.trim().trim_matches('"').to_owned();
+        match key.trim() {
+            "name" => name = Some(value),
+            "default-run" => default_run = Some(value),
+            _ => {}
+        }
+    }
+    default_run.or(name)
 }
 
 /// Whether `command` runs Jest through npx (`npx jest …`), which can be debugged with js-debug
@@ -167,10 +271,14 @@ pub type DebugPlan = (Kind, Option<PathBuf>, PathBuf, Vec<String>);
 /// debugged.
 pub fn plan_run_config(
     root: &Path,
-    config: &idecraft_core::RunConfig,
+    config: &ferris_idea_core::RunConfig,
     cwd: &Path,
 ) -> Result<Option<DebugPlan>, String> {
-    let command = idecraft_core::launch_command(root, config)?;
+    // Requests of a request file are sent, not debugged (`SPEC-0047` v6 behaviour 17).
+    if config.http.is_some() {
+        return Ok(None);
+    }
+    let command = ferris_idea_core::launch_command(root, config)?;
     Ok(plan(&command, cwd))
 }
 
@@ -184,6 +292,21 @@ fn java_main(command: &[String], cwd: &Path) -> Option<String> {
         return Some(class.to_owned());
     }
     let name = Path::new(command.first()?).file_name()?.to_string_lossy();
+    // `sh -c "… javac … && java -cp <classes> <Class>"` of a module without a build tool
+    // (`SPEC-0097` v4 behaviour 10): jdtls builds and launches the class itself.
+    if name == "sh"
+        && command.get(1).map(String::as_str) == Some("-c")
+        && let Some(script) = command.get(2)
+        && let Some((build, run)) = script.rsplit_once(" && ")
+        && build.contains("javac ")
+        && run.starts_with("java -cp ")
+    {
+        // The class is quoted like every other word of the line.
+        return run
+            .split_whitespace()
+            .last()
+            .map(|w| w.trim_matches('\'').to_owned());
+    }
     let file = command.get(1).filter(|f| f.ends_with(".java"))?;
     if name != "java" {
         return None;
@@ -205,6 +328,76 @@ fn which(name: &str) -> Option<PathBuf> {
 mod tests {
     use super::*;
 
+    /// SPEC-0097 v4 AK-7 (behaviour 10): the compile-and-run command of a module without a build
+    /// tool is debugged as its main class.
+    #[test]
+    fn a_compiled_module_is_debugged_as_its_class() {
+        let script = "mkdir -p .ferris-idea/run 'out/production/lab' && find 'src/main/java' \
+                      -name '*.java' > '.ferris-idea/run/lab.sources' && javac -d \
+                      'out/production/lab' @'.ferris-idea/run/lab.sources' && java -cp \
+                      'out/production/lab' 'lab.stock.Report'";
+        let command: Vec<String> = ["sh", "-c", script].map(String::from).to_vec();
+        let (kind, _, class, args) = plan(&command, Path::new("/w")).unwrap();
+        assert_eq!(kind, Kind::Java);
+        assert_eq!(class, PathBuf::from("lab.stock.Report"));
+        assert!(args.is_empty());
+    }
+
+    /// SPEC-0097 v3 AK-6 (behaviour 9): `cargo run` is debugged as the program it builds.
+    #[test]
+    fn cargo_run_debugs_the_built_program() {
+        let dir =
+            std::env::temp_dir().join(format!("ferris-idea-cargo-run-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let root = dir.as_path();
+        std::fs::write(
+            root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"shapes\"]\n",
+        )
+        .unwrap();
+        let member = root.join("shapes");
+        std::fs::create_dir_all(&member).unwrap();
+        std::fs::write(
+            member.join("Cargo.toml"),
+            "[package]\nname = \"shapes\"\nversion = \"0.1.0\"\n\n[dependencies]\nname = \"x\"\n",
+        )
+        .unwrap();
+        // The test may run with CARGO_TARGET_DIR set; the expected folder follows it.
+        let target = std::env::var_os("CARGO_TARGET_DIR")
+            .map_or_else(|| root.join("target"), |d| member.join(d));
+        let exe = std::env::consts::EXE_SUFFIX;
+        let plain = cargo_run(&words("cargo run"), &member).unwrap();
+        assert_eq!(plain.build, "cargo build");
+        assert_eq!(plain.program, target.join(format!("debug/shapes{exe}")));
+        assert!(plain.args.is_empty());
+        let bin = cargo_run(&words("cargo run -q --bin tool -- --size 3"), &member).unwrap();
+        assert_eq!(bin.build, "cargo build --bin 'tool'");
+        assert_eq!(bin.program, target.join(format!("debug/tool{exe}")));
+        assert_eq!(bin.args, ["--size", "3"]);
+        let example = cargo_run(&words("cargo run --example=demo"), &member).unwrap();
+        assert_eq!(example.build, "cargo build --example 'demo'");
+        assert_eq!(
+            example.program,
+            target.join(format!("debug/examples/demo{exe}"))
+        );
+        // The plan debugs that program natively, not cargo.
+        let (kind, _, program, args) = plan(&words("cargo run --bin tool -- a"), &member).unwrap();
+        assert_eq!(
+            (kind, program, args),
+            (Kind::Native, bin.program.clone(), vec!["a".to_owned()])
+        );
+        // Options that pick another program are not guessed at.
+        assert!(cargo_run(&words("cargo run --release"), &member).is_none());
+        assert!(cargo_run(&words("cargo run -p other"), &member).is_none());
+        assert!(cargo_run(&words("cargo test"), &member).is_none());
+        assert_eq!(
+            package_binary("[package]\nname = \"a\"\ndefault-run = \"b\"\n").as_deref(),
+            Some("b")
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     fn words(text: &str) -> Vec<String> {
         text.split_whitespace().map(str::to_owned).collect()
     }
@@ -215,7 +408,7 @@ mod tests {
     fn jest_through_npx_runs_under_js_debug() {
         let cwd = Path::new("/work/app");
         let command =
-            words("npx jest --json --outputFile=.idecraft/jest.json sum.test.js -t ^sum$");
+            words("npx jest --json --outputFile=.ferris-idea/jest.json sum.test.js -t ^sum$");
         assert!(is_npx_jest(&command));
         let (kind, interpreter, program, args) = plan(&command, cwd).unwrap();
         assert_eq!(kind, Kind::PackageScript);
@@ -224,7 +417,9 @@ mod tests {
         assert!(program.ends_with("npx"), "{program:?}");
         assert_eq!(
             args,
-            words("jest --json --outputFile=.idecraft/jest.json sum.test.js -t ^sum$ --runInBand")
+            words(
+                "jest --json --outputFile=.ferris-idea/jest.json sum.test.js -t ^sum$ --runInBand"
+            )
         );
         // Already in one process: nothing added.
         let (_, _, _, args) = plan(&words("npx jest -i a.test.js"), cwd).unwrap();
@@ -254,7 +449,7 @@ mod tests {
             plan(&words("go test -json -run ^TestTotal$ ./cart"), cwd).unwrap();
         assert_eq!(kind, Kind::Go);
         assert_eq!(program, cwd.join("./cart"));
-        let launch = idecraft_debugger::go_launch(&args, cwd, &Default::default()).unwrap();
+        let launch = ferris_idea_debugger::go_launch(&args, cwd, &Default::default()).unwrap();
         assert_eq!(launch["mode"], "test");
         assert_eq!(
             launch["args"],
@@ -263,7 +458,7 @@ mod tests {
         // What Delve cannot debug is still planned for it, so the start says why.
         let (kind, _, _, args) = plan(&words("go test -json ./..."), cwd).unwrap();
         assert_eq!(kind, Kind::Go);
-        assert!(idecraft_debugger::go_command(&args).is_err());
+        assert!(ferris_idea_debugger::go_command(&args).is_err());
         let (kind, ..) = plan(&words("go build ./..."), cwd).unwrap();
         assert_eq!(kind, Kind::Go);
         // Other programs are untouched.

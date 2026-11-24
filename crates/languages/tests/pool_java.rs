@@ -4,12 +4,12 @@
 
 use std::time::Duration;
 
-use idecraft_languages::insight::{self, LocationKind};
-use idecraft_languages::pool;
+use ferris_idea_languages::insight::{self, LocationKind};
+use ferris_idea_languages::pool;
 
 fn skip(reason: &str) {
     assert!(
-        std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+        ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
         "required tool missing: {reason}"
     );
     eprintln!("skipped: {reason}");
@@ -37,11 +37,11 @@ public class Main {
 
 #[tokio::test]
 async fn declarations_in_a_java_file_without_build() {
-    if idecraft_languages::servers::resolve(idecraft_languages::LanguageId::Java).is_err() {
+    if ferris_idea_languages::servers::resolve(ferris_idea_languages::LanguageId::Java).is_err() {
         skip("jdtls not installed");
         return;
     }
-    let root = std::env::temp_dir().join(format!("idecraft-pool-java-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-pool-java-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("sprachen")).unwrap();
     std::fs::write(root.join("shapes.cpp"), "int main() { return 0; }\n").unwrap();

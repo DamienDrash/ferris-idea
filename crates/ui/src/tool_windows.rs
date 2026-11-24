@@ -372,7 +372,7 @@ impl ToolWindow {
             ToolWindow::FindInFiles => "FindInPath",
             ToolWindow::Endpoints => "ActivateEndpointsToolWindow",
             ToolWindow::Spring => "Spring.ToolWindow",
-            ToolWindow::AiChat => "IDECraft.AiChat",
+            ToolWindow::AiChat => "FerrisIDEA.AiChat",
             ToolWindow::Python => "ActivatePythonPackagesToolWindow",
             ToolWindow::Containers => "Containers.ToolWindow",
             ToolWindow::Profiler => "Profiler.ToolWindow",
@@ -401,14 +401,14 @@ impl ToolWindow {
             ToolWindow::Structure => "toolwindows/structure",
             ToolWindow::Find | ToolWindow::FindInFiles => "general/search",
             ToolWindow::Endpoints => "fileTypes/http",
-            ToolWindow::Spring => "idecraft/spring",
-            ToolWindow::AiChat => "idecraft/chat",
+            ToolWindow::Spring => "ferris-idea/spring",
+            ToolWindow::AiChat => "ferris-idea/chat",
             ToolWindow::Python => "fileTypes/python",
             ToolWindow::Containers => "fileTypes/docker",
-            ToolWindow::Profiler => "idecraft/profiler",
-            ToolWindow::Remote => "idecraft/remote",
+            ToolWindow::Profiler => "ferris-idea/profiler",
+            ToolWindow::Remote => "ferris-idea/remote",
             // The bundled icons have none for bookmarks yet (SPEC-0331, out of scope).
-            ToolWindow::Bookmarks => "idecraft/tag",
+            ToolWindow::Bookmarks => "ferris-idea/tag",
             // The open platform's TODO tool window icon (SPEC-0334 behaviour 13).
             ToolWindow::Todo => "toolwindows/todo",
             // SPEC-0061 v17 behaviour 64.
@@ -459,7 +459,7 @@ impl ToolWindow {
         Placement::new(self.default_side(), self == ToolWindow::Structure)
     }
 
-    /// Whether the window has a stripe button in the default layout; IDECraft's own and rarely
+    /// Whether the window has a stripe button in the default layout; Ferris IDEA's own and rarely
     /// used windows are reached through "…" until the user adds them (`SPEC-0061` v10
     /// behaviour 51).
     pub fn on_sidebar_by_default(self) -> bool {
@@ -612,7 +612,7 @@ impl ToolWindow {
 pub const BOTTOM_HEIGHT: f32 = 280.0;
 
 /// File the layout is kept in, below the project root (behaviour 8).
-pub const LAYOUT_FILE: &str = ".idecraft/tool-windows.json";
+pub const LAYOUT_FILE: &str = ".ferris-idea/tool-windows.json";
 
 /// Sides, order and stripes of the tool windows, plus what "hide all" hid.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1808,7 +1808,7 @@ mod tests {
             l.on(Side::Right),
             vec![Notifications, AiChat, Database, Build, Plugins]
         );
-        // IDECraft's own and rare windows are off the sidebar.
+        // Ferris IDEA's own and rare windows are off the sidebar.
         for w in [
             Plugins, Endpoints, Spring, Python, Containers, Profiler, Remote, Bookmarks, Todo,
         ] {
@@ -2434,7 +2434,7 @@ mod tests {
         );
         assert_eq!(Layout::parse("not json"), Layout::default());
 
-        let dir = std::env::temp_dir().join(format!("idecraft-tw-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-tw-{}", std::process::id()));
         let mut m = Layout::default();
         m.move_to(Git, Side::Right);
         m.save(&dir).unwrap();

@@ -9,8 +9,8 @@
 
 use std::path::Path;
 
+use ferris_idea_workbench::{EditorView, WorkbenchView};
 use gpui::{Entity, TestAppContext, VisualTestContext};
-use idecraft_workbench::{EditorView, WorkbenchView};
 
 use crate::db_refactor_retest::{
     has_sqlite, open_with, rename_to, select_in_tree, sqlite, text, until, window, workspace,
@@ -66,7 +66,7 @@ fn running_an_unbound_file_asks_for_its_data_source(cx: &mut TestAppContext) {
     let duck = root.join("other.duckdb");
     let shop = root.join("shop.db");
     std::fs::write(
-        root.join(".idecraft/connections.toml"),
+        root.join(".ferris-idea/connections.toml"),
         format!(
             "[[connection]]\nid = \"duck\"\nname = \"duck\"\ndialect = \"duckdb\"\npath = \"{}\"\n\n\
              [[connection]]\nid = \"shop\"\nname = \"shop\"\ndialect = \"sqlite\"\npath = \"{}\"\n",
@@ -81,8 +81,8 @@ fn running_an_unbound_file_asks_for_its_data_source(cx: &mut TestAppContext) {
     let start = text.find("select").unwrap();
     let end = text.rfind(';').unwrap();
     let bound = || {
-        let profiles = idecraft_database::load_profiles(&root).unwrap();
-        idecraft_database::bound_connection(&root, &file, &profiles)
+        let profiles = ferris_idea_database::load_profiles(&root).unwrap();
+        ferris_idea_database::bound_connection(&root, &file, &profiles)
     };
     let ask = |cx: &mut VisualTestContext| {
         editor.update(cx, |e, cx| e.select_range(start..end, cx));

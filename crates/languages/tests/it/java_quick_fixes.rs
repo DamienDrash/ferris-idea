@@ -1,17 +1,17 @@
-//! SPEC-0076 v6 AK-7 and v7 AK-8 (F-033, OBS-0027 JQ1, JQ1b and JQ2) with a real jdtls: an unused
+//! SPEC-0076 v6 AK-7 and v7 AK-10 (F-033, OBS-0027 JQ1, JQ1b and JQ2) with a real jdtls: an unused
 //! import, private field, private method and local variable are weak warnings (marked unnecessary)
 //! with jdtls's removal fixes; the fixes of a type error are found at its exact place, because the
 //! question sends jdtls's refined diagnostics as context, not the first list of its build
-//! (behaviour 10); a primitive assigned to a String gets IDECraft's Wrap using 'String.valueOf()'
+//! (behaviour 10); a primitive assigned to a String gets Ferris IDEA's Wrap using 'String.valueOf()'
 //! (behaviour 11), and an unused local in a method with an error, which JDT does not check, gets
-//! IDECraft's removal (behaviour 12). Skipped without `jdtls`.
+//! Ferris IDEA's removal (behaviour 12). Skipped without `jdtls`.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use idecraft_languages::actions::{code_actions_in, plan_code_action_in};
-use idecraft_languages::insight::Range;
-use idecraft_languages::rename::apply_edits;
+use ferris_idea_languages::actions::{code_actions_in, plan_code_action_in};
+use ferris_idea_languages::insight::Range;
+use ferris_idea_languages::rename::apply_edits;
 
 const WAIT: Duration = Duration::from_secs(120);
 
@@ -36,15 +36,15 @@ fn caret(line: u64, character: u64) -> Range {
 
 /// A project with `text` as `src/main/java/lab/<name>`, or `None` (skipped) without jdtls.
 fn project(tag: &str, name: &str, text: &str) -> Option<(PathBuf, PathBuf)> {
-    if idecraft_languages::servers::resolve(idecraft_languages::LanguageId::Java).is_err() {
+    if ferris_idea_languages::servers::resolve(ferris_idea_languages::LanguageId::Java).is_err() {
         assert!(
-            std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+            ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
             "required tool missing: jdtls"
         );
         eprintln!("skipped: jdtls not installed");
         return None;
     }
-    let root = std::env::temp_dir().join(format!("idecraft-java-{tag}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-java-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src/main/java/lab")).unwrap();
     let root = root.canonicalize().unwrap();
@@ -67,7 +67,7 @@ async fn unused_code_is_a_weak_warning_with_a_removal_fix() {
     let Some((root, file)) = project("unused", "Probe.java", UNUSED) else {
         return;
     };
-    let found = idecraft_languages::lsp::file_diagnostics(&root, &file, WAIT)
+    let found = ferris_idea_languages::lsp::file_diagnostics(&root, &file, WAIT)
         .await
         .unwrap();
     for (line, says) in [
@@ -148,7 +148,7 @@ async fn the_fixes_of_a_type_error_are_found_at_its_place() {
                 .any(|t| t == "Change type of 'text' to 'int'"),
             "{offered:?}"
         );
-        // JQ2: jdtls has no wrapping; IDECraft offers its own, once (SPEC-0076 v7 behaviour 11).
+        // JQ2: jdtls has no wrapping; Ferris IDEA offers its own, once (SPEC-0076 v7 behaviour 11).
         assert_eq!(
             offered
                 .iter()
@@ -189,7 +189,7 @@ async fn an_unused_local_in_a_method_with_an_error_can_be_removed() {
     let Some((root, file)) = project("in-error", "Qf.java", IN_ERROR) else {
         return;
     };
-    // JDT reports the unresolved type, not the unused local, so jdtls offers no removal; IDECraft
+    // JDT reports the unresolved type, not the unused local, so jdtls offers no removal; Ferris IDEA
     // offers the one of its inspection (SPEC-0076 v7 behaviour 12).
     let offered = titles(&root, &file, IN_ERROR, caret(4, 12)).await;
     assert!(

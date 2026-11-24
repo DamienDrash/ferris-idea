@@ -70,7 +70,7 @@ Try an HTTP endpoint from a request file and read the answer without leaving the
    - the body: as JSON when the request's `Content-Type` is JSON or the body begins with `{` or `[`,
      else plain text; a `< path` line as metadata;
    - response handler and response target lines (`> {% … %}`, `> file.js`, `>> file`, `>>! file`)
-     as comments: IDECraft never runs or writes them (SPEC-0046 behaviour 9), and the colour says so.
+     as comments: Ferris IDEA never runs or writes them (SPEC-0046 behaviour 9), and the colour says so.
    The colouring follows each edit like the other languages. [GEN, OSS token classes]
 6. **Run mark (v4):** every request has a run mark (▶) in the gutter at its request line, like the
    marks of `main` functions and tests. Its tooltip names the request ("Send GET https://…").
@@ -83,7 +83,7 @@ Try an HTTP endpoint from a request file and read the answer without leaving the
    console (SPEC-0015). [GEN, OSS action id]
 
 8. **Run All Requests in File (v5):** Tools › HTTP Client › Run All Requests in File
-   (`IDECraft.HttpRunAllRequests`, also in Find Action under that title) sends every request of the
+   (`FerrisIDEA.HttpRunAllRequests`, also in Find Action under that title) sends every request of the
    active request file one after another in file order, with the chosen environment, the checks and
    the settings of behaviours 1–3, one request at a time and off the UI thread. The Services window is
    headed "All requests · N". Output gets each request's status line and notes in file order, a
@@ -95,7 +95,7 @@ Try an HTTP endpoint from a request file and read the answer without leaving the
    (behaviour 4); a tool of its own would add nothing an agent cannot do. [GEN, ADR-0008]
    **v6:** the editor's context menu of a `.http` or `.rest` file has Run All Requests in File
    after Reformat Code, behind a separator; other files' menus stay as they are. Before, Find Action
-   and the Tools menu were the only ways. IDECraft has no editor toolbar for request files, so the
+   and the Tools menu were the only ways. Ferris IDEA has no editor toolbar for request files, so the
    entry goes nowhere else. [GEN, OBS-0061 W3]
 9. **A request that cannot go (v7, OBS-0061 H2, H3):** a single request (⌘↩ or its run mark) that
    cannot go — unresolved variables, a refused body file — is not sent; its reason stands in the
@@ -109,7 +109,7 @@ Try an HTTP endpoint from a request file and read the answer without leaving the
 - **AK-1** Request at the caret, response text with indented JSON, status line, a decoded body with
   both sizes, a cut one marked, a body with a coding that is not decoded and a body without text
   described, the notes as output lines (unit tests `http_model::tests`).
-- **AK-2** In a real window (`idecraft ui --selftest`): ⌘↩ in a `.http` file sends the request to a
+- **AK-2** In a real window (`ferris-idea ui --selftest`): ⌘↩ in a `.http` file sends the request to a
   local server; the Response tab shows `HTTP 200 OK` and the indented body, Output the status line.
 - **AK-3** By hand: a real API with headers and a JSON body, next to the reference.
 - **AK-4 (v4, behaviour 5)** Unit tests `http_model::tests` (the colours): every part of behaviour 5
@@ -140,7 +140,7 @@ Try an HTTP endpoint from a request file and read the answer without leaving the
   in File is under Tools › HTTP Client and its label is its title in Find Action.
 - **AK-10 (v6, behaviour 8)** Unit test
   `context_menu::tests::request_files_have_run_all_in_the_editor_menu`: the editor's menu of a
-  request file has Run All Requests in File (`IDECraft.HttpRunAllRequests`) after Reformat Code, the
+  request file has Run All Requests in File (`FerrisIDEA.HttpRunAllRequests`) after Reformat Code, the
   menu of another file does not.
 - **AK-11 (v7, behaviour 9)** Unit test `http_model::tests::output_keeps_file_order`: sent and
   skipped requests in file order. In a window of the test harness
@@ -153,9 +153,9 @@ separate result per request, a menu on the run mark (it sends; the reference als
 with an environment from the mark). Environment files: SPEC-0102.
 
 ## Known deviations from the reference
-The reference keeps a history of responses; IDECraft shows the latest response. **(v5)** The
+The reference keeps a history of responses; Ferris IDEA shows the latest response. **(v5)** The
 reference runs response handler scripts (`> {% … %}`) that test the response and set variables for
-later requests, and keeps cookies between requests; IDECraft runs no script from a request file and
+later requests, and keeps cookies between requests; Ferris IDEA runs no script from a request file and
 keeps no cookie jar (SPEC-0046 behaviour 9 and Out of scope): a script in a request file would run
 with the rights of the IDE on whatever a server answers, and a jar written into the project would
 keep session tokens in a file. Both are to be compared next to the reference first

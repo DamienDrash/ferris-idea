@@ -66,7 +66,7 @@ Rules: [`../legal/RESEARCH_BOUNDARIES.md`](../legal/RESEARCH_BOUNDARIES.md).
 | [SPEC-0017](SPEC-0017-data-editing.md) | Editing table data | GEN, STD (NULL-safe comparison, transactions), OBS-0005, IMP-0014 | implemented (logic + MCP) |
 
 Weaknesses of the reference are improved, not copied:
-[`IMPROVEMENTS.md`](IMPROVEMENTS.md) lists each one with the IDECraft behaviour.
+[`IMPROVEMENTS.md`](IMPROVEMENTS.md) lists each one with the Ferris IDEA behaviour.
 
 New specs start from [`TEMPLATE.md`](TEMPLATE.md). Status of implementation and
 tests: [`TRACEABILITY.md`](TRACEABILITY.md).

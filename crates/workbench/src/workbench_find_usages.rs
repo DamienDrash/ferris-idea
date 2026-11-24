@@ -4,19 +4,19 @@
 //! result or a message and can be stopped.
 //!
 //! The tree, the preview and the search itself are in [`crate::find_usages_model`] and
-//! [`idecraft_languages::find_usages`].
+//! [`ferris_idea_languages::find_usages`].
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use gpui::{AppContext, Context, Entity, Window};
-use idecraft_languages::find_usages::{
+use ferris_idea_languages::find_usages::{
     DEADLINE, UsageSearch, UsageSource, find_usages_in, text_reason,
 };
-use idecraft_languages::insight::Location;
-use idecraft_languages::lsp::LspError;
+use ferris_idea_languages::insight::Location;
+use ferris_idea_languages::lsp::LspError;
+use gpui::{AppContext, Context, Entity, Window};
 
 use super::WorkbenchView;
 use crate::find_usages_model::{Hit, UsageTree, hit};
@@ -139,7 +139,7 @@ impl WorkbenchView {
             });
         }
         let here = self.here(cx)?;
-        idecraft_languages::LanguageId::detect(&here.path)?;
+        ferris_idea_languages::LanguageId::detect(&here.path)?;
         let editor = self.active_editor()?;
         let (subject, text) = {
             let e = editor.read(cx);
@@ -167,7 +167,7 @@ impl WorkbenchView {
 
     /// The text of a line from the open editor when the file is open, else from disk.
     fn line_source(&self, cx: &gpui::App) -> impl Fn(&Path, usize) -> Option<String> + use<> {
-        let open: HashMap<PathBuf, idecraft_editor::TextBuffer> = self
+        let open: HashMap<PathBuf, ferris_idea_editor::TextBuffer> = self
             .editors
             .iter()
             .map(|(p, e)| (p.clone(), e.read(cx).state.buffer.clone()))
@@ -566,7 +566,7 @@ impl WorkbenchView {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use idecraft_languages::find_usages::Target;
+    use ferris_idea_languages::find_usages::Target;
 
     fn text_search(note: Option<&str>) -> UsageSearch {
         UsageSearch {

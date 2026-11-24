@@ -12,7 +12,7 @@ use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use idecraft_debugger::{
+use ferris_idea_debugger::{
     DapClient, DebugSession, Event, SourceBreakpoint, read_message, write_message,
 };
 use serde_json::{Value, json};
@@ -111,7 +111,8 @@ fn scripted_adapter(source: PathBuf, binds_later: bool) -> String {
 }
 
 fn source(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("idecraft-binding-{name}-{}", std::process::id()));
+    let dir =
+        std::env::temp_dir().join(format!("ferris-idea-binding-{name}-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("Main.java");
     std::fs::write(
@@ -127,7 +128,7 @@ fn start(
     binds_later: bool,
 ) -> (
     DebugSession,
-    BTreeMap<PathBuf, Vec<idecraft_debugger::Breakpoint>>,
+    BTreeMap<PathBuf, Vec<ferris_idea_debugger::Breakpoint>>,
 ) {
     let address = scripted_adapter(path.to_path_buf(), binds_later);
     let breakpoints = BTreeMap::from([(

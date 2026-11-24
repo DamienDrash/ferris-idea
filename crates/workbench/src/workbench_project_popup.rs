@@ -15,6 +15,52 @@ use crate::project_popup_model::progress_text;
 /// How long a clone may run before it is ended.
 const CLONE_LIMIT: Duration = Duration::from_secs(3600);
 
+/// A clone running on a thread of its own (behaviour 13): set `cancel` to end it; `progress`
+/// holds git's last progress line and `done` the new folder or why it failed, once it ended.
+pub(crate) struct CloneThread {
+    pub cancel: Arc<AtomicBool>,
+    pub progress: Arc<Mutex<Option<ferris_idea_vcs::CloneProgress>>>,
+    pub done: Arc<Mutex<Option<Result<PathBuf, String>>>>,
+}
+
+impl CloneThread {
+    /// The last progress and, once the clone ended, its result (taken).
+    pub fn poll(
+        &self,
+    ) -> (
+        Option<ferris_idea_vcs::CloneProgress>,
+        Option<Result<PathBuf, String>>,
+    ) {
+        let finished = self.done.lock().unwrap_or_else(|e| e.into_inner()).take();
+        let step = self
+            .progress
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        (step, finished)
+    }
+}
+
+/// Starts cloning `source` into `target` with the rules of behaviour 13 and the one-hour limit.
+pub(crate) fn spawn_clone(source: ferris_idea_vcs::CloneSource, target: PathBuf) -> CloneThread {
+    let job = CloneThread {
+        cancel: Arc::new(AtomicBool::new(false)),
+        progress: Arc::new(Mutex::new(None)),
+        done: Arc::new(Mutex::new(None)),
+    };
+    let (progress, done, cancel) = (job.progress.clone(), job.done.clone(), job.cancel.clone());
+    std::thread::spawn(move || {
+        let result =
+            ferris_idea_vcs::clone_repository(&source, &target, &cancel, CLONE_LIMIT, |p| {
+                *progress.lock().unwrap_or_else(|e| e.into_inner()) = Some(p)
+            })
+            .map(|o| o.folder)
+            .map_err(|e| e.to_string());
+        *done.lock().unwrap_or_else(|e| e.into_inner()) = Some(result);
+    });
+    job
+}
+
 impl WorkbenchView {
     /// Opens the project popup: the actions, the projects open in windows and the recent ones
     /// (behaviours 1 and 12).
@@ -58,8 +104,17 @@ impl WorkbenchView {
                         return;
                     }
                     crate::ProjectsEvent::NewProject(target, git) => {
-                        match idecraft_vcs::new_project(target, *git) {
-                            Ok(()) => this.open_project(target, cx),
+                        match ferris_idea_vcs::new_project(target, *git) {
+                            Ok(()) => {
+                                // Made by Ferris IDEA a moment ago: no trust question (A16, NP2).
+                                if let Err(e) = crate::project_popup_model::trust_new_project(
+                                    crate::project_popup_model::new_project_trust_file().as_deref(),
+                                    target,
+                                ) {
+                                    this.status = Some(format!("Not trusted: {e}"));
+                                }
+                                this.open_project(target, cx)
+                            }
                             Err(e) => {
                                 if let Some(v) = &this.projects {
                                     v.update(cx, |v, cx| {
@@ -87,7 +142,7 @@ impl WorkbenchView {
     /// trust it like any new folder (behaviour 13, `SPEC-0278`).
     fn start_clone(
         &mut self,
-        source: idecraft_vcs::CloneSource,
+        source: ferris_idea_vcs::CloneSource,
         target: PathBuf,
         cx: &mut Context<Self>,
     ) {
@@ -95,34 +150,19 @@ impl WorkbenchView {
             return;
         }
         let name = source.folder_name.clone();
-        let cancel = Arc::new(AtomicBool::new(false));
-        let progress = Arc::new(Mutex::new(None::<idecraft_vcs::CloneProgress>));
-        let done = Arc::new(Mutex::new(None::<Result<PathBuf, String>>));
+        let job = spawn_clone(source, target);
         let first = progress_text(&name, None);
-        self.clone_job = Some((cancel.clone(), first.clone()));
+        self.clone_job = Some((job.cancel.clone(), first.clone()));
         self.status = Some(first.clone());
         if let Some(v) = &self.projects {
             v.update(cx, |v, cx| v.set_cloning(Some(first), None, cx));
-        }
-        {
-            let (progress, done, cancel) = (progress.clone(), done.clone(), cancel.clone());
-            std::thread::spawn(move || {
-                let result =
-                    idecraft_vcs::clone_repository(&source, &target, &cancel, CLONE_LIMIT, |p| {
-                        *progress.lock().unwrap_or_else(|e| e.into_inner()) = Some(p)
-                    })
-                    .map(|o| o.folder)
-                    .map_err(|e| e.to_string());
-                *done.lock().unwrap_or_else(|e| e.into_inner()) = Some(result);
-            });
         }
         cx.spawn(async move |this, cx| {
             loop {
                 cx.background_executor()
                     .timer(Duration::from_millis(200))
                     .await;
-                let finished = done.lock().unwrap_or_else(|e| e.into_inner()).take();
-                let step = progress.lock().unwrap_or_else(|e| e.into_inner()).clone();
+                let (step, finished) = job.poll();
                 let alive = this.update(cx, |this, cx| {
                     match &finished {
                         None => {

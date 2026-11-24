@@ -7,11 +7,15 @@
 use std::path::Path;
 
 pub mod actions;
+pub mod completion_filter;
 pub mod config_completion;
 pub mod context;
+pub mod context_actions;
 pub mod copyright;
+pub mod css_colors;
 pub mod debug_plan;
 pub mod declaration_kind;
+pub mod declared_names;
 pub mod dictionaries;
 pub mod endpoints;
 pub mod everywhere;
@@ -19,6 +23,7 @@ pub mod file_types;
 pub mod find_usages;
 pub mod folding;
 pub mod format;
+pub mod go_usages;
 pub mod grammar_ignore;
 pub mod grazie;
 pub mod highlighting;
@@ -28,6 +33,7 @@ pub mod insight;
 mod inspection_catalogue;
 pub mod inspection_profile;
 pub mod inspections;
+pub mod java_calls;
 pub mod java_debug;
 pub mod java_generate;
 pub mod java_inspections;
@@ -47,6 +53,7 @@ pub mod jvm;
 pub mod kotlin_inspections;
 pub mod kotlin_structure;
 pub mod lsp;
+pub mod main_markers;
 pub mod markdown_format;
 pub mod move_file;
 pub mod names;
@@ -79,10 +86,12 @@ pub mod servers;
 pub mod shown;
 pub mod signature;
 pub mod smart;
+pub mod spelling_variants;
 pub mod spring;
 pub mod spring_nav;
 pub mod structure;
 pub mod syntax;
+pub mod test_class;
 pub mod test_markers;
 pub mod todo;
 pub mod ts_extract;
@@ -155,11 +164,14 @@ pub enum LanguageId {
     Vue,
     /// Svelte components (`SPEC-0141`)
     Svelte,
+    /// Java `.properties` files (`SPEC-0004` v11 behaviour 22); coloured by Ferris IDEA's own lexer
+    /// (`SPEC-0155` v5 behaviour 12), no grammar library.
+    Properties,
 }
 
 impl LanguageId {
     /// Every language, sorted by id.
-    pub const ALL: [Self; 30] = [
+    pub const ALL: [Self; 31] = [
         Self::C,
         Self::Cpp,
         Self::Css,
@@ -175,6 +187,7 @@ impl LanguageId {
         Self::Lua,
         Self::Markdown,
         Self::Php,
+        Self::Properties,
         Self::Python,
         Self::R,
         Self::Ruby,
@@ -201,7 +214,8 @@ impl LanguageId {
             | Self::Toml
             | Self::Shell
             | Self::Dockerfile
-            | Self::R => Some("#"),
+            | Self::R
+            | Self::Properties => Some("#"),
             Self::Sql | Self::Lua => Some("--"),
             Self::JavaScript
             | Self::TypeScript
@@ -258,7 +272,8 @@ impl LanguageId {
             | Self::Shell
             | Self::Dockerfile
             | Self::R
-            | Self::Json => None,
+            | Self::Json
+            | Self::Properties => None,
         }
     }
 
@@ -308,6 +323,7 @@ impl LanguageId {
             Self::R => "r",
             Self::Vue => "vue",
             Self::Svelte => "svelte",
+            Self::Properties => "properties",
         }
     }
 
@@ -350,6 +366,7 @@ impl LanguageId {
             Self::R => "R",
             Self::Vue => "Vue",
             Self::Svelte => "Svelte",
+            Self::Properties => "Properties",
         }
     }
 
@@ -407,8 +424,50 @@ impl LanguageId {
             "swift" => Self::Swift,
             "lua" => Self::Lua,
             "r" => Self::R,
+            "properties" => Self::Properties,
             _ => return None,
         })
+    }
+}
+
+/// Ignore files whose lines are commented with `#` and no space (`SPEC-0004` v12 behaviour 23).
+pub const IGNORE_FILES: &[&str] = &[
+    ".gitignore",
+    ".dockerignore",
+    ".ignore",
+    ".npmignore",
+    ".prettierignore",
+    ".eslintignore",
+    ".stylelintignore",
+    ".helmignore",
+    ".gcloudignore",
+    ".vscodeignore",
+    ".hgignore",
+];
+
+/// The line comment of a file whose name gives no language but a comment syntax
+/// (`SPEC-0004` v12 behaviour 23): `Makefile`, `GNUmakefile`, `makefile` and `*.mk` take `# `
+/// (a trailing space: the comment is written with a space after the token and removed with or
+/// without one), the ignore files of [`IGNORE_FILES`] take `#`. `None` for every other file.
+pub fn plain_line_comment(path: &Path) -> Option<&'static str> {
+    let name = path.file_name()?.to_str()?;
+    let lower = name.to_ascii_lowercase();
+    if matches!(name, "Makefile" | "GNUmakefile" | "makefile") || lower.ends_with(".mk") {
+        Some("# ")
+    } else if IGNORE_FILES.contains(&lower.as_str()) {
+        Some("#")
+    } else {
+        None
+    }
+}
+
+/// The line comment of the file `path` whose language is `language`: the language's, or for a
+/// file without one the comment its name gives (`SPEC-0004` v12 behaviour 23). A token that ends
+/// with a space is written with that space and removed with or without it.
+pub fn line_comment_of(language: Option<LanguageId>, path: &Path) -> Option<&'static str> {
+    match language {
+        Some(l) => l.line_comment(),
+        None => plain_line_comment(path),
     }
 }
 
@@ -429,6 +488,48 @@ mod tests {
         assert_eq!(detect("Main.java"), Some(LanguageId::Java));
     }
 
+    /// SPEC-0004 v12 AK-20: line comments without a grammar (OBS-0090 L2).
+    #[test]
+    fn makefiles_and_ignore_files_have_a_line_comment() {
+        for name in [
+            "Makefile",
+            "GNUmakefile",
+            "makefile",
+            "rules.mk",
+            "dir/Common.MK",
+        ] {
+            assert_eq!(detect(name), None, "{name}");
+            assert_eq!(line_comment_of(None, Path::new(name)), Some("# "), "{name}");
+        }
+        for name in [
+            ".gitignore",
+            ".dockerignore",
+            ".ignore",
+            ".npmignore",
+            "sub/.hgignore",
+        ] {
+            assert_eq!(line_comment_of(None, Path::new(name)), Some("#"), "{name}");
+        }
+        for name in [
+            "data",
+            "notes.data",
+            "tools.cmake",
+            "MAKEFILE",
+            "Makefile.bak",
+        ] {
+            assert_eq!(line_comment_of(None, Path::new(name)), None, "{name}");
+        }
+        // A language decides: its own token, or none.
+        assert_eq!(
+            line_comment_of(Some(LanguageId::Python), Path::new("Makefile")),
+            Some("#")
+        );
+        assert_eq!(
+            line_comment_of(Some(LanguageId::Xml), Path::new(".gitignore")),
+            None
+        );
+    }
+
     #[test]
     fn special_names_and_unknowns() {
         assert_eq!(detect("Gemfile"), Some(LanguageId::Ruby));
@@ -436,6 +537,20 @@ mod tests {
         assert_eq!(detect("README"), None);
         assert_eq!(detect("notes.txt"), None);
         assert_eq!(detect("package.json"), Some(LanguageId::Json));
+    }
+
+    /// SPEC-0004/AK-18 (v11): `.properties` files are Properties, commented with `#`.
+    #[test]
+    fn properties_language() {
+        for name in ["a.properties", "Messages_de.PROPERTIES"] {
+            assert_eq!(detect(name), Some(LanguageId::Properties), "{name}");
+        }
+        let p = LanguageId::Properties;
+        assert_eq!(
+            (p.line_comment(), p.block_comment(), p.title(), p.lsp_id()),
+            (Some("#"), None, "Properties", "properties")
+        );
+        assert_eq!(LanguageId::from_lsp_id("properties"), Some(p));
     }
 
     #[test]

@@ -132,8 +132,11 @@ pub struct Comment {
     pub text: String,
     /// Unix milliseconds.
     pub time: u64,
-    /// Resolved.
+    /// Resolved (for a thread's first comment: the whole thread).
     pub resolved: bool,
+    /// The first comment of the thread this one replies to (`SPEC-0323` v8 behaviour 55).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reply_to: Option<u64>,
 }
 
 /// What survives a restart besides the journal.
@@ -285,9 +288,9 @@ pub(crate) struct Room {
 }
 
 fn is_noise(path: &str) -> bool {
-    path.contains(".idecraft-save-")
-        || path.contains(".idecraft-write-")
-        || [".git", "target", "node_modules", ".idecraft"]
+    path.contains(".ferris-idea-save-")
+        || path.contains(".ferris-idea-write-")
+        || [".git", "target", "node_modules", ".ferris-idea"]
             .iter()
             .any(|d| path == *d || path.starts_with(&format!("{d}/")))
 }
@@ -795,17 +798,21 @@ impl Room {
     /// The comments (of `doc` only, when given) as `viewer` sees them.
     fn comments_for(&self, viewer: &str, doc: Option<&str>) -> Value {
         let guest = self.is_guest(viewer);
+        let me = self.participants.get(viewer).map(|p| p.person.id.as_str());
         let list: Vec<Value> = self
             .meta
             .comments
             .iter()
             .filter(|c| doc.is_none_or(|d| c.doc == d))
             .map(|c| {
-                if guest {
+                let mut v = if guest {
                     guest_comment(c)
                 } else {
                     serde_json::to_value(c).unwrap_or(Value::Null)
-                }
+                };
+                // Whether the viewer wrote it: the window offers Delete only then (v8).
+                v["own"] = json!(!guest && me == Some(c.author.as_str()));
+                v
             })
             .collect();
         json!({ "comments": list })
@@ -821,7 +828,7 @@ impl Room {
         json!({
             "id": self.meta.id,
             "name": self.meta.name,
-            "link": format!("idecraft://room/{}", self.meta.id),
+            "link": format!("ferris-idea://room/{}", self.meta.id),
             "seq": self.meta.next_seq,
             "participants": people,
             "members": self.meta.access.members,

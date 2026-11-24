@@ -4,15 +4,15 @@
 
 #![cfg(target_os = "macos")]
 
+use ferris_idea_workbench::WorkbenchView;
 use gpui::{TestAppContext, VisualTestContext, px};
-use idecraft_workbench::WorkbenchView;
 
 /// SPEC-0111/AK-10 (v5).
 #[gpui::test]
 fn boxes_and_exports_by_keyboard(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("idecraft-dbecp-er-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-dbecp-er-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir_all(root.join(".idecraft")).unwrap();
+    std::fs::create_dir_all(root.join(".ferris-idea")).unwrap();
     let db = root.join("shop.db");
     let made = std::process::Command::new("sqlite3")
         .arg(&db)
@@ -28,7 +28,7 @@ fn boxes_and_exports_by_keyboard(cx: &mut TestAppContext) {
         return;
     }
     std::fs::write(
-        root.join(".idecraft/connections.toml"),
+        root.join(".ferris-idea/connections.toml"),
         format!(
             "[[connection]]\nid = \"shop\"\nname = \"shop\"\ndialect = \"sqlite\"\npath = \"{}\"\n",
             db.display()
@@ -86,7 +86,8 @@ fn boxes_and_exports_by_keyboard(cx: &mut TestAppContext) {
         !er.read_with(cx, |v, _| v.export_menu_open()),
         "Enter closes the menu"
     );
-    let svg = std::fs::read_to_string(root.join(".idecraft/diagrams/shop.svg")).unwrap_or_default();
+    let svg =
+        std::fs::read_to_string(root.join(".ferris-idea/diagrams/shop.svg")).unwrap_or_default();
     assert!(svg.contains(">customer_id:id</text>"), "{svg}");
 
     cx.simulate_keystrokes("alt-e");
@@ -103,7 +104,7 @@ fn boxes_and_exports_by_keyboard(cx: &mut TestAppContext) {
 
 /// Where `layout` breaks the rule of SPEC-0111 v8 behaviour 16: a slanted segment, or one that
 /// crosses or touches a box other than its line's ends, or its own boxes away from its ends.
-fn breaches(layout: &idecraft_database::er_layout::DiagramLayout) -> Vec<String> {
+fn breaches(layout: &ferris_idea_database::er_layout::DiagramLayout) -> Vec<String> {
     let mut out = Vec::new();
     for l in &layout.lines {
         let index = |n: &str| layout.boxes.iter().position(|b| b.name == n).unwrap();
@@ -136,7 +137,7 @@ fn breaches(layout: &idecraft_database::er_layout::DiagramLayout) -> Vec<String>
 
 /// For each line, how near it comes to a box it must keep away from (every box but its ends, and
 /// its own boxes away from its first and last segment), measured straight, with that box's name.
-fn nearest(layout: &idecraft_database::er_layout::DiagramLayout) -> Vec<(String, f32, String)> {
+fn nearest(layout: &ferris_idea_database::er_layout::DiagramLayout) -> Vec<(String, f32, String)> {
     let mut out = Vec::new();
     for l in &layout.lines {
         let index = |n: &str| layout.boxes.iter().position(|b| b.name == n).unwrap();
@@ -167,9 +168,9 @@ fn nearest(layout: &idecraft_database::er_layout::DiagramLayout) -> Vec<(String,
 /// text.
 #[gpui::test]
 fn lines_go_around_boxes_and_editor_exports(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("idecraft-er-around-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-er-around-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir_all(root.join(".idecraft")).unwrap();
+    std::fs::create_dir_all(root.join(".ferris-idea")).unwrap();
     let db = root.join("inv.db");
     let made = std::process::Command::new("sqlite3")
         .arg(&db)
@@ -201,7 +202,7 @@ fn lines_go_around_boxes_and_editor_exports(cx: &mut TestAppContext) {
         return;
     }
     std::fs::write(
-        root.join(".idecraft/connections.toml"),
+        root.join(".ferris-idea/connections.toml"),
         format!(
             "[[connection]]\nid = \"inv\"\nname = \"inv\"\ndialect = \"sqlite\"\npath = \"{}\"\n",
             db.display()
@@ -256,13 +257,13 @@ fn lines_go_around_boxes_and_editor_exports(cx: &mut TestAppContext) {
             7,
             "yEd GraphML",
             "inv.graphml",
-            idecraft_database::er_editors::to_graphml(&moved),
+            ferris_idea_database::er_editors::to_graphml(&moved),
         ),
         (
             8,
             "draw.io",
             "inv.drawio",
-            idecraft_database::er_editors::to_drawio(&moved),
+            ferris_idea_database::er_editors::to_drawio(&moved),
         ),
     ] {
         cx.simulate_keystrokes("alt-e");
@@ -275,8 +276,8 @@ fn lines_go_around_boxes_and_editor_exports(cx: &mut TestAppContext) {
         );
         cx.simulate_keystrokes("enter");
         cx.run_until_parked();
-        let written =
-            std::fs::read_to_string(root.join(".idecraft/diagrams").join(file)).unwrap_or_default();
+        let written = std::fs::read_to_string(root.join(".ferris-idea/diagrams").join(file))
+            .unwrap_or_default();
         assert_eq!(written, expected, "{file} holds the drawing as moved");
         assert_eq!(
             clipboard(cx).as_deref(),

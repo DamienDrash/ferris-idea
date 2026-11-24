@@ -132,13 +132,13 @@ without secrets leaving the machine. The assistant can suggest a command, which 
 
 ## Acceptance criteria
 - **AK-1** Masking: every pattern of behaviour 6 masked with what it keeps; ordinary text, hashes,
-  paths, empty and placeholder values left alone; idempotence; the count (`idecraft_ai::context`
+  paths, empty and placeholder values left alone; idempotence; the count (`ferris_idea_ai::context`
   unit tests).
 - **AK-2** Budget: short text unchanged; long text keeps head and tail at line ends with the
   left-out note; one huge line; the total cap of a question (`context` unit tests).
 - **AK-3** Last command: OSC 133 marks give command, output and exit code; a running command;
   a command whose prompt left the history and output without marks give the last *n* lines
-  (`idecraft_terminal` screen tests).
+  (`ferris_idea_terminal` screen tests).
 - **AK-4** Chips: labels with source and size, several chips sent in order before the question,
   removal, the shared-tab snapshot taken once per change; command blocks found by language and
   cleaned for insertion (prompt, control characters, several lines with and without bracketed

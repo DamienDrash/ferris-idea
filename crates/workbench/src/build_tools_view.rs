@@ -8,9 +8,9 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
+use ferris_idea_core::buildtasks::{self, When};
+use ferris_idea_core::buildtools::{self, BuildOptions, Task};
 use gpui::{Context, EventEmitter, FocusHandle, KeyDownEvent, Window, div, prelude::*, px};
-use idecraft_core::buildtasks::{self, When};
-use idecraft_core::buildtools::{self, BuildOptions, Task};
 
 use crate::build_tools_model::{
     Entry, Extras, Problem, Row, RowKind, all_group_keys, analysis_expanded, initially_expanded,
@@ -26,17 +26,17 @@ pub enum BuildToolsEvent {
     /// Hide the window.
     Hide,
     /// Run this configuration (a task).
-    Run(Box<idecraft_core::RunConfig>),
+    Run(Box<ferris_idea_core::RunConfig>),
     /// Open this build file at this 1-based line (a problem, behaviour 12).
     Open(PathBuf, usize),
     /// The context menu of a task row at this window position (behaviour 10).
     ContextMenu(gpui::Point<gpui::Pixels>),
     /// Ask for a build command to run in this module (behaviour 5).
-    Execute(Box<idecraft_core::Module>),
+    Execute(Box<ferris_idea_core::Module>),
     /// Show this in the status line.
     Status(String),
     /// Give keymap action `.0` these shortcuts (v3 behaviour 19).
-    Shortcut(String, Vec<idecraft_ui::keymap::Shortcut>),
+    Shortcut(String, Vec<ferris_idea_ui::keymap::Shortcut>),
     /// Ask for a build file to link, the field prefilled with this text (v3 behaviour 16).
     LinkPrompt(String),
     /// Sync the build files with the tasks bound to a sync (the Reload button, v4).
@@ -46,7 +46,7 @@ pub enum BuildToolsEvent {
     ModelChanged,
     /// Show the dependency diagram of a module: its name, the boxes and edges, the Mermaid text
     /// (v4 behaviour 15).
-    Diagram(String, Box<idecraft_database::ErModel>, String),
+    Diagram(String, Box<ferris_idea_database::ErModel>, String),
 }
 
 /// The window.
@@ -66,7 +66,7 @@ pub struct BuildToolsView {
     /// Another resolution was asked for while one ran (`Some(force)`); it runs afterwards.
     resolve_again: Option<bool>,
     /// The analyzer's module (folder, label) and result (v3 behaviour 14).
-    analysis: Option<(String, String, Vec<idecraft_core::depanalysis::Artifact>)>,
+    analysis: Option<(String, String, Vec<ferris_idea_core::depanalysis::Artifact>)>,
     /// Typed text narrowing the analyzer's list of all artifacts (v4).
     analysis_filter: String,
     /// The module folder to analyse once its resolution is done.
@@ -100,10 +100,10 @@ fn problem_place(text: &str) -> Option<(String, usize)> {
 /// Reads the modules, their task groups, dependency trees and problems of the workspace at `root`
 /// (behaviours 1, 2, 12).
 pub fn load(root: &Path) -> Loaded {
-    let files = idecraft_core::Workspace::open(root)
+    let files = ferris_idea_core::Workspace::open(root)
         .and_then(|w| w.files())
         .unwrap_or_default();
-    let model = idecraft_core::read_project(root, &files);
+    let model = ferris_idea_core::read_project(root, &files);
     let mut problems: Vec<Problem> = model
         .problems
         .iter()
@@ -120,16 +120,16 @@ pub fn load(root: &Path) -> Loaded {
         .map(|module| {
             // Entries the build tool left out are the analyzer's, not the tree's (SPEC-0149 v3
             // behaviour 9).
-            let mut deps = idecraft_core::dependency_tree(root, &module)
-                .map(|t| idecraft_core::without_omitted(&t));
+            let mut deps = ferris_idea_core::dependency_tree(root, &module)
+                .map(|t| ferris_idea_core::without_omitted(&t));
             // Sibling modules come from the reactor, not the local repository (behaviour 8).
             if let Ok(tree) = &mut deps {
                 buildtools::unmark_modules(&model, tree);
             }
             if let Ok(tree) = &deps {
                 let file = match module.kind {
-                    idecraft_core::ModuleKind::Maven => Some("pom.xml"),
-                    idecraft_core::ModuleKind::Gradle => ["build.gradle.kts", "build.gradle"]
+                    ferris_idea_core::ModuleKind::Maven => Some("pom.xml"),
+                    ferris_idea_core::ModuleKind::Gradle => ["build.gradle.kts", "build.gradle"]
                         .into_iter()
                         .find(|f| root.join(&module.dir).join(f).is_file()),
                     _ => None,
@@ -185,21 +185,21 @@ fn build_file_of(root: &Path, dir: &str) -> Option<String> {
         })
 }
 
-/// Writes the dependency diagram of module `m` to `.idecraft/diagrams/<module>-dependencies.mmd`
+/// Writes the dependency diagram of module `m` to `.ferris-idea/diagrams/<module>-dependencies.mmd`
 /// (v3 behaviour 15, IMP-0339) and returns the file. The module must be resolved.
-pub fn diagram_file(root: &Path, m: &idecraft_core::Module) -> Result<PathBuf, String> {
-    let Some(tree) = idecraft_core::jvmdeps::resolved_tree(root, m) else {
+pub fn diagram_file(root: &Path, m: &ferris_idea_core::Module) -> Result<PathBuf, String> {
+    let Some(tree) = ferris_idea_core::jvmdeps::resolved_tree(root, m) else {
         return Err(format!(
             "{} is not resolved yet: reload the build tools window first",
             m.short_name()
         ));
     };
-    let text = idecraft_core::depanalysis::mermaid(m.short_name(), &tree);
+    let text = ferris_idea_core::depanalysis::mermaid(m.short_name(), &tree);
     let file = root
-        .join(".idecraft/diagrams")
+        .join(".ferris-idea/diagrams")
         .join(format!("{}-dependencies.mmd", m.short_name()));
     std::fs::create_dir_all(file.parent().unwrap_or(root)).map_err(|e| e.to_string())?;
-    idecraft_core::write_atomic(&file, text.as_bytes()).map_err(|e| e.to_string())?;
+    ferris_idea_core::write_atomic(&file, text.as_bytes()).map_err(|e| e.to_string())?;
     Ok(file)
 }
 
@@ -208,9 +208,12 @@ pub fn diagram_file(root: &Path, m: &idecraft_core::Module) -> Result<PathBuf, S
 /// the column of its depth, an edge from each artifact to what it needs, left-out entries
 /// (`omitted for conflict`) with dashed edges, and artifacts in conflict marked. Gradle's
 /// classpaths are merged into one graph.
-pub fn diagram_model(module: &str, tree: &[idecraft_core::DepNode]) -> idecraft_database::ErModel {
-    use idecraft_database::{Dependency, Entity, ErColumn, ErModel, Relationship};
-    let conflicts: HashSet<String> = idecraft_core::depanalysis::analyze(module, tree)
+pub fn diagram_model(
+    module: &str,
+    tree: &[ferris_idea_core::DepNode],
+) -> ferris_idea_database::ErModel {
+    use ferris_idea_database::{Dependency, Entity, ErColumn, ErModel, Relationship};
+    let conflicts: HashSet<String> = ferris_idea_core::depanalysis::analyze(module, tree)
         .into_iter()
         .filter(|a| a.conflict)
         .map(|a| a.name)
@@ -228,7 +231,7 @@ pub fn diagram_model(module: &str, tree: &[idecraft_core::DepNode]) -> idecraft_
         dependencies: Vec::new(),
     };
     // Breadth first, so an artifact sits in the column of its shortest path.
-    let mut queue: std::collections::VecDeque<(String, usize, &idecraft_core::DepNode)> = tree
+    let mut queue: std::collections::VecDeque<(String, usize, &ferris_idea_core::DepNode)> = tree
         .iter()
         .flat_map(|n| {
             if n.scope == "configuration" {
@@ -241,7 +244,7 @@ pub fn diagram_model(module: &str, tree: &[idecraft_core::DepNode]) -> idecraft_
         .collect();
     let mut rows: Vec<usize> = vec![1];
     while let Some((parent, depth, n)) = queue.pop_front() {
-        let (asked, chosen) = idecraft_core::depanalysis::versions(n);
+        let (asked, chosen) = ferris_idea_core::depanalysis::versions(n);
         let version = if n.omitted.is_some() { asked } else { chosen };
         let (group, artifact) = n.name.rsplit_once(':').unwrap_or(("", &n.name));
         let name = if version.is_empty() {
@@ -376,14 +379,14 @@ impl BuildToolsView {
             return;
         }
         let root = self.root.clone();
-        let files = idecraft_core::Workspace::open(&root)
+        let files = ferris_idea_core::Workspace::open(&root)
             .and_then(|w| w.files())
             .unwrap_or_default();
-        let modules: Vec<_> = idecraft_core::read_project(&root, &files)
+        let modules: Vec<_> = ferris_idea_core::read_project(&root, &files)
             .modules
             .into_iter()
-            .filter(|m| idecraft_core::jvmdeps::cache_file(&root, m).is_some())
-            .filter(|m| force || !idecraft_core::jvmdeps::is_resolved(&root, m))
+            .filter(|m| ferris_idea_core::jvmdeps::cache_file(&root, m).is_some())
+            .filter(|m| force || !ferris_idea_core::jvmdeps::is_resolved(&root, m))
             .collect();
         if modules.is_empty() {
             return;
@@ -394,7 +397,7 @@ impl BuildToolsView {
             modules
                 .iter()
                 .filter_map(|m| {
-                    idecraft_core::jvmdeps::resolve(&root, m)
+                    ferris_idea_core::jvmdeps::resolve(&root, m)
                         .err()
                         .map(|e| format!("{}: {e}", m.name))
                 })
@@ -420,7 +423,7 @@ impl BuildToolsView {
     pub fn dependencies_of(
         &self,
         dir: &str,
-    ) -> Option<&Result<Vec<idecraft_core::DepNode>, String>> {
+    ) -> Option<&Result<Vec<ferris_idea_core::DepNode>, String>> {
         self.entries
             .iter()
             .find(|e| e.module.dir == dir)
@@ -659,7 +662,7 @@ impl BuildToolsView {
 
     /// The run configuration of `task`: its name, the command with the options, its folder; a
     /// test task reports to the test tree (behaviour 2).
-    pub fn run_config(&self, task: &Task) -> idecraft_core::RunConfig {
+    pub fn run_config(&self, task: &Task) -> ferris_idea_core::RunConfig {
         buildtasks::task_config(
             &self.module_dir_of(task),
             task,
@@ -703,7 +706,7 @@ impl BuildToolsView {
 
     /// The task of keymap action `id` (v3 behaviour 19): its module folder and run
     /// configuration.
-    pub fn task_of_action(&self, id: &str) -> Option<idecraft_core::RunConfig> {
+    pub fn task_of_action(&self, id: &str) -> Option<ferris_idea_core::RunConfig> {
         let (dir, label) = buildtasks::parse_task_action(id)?;
         let entry = self.entries.iter().find(|e| e.module.dir == dir)?;
         let task = entry
@@ -736,11 +739,11 @@ impl BuildToolsView {
 
     /// Takes `stroke` as the recorded shortcut: adds it to the action's shortcuts and names the
     /// other actions on the same keys (v3 behaviour 19).
-    pub fn record(&mut self, stroke: idecraft_ui::keymap::Keystroke, cx: &mut Context<Self>) {
+    pub fn record(&mut self, stroke: ferris_idea_ui::keymap::Keystroke, cx: &mut Context<Self>) {
         let Some((id, name)) = self.recording.take() else {
             return;
         };
-        use idecraft_ui::keymap::Shortcut;
+        use ferris_idea_ui::keymap::Shortcut;
         let keymap = crate::keymaps::current();
         let others: Vec<String> = keymap
             .actions_for(&stroke, None)
@@ -767,11 +770,11 @@ impl BuildToolsView {
     }
 
     /// The selected row's module, else the first Maven or Gradle module.
-    fn jvm_module(&self) -> Option<idecraft_core::Module> {
-        let jvm = |m: &idecraft_core::Module| {
+    fn jvm_module(&self) -> Option<ferris_idea_core::Module> {
+        let jvm = |m: &ferris_idea_core::Module| {
             matches!(
                 m.kind,
-                idecraft_core::ModuleKind::Maven | idecraft_core::ModuleKind::Gradle
+                ferris_idea_core::ModuleKind::Maven | ferris_idea_core::ModuleKind::Gradle
             )
         };
         // A row of the analyzer stands for the analysed module (v4).
@@ -815,7 +818,7 @@ impl BuildToolsView {
             ));
             return;
         };
-        if !idecraft_core::jvmdeps::is_resolved(&self.root, &m) {
+        if !ferris_idea_core::jvmdeps::is_resolved(&self.root, &m) {
             self.analyse_after_resolve = Some(m.dir.clone());
             cx.emit(BuildToolsEvent::Status(format!(
                 "Resolving {} before the analysis…",
@@ -837,20 +840,20 @@ impl BuildToolsView {
         else {
             return;
         };
-        let Some(mut tree) = idecraft_core::jvmdeps::resolved_tree(&self.root, &m) else {
+        let Some(mut tree) = ferris_idea_core::jvmdeps::resolved_tree(&self.root, &m) else {
             cx.emit(BuildToolsEvent::Status(format!(
                 "{} could not be resolved; see the problems",
                 m.short_name()
             )));
             return;
         };
-        let files = idecraft_core::Workspace::open(&self.root)
+        let files = ferris_idea_core::Workspace::open(&self.root)
             .and_then(|w| w.files())
             .unwrap_or_default();
-        let model = idecraft_core::read_project(&self.root, &files);
+        let model = ferris_idea_core::read_project(&self.root, &files);
         buildtools::unmark_modules(&model, &mut tree);
         let label = m.short_name().to_owned();
-        let artifacts = idecraft_core::depanalysis::analyze(&label, &tree);
+        let artifacts = ferris_idea_core::depanalysis::analyze(&label, &tree);
         self.expanded.extend(analysis_expanded(&artifacts));
         self.analysis = Some((m.dir.clone(), label, artifacts));
         self.selected = 0;
@@ -858,7 +861,7 @@ impl BuildToolsView {
     }
 
     /// The analyzer's module label and its artifacts, if it is shown (self-test).
-    pub fn analysis(&self) -> Option<(&str, &[idecraft_core::depanalysis::Artifact])> {
+    pub fn analysis(&self) -> Option<(&str, &[ferris_idea_core::depanalysis::Artifact])> {
         self.analysis
             .as_ref()
             .map(|(_, l, a)| (l.as_str(), a.as_slice()))
@@ -873,13 +876,13 @@ impl BuildToolsView {
             ));
             return;
         };
-        // The text stays in `.idecraft/diagrams/` (IMP-0339); the drawing opens over the editor.
+        // The text stays in `.ferris-idea/diagrams/` (IMP-0339); the drawing opens over the editor.
         match diagram_file(&self.root, &m)
             .and_then(|file| std::fs::read_to_string(&file).map_err(|e| e.to_string()))
         {
             Ok(text) => {
                 let tree =
-                    idecraft_core::jvmdeps::resolved_tree(&self.root, &m).unwrap_or_default();
+                    ferris_idea_core::jvmdeps::resolved_tree(&self.root, &m).unwrap_or_default();
                 let model = diagram_model(m.short_name(), &tree);
                 cx.emit(BuildToolsEvent::Diagram(
                     format!("{}-dependencies", m.short_name()),
@@ -901,13 +904,13 @@ impl BuildToolsView {
         cx.notify();
         let root = self.root.clone();
         let task = cx.background_executor().spawn(async move {
-            let files = idecraft_core::Workspace::open(&root)
+            let files = ferris_idea_core::Workspace::open(&root)
                 .and_then(|w| w.files())
                 .unwrap_or_default();
-            let model = idecraft_core::read_project(&root, &files);
-            let failures = idecraft_core::jvmsources::download(&root, &model);
-            let states = idecraft_core::jvmsources::library_states(&root, &model);
-            (failures, idecraft_core::jvmsources::summary(&states))
+            let model = ferris_idea_core::read_project(&root, &files);
+            let failures = ferris_idea_core::jvmsources::download(&root, &model);
+            let states = ferris_idea_core::jvmsources::library_states(&root, &model);
+            (failures, ferris_idea_core::jvmsources::summary(&states))
         });
         cx.spawn(async move |this, cx| {
             let (failures, summary) = task.await;
@@ -986,7 +989,7 @@ impl BuildToolsView {
     }
 
     /// The module of row `i`: the nearest module row above it.
-    fn module_of_row(&self, i: usize) -> Option<idecraft_core::Module> {
+    fn module_of_row(&self, i: usize) -> Option<ferris_idea_core::Module> {
         let rows = self.rows();
         let row = rows.get(i)?;
         let mut depth = row.depth;
@@ -1015,13 +1018,13 @@ impl BuildToolsView {
     /// The run configuration for a command line typed for `module` (behaviour 5): `mvn …` and
     /// `gradle …` run in the module's folder (Gradle from its build's root, with the project path
     /// before bare task names), with the window's options; a line without the tool gets it.
-    pub fn typed_command(&self, module: &idecraft_core::Module, line: &str) -> Option<Task> {
+    pub fn typed_command(&self, module: &ferris_idea_core::Module, line: &str) -> Option<Task> {
         let mut words: Vec<String> = line.split_whitespace().map(str::to_owned).collect();
         if words.is_empty() {
             return None;
         }
         let (dir, run_name) = match module.kind {
-            idecraft_core::ModuleKind::Gradle => {
+            ferris_idea_core::ModuleKind::Gradle => {
                 let build = buildtools::gradle_build(&self.root, module);
                 if matches!(words[0].as_str(), "gradle" | "./gradlew" | "gradlew") {
                     words[0] = build.runner.clone();
@@ -1040,7 +1043,7 @@ impl BuildToolsView {
                     format!("{} [{}]", build.folder_name, words[1..].join(" ")),
                 )
             }
-            idecraft_core::ModuleKind::Maven => {
+            ferris_idea_core::ModuleKind::Maven => {
                 if !matches!(words[0].as_str(), "mvn" | "./mvnw" | "mvnw") {
                     words.insert(0, "mvn".into());
                 }
@@ -1139,7 +1142,7 @@ impl BuildToolsView {
             if k.key == "escape" {
                 self.recording = None;
                 cx.emit(BuildToolsEvent::Status("No shortcut assigned".into()));
-            } else if let Some(stroke) = idecraft_ui::keymap::Keystroke::from_platform(
+            } else if let Some(stroke) = ferris_idea_ui::keymap::Keystroke::from_platform(
                 &k.key, m.control, m.alt, m.shift, m.platform,
             ) {
                 self.record(stroke, cx);
@@ -1253,7 +1256,7 @@ impl BuildToolsView {
                     OTHER_TOOL_WINDOWS,
                     "build-tools-execute"
                 ))
-                .child(icon("idecraft/execute"))
+                .child(icon("ferris-idea/execute"))
                 .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| this.execute(cx)))
                 .into_any_element(),
         );
@@ -1265,7 +1268,7 @@ impl BuildToolsView {
                     "build-tools-offline"
                 ))
                 .when(offline, |d| d.bg(c(p.tab_selected)))
-                .child(icon("idecraft/offline"))
+                .child(icon("ferris-idea/offline"))
                 .on_click(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
                     this.set_offline(!offline, cx)
                 }))
@@ -1279,7 +1282,7 @@ impl BuildToolsView {
                     "build-tools-skip-tests"
                 ))
                 .when(skip, |d| d.bg(c(p.tab_selected)))
-                .child(icon("idecraft/skipTests"))
+                .child(icon("ferris-idea/skipTests"))
                 .on_click(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
                     this.set_skip_tests(!skip, cx)
                 }))
@@ -1301,7 +1304,7 @@ impl BuildToolsView {
                     OTHER_TOOL_WINDOWS,
                     "build-tools-unlink"
                 ))
-                .child(icon("idecraft/remove"))
+                .child(icon("ferris-idea/remove"))
                 .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| this.unlink_selected(cx)))
                 .into_any_element(),
         );
@@ -1311,7 +1314,7 @@ impl BuildToolsView {
                     OTHER_TOOL_WINDOWS,
                     "build-tools-sources"
                 ))
-                .child(icon("idecraft/download"))
+                .child(icon("ferris-idea/download"))
                 .on_click(
                     cx.listener(|this, _: &gpui::ClickEvent, _, cx| this.download_sources(cx)),
                 )
@@ -1325,7 +1328,7 @@ impl BuildToolsView {
                     "build-tools-analyze"
                 ))
                 .when(analysing, |d| d.bg(c(p.tab_selected)))
-                .child(icon("idecraft/dependencyAnalyzer"))
+                .child(icon("ferris-idea/dependencyAnalyzer"))
                 .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| this.toggle_analysis(cx)))
                 .into_any_element(),
         );
@@ -1335,7 +1338,7 @@ impl BuildToolsView {
                     OTHER_TOOL_WINDOWS,
                     "build-tools-diagram"
                 ))
-                .child(icon("idecraft/diagram"))
+                .child(icon("ferris-idea/diagram"))
                 .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| this.show_diagram(cx)))
                 .into_any_element(),
         );
@@ -1578,7 +1581,7 @@ mod tests {
     /// Escape undo it; without the analyzer committed text changes nothing.
     #[gpui::test]
     fn committed_text_narrows_the_analyzer(cx: &mut TestAppContext) {
-        let root = std::env::temp_dir().join(format!("idecraft-bt-text-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("ferris-idea-bt-text-{}", std::process::id()));
         std::fs::create_dir_all(&root).unwrap();
         let at = root.clone();
         let window = cx.add_window(move |_, cx| BuildToolsView::new(&at, cx));

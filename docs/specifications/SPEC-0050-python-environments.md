@@ -39,18 +39,18 @@ how to run its tests, without executing anything to find out.
    `path`/`git`/`workspace` dependencies are skipped. A plain system interpreter is not checked. [STD]
 6. Test framework: `pytest` when installed or declared, else `unittest`. A suggested run configuration
    (SPEC-0047) uses the selected interpreter (`${workspace}`-relative inside the project): pytest as a test
-   configuration writing a JUnit report to `.idecraft/pytest.xml`, unittest as `-m unittest -v`. Nothing
+   configuration writing a JUnit report to `.ferris-idea/pytest.xml`, unittest as `-m unittest -v`. Nothing
    is written automatically. [GEN]
 7. MCP tool `python_environments` (optional `interpreter`) with the above, reading `requires-python` and
    dependencies from the root module of SPEC-0048. [ADR-0008]
 8. **v2 – Every Python launch uses the selected interpreter.** The workspace's selected interpreter
    (behaviour 3, including the choice stored by SPEC-0117) is resolved in one place and used by everything
-   IDECraft starts with Python: Run current file and the ▶ markers of a Python file (`python <file>`), a test
+   Ferris IDEA starts with Python: Run current file and the ▶ markers of a Python file (`python <file>`), a test
    file or test method (`python -m pytest …`), the pytest configuration suggested by the project model
    (SPEC-0048), the test configuration of behaviour 6, and debugging a Python configuration with debugpy
    (SPEC-0091: the interpreter of the debugged program). [GEN, OBS-0034 L1]
    - A configuration whose command starts with a bare `python` or `python3` — generated ones and those
-     stored in `.idecraft/run.toml` — runs with the selected interpreter. A command that names a path
+     stored in `.ferris-idea/run.toml` — runs with the selected interpreter. A command that names a path
      (`.venv/bin/python`, `/usr/bin/python3`, `${workspace}/env/bin/python`) or another name
      (`python3.11`) stays exactly as written. Configurations suggested by plugins (SPEC-0276, run as given)
      are not changed. A `PATH` in the configuration's environment is used for the search.
@@ -90,7 +90,7 @@ remote host's own environment beyond what its host process finds there.
 
 ## Known deviations from the reference
 Interpreters are never started for discovery (IMP-0025). v2: the reference, without an interpreter set up, creates
-a run configuration that starts nothing and says nothing (OBS-0034, IMP-0394); IDECraft picks the project's
+a run configuration that starts nothing and says nothing (OBS-0034, IMP-0394); Ferris IDEA picks the project's
 environment on its own (IMP-0396, IMP-0397), and a start without any interpreter names the reason.
 
 v3 (OBS-0071): asked over MCP for the Python environment of a `.sql` file, the reference answers that

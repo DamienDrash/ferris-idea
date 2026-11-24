@@ -1,4 +1,4 @@
-//! The `room.*` methods of `idecraft serve` (`SPEC-0323` behaviour 28), the session gate and the
+//! The `room.*` methods of `ferris-idea serve` (`SPEC-0323` behaviour 28), the session gate and the
 //! pump that carries everything a room sends out, outside the locks.
 
 use std::path::Path;
@@ -9,13 +9,16 @@ use std::time::{Duration, Instant};
 use serde_json::{Value, json};
 
 use super::access::{self, Admission, Audience, Kind, Person, Role, person_of};
-use super::{Body, Comment, Files, Handle, Meta, Out, Room, not_granted};
+use super::{Body, Files, Handle, Meta, Out, Room, invalid, not_granted};
 use crate::backend::{Backend, Call, Right, RoomLink, SessionHandle};
 use crate::docs::{SetChange, StoreRecord, StoreSink};
 use crate::hello::hex;
 use crate::ot::TextOp;
 use crate::reattach::{append_private, private_dir, write_private};
 use crate::rpc::{ErrorCode, RpcError};
+
+#[path = "comments.rs"]
+mod comments;
 
 /// The clock of a room: Unix milliseconds.
 pub type Clock = Arc<dyn Fn() -> u64 + Send + Sync>;
@@ -26,6 +29,11 @@ const MAX_COMMENT: usize = 16 << 10;
 const MAX_COMMENTS: usize = 10_000;
 /// The most entries one history answer returns.
 const MAX_LIST: usize = 1000;
+/// The most text both sides of one `room.diff` answer carry together, so the answer stays below
+/// the session's 1 MiB (`SPEC-0323` v9 behaviour 63).
+const MAX_DIFF_TEXT: usize = 448 << 10;
+/// The most files one `room.restore` brings back (`SPEC-0323` v9 behaviour 64).
+const MAX_RESTORE_DOCS: usize = 200;
 /// How often modified documents are saved (`SPEC-0323` behaviour 6).
 const SAVE_MS: u64 = 1000;
 /// Presence updates per second and session (`SPEC-0323` behaviour 21).
@@ -108,7 +116,7 @@ fn backend_of(call: &Call) -> Result<Backend, RpcError> {
         .ok_or_else(|| RpcError::new(ErrorCode::Unavailable, "the backend has stopped"))
 }
 
-/// The secret of a link given as `idecraft://room/<id>#<secret>` or bare.
+/// The secret of a link given as `ferris-idea://room/<id>#<secret>` or bare.
 fn secret_of(link: &str) -> &str {
     link.rsplit_once('#').map_or(link, |(_, s)| s)
 }
@@ -223,7 +231,7 @@ impl Rooms {
                 let Some(p) = room.participants.get_mut(&sid) else {
                     continue;
                 };
-                let was_gone = p.gone;
+                let (was_gone, was_away) = (p.gone, p.away_since.is_some());
                 if connected {
                     p.away_since = None;
                     p.gone = false;
@@ -233,9 +241,20 @@ impl Rooms {
                         p.gone = true;
                     }
                 }
-                if p.gone && !was_gone {
+                let (gone, away) = (p.gone, p.away_since.is_some());
+                // The others learn every change of state (`SPEC-0323` v4 behaviours 10, 21).
+                if gone && !was_gone {
                     let p = p.clone();
                     room.announce_left(&p, Some(&sid));
+                } else if (was_gone && !gone) || away != was_away {
+                    let method = if was_gone {
+                        "room.joined"
+                    } else {
+                        "room.presence"
+                    };
+                    if let Some((view, public)) = room.views(&sid) {
+                        room.announce(method, &view, &public, Some(&sid));
+                    }
                 }
             }
             let ended: Vec<String> = room
@@ -474,10 +493,12 @@ fn register(backend: &Backend, rooms: &Handle) {
     reg("room.history", false, history);
     reg("room.version", true, version);
     reg("room.restore", true, restore);
+    reg("room.diff", false, diff);
     reg("room.presence", false, presence);
-    reg("room.comment", true, comment);
-    reg("room.comments", false, comments);
-    reg("room.resolve_comment", true, resolve_comment);
+    reg("room.comment", true, comments::comment);
+    reg("room.comments", false, comments::comments);
+    reg("room.resolve_comment", true, comments::resolve_comment);
+    reg("room.delete_comment", true, comments::delete_comment);
 }
 
 fn peer_of(backend: &Backend, call: &Call) -> String {
@@ -652,7 +673,7 @@ fn share(rooms: &Handle, _b: &Backend, call: &Call) -> Result<Value, RpcError> {
             "role": link.role.name(),
             "audience": link.audience.name(),
             "expires": link.expires,
-            "link": format!("idecraft://room/{}#{token}", room.meta.id),
+            "link": format!("ferris-idea://room/{}#{token}", room.meta.id),
         }))
     })
 }
@@ -782,33 +803,47 @@ fn version(rooms: &Handle, _b: &Backend, call: &Call) -> Result<Value, RpcError>
     })
 }
 
-fn restore(rooms: &Handle, backend: &Backend, call: &Call) -> Result<Value, RpcError> {
-    let doc = str_of(&call.params, "doc")?.to_owned();
-    let seq = call.params["seq"]
-        .as_u64()
-        .ok_or_else(|| RpcError::new(ErrorCode::Invalid, "`seq` is missing"))?;
-    let group = rooms.with(|room| {
-        room.need(call.session.id(), Role::Editor)?;
-        if seq > room.meta.next_seq {
-            return Err(RpcError::new(
-                ErrorCode::Invalid,
-                "that point has not happened yet",
-            ));
+/// The documents of a `room.restore`: `docs` (1 to [`MAX_RESTORE_DOCS`] paths, each once) or
+/// `doc` (`SPEC-0323` v9 behaviour 64).
+fn restore_docs(params: &Value) -> Result<Vec<String>, RpcError> {
+    let Some(list) = params.get("docs").filter(|v| !v.is_null()) else {
+        return Ok(vec![str_of(params, "doc")?.to_owned()]);
+    };
+    let list = list
+        .as_array()
+        .filter(|l| !l.is_empty() && l.len() <= MAX_RESTORE_DOCS)
+        .ok_or_else(|| invalid(format!("`docs` is a list of 1 to {MAX_RESTORE_DOCS} paths")))?;
+    let mut out: Vec<String> = Vec::with_capacity(list.len());
+    for d in list {
+        let d = d
+            .as_str()
+            .ok_or_else(|| invalid("`docs` holds paths"))?
+            .to_owned();
+        if !out.contains(&d) {
+            out.push(d);
         }
-        Ok(room.next_group())
-    })?;
-    let existing = backend.open_for_room(&doc);
-    let changes = match existing {
+    }
+    Ok(out)
+}
+
+/// What brings `doc` back to journal position `seq`; `None` when it already reads so.
+fn restore_change(
+    rooms: &Handle,
+    backend: &Backend,
+    doc: &str,
+    seq: u64,
+) -> Result<Option<SetChange>, RpcError> {
+    match backend.open_for_room(doc) {
         Ok(info) => {
-            let target = rooms.with(|room| room.text_at(&doc, &info.text, seq))?;
+            let target = rooms.with(|room| room.text_at(doc, &info.text, seq))?;
             if target == info.text {
-                return Ok(json!({ "group": null, "changes": 0 }));
+                return Ok(None);
             }
-            vec![SetChange::Edit {
+            Ok(Some(SetChange::Edit {
                 path: info.doc,
                 base: Some(info.revision),
                 ops: TextOp::diff(&info.text, &target).to_ops(),
-            }]
+            }))
         }
         Err(e) if e.code == ErrorCode::NotFound => {
             let blob = rooms.with(|room| {
@@ -822,20 +857,125 @@ fn restore(rooms: &Handle, backend: &Backend, call: &Call) -> Result<Value, RpcE
             let blob = blob.ok_or_else(|| {
                 RpcError::new(ErrorCode::NotFound, format!("{doc} is not in the history"))
             })?;
-            vec![SetChange::Create {
-                path: doc.clone(),
+            Ok(Some(SetChange::Create {
+                path: doc.to_owned(),
                 dir: false,
                 text: None,
                 blob: Some(blob),
-            }]
+            }))
         }
-        Err(e) => return Err(e),
-    };
+        Err(e) => Err(e),
+    }
+}
+
+/// `room.restore`: one file (`doc`) or several (`docs`, v9) back to a journal position, as one
+/// change set: one group, one undo step, nothing changes when one of them cannot be restored.
+fn restore(rooms: &Handle, backend: &Backend, call: &Call) -> Result<Value, RpcError> {
+    let docs = restore_docs(&call.params)?;
+    let seq = call.params["seq"]
+        .as_u64()
+        .ok_or_else(|| RpcError::new(ErrorCode::Invalid, "`seq` is missing"))?;
+    let group = rooms.with(|room| {
+        room.need(call.session.id(), Role::Editor)?;
+        if seq > room.meta.next_seq {
+            return Err(RpcError::new(
+                ErrorCode::Invalid,
+                "that point has not happened yet",
+            ));
+        }
+        Ok(room.next_group())
+    })?;
+    let mut changes = Vec::with_capacity(docs.len());
+    for doc in &docs {
+        if let Some(change) = restore_change(rooms, backend, doc, seq)? {
+            changes.push(change);
+        }
+    }
+    if changes.is_empty() {
+        return Ok(json!({ "group": null, "changes": 0 }));
+    }
     backend.apply_room_set(&call.client, group, &changes)?;
     Ok(json!({ "group": group, "changes": changes.len() }))
 }
 
+/// `room.diff` (`SPEC-0323` v9 behaviour 63): the text of `doc` after journal position `from`
+/// and after `to`, walked back from its text now. Every participant may read it.
+fn diff(rooms: &Handle, backend: &Backend, call: &Call) -> Result<Value, RpcError> {
+    let doc = str_of(&call.params, "doc")?.to_owned();
+    let position = |name: &str| {
+        call.params[name]
+            .as_u64()
+            .ok_or_else(|| invalid(format!("`{name}` is a journal position")))
+    };
+    let (from, to) = (position("from")?, position("to")?);
+    rooms.with(|room| {
+        room.participant(call.session.id())?;
+        if from > to {
+            return Err(invalid("`from` comes after `to`"));
+        }
+        if to > room.meta.next_seq {
+            return Err(invalid("that point has not happened yet"));
+        }
+        Ok(())
+    })?;
+    let info = backend.open_for_room(&doc)?;
+    let (before, after) = rooms.with(|room| {
+        Ok((
+            room.text_at(&info.doc, &info.text, from)?,
+            room.text_at(&info.doc, &info.text, to)?,
+        ))
+    })?;
+    if before.len() + after.len() > MAX_DIFF_TEXT {
+        return Err(RpcError::new(
+            ErrorCode::TooLarge,
+            format!(
+                "{} is too large to compare here ({} KiB before and after)",
+                info.doc,
+                (before.len() + after.len()) >> 10
+            ),
+        ));
+    }
+    Ok(json!({ "doc": info.doc, "from": from, "to": to, "before": before, "after": after }))
+}
+
+/// The longest document path in a presence update.
+const MAX_PRESENCE_DOC: usize = 4096;
+/// The longest session or person a presence update may follow.
+const MAX_PRESENCE_FOLLOWS: usize = 256;
+
+/// The presence of `params` in its fixed shape (`SPEC-0323` v4 behaviour 21): a document path,
+/// a caret, a selection of two positions and whom the person follows, each optional. Anything
+/// else is refused, so nobody can pass large or nested data on to every participant.
+fn presence_of(params: &Value) -> Result<Value, RpcError> {
+    let text = |name: &str, max: usize| match &params[name] {
+        Value::Null => Ok(Value::Null),
+        Value::String(s) if s.len() <= max => Ok(Value::String(s.clone())),
+        _ => Err(invalid(format!(
+            "`{name}` is a text of at most {max} bytes"
+        ))),
+    };
+    let position = |v: &Value, name: &str| match v {
+        Value::Null => Ok(Value::Null),
+        Value::Number(n) if n.as_u64().is_some() => Ok(v.clone()),
+        _ => Err(invalid(format!("`{name}` is a position"))),
+    };
+    let selection = match &params["selection"] {
+        Value::Null => Value::Null,
+        Value::Array(a) if a.len() == 2 && a.iter().all(|v| v.as_u64().is_some()) => {
+            params["selection"].clone()
+        }
+        _ => return Err(invalid("`selection` is two positions")),
+    };
+    Ok(json!({
+        "doc": text("doc", MAX_PRESENCE_DOC)?,
+        "caret": position(&params["caret"], "caret")?,
+        "selection": selection,
+        "follows": text("follows", MAX_PRESENCE_FOLLOWS)?,
+    }))
+}
+
 fn presence(rooms: &Handle, _b: &Backend, call: &Call) -> Result<Value, RpcError> {
+    let update = presence_of(&call.params)?;
     let now = rooms.now();
     rooms.with(|room| {
         let sid = call.session.id();
@@ -853,74 +993,11 @@ fn presence(rooms: &Handle, _b: &Backend, call: &Call) -> Result<Value, RpcError
             if p.window.1 > PRESENCE_PER_SECOND {
                 return Ok(json!({ "dropped": true }));
             }
-            p.presence = json!({
-                "doc": call.params["doc"], "caret": call.params["caret"],
-                "selection": call.params["selection"], "follows": call.params["follows"],
-            });
+            p.presence = update;
         }
         if let Some((view, public)) = room.views(sid) {
             room.announce("room.presence", &view, &public, Some(sid));
         }
         Ok(json!({ "dropped": false }))
-    })
-}
-
-fn comment(rooms: &Handle, _b: &Backend, call: &Call) -> Result<Value, RpcError> {
-    let doc = str_of(&call.params, "doc")?.to_owned();
-    let text = str_of(&call.params, "text")?.to_owned();
-    let at = call.params["at"].as_u64().unwrap_or(0) as usize;
-    if text.is_empty() || text.len() > MAX_COMMENT {
-        return Err(RpcError::new(
-            ErrorCode::Invalid,
-            "a comment has 1 to 16384 bytes",
-        ));
-    }
-    let now = rooms.now();
-    rooms.with(|room| {
-        let p = room.need(call.session.id(), Role::Commenter)?;
-        let (author, name) = (p.person.id.clone(), p.person.name.clone());
-        if room.meta.comments.len() >= MAX_COMMENTS {
-            return Err(RpcError::new(ErrorCode::Invalid, "too many comments"));
-        }
-        room.meta.next_comment += 1;
-        let id = room.meta.next_comment;
-        room.meta.comments.push(Comment {
-            id,
-            doc,
-            at,
-            author,
-            name,
-            text,
-            time: now,
-            resolved: false,
-        });
-        room.save_meta();
-        Ok(json!({ "id": id }))
-    })
-}
-
-fn comments(rooms: &Handle, _b: &Backend, call: &Call) -> Result<Value, RpcError> {
-    let doc = call.params["doc"].as_str();
-    rooms.with(|room| {
-        room.participant(call.session.id())?;
-        Ok(room.comments_for(call.session.id(), doc))
-    })
-}
-
-fn resolve_comment(rooms: &Handle, _b: &Backend, call: &Call) -> Result<Value, RpcError> {
-    let id = call.params["id"]
-        .as_u64()
-        .ok_or_else(|| RpcError::new(ErrorCode::Invalid, "`id` is missing"))?;
-    rooms.with(|room| {
-        room.need(call.session.id(), Role::Commenter)?;
-        let c = room
-            .meta
-            .comments
-            .iter_mut()
-            .find(|c| c.id == id)
-            .ok_or_else(|| RpcError::new(ErrorCode::NotFound, format!("no comment {id}")))?;
-        c.resolved = true;
-        room.save_meta();
-        Ok(json!({ "resolved": id }))
     })
 }

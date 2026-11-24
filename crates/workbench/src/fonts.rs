@@ -25,7 +25,7 @@ pub fn line_height() -> f32 {
 
 static EDITOR_FAMILY: std::sync::RwLock<Option<String>> = std::sync::RwLock::new(None);
 static EDITOR_ADVANCE: AtomicU32 = AtomicU32::new(0);
-static CODE_STYLE: std::sync::RwLock<Option<idecraft_core::CodeStyleSettings>> =
+static CODE_STYLE: std::sync::RwLock<Option<ferris_idea_core::CodeStyleSettings>> =
     std::sync::RwLock::new(None);
 
 /// The editor font family chosen in Settings › Font (`SPEC-0150` behaviour 1).
@@ -52,7 +52,7 @@ pub fn set_editor_advance(width: f32) {
 }
 
 /// The Code Style settings (`SPEC-0150` behaviour 2).
-pub fn code_style() -> idecraft_core::CodeStyleSettings {
+pub fn code_style() -> ferris_idea_core::CodeStyleSettings {
     CODE_STYLE
         .read()
         .ok()
@@ -62,7 +62,7 @@ pub fn code_style() -> idecraft_core::CodeStyleSettings {
 
 /// The Code Style language name for a file's language.
 pub fn code_style_language(path: &std::path::Path) -> &'static str {
-    idecraft_languages::format::code_style_language(path)
+    ferris_idea_languages::format::code_style_language(path)
 }
 
 static EDITOR_LIGATURES: AtomicBool = AtomicBool::new(false);
@@ -86,7 +86,7 @@ pub fn editor_line_height() -> f32 {
 }
 
 /// Takes the editor font of `settings`; editors use it from their next frame.
-pub fn set_editor_font(settings: &idecraft_core::IdeSettings) {
+pub fn set_editor_font(settings: &ferris_idea_core::IdeSettings) {
     EDITOR_SIZE.store(settings.editor.font_size.to_bits(), Ordering::Relaxed);
     EDITOR_LINE.store(settings.line_height().to_bits(), Ordering::Relaxed);
     EDITOR_LIGATURES.store(settings.editor.ligatures, Ordering::Relaxed);
@@ -133,12 +133,20 @@ pub fn font_choices(installed: &[String], current: &str) -> Vec<String> {
 }
 
 /// Registers the bundled fonts with the toolkit; returns whether that worked (else the view falls
-/// back to a system monospace font).
+/// back to a system monospace font). The bundled font is also the toolkit's last resort for all
+/// text, so a system without any font draws the window instead of stopping (`SPEC-0060` v14
+/// behaviour 7).
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub fn register(cx: &mut gpui::App) -> bool {
-    cx.text_system()
+    let added = cx
+        .text_system()
         .add_fonts(FONT_FILES.iter().map(|f| Cow::Borrowed(*f)).collect())
-        .is_ok()
+        .is_ok();
+    if added {
+        cx.text_system()
+            .set_last_resort_font(gpui::font(EDITOR_FONT));
+    }
+    added
 }
 
 #[cfg(test)]

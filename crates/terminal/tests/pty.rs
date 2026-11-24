@@ -3,7 +3,7 @@
 
 use std::time::Duration;
 
-use idecraft_terminal::{Color, Session};
+use ferris_idea_terminal::{Color, Session};
 
 const WAIT: Duration = Duration::from_secs(10);
 
@@ -27,7 +27,7 @@ fn coloured_output_and_exit_status() {
 
 #[test]
 fn size_resize_cwd_and_input() {
-    let dir = std::env::temp_dir().join(format!("idecraft-pty-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-pty-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let cmd = [
         "/bin/sh".to_owned(),
@@ -81,7 +81,7 @@ fn wide_characters_from_a_program() {
 #[test]
 fn current_folder_follows_cd() {
     let base = std::fs::canonicalize(std::env::temp_dir()).unwrap();
-    let dir = base.join(format!("idecraft-cd-{}", std::process::id()));
+    let dir = base.join(format!("ferris-idea-cd-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let cmd = [
         "/bin/sh".to_owned(),
@@ -96,11 +96,68 @@ fn current_folder_follows_cd() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// SPEC-0161 v2 AK-5: a shell that reported its folder with OSC 7 starts `sh`, which sends no
+/// OSC 7 and runs `cd ..`: the folder is the nested shell's; after `exit` the OSC 7 one again.
+#[test]
+fn nested_shell_without_osc7_is_followed() {
+    let base = std::fs::canonicalize(std::env::temp_dir()).unwrap();
+    let dir = base.join(format!("ferris-idea-nested-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let canonical = |d: std::path::PathBuf| std::fs::canonicalize(d).unwrap();
+    let mut s = Session::spawn(&["/bin/sh".to_owned()], &dir, 10, 80).unwrap();
+    let prompt = |t: &str| t.trim_end().ends_with('$') || t.trim_end().ends_with('#');
+    assert!(s.wait_for(WAIT, prompt), "{:?}", s.text());
+    // The outer shell reports its folder as zsh's integration does; the output marker is written
+    // apart so that the echoed command line does not count.
+    s.write(b"printf '\\033]7;file://host%s\\007' \"$PWD\"; echo \"rep\"\"orted\"\r")
+        .unwrap();
+    assert!(
+        s.wait_for(WAIT, |t| t.contains("reported")),
+        "{:?}",
+        s.text()
+    );
+    assert!(s.with_terminal(|t| t.screen.reported_dir().is_some()));
+    let shell = s.foreground_group();
+    assert!(shell.is_some());
+    assert_eq!(
+        s.current_dir().map(canonical).as_deref(),
+        Some(dir.as_path())
+    );
+    s.write(b"sh\r").unwrap();
+    s.write(b"cd ..; echo \"nested\"\"-moved\"\r").unwrap();
+    assert!(
+        s.wait_for(WAIT, |t| t.contains("nested-moved")),
+        "{:?}",
+        s.text()
+    );
+    assert_ne!(
+        s.foreground_group(),
+        shell,
+        "the nested shell leads its own group"
+    );
+    assert_eq!(
+        s.current_dir().map(canonical).as_deref(),
+        Some(base.as_path())
+    );
+    s.write(b"exit\r").unwrap();
+    let start = std::time::Instant::now();
+    while s.foreground_group() != shell && start.elapsed() < WAIT {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert_eq!(s.foreground_group(), shell, "{:?}", s.text());
+    assert_eq!(
+        s.current_dir().map(canonical).as_deref(),
+        Some(dir.as_path())
+    );
+    let _ = s.kill_group();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// SPEC-0205 AK-2: a shell that runs `exit` ends its session; saved lines come first.
 #[test]
 fn exit_ends_the_shell_and_history_comes_first() {
     let cwd = std::env::temp_dir();
-    let options = idecraft_terminal::SpawnOptions {
+    let options = ferris_idea_terminal::SpawnOptions {
         history: vec!["saved line".into()],
         integration: None,
         env: Vec::new(),
@@ -132,7 +189,7 @@ fn exit_ends_the_shell_and_history_comes_first() {
 
 /// A test home whose start-up files set `FROM_USER`, a fixed prompt and hooks of their own, and
 /// the options that start a shell in it as the terminal view does (integration files in `dir`).
-fn test_shell(dir: &std::path::Path) -> (std::path::PathBuf, idecraft_terminal::SpawnOptions) {
+fn test_shell(dir: &std::path::Path) -> (std::path::PathBuf, ferris_idea_terminal::SpawnOptions) {
     let home = dir.join("home");
     std::fs::create_dir_all(home.join("sub folder")).unwrap();
     // The user's own files are loaded first and keep their effect, hooks included.
@@ -142,19 +199,22 @@ fn test_shell(dir: &std::path::Path) -> (std::path::PathBuf, idecraft_terminal::
     )
     .unwrap();
     std::fs::write(home.join(".bashrc"), "export FROM_USER=bash\nPS1='$ '\n").unwrap();
-    let options = idecraft_terminal::SpawnOptions {
+    let options = ferris_idea_terminal::SpawnOptions {
         history: Vec::new(),
         integration: Some(dir.join("files")),
         env: vec![
             ("HOME".into(), home.display().to_string()),
-            ("IDECRAFT_USER_ZDOTDIR".into(), home.display().to_string()),
+            (
+                "FERRIS_IDEA_USER_ZDOTDIR".into(),
+                home.display().to_string(),
+            ),
         ],
     };
     (home, options)
 }
 
 /// The prompts marked once there are `n`, or after the wait.
-fn wait_prompts(s: &Session, n: usize) -> Vec<idecraft_terminal::Prompt> {
+fn wait_prompts(s: &Session, n: usize) -> Vec<ferris_idea_terminal::Prompt> {
     let prompts = |s: &Session| s.with_terminal(|t| t.screen.prompts().to_vec());
     let start = std::time::Instant::now();
     while prompts(s).len() < n && start.elapsed() < WAIT {
@@ -167,7 +227,10 @@ fn wait_prompts(s: &Session, n: usize) -> Vec<idecraft_terminal::Prompt> {
 /// statuses and report the folder after `cd`; the user's own files and hooks still run.
 #[test]
 fn shell_integration_marks_prompts_in_zsh_and_bash() {
-    let dir = std::env::temp_dir().join(format!("idecraft-pty-integration-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!(
+        "ferris-idea-pty-integration-{}",
+        std::process::id()
+    ));
     let (home, options) = test_shell(&dir);
     let sub = home.join("sub folder");
     for shell in ["/bin/zsh", "/bin/bash"] {
@@ -224,7 +287,7 @@ fn shell_integration_marks_prompts_in_zsh_and_bash() {
 #[test]
 fn the_command_line_survives_short_and_narrow_terminals() {
     const LINE: &str = "echo GITHUB_TOKEN=ghp_FAKEFAKEFAKEFAKEFAKEFAKE0000 ';%'";
-    let dir = std::env::temp_dir().join(format!("idecraft-pty-short-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-pty-short-{}", std::process::id()));
     let (home, options) = test_shell(&dir);
     for shell in ["/bin/zsh", "/bin/bash"] {
         if !std::path::Path::new(shell).exists() {
@@ -264,7 +327,7 @@ fn the_command_line_survives_short_and_narrow_terminals() {
 /// screen for the history, where Last n Lines finds it.
 #[test]
 fn a_shell_without_marks_in_one_row_keeps_its_output_in_the_history() {
-    let dir = std::env::temp_dir().join(format!("idecraft-pty-unmarked-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-pty-unmarked-{}", std::process::id()));
     let (home, options) = test_shell(&dir);
     let mut s = Session::spawn_with(&["/bin/sh".to_owned()], &home, 1, 60, &options).unwrap();
     assert!(s.wait_for(WAIT, |t| !t.trim().is_empty()), "no prompt");

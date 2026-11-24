@@ -4,7 +4,7 @@ name = "Vertica"
 family = "odbc"
 category = "analytics"
 status = "beta"
-note = "Listed for the ODBC route (ADR-0020), which IDECraft does not have yet; not connectable."
+note = "Listed for the ODBC route (ADR-0020), which Ferris IDEA does not have yet; not connectable."
 aliases = ["opentext vertica"]
 
 [connection]

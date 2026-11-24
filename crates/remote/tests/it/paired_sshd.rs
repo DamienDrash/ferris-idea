@@ -1,6 +1,6 @@
 //! The SSH path of `SPEC-0324` (AK-4) over a real OpenSSH server of its own: a private `sshd` on a
 //! high port with temporary keys and a private client configuration. Nothing outside the temp folder
-//! is read or changed. Ignored by default; run with `cargo test -p idecraft-remote --test
+//! is read or changed. Ignored by default; run with `cargo test -p ferris-idea-remote --test
 //! paired_sshd -- --ignored`.
 #![cfg(unix)]
 
@@ -10,9 +10,9 @@ use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use idecraft_pairing::{Console, Limits, ListenOptions, Side, Store, Timing, listen};
-use idecraft_remote::paired::{self, PairedProject};
-use idecraft_session::{Backend, BackendConfig, Right};
+use ferris_idea_pairing::{Console, Limits, ListenOptions, Side, Store, Timing, listen};
+use ferris_idea_remote::paired::{self, PairedProject};
+use ferris_idea_session::{Backend, BackendConfig, Right};
 
 struct Yes(std::sync::Mutex<Vec<String>>);
 
@@ -166,7 +166,7 @@ fn ak4_real_sshd() {
         .unwrap()
         .pipe;
     let pending =
-        idecraft_pairing::start_pairing_on(pipe, &address, &code, None, &identity, "over-ssh")
+        ferris_idea_pairing::start_pairing_on(pipe, &address, &code, None, &identity, "over-ssh")
             .unwrap();
     assert_eq!(pending.digits().len(), 6);
     pending.confirm(&store).unwrap();
@@ -181,7 +181,7 @@ fn ak4_real_sshd() {
         .session
         .edit(
             "a.txt",
-            &[idecraft_session::Op {
+            &[ferris_idea_session::Op {
                 at: 0,
                 delete: 0,
                 insert: "real ".into(),
@@ -199,6 +199,6 @@ fn ak4_real_sshd() {
     project_open.break_connection();
     project_open.reconnect().unwrap();
     assert!(project_open.session.connected());
-    let _ = project_open.close(idecraft_remote::Unsaved::Discard);
+    let _ = project_open.close(ferris_idea_remote::Unsaved::Discard);
     running.stop();
 }

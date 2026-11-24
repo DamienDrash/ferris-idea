@@ -9,8 +9,8 @@
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_vcs::{LineChange, Repo};
 use gpui::{Context, Entity, Pixels, Point, Window, div, prelude::*, px};
-use idecraft_vcs::{LineChange, Repo};
 
 use super::WorkbenchView;
 use crate::EditorView;
@@ -51,17 +51,17 @@ fn repo_path(path: &Path) -> Option<(Repo, String)> {
 
 /// The authors of the declarations of `text`, the content of `path` (behaviours 7a–7b); empty
 /// outside Git, for an untracked file and without a grammar.
-pub(super) fn authors_of(path: &Path, text: &str) -> Vec<idecraft_vcs::CodeAuthor> {
-    let spans = idecraft_languages::syntax::declaration_spans_of(path, text, MAX_DECLARATIONS);
+pub(super) fn authors_of(path: &Path, text: &str) -> Vec<ferris_idea_vcs::CodeAuthor> {
+    let spans = ferris_idea_languages::syntax::declaration_spans_of(path, text, MAX_DECLARATIONS);
     if spans.is_empty() {
         return Vec::new();
     }
     let Ok(blame) = super::annotate::blame_of(path) else {
         return Vec::new();
     };
-    let declarations: Vec<idecraft_vcs::DeclarationLines> = spans
+    let declarations: Vec<ferris_idea_vcs::DeclarationLines> = spans
         .into_iter()
-        .map(|s| idecraft_vcs::DeclarationLines {
+        .map(|s| ferris_idea_vcs::DeclarationLines {
             name: s.name,
             kind: s.kind,
             line: s.line,
@@ -69,7 +69,7 @@ pub(super) fn authors_of(path: &Path, text: &str) -> Vec<idecraft_vcs::CodeAutho
             end: s.end_line,
         })
         .collect();
-    idecraft_vcs::declaration_authors(&blame, text, &declarations)
+    ferris_idea_vcs::declaration_authors(&blame, text, &declarations)
 }
 
 impl WorkbenchView {
@@ -105,7 +105,7 @@ impl WorkbenchView {
         let Some(editor) = self.editors.get(path) else {
             return;
         };
-        if idecraft_languages::LanguageId::detect(path).is_none() {
+        if ferris_idea_languages::LanguageId::detect(path).is_none() {
             return;
         }
         let (text, revision) = {
@@ -221,7 +221,7 @@ impl WorkbenchView {
         let title = self.diff.as_ref()?.read(cx).title().to_owned();
         Some(
             crate::metrics::tab("diff-tab", true, true)
-                .pr(px(idecraft_ui::metrics::TAB_CLOSE_PADDING - 1.))
+                .pr(px(ferris_idea_ui::metrics::TAB_CLOSE_PADDING - 1.))
                 .children(crate::hit_targets::mark("diff-tab"))
                 .child(crate::metrics::tab_content(
                     div().text_color(c(Palette::current().ui_muted)).child("⇄"),
@@ -398,8 +398,8 @@ impl WorkbenchView {
             bar.note = Some("The file has no committed version".into());
             return;
         };
-        let content = idecraft_vcs::apply_change(&base, &text, change);
-        let options = idecraft_vcs::CommitOptions::default();
+        let content = ferris_idea_vcs::apply_change(&base, &text, change);
+        let options = ferris_idea_vcs::CommitOptions::default();
         match repo.commit_change(&message, &rel, &content, false, &options) {
             Ok(done) => {
                 let short = done
@@ -454,16 +454,18 @@ impl WorkbenchView {
         }
     }
 
-    /// `Vcs.RollbackChangedLines`: takes back the change at the caret (behaviour 7).
-    pub(super) fn rollback_change_at_caret(&mut self, cx: &mut Context<Self>) {
+    /// `Vcs.RollbackChangedLines`: takes back the change at the caret (behaviour 7). Without a
+    /// change at the caret it does nothing and returns false, so ⌥⌘Z, which Rollback shares, opens
+    /// Rollback of files instead (`SPEC-0109` v4 behaviour 12).
+    pub(super) fn rollback_change_at_caret(&mut self, cx: &mut Context<Self>) -> bool {
         let Some(editor) = self.active_editor() else {
-            return;
+            return false;
         };
         let (changes, line) = {
             let e = editor.read(cx);
             (e.changes().to_vec(), e.status().line.saturating_sub(1))
         };
-        match idecraft_vcs::change_at_line(&changes, line) {
+        match ferris_idea_vcs::change_at_line(&changes, line) {
             Some(i) => {
                 if let Some(change) = editor.update(cx, |e, cx| e.revert_change(i, cx)) {
                     self.status = Some(format!(
@@ -472,9 +474,10 @@ impl WorkbenchView {
                     ));
                 }
             }
-            None => self.status = Some("No change at the caret".into()),
+            None => return false,
         }
         cx.notify();
+        true
     }
 
     /// Hides the hover cards of every editor view (`SPEC-0061` v9 behaviour 48).
@@ -592,7 +595,7 @@ impl WorkbenchView {
         let old_raw: Vec<&str> = old.split('\n').collect();
         let old_syntax = crate::diff_model::syntax_by_line(&bar.path, &old);
         let new_lines: Vec<Option<String>> =
-            if change.kind == idecraft_vcs::LineChangeKind::Modified {
+            if change.kind == ferris_idea_vcs::LineChangeKind::Modified {
                 (0..old_raw.len())
                     .map(|i| {
                         let line = change.new_start + i;
@@ -628,7 +631,7 @@ impl WorkbenchView {
                 .when(!enabled, |d| d.text_color(c(p.ui_dim)))
                 .child(label.to_owned())
         };
-        let added = change.kind == idecraft_vcs::LineChangeKind::Added;
+        let added = change.kind == ferris_idea_vcs::LineChangeKind::Added;
         let toolbar = div()
             .flex()
             .items_center()
@@ -662,7 +665,7 @@ impl WorkbenchView {
                             let words = new_lines
                                 .get(i)
                                 .and_then(|n| n.as_deref())
-                                .and_then(|n| idecraft_vcs::changed_words(raw, n))
+                                .and_then(|n| ferris_idea_vcs::changed_words(raw, n))
                                 .map(|w| w.0)
                                 .unwrap_or_default();
                             let kinds = old_syntax.get(i).cloned().unwrap_or_default();

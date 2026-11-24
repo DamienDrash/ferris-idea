@@ -1,5 +1,5 @@
 //! Exchange files in the workbench (`SPEC-0303` behaviours 11, 17, 18): the import preview for a
-//! file that was opened, dropped or sent by `idecraft open`, the import after confirmation, and
+//! file that was opened, dropped or sent by `ferris-idea open`, the import after confirmation, and
 //! Share, which opens a prefilled GitHub issue in the browser.
 
 use std::path::{Path, PathBuf};
@@ -13,7 +13,7 @@ use crate::{ImportPreview, ImportPreviewEvent};
 /// The name Export Settings suggests (`SPEC-0105` v9 behaviour 14).
 pub const SETTINGS_EXPORT_NAME: &str = "settings.idcsettings";
 
-/// Files the system asked IDECraft to open (Finder, `open`), waiting for a project window.
+/// Files the system asked Ferris IDEA to open (Finder, `open`), waiting for a project window.
 static OPENED: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
 
 /// Notes files to open; the app's loop hands them to [`WorkbenchView::show_import_in_front`].
@@ -31,8 +31,8 @@ pub fn take_opened() -> Vec<PathBuf> {
 
 impl WorkbenchView {
     /// Where an import of this window writes: its project and the window's user files.
-    fn import_targets(&self, cx: &App) -> idecraft_formats::Targets {
-        idecraft_formats::Targets {
+    fn import_targets(&self, cx: &App) -> ferris_idea_formats::Targets {
+        ferris_idea_formats::Targets {
             root: self.root.clone(),
             keymap_file: crate::keymaps::keymap_file(cx),
             settings_file: crate::appearance::ide_settings_file(cx),
@@ -43,7 +43,7 @@ impl WorkbenchView {
     /// Shows the import preview of the exchange file at `path` (behaviour 11).
     pub fn open_import(&mut self, path: &Path, window: &mut Window, cx: &mut Context<Self>) {
         let targets = self.import_targets(cx);
-        let preview = idecraft_formats::preview_file(path, &targets);
+        let preview = ferris_idea_formats::preview_file(path, &targets);
         let view = cx.new(|cx| ImportPreview::new(preview, cx));
         self._import_events = Some(cx.subscribe_in(
             &view,
@@ -91,9 +91,9 @@ impl WorkbenchView {
     /// was left out; returns whether it was written.
     pub fn export_settings_to(&mut self, target: &Path, cx: &mut Context<Self>) -> bool {
         let targets = self.import_targets(cx);
-        let written = idecraft_formats::export(
+        let written = ferris_idea_formats::export(
             "settings",
-            &idecraft_formats::Selection::default(),
+            &ferris_idea_formats::Selection::default(),
             &targets,
         )
         .and_then(|e| {
@@ -153,9 +153,9 @@ impl WorkbenchView {
     }
 
     /// Imports a confirmed preview and uses what changed at once (behaviour 12).
-    fn apply_import(&mut self, preview: &idecraft_formats::Preview, cx: &mut Context<Self>) {
+    fn apply_import(&mut self, preview: &ferris_idea_formats::Preview, cx: &mut Context<Self>) {
         let targets = self.import_targets(cx);
-        match idecraft_formats::apply(preview, &targets) {
+        match ferris_idea_formats::apply(preview, &targets) {
             Ok(written) => {
                 crate::keymaps::load(cx);
                 crate::appearance::apply_saved_theme(cx);
@@ -172,14 +172,14 @@ impl WorkbenchView {
     }
 
     /// Opens the prefilled issue for `preview`'s file in the browser (behaviour 18).
-    fn share_exchange(&mut self, preview: &idecraft_formats::Preview, cx: &mut Context<Self>) {
+    fn share_exchange(&mut self, preview: &ferris_idea_formats::Preview, cx: &mut Context<Self>) {
         let kind = preview.kind.clone().unwrap_or_else(|| "file".into());
         let name = preview
             .envelope
             .as_ref()
             .and_then(|e| e.name.clone())
             .unwrap_or_else(|| preview.file.clone());
-        let (url, whole) = idecraft_formats::share_url(&kind, &name, &preview.text);
+        let (url, whole) = ferris_idea_formats::share_url(&kind, &name, &preview.text);
         cx.open_url(&url);
         self.status = Some(if whole {
             "Opened a prefilled issue in the browser; nothing is sent until you submit it.".into()

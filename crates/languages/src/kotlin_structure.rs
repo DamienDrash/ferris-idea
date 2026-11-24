@@ -20,7 +20,7 @@ use crate::jvm::{Jvm, parse};
 use crate::lsp::LspError;
 use crate::rename::{Edit, FileEdits};
 use crate::ts_structure::{DeclarationMark, MarkKind, MarkTarget, place_of};
-use crate::usages::{UsageCount, distinct_places};
+use crate::usages::{Counted, Plan, UsageCount, distinct_places};
 
 /// At most this many nodes in a hierarchy.
 const NODE_LIMIT: usize = 500;
@@ -28,8 +28,6 @@ const NODE_LIMIT: usize = 500;
 const MAX_FILES: usize = 5000;
 /// Files larger than this are left out.
 const MAX_FILE_BYTES: u64 = 1_000_000;
-/// At most this many declarations counted per file.
-const MAX_DECLARATIONS: usize = 200;
 /// Folders never searched for sources.
 const SKIPPED_DIRS: &[&str] = &["build", "out", "target", "node_modules", "bin"];
 
@@ -1383,12 +1381,8 @@ impl KtProject {
         let mut out = Vec::new();
         let entry =
             |name: &str, kind: &'static str, line: usize, column: usize, below: usize| UsageCount {
-                name: name.to_owned(),
-                kind,
-                line: line as u64,
-                character: column as u64,
-                count: 0,
                 inheritors: below,
+                ..UsageCount::new(name, kind, line as u64, column as u64)
             };
         let member_kind = |m: &KtMember, in_type: bool| match (m.property, m.is_abstract) {
             (true, true) => "abstract property",
@@ -1424,8 +1418,8 @@ impl KtProject {
         for m in &file.top_level {
             out.push(entry(&m.name, member_kind(m, false), m.line, m.column, 0));
         }
+        // The plan cuts to at most 200 (`SPEC-0292` v8 behaviour 12).
         out.sort_by_key(|u| (u.line, u.character));
-        out.truncate(MAX_DECLARATIONS);
         out
     }
 }
@@ -1628,17 +1622,20 @@ pub fn declaration_marks_in(root: &Path, file: &Path, text: Option<&str>) -> Vec
 /// them from the syntax tree, the usages from the server's references. Declarations with neither
 /// usages nor anything below are left out; so are those the server was not asked about in time
 /// or failed on. Without a server there are no counts.
+///
+/// `plan` chooses the declarations and their order (`SPEC-0292` v8 behaviour 12).
 pub async fn usage_counts_in(
     root: &Path,
     file: &Path,
     text: Option<&str>,
     wait: Duration,
-) -> Result<Vec<UsageCount>, LspError> {
+    plan: &Plan,
+) -> Result<Counted, LspError> {
     let project = KtProject::load(root, file, text, &no_texts);
     let Some(f) = project.file(file) else {
-        return Ok(Vec::new());
+        return Ok(Counted::new(Vec::new(), true));
     };
-    let mut found = project.counted_declarations(f);
+    let mut found = plan.order(project.counted_declarations(f));
     let deadline = Instant::now() + wait;
     let o = Opened::open_text(root, file, text, wait).await?;
     let mut asked = 0;
@@ -1659,9 +1656,10 @@ pub async fn usage_counts_in(
         asked += 1;
     }
     o.close().await;
+    let complete = asked == found.len();
     found.truncate(asked);
     found.retain(|d| d.count > 0 || d.inheritors > 0);
-    Ok(found)
+    Ok(Counted::new(found, complete))
 }
 
 #[cfg(test)]

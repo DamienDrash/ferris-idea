@@ -4,8 +4,8 @@
 
 use std::path::Path;
 
+use ferris_idea_core::changelists::{CHANGELISTS_FILE, Changelists, ListError};
 use gpui::{Context, Window, div, prelude::*, px};
-use idecraft_core::changelists::{CHANGELISTS_FILE, Changelists, ListError};
 
 use super::{CommitEvent, CommitView, button, c, checkbox};
 use crate::changelist_model::{self as model, ListOp, ListStrip};
@@ -32,7 +32,7 @@ impl CommitView {
     /// Reads the changelists and brings them in line with the changed files just read
     /// (`SPEC-0335` behaviours 2–4 and 17). A state file that cannot be used is said once and is
     /// not replaced by looking (behaviour 21).
-    pub(super) fn read_lists(&mut self, renames: &[idecraft_vcs::Rename]) {
+    pub(super) fn read_lists(&mut self, renames: &[ferris_idea_vcs::Rename]) {
         let (mut lists, problem) = Changelists::load(&self.root);
         if problem != self.lists_problem
             && let Some(why) = problem

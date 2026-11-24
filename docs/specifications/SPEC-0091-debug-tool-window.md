@@ -1,6 +1,8 @@
 # SPEC-0091: Debugging in the window
 
-- **Version:** 22 · **Date:** 2026-11-16 (v22 (v20 and v21 are taken by #891 and #902): a value with line breaks after a line of code is put on one line too, behaviour 13, AK-27; hand test 20 of the beta of workflow (a); v20: Jump to Type Source from the Variables list, behaviour 45, AK-28 (AK-25 is taken by v13, AK-26 by #902, AK-27 by v22); eleventh package of docs/research/KEYMAP_COVERAGE.md); 2026-11-14 (v19: Quick Evaluate Expression, behaviour 44, AK-24; eighth package of docs/research/KEYMAP_COVERAGE.md; v18: Go files and Go tests through Delve, SPEC-0039 v7; v17: a breakpoint the session cannot bind is hollow, SPEC-0127 v5, OBS-0035 L14; v16: JVM values in one form with the size of collections, no `this` row in a frame without a receiver, OBS-0035 L11 and L12; v15: values at the end of a line are placed one after the other; v14: a value with line breaks stays on one row; v2: Python scripts through debugpy; v3: evaluate expression,
+- **Version:** 22 · **Date:** 2026-11-16 (v22 (v20 and v21 are taken by #891 and #902): a value with line breaks after a line of code is put on one line too, behaviour 13, AK-27; hand test 20 of the beta of workflow (a); v20: Jump to Type Source from the Variables list, behaviour 45, AK-28 (AK-25 is taken by v13, AK-26 by #902, AK-27 by v22); eleventh package of docs/research/KEYMAP_COVERAGE.md); 2026-11-16 (v21: the expression field's history with ↑ and ↓,
+  behaviour 46, AK-26, and a condition that cannot be evaluated told in the window with a real
+  debugpy; F-071 checked without a screen; behaviour 45 belongs to v20 on another branch); 2026-11-14 (v19: Quick Evaluate Expression, behaviour 44, AK-24; eighth package of docs/research/KEYMAP_COVERAGE.md; v18: Go files and Go tests through Delve, SPEC-0039 v7; v17: a breakpoint the session cannot bind is hollow, SPEC-0127 v5, OBS-0035 L14; v16: JVM values in one form with the size of collections, no `this` row in a frame without a receiver, OBS-0035 L11 and L12; v15: values at the end of a line are placed one after the other; v14: a value with line breaks stays on one row; v2: Python scripts through debugpy; v3: evaluate expression,
   breakpoints kept across restarts; v4: Node.js scripts through js-debug; v5: watches, threads, values
   in the editor; v6: the field's hint is a placeholder; v7: debugger items in the editor menu, the
   adapter's echo of the command line, closure scopes; v8: values in the editor also for the fields of the
@@ -106,10 +108,10 @@ the editor.
    **(v6)** The hint "Evaluate (↩) · Watch (⇧⌘↩)" (Enter / Ctrl+Shift+Enter elsewhere) is a
    placeholder inside the field: dimmed, shown only while the field is empty, gone as soon as it has
    text, so it never overlaps what is typed. [GEN]
-9. **Breakpoints kept (v3):** the breakpoints of the workspace are saved in `.idecraft/breakpoints`, one
+9. **Breakpoints kept (v3):** the breakpoints of the workspace are saved in `.ferris-idea/breakpoints`, one
    file per line as `path:line,line` (path relative to the workspace, 1-based lines). The file is
    written on every change and removed when there are none. Like the other machine-local state it is
-   listed in the generated `.idecraft/.gitignore`, and an outdated generated ignore file is refreshed.
+   listed in the generated `.ferris-idea/.gitignore`, and an outdated generated ignore file is refreshed.
    An opened file gets its saved breakpoints (lines past its end are dropped). `Debug` sends all
    breakpoints of the workspace, also those of files without an open editor, so closing a tab no
    longer loses its breakpoints. [GEN]
@@ -128,7 +130,7 @@ the editor.
 12. **Threads (v5):** when the program pauses, its threads are listed above the call stack, the stopped
    one marked; a click on another thread shows its call stack and locals, and stepping then acts on that
    thread. [GEN]
-   **(v10)** In OBS-0014 IDECraft listed every thread of the JVM as a tree (also the system threads)
+   **(v10)** In OBS-0014 Ferris IDEA listed every thread of the JVM as a tree (also the system threads)
    above all frames; the reference shows one thread in a selection list and only its frames below.
    Now a selector row at the top of the frames pane shows the shown thread's name with a ▾; a click
    opens the list of all threads (the shown one marked), a click on a thread shows it and closes the
@@ -147,7 +149,7 @@ the editor.
 
    The top frame and the selected frame are never folded. Agents keep the whole stack
    (`debug_state` of SPEC-0054 is unchanged). The open question of OBS-0014 (which frames the
-   reference hides, a setting) stays open; this rule is IDECraft's own. [GEN, STD, OBS]
+   reference hides, a setting) stays open; this rule is Ferris IDEA's own. [GEN, STD, OBS]
 13. **Values in the editor (v5):** while paused, the editor of the execution point shows the values of
    the shown frame's variables after the lines, `name: value` (several joined by two spaces, long values
    cut at 40 characters with "…"), in the scheme's `DEBUGGER_INLINED_VALUES` colour. Each variable
@@ -168,7 +170,7 @@ the editor.
    one line of text; with a line break in it the editor could not lay it out and the application
    ended with an error (found in the harness walk of hand test 20, 2026-11-16). [GEN]
 14. **The frame's object (v9):** in OBS-0014 the reference showed `this` with its object id and its
-   text, and the fields the method uses (`qty`, `unitPriceCents`) at the top of the variables; IDECraft
+   text, and the fields the method uses (`qty`, `unitPriceCents`) at the top of the variables; Ferris IDEA
    showed only `this = Inventory$Item@15` and its type. Now:
    - **Text of the object** (Java and Kotlin): when the shown frame has `this` with children, the
      session asks the adapter to evaluate `this.toString()` in the frame and waits at most one second.
@@ -206,7 +208,7 @@ the editor.
    the adapter's list stays. With two or more, a menu under the code
    of the execution line lists them in the adapter's order (java-debug: `add(twice(sum),square(3))`,
    `twice(sum)`, `square(3)`), the first highlighted; ↑ ↓ Enter or a click steps into that call,
-   Escape closes it without stepping. IDECraft steps into the line's calls one by one and back out of
+   Escape closes it without stepping. Ferris IDEA steps into the line's calls one by one and back out of
    each one that is not the chosen method (by the frame's method name), at most 12 times, until it is
    entered or the line is left; the stop is then shown. This works the same with every adapter that lists
    the calls, whatever its own `stepIn` with `targetId` does. With one call or none it is a plain Step
@@ -221,7 +223,7 @@ the editor.
    the session takes the line breakpoints of all files away and puts them back at the next stop,
    wherever it is. Force Run to Cursor refuses a line without code like Run to Cursor. `ForceStepInto`
    (⌥⇧F7) is Step Into: the adapters' Step Into already enters every frame they can show (java-debug
-   has no step filters set by IDECraft; debugpy's "just my code" is the launch's setting). [OSS, STD]
+   has no step filters set by Ferris IDEA; debugpy's "just my code" is the launch's setting). [OSS, STD]
 21. **The ⋮ menu (v11):** after Mute Breakpoints the toolbar has ⋮ (tooltip "More") with Force Step
    Over, Force Step Into, Smart Step Into, Run to Cursor, Force Run to Cursor, Show Execution Point,
    Evaluate Expression… and Reset Frame, with the keymap's shortcuts, enabled while paused.
@@ -245,14 +247,14 @@ the editor.
    has `[label]` in red before its name, also after stepping and in other frames, for the window's
    sessions. Unmark Object takes the label away. Rows without an id (numbers, strings) cannot be
    marked. [OBS, GEN]
-25. **Step Out of Code Block (v12):** `StepOutOfBlock` (the ⋮ menu; ⌃⌥⇧F10, given by IDECraft
+25. **Step Out of Code Block (v12):** `StepOutOfBlock` (the ⋮ menu; ⌃⌥⇧F10, given by Ferris IDEA
    because the keymaps have none) steps over until the top frame is on a line outside the
    innermost code block around its line, the function returned, or a breakpoint stopped it; at
    most 200 steps, then a console line says it is still in the block. The block runs from the
    line of its opening brace (or the header above a brace on a line of its own) to its closing
    brace; braces in strings and `//` comments do not count. Python's block is the header ending
    with `:` above the line, indented less, through the last line indented deeper. Without a block
-   it is Step Out. IDECraft's own stepping, so it works with every adapter. [GEN, OSS, OBS]
+   it is Step Out. Ferris IDEA's own stepping, so it works with every adapter. [GEN, OSS, OBS]
 26. **Thread dump (v12):** `DumpThreads` (⋮ "Get Thread Dump") writes to the console a heading with
    the number of threads, then per thread `"name"`, its state and `(group …)` where known, its
    frames as `at name (file:line)` (up to 50), `running` for a thread that is not suspended; the
@@ -270,9 +272,9 @@ the editor.
    (RUNNING for RUNNABLE, WAIT for WAITING and TIMED_WAITING, MONITOR for BLOCKED, NEW, ZOMBIE for
    TERMINATED; **v13:** SLEEPING for a timed wait whose top frame is `Thread.sleep`, as the reference
    shows it) and an icon: the stopped thread at its breakpoint, a suspended one paused, else by
-   state. java-debug names threads `Thread [main]`; IDECraft shows `main`. Python has no thread
+   state. java-debug names threads `Thread [main]`; Ferris IDEA shows `main`. Python has no thread
    states and debugpy stops every thread together, so its list stays as it was, without groups.
-   IDECraft adds no threads of its own to the program (IMP-0345). **(v13)** Escape closes the open
+   Ferris IDEA adds no threads of its own to the program (IMP-0345). **(v13)** Escape closes the open
    list before it moves the focus to the editor. [OBS, OSS]
 29. **Force Return and Throw Exception (v12):** in the ⋮ menu, refused with a console line for every
    adapter: DAP has no request to leave a method early or to throw into the program, java-debug
@@ -300,7 +302,7 @@ the editor.
    empty field removes it, Escape leaves. A renderer is an expression in which `this` (Java) or
    `self` (Python) is the value; rows whose type is the renderer's type, or ends with it as simple
    name, show its result instead of the adapter's value (they still open to their fields). The
-   renderers are kept in `.idecraft/debug-renderers.json`; "Mute Renderers" switches them off for
+   renderers are kept in `.ferris-idea/debug-renderers.json`; "Mute Renderers" switches them off for
    the window. Java and Python only. [OBS, GEN]
 34. **Filters (v12, L7):** the variables menu's "Filter" switches Show Static Fields (Java: java-debug's
    `showStaticVariables` setting through jdtls, the frame is read again; Python: the "class
@@ -425,12 +427,23 @@ the editor.
     type arguments or array brackets (`java.util.ArrayList<String>` → `ArrayList`); Enter opens
     the class. A primitive type says in the status bar that it has no declaration. Without a
     selected row the key goes to the next action of the chord. [GEN]
+46. **History of the expression field (v21):** every expression evaluated from the field (Enter,
+    also a code fragment, also while not paused) goes on top of the field's history, an earlier
+    copy of it removed; at most 50 are kept, for as long as the window is open, across its debug
+    sessions (as the watches, behaviour 11). With the plain field (no completion list, not
+    marking an object, setting a value or a renderer's expression) ↑ puts the next older
+    expression into the field and stops at the oldest; ↓ goes back towards the newest and past it
+    to the text that was in the field before the first ↑. Typing ends going through the history:
+    the next ↑ starts at the newest again. The completion list keeps ↑ and ↓ while it shows
+    (behaviour 22); in a code fragment ↑ and ↓ move between its lines. Agents send their own
+    expressions to `debug_evaluate` and need no history. [GEN: an expression field remembers its
+    entries as a shell or a console does]
 
 ## Acceptance criteria
 - **AK-1** Breakpoint lines follow inserted, removed and joined lines; the variables tree fetches
   children once and toggles; programs resolve relative to the working directory or on the `PATH`
   (unit tests of `debug_model`).
-- **AK-2** In a real window (`idecraft ui --selftest`, with lldb-dap and a C compiler), on a compiled C
+- **AK-2** In a real window (`ferris-idea ui --selftest`, with lldb-dap and a C compiler), on a compiled C
   program:
   - ⌘F8 sets a breakpoint on the caret line.
   - ⌃D stops there with `main` on top of the stack, `a = 21` among the locals and the execution
@@ -513,7 +526,7 @@ the editor.
   (`crates/mcp/tests/it/protocol.rs`: tool list, `debug` right, renderers). Window self-test steps
   `java_debug_more_steps`, `python_debug_more_steps` (written, not yet run in the window).
 - **AK-25 (v13)** `extras::tests::{thread_names_and_states, views_of_values}` (SLEEPING, `0xFF`),
-  `context_menu` tests (views by kind), window self-test `IDECRAFT_SELFTEST_ONLY=java-debug` 35/35 and
+  `context_menu` tests (views by kind), window self-test `FERRIS_IDEA_SELFTEST_ONLY=java-debug` 35/35 and
   `debug-more` 26/26, full window self-test green; next to the reference in OBS-0025 re-check 2.
 - **AK-18 (v12)** In the window (by hand or the self-test): the thread list's groups and icons,
   the Inspect tab, View as, the renderer, mark colours, the fragment button, the hot swap bar and
@@ -539,6 +552,16 @@ the editor.
   window of the test harness the action without a session is not available and leaves the
   Debug window closed (`eighth_package_keymap.rs::quick_evaluate_needs_a_paused_session`).
   With a debugger: not checked.
+- **AK-26 (v21, behaviour 46)** Unit test `debug_model::tests::the_expression_history_goes_back_and_forward`:
+  newest first and each once, blank text left out, ↑ stops at the oldest, ↓ gives back the typed
+  text, typing and evaluating start again at the newest, at most 50 kept. In a window of the
+  test harness with a real debugpy (`crates/workbench/tests/it/breakpoint_toggles.rs`:
+  `a_failed_condition_is_told_and_the_field_keeps_a_history`): a breakpoint whose condition names
+  an unknown variable stops the program and the console says the condition could not be
+  evaluated, with debugpy's `NameError` (SPEC-0039 v6 in the window); `total` and `i * 10` evaluated with Enter show their
+  values; in the empty field ↑ ↑ ↑ ↓ ↓ give `i * 10`, `total`, `total`, `i * 10` and the empty
+  field; after Stop and a new Debug the history is still `i * 10`, `total`. Skipped without
+  debugpy.
 - **AK-27 (v22, behaviour 13)** Unit test `debug_model::tests::an_inline_function_value_is_one_line`;
   in a window of the test harness a Node.js program paused with a function among its variables
   shows its values after the lines (`workflow_a_beta_handtests.rs::hand_test_20_debug_node`, with
@@ -558,22 +581,22 @@ reference can list chosen expressions as a value's children), type renderers for
 JavaScript values.
 
 ## Known deviations from the reference
-The reference builds the program before debugging and offers more adapters. IDECraft debugs native
+The reference builds the program before debugging and offers more adapters. Ferris IDEA debugs native
 programs through lldb-dap and Python scripts through debugpy. ⌥F8 uses the inline expression field of
 the variables pane instead of a modal dialog, so the stack, the variables and earlier results stay
 visible. Breakpoints are kept in a small plain-text file that people and agents can read, instead of
 inside a workspace XML file. Values in the editor show each variable once, after the last line up to
 the execution point that names it, rather than on every line that uses it, so the code stays readable.
-In OBS-0014 the reference also listed the object's components at the record's declaration; IDECraft
+In OBS-0014 the reference also listed the object's components at the record's declaration; Ferris IDEA
 shows each value once, where it is used last. The reference shows the object's id in braces before
-the class name; IDECraft shows the adapter's value as it comes and adds the text after it. Which
-frames count as library frames is IDECraft's own rule (behaviour 15), written down so people and
+the class name; Ferris IDEA shows the adapter's value as it comes and adds the text after it. Which
+frames count as library frames is Ferris IDEA's own rule (behaviour 15), written down so people and
 agents can predict it. **(v11)** Smart Step Into lists the calls in a menu under the line instead of
 highlighting them in the code; Reset Frame stops where the adapter's `restartFrame` stops (java-debug
 steps into the reset frame's call again) rather than before the call; Mark Object labels inline in
 the expression field instead of a dialog with a colour; Set Value, Mark Object and completions use the
 one field above the variables. The reference's thread list also shows its own helper threads in the
-debugged JVM; IDECraft shows the program's threads only (IMP-0345). Compared
+debugged JVM; Ferris IDEA shows the program's threads only (IMP-0345). Compared
 side by side for Java in OBS-0014. **(v12)** Inspect opens a tab of the Debug window instead of a
 window of its own. A renderer's expression names the value as `this`/`self`, not its bare fields.
 The thread dump goes to the console instead of a tab of its own; the console's stack lines can be
@@ -584,7 +607,7 @@ A code fragment the reference refused (OBS-0025 item 5) is evaluated (IMP-0355).
 
 **(v13)** The result of hot swap stays in the console instead of a passing notification, and reloading is refused with the files and error counts while a changed source has errors (IMP-0361); the console's input line also evaluates in Java, where the reference has none (IMP-0362).
 
-**(v16)** Collections show their size after type and id in IDECraft's own form (`ArrayList@566 size = 1`); the reference showed type, id and size too (OBS-0035 item 18). IDECraft shows no preview of the elements in the row, and for Kotlin no size of collection classes outside `java.util` and `kotlin.collections`, because it reads fields instead of calling the program's methods.
-- **Jump to Type Source (v20):** the reference opens the type's declaration at once; IDECraft
+**(v16)** Collections show their size after type and id in Ferris IDEA's own form (`ArrayList@566 size = 1`); the reference showed type, id and size too (OBS-0035 item 18). Ferris IDEA shows no preview of the elements in the row, and for Kotlin no size of collection classes outside `java.util` and `kotlin.collections`, because it reads fields instead of calling the program's methods.
+- **Jump to Type Source (v20):** the reference opens the type's declaration at once; Ferris IDEA
   lists the classes of that name in Go to Class, where the person picks one when several have
   it.

@@ -1,5 +1,5 @@
 //! A folder on an SSH host as a remote project (`SPEC-0317` v2, `ADR-0025` §1a, `ADR-0026` §1):
-//! the backend `idecraft serve --stdio` of this very build runs on the host behind the system
+//! the backend `ferris-idea serve --stdio` of this very build runs on the host behind the system
 //! `ssh` with SPEC-0121's options, checked by SHA-256 before each start of an uploaded copy; the
 //! window half of the session protocol runs here. After a break, `serve --attach <session>`
 //! bridges a new SSH channel to the waiting session; the resume token travels only inside it.
@@ -10,7 +10,7 @@ use std::process::{Child, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use idecraft_session::{ClientSession, ErrorCode, Reconnected, Recovery, RpcError, Transport};
+use ferris_idea_session::{ClientSession, ErrorCode, Reconnected, Recovery, RpcError, Transport};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
@@ -258,12 +258,12 @@ fn check_runs(route: &Route, path: &str, platform: &HostPlatform) -> Result<(), 
         &[path],
         None,
     )?;
-    if out.success() && String::from_utf8_lossy(&out.stdout).starts_with("idecraft ") {
+    if out.success() && String::from_utf8_lossy(&out.stdout).starts_with("ferris-idea ") {
         return Ok(());
     }
     Err(RemoteError::Failed(format!(
         "{}: the backend build for {} does not start there: {}. A musl-based system needs its own \
-         build; start idecraft-serve there by hand with --pair",
+         build; start ferris-idea-serve there by hand with --pair",
         route.label(),
         platform.platform,
         out.stderr.trim()
@@ -367,7 +367,7 @@ impl RemoteProject {
         let session = ClientSession::open(
             transport,
             folder,
-            &format!("idecraft {version}"),
+            &format!("ferris-idea {version}"),
             &host,
             recovery,
         )
@@ -574,7 +574,7 @@ mod tests {
             checksum_limit(2_694_000_000),
             crate::ssh::TIMEOUT + Duration::from_secs(161)
         );
-        let dir = std::env::temp_dir().join(format!("idecraft-sha-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-sha-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("b");
         let bytes: Vec<u8> = (0..(3u32 << 20) + 17).map(|i| (i % 251) as u8).collect();
@@ -598,12 +598,12 @@ mod tests {
             ..ServeOptions::default()
         };
         assert_eq!(
-            serve_line("$HOME/.cache/idecraft/bin/idecraft-1", &opts),
-            "exec \"$HOME\"/.cache/idecraft/bin/idecraft-1 serve --stdio --state-dir '/tmp/my state' --run-dir /tmp/r --reattach-minutes 2"
+            serve_line("$HOME/.cache/ferris-idea/bin/ferris-idea-1", &opts),
+            "exec \"$HOME\"/.cache/ferris-idea/bin/ferris-idea-1 serve --stdio --state-dir '/tmp/my state' --run-dir /tmp/r --reattach-minutes 2"
         );
         assert_eq!(
-            attach_line("/usr/bin/idecraft", "ab12", &opts),
-            "exec /usr/bin/idecraft serve --attach ab12 --run-dir /tmp/r"
+            attach_line("/usr/bin/ferris-idea", "ab12", &opts),
+            "exec /usr/bin/ferris-idea serve --attach ab12 --run-dir /tmp/r"
         );
         let me = std::env::current_exe().unwrap();
         assert_eq!(sha256_file(&me).unwrap().len(), 64);

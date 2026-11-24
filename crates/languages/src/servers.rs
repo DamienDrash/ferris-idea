@@ -331,7 +331,8 @@ pub fn candidates(language: LanguageId) -> &'static [Candidate] {
         LanguageId::Json => JSON,
         LanguageId::Vue => VUE,
         LanguageId::Svelte => SVELTE,
-        LanguageId::Sql => &[],
+        // No server: Ferris IDEA reads properties files itself (SPEC-0155).
+        LanguageId::Sql | LanguageId::Properties => &[],
     }
 }
 
@@ -377,7 +378,7 @@ fn rustup_proxy(_: &Path) -> Option<PathBuf> {
 }
 
 /// Why the rustup proxy `path` cannot run `program` in `root` (the folder whose toolchain rustup
-/// chooses; `None`: the folder IDECraft runs in), or `None` when it can (`SPEC-0042` v15
+/// chooses; `None`: the folder Ferris IDEA runs in), or `None` when it can (`SPEC-0042` v15
 /// behaviour 2a, v16 behaviour 23). rustup is asked without letting it install a toolchain.
 fn rustup_problem(
     rustup: &Path,
@@ -396,7 +397,7 @@ fn rustup_problem(
         which.current_dir(root);
     }
     // A rustup still open for writing ("Text file busy") runs a moment later.
-    let said = match idecraft_core::spawn::output(&mut which) {
+    let said = match ferris_idea_core::spawn::output(&mut which) {
         Ok(o) if o.status.success() => return None,
         Ok(o) => String::from_utf8_lossy(&o.stderr).into_owned(),
         Err(_) => String::new(),
@@ -442,7 +443,7 @@ pub fn find_in(path_var: &OsStr, program: &str) -> Availability {
 /// [`find_in`] for a server that will run in the workspace `root` (`SPEC-0042` v15 behaviour 2a):
 /// a rustup proxy starts the program of the toolchain rustup selects for the folder it runs in
 /// (`rust-toolchain.toml`, a folder override, else the default), so whether that toolchain has
-/// the component is asked there, not in the folder IDECraft happens to run in. rustup is asked
+/// the component is asked there, not in the folder Ferris IDEA happens to run in. rustup is asked
 /// without letting it install a toolchain, and its answer names the toolchain (v16 behaviour 23).
 pub fn find_for(path_var: &OsStr, program: &str, root: Option<&Path>) -> Availability {
     let mut unusable = None;
@@ -507,7 +508,7 @@ pub fn find_for(path_var: &OsStr, program: &str, root: Option<&Path>) -> Availab
                 None => {
                     unusable.get_or_insert_with(|| {
                         format!(
-                            "{} does not belong to a TypeScript package IDECraft can read",
+                            "{} does not belong to a TypeScript package Ferris IDEA can read",
                             path.display()
                         )
                     });
@@ -755,7 +756,7 @@ impl Resolved {
                     "extendedClientCapabilities": {"classFileContentsSupport": true}
                 })
             }
-            "rust-analyzer" if self.safe => rust_analyzer_safe_options(),
+            "rust-analyzer" => rust_analyzer_options(self.safe),
             // These servers announce and do formatting only when asked to in `initialize`
             // (`SPEC-0043` v4 behaviour 10): HTML, CSS, SCSS, Less and JSON.
             "vscode-html-language-server"
@@ -775,6 +776,21 @@ impl Resolved {
             _ => serde_json::Value::Null,
         }
     }
+}
+
+/// rust-analyzer's options: its reference lenses switched on for usage counts (`SPEC-0292` v8
+/// behaviour 11; they read code and run nothing), in safe mode with [`rust_analyzer_safe_options`].
+fn rust_analyzer_options(safe: bool) -> serde_json::Value {
+    let mut options = if safe {
+        rust_analyzer_safe_options()
+    } else {
+        serde_json::json!({})
+    };
+    let on = serde_json::json!({"enable": true});
+    options["lens"] = serde_json::json!({"references": {
+        "adt": on, "method": on, "trait": on, "enumVariant": on,
+    }});
+    options
 }
 
 /// rust-analyzer without build scripts, procedural macros and `cargo check` (`SPEC-0278`
@@ -900,8 +916,8 @@ impl Resolved {
             // Parameter names; gopls leaves every hint off unless asked (`SPEC-0291` v8
             // behaviour 3e).
             serde_json::json!({"gopls": {"hints": {"parameterNames": true}}})
-        } else if self.safe && self.candidate.program == "rust-analyzer" {
-            serde_json::json!({"rust-analyzer": rust_analyzer_safe_options()})
+        } else if self.candidate.program == "rust-analyzer" {
+            serde_json::json!({"rust-analyzer": rust_analyzer_options(self.safe)})
         } else {
             serde_json::Value::Null
         }
@@ -1008,7 +1024,7 @@ fn resolve_mode(
     let list = candidates(language);
     if list.is_empty() {
         return Err(LspError::NoServer(format!(
-            "{}: IDECraft serves it itself, no language server is used",
+            "{}: Ferris IDEA serves it itself, no language server is used",
             language.lsp_id()
         )));
     }
@@ -1077,7 +1093,7 @@ pub fn resolve_for_in(
     language: LanguageId,
     root: &Path,
 ) -> Result<Resolved, LspError> {
-    let safe = !idecraft_core::trust::allows_project_code(root);
+    let safe = !ferris_idea_core::trust::allows_project_code(root);
     resolve_for_mode(path_var, language, root, safe)
 }
 
@@ -1124,7 +1140,7 @@ pub fn resolve_for_mode(
         });
     }
     if language == LanguageId::Ruby {
-        let mut search = idecraft_core::RubySearch::from_env(root);
+        let mut search = ferris_idea_core::RubySearch::from_env(root);
         search.path_var = Some(path_var.to_os_string());
         return resolve_ruby_mode(&search, safe);
     }
@@ -1134,14 +1150,17 @@ pub fn resolve_for_mode(
 /// The Ruby server in the workspace of `search` (`SPEC-0185` behaviours 7–8): looked up with the
 /// selected Ruby first on the search path; a candidate locked in `Gemfile.lock` starts through
 /// `bundle exec` when `bundle` is found.
-pub fn resolve_ruby(search: &idecraft_core::RubySearch) -> Result<Resolved, LspError> {
+pub fn resolve_ruby(search: &ferris_idea_core::RubySearch) -> Result<Resolved, LspError> {
     resolve_ruby_mode(search, false)
 }
 
 /// [`resolve_ruby`]; in safe mode never through `bundle exec`, and without servers that run Bundler
 /// (`SPEC-0278` behaviour 9).
-fn resolve_ruby_mode(search: &idecraft_core::RubySearch, safe: bool) -> Result<Resolved, LspError> {
-    let env = idecraft_core::ruby_environment(search);
+fn resolve_ruby_mode(
+    search: &ferris_idea_core::RubySearch,
+    safe: bool,
+) -> Result<Resolved, LspError> {
+    let env = ferris_idea_core::ruby_environment(search);
     let dirs: Vec<PathBuf> = env
         .server_path
         .iter()
@@ -1263,7 +1282,7 @@ fn overview_at(root: Option<&Path>) -> Vec<LanguageServers> {
 
 /// What the status bar says when a file of `language` opens in `root` and none of its servers is
 /// usable (`SPEC-0042` v7 behaviour 15): the language, the programs looked for and how to install
-/// them. `None` when a server is usable, or when IDECraft serves the language itself.
+/// them. `None` when a server is usable, or when Ferris IDEA serves the language itself.
 pub fn missing_server_message(language: LanguageId, root: &Path) -> Option<String> {
     missing_server_message_in(&path_var(), language, root)
 }
@@ -1405,7 +1424,7 @@ mod tests {
     /// whether the component exists.
     #[test]
     fn rustup_proxy_is_checked_in_the_project() {
-        let base = std::env::temp_dir().join(format!("idecraft-rustup-{}", std::process::id()));
+        let base = std::env::temp_dir().join(format!("ferris-idea-rustup-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         let (bin, with, without) = (base.join("bin"), base.join("with"), base.join("without"));
         for dir in [&bin, &with, &without] {
@@ -1461,7 +1480,7 @@ mod tests {
     #[test]
     fn rustup_proxy_is_asked_in_the_project_folder() {
         let base =
-            std::env::temp_dir().join(format!("idecraft-rustup-asked-{}", std::process::id()));
+            std::env::temp_dir().join(format!("ferris-idea-rustup-asked-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         let cargo = base.join("cargo/bin");
         let (with, without) = (base.join("with"), base.join("without"));
@@ -1535,7 +1554,7 @@ mod tests {
 
     #[test]
     fn missing_server_message() {
-        let base = std::env::temp_dir().join(format!("idecraft-missing-{}", std::process::id()));
+        let base = std::env::temp_dir().join(format!("ferris-idea-missing-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         let bin = base.join("bin");
         std::fs::create_dir_all(&bin).unwrap();
@@ -1551,7 +1570,7 @@ mod tests {
             missing_server_message_in(&empty, LanguageId::Java, &base),
             None
         );
-        // SQL is served by IDECraft itself.
+        // SQL is served by Ferris IDEA itself.
         assert_eq!(
             missing_server_message_in(&empty, LanguageId::Sql, &base),
             None
@@ -1567,7 +1586,7 @@ mod tests {
     /// SPEC-0122 v3 behaviour 9: Lombok's jar from the local caches, the declared version first.
     #[test]
     fn lombok_agent_from_the_local_caches() {
-        let base = std::env::temp_dir().join(format!("idecraft-lombok-{}", std::process::id()));
+        let base = std::env::temp_dir().join(format!("ferris-idea-lombok-{}", std::process::id()));
         let (home, root) = (base.join("home"), base.join("p"));
         std::fs::create_dir_all(&root).unwrap();
         assert_eq!(lombok_agent(&root, &home), None);
@@ -1617,7 +1636,8 @@ mod tests {
     /// SPEC-0042 AK-14: jdtls gets `-data` with a data folder recording the roots; others nothing.
     #[test]
     fn jdtls_gets_its_workspace_data() {
-        let base = std::env::temp_dir().join(format!("idecraft-jdtls-data-{}", std::process::id()));
+        let base =
+            std::env::temp_dir().join(format!("ferris-idea-jdtls-data-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         let root = base.join("project");
         std::fs::create_dir_all(root.join("src/main/java/a")).unwrap();
@@ -1635,7 +1655,7 @@ mod tests {
         let dir = PathBuf::from(&args[2]);
         assert!(dir.starts_with(&cache), "{args:?}");
         assert_eq!(
-            std::fs::read_to_string(dir.join("idecraft-source-roots")).unwrap(),
+            std::fs::read_to_string(dir.join("ferris-idea-source-roots")).unwrap(),
             "src/main/java"
         );
         let clangd = Resolved::plain(CLANGD[0], PathBuf::from("/bin/clangd"));
@@ -1697,7 +1717,7 @@ mod tests {
     /// the reasons and the fixes are named; TypeScript 5 keeps typescript-language-server.
     #[test]
     fn typescript_7_starts_its_own_server() {
-        let base = std::env::temp_dir().join(format!("idecraft-ts7-{}", std::process::id()));
+        let base = std::env::temp_dir().join(format!("ferris-idea-ts7-{}", std::process::id()));
         // TypeScript 7 with its native program.
         let bin = npm_prefix(&base.join("seven"), "7.0.2", false, true);
         let path = std::env::join_paths([&bin]).unwrap();
@@ -1716,7 +1736,7 @@ mod tests {
             why.contains("7.0.2") && why.contains("npm install -g typescript@5"),
             "{why}"
         );
-        // Also in safe mode: it is IDECraft's TypeScript, not the project's.
+        // Also in safe mode: it is Ferris IDEA's TypeScript, not the project's.
         assert_eq!(
             resolve_mode(&path, LanguageId::TypeScript, true, None)
                 .unwrap()
@@ -1752,7 +1772,7 @@ mod tests {
 
     #[test]
     fn resolution_order_and_problems() {
-        let base = std::env::temp_dir().join(format!("idecraft-servers-{}", std::process::id()));
+        let base = std::env::temp_dir().join(format!("ferris-idea-servers-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         let (a, b, cargo) = (base.join("a"), base.join("b"), base.join("cargo"));
         for d in [&a, &b, &cargo] {
@@ -1795,13 +1815,14 @@ mod tests {
             .to_string();
         assert!(err.contains("ruby-lsp not found") && err.contains("gem install solargraph"));
         let sql = resolve_in(&empty, LanguageId::Sql).unwrap_err().to_string();
-        assert!(sql.contains("IDECraft serves it itself"));
+        assert!(sql.contains("Ferris IDEA serves it itself"));
         let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]
     fn ruby_with_its_ruby_and_bundler() {
-        let base = std::env::temp_dir().join(format!("idecraft-ruby-srv-{}", std::process::id()));
+        let base =
+            std::env::temp_dir().join(format!("ferris-idea-ruby-srv-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         let (home, root, other) = (base.join("home"), base.join("project"), base.join("other"));
         let bin = home.join(".rbenv/versions/3.3.6/bin");
@@ -1812,7 +1833,7 @@ mod tests {
         script(&bin, "bundle", "exit 0", 0o755);
         let solargraph = script(&bin, "solargraph", "exit 0", 0o755);
         std::fs::write(root.join(".ruby-version"), "3.3.6\n").unwrap();
-        let search = idecraft_core::RubySearch {
+        let search = ferris_idea_core::RubySearch {
             root: root.clone(),
             path_var: Some(std::env::join_paths([&other]).unwrap()),
             home: Some(home.clone()),
@@ -1854,7 +1875,7 @@ mod tests {
         assert_eq!((r.command, r.prefix_args.len()), (ruby_lsp, 0));
 
         // Nothing usable: both install hints.
-        let empty = idecraft_core::RubySearch {
+        let empty = ferris_idea_core::RubySearch {
             root: base.join("none"),
             path_var: Some(std::env::join_paths([&base.join("none")]).unwrap()),
             ..Default::default()

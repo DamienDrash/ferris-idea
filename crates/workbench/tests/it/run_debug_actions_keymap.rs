@@ -5,16 +5,16 @@
 
 #![cfg(target_os = "macos")]
 
+use ferris_idea_workbench::WorkbenchView;
+use ferris_idea_workbench::project_windows::{RecentProjectsFile, register_window};
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_workbench::WorkbenchView;
-use idecraft_workbench::project_windows::{RecentProjectsFile, register_window};
 
 fn workspace(tag: &str) -> std::path::PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-rda-{tag}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-rda-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir_all(root.join(".idecraft")).unwrap();
+    std::fs::create_dir_all(root.join(".ferris-idea")).unwrap();
     std::fs::write(
-        root.join(".idecraft/run.toml"),
+        root.join(".ferris-idea/run.toml"),
         "[[run]]\nname = \"serve\"\ncommand = [\"echo\", \"1\"]\n",
     )
     .unwrap();
@@ -56,7 +56,7 @@ fn the_temporary_breakpoint_is_set_saved_and_removed(cx: &mut TestAppContext) {
                 .to_vec()
         })
     };
-    let saved = || std::fs::read_to_string(root.join(".idecraft/breakpoints.toml")).ok();
+    let saved = || std::fs::read_to_string(root.join(".ferris-idea/breakpoints.toml")).ok();
     let act = |id: &str, cx: &mut VisualTestContext| {
         bench.update_in(cx, |b, window, cx| b.menu_action(id, window, cx));
         cx.run_until_parked();
@@ -169,7 +169,8 @@ fn committed_text_filters_the_chooser(cx: &mut TestAppContext) {
 /// front; a third one makes Next and Previous differ and both wrap.
 #[gpui::test]
 fn next_and_previous_project_window_step_through_the_windows(cx: &mut TestAppContext) {
-    let recent = std::env::temp_dir().join(format!("idecraft-rda-recent-{}", std::process::id()));
+    let recent =
+        std::env::temp_dir().join(format!("ferris-idea-rda-recent-{}", std::process::id()));
     cx.update(|cx| cx.set_global(RecentProjectsFile(recent.clone())));
     let roots = [workspace("w1"), workspace("w2"), workspace("w3")];
     let mut benches = Vec::new();

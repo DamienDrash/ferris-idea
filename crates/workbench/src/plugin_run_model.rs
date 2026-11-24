@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use idecraft_plugins::{RunAllowance, RunAllowances, RunType, SuggestedCommand};
+use ferris_idea_plugins::{RunAllowance, RunAllowances, RunType, SuggestedCommand};
 
 /// One suggestion as the Run dialog knows it.
 #[derive(Debug, Clone, PartialEq, Eq)]

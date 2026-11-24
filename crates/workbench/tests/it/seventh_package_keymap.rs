@@ -9,14 +9,14 @@
 
 use std::sync::atomic::Ordering;
 
+use ferris_idea_languages::context::UsageKind;
+use ferris_idea_ui::tool_windows::ToolWindow;
+use ferris_idea_workbench::WorkbenchView;
+use ferris_idea_workbench::doc_model::DocBlock;
+use ferris_idea_workbench::find_usages_model::{Hit, UsageTree};
+use ferris_idea_workbench::keymap_actions::BackgroundTask;
+use ferris_idea_workbench::nav_model::Place;
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_languages::context::UsageKind;
-use idecraft_ui::tool_windows::ToolWindow;
-use idecraft_workbench::WorkbenchView;
-use idecraft_workbench::doc_model::DocBlock;
-use idecraft_workbench::find_usages_model::{Hit, UsageTree};
-use idecraft_workbench::keymap_actions::BackgroundTask;
-use idecraft_workbench::nav_model::Place;
 
 /// A Java file with three custom regions: `Fields` 1–4, `Inner` 2–3 inside it and one without
 /// a name 6–8; a marker without a partner on line 9.
@@ -35,10 +35,11 @@ const REGIONS: &str = "class Shop {
 ";
 
 fn workspace(tag: &str) -> std::path::PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-seventh-{tag}-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-seventh-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src")).unwrap();
-    std::fs::create_dir_all(root.join(".idecraft")).unwrap();
+    std::fs::create_dir_all(root.join(".ferris-idea")).unwrap();
     std::fs::write(
         root.join("src/main.rs"),
         "fn main() {\n    let total = vec![1u8];\n    total.len();\n}\n",
@@ -49,7 +50,7 @@ fn workspace(tag: &str) -> std::path::PathBuf {
     std::fs::write(root.join("notes.txt"), "one\ntwo\n").unwrap();
     // A program that reads its input to the end between two lines of output.
     std::fs::write(
-        root.join(".idecraft/run.toml"),
+        root.join(".ferris-idea/run.toml"),
         "[[run]]\nname = \"reader\"\ncommand = [\"/bin/sh\", \"-c\", \"echo before; cat; echo after\"]\n",
     )
     .unwrap();

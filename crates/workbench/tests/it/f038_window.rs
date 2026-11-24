@@ -1,7 +1,7 @@
 //! The parts of hand test 110 (F-038; `SPEC-0185`, `SPEC-0027` v5, `SPEC-0042` v6) that were left
 //! for a real window, in a window of the test harness with keys and real servers, without the
 //! screen: Ruby and PHP code is coloured with the scheme's colours (no language server needed);
-//! `bundle lock --local` typed into IDECraft's terminal makes the Ruby server run through
+//! `bundle lock --local` typed into Ferris IDEA's terminal makes the Ruby server run through
 //! `bundle exec solargraph`, and F1 answers through it after the file is opened again (skipped
 //! without Ruby, Bundler and solargraph on `PATH`, e.g. `~/.local/ruby/bin`).
 
@@ -10,9 +10,9 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
+use ferris_idea_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
+use ferris_idea_workbench::{EditorView, WorkbenchView};
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
-use idecraft_workbench::{EditorView, WorkbenchView};
 
 type Bench = Entity<WorkbenchView>;
 
@@ -21,7 +21,7 @@ const GREETER_RB: &str = "class Greeter\n  # Greets someone.\n  def greet(name)\
 const GREETER_PHP: &str = "<?php\n// Greets someone.\nfunction greet(string $name): string {\n    return \"Hello \" . $name;\n}\necho greet(\"you\");\n";
 
 fn workspace(tag: &str, files: &[(&str, &str)]) -> PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-f038-{tag}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-f038-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     for (name, text) in files {
@@ -32,7 +32,7 @@ fn workspace(tag: &str, files: &[(&str, &str)]) -> PathBuf {
 
 fn window(
     root: &Path,
-    settings: idecraft_core::IdeSettings,
+    settings: ferris_idea_core::IdeSettings,
     cx: &mut TestAppContext,
 ) -> (Bench, &'static mut VisualTestContext) {
     let dir = root.join(".test-settings");
@@ -107,7 +107,7 @@ fn hand_test_110_ruby_and_php_are_coloured(cx: &mut TestAppContext) {
         "colours",
         &[("greeter.rb", GREETER_RB), ("greeter.php", GREETER_PHP)],
     );
-    let (bench, cx) = window(&root, idecraft_core::IdeSettings::default(), cx);
+    let (bench, cx) = window(&root, ferris_idea_core::IdeSettings::default(), cx);
     for (file, text, parts) in [
         (
             "greeter.rb",
@@ -150,7 +150,7 @@ fn hand_test_110_ruby_and_php_are_coloured(cx: &mut TestAppContext) {
     let _ = std::fs::remove_dir_all(&root);
 }
 
-/// Hand test 110: `bundle lock --local` in IDECraft's terminal puts solargraph behind
+/// Hand test 110: `bundle lock --local` in Ferris IDEA's terminal puts solargraph behind
 /// `bundle exec`; the file opened again answers F1 through it (`SPEC-0185`).
 #[gpui::test]
 fn hand_test_110_bundle_lock_in_the_terminal_and_f1_through_bundle_exec(cx: &mut TestAppContext) {
@@ -170,8 +170,8 @@ fn hand_test_110_bundle_lock_in_the_terminal_and_f1_through_bundle_exec(cx: &mut
         let _ = std::fs::remove_dir_all(&root);
         return;
     }
-    idecraft_core::trust::trust_for_process(&root);
-    let mut settings = idecraft_core::IdeSettings::default();
+    ferris_idea_core::trust::trust_for_process(&root);
+    let mut settings = ferris_idea_core::IdeSettings::default();
     settings.terminal.shell = Some("/bin/zsh".into());
     let (bench, cx) = window(&root, settings, cx);
     let file = root.join("greeter.rb");
@@ -208,7 +208,7 @@ fn hand_test_110_bundle_lock_in_the_terminal_and_f1_through_bundle_exec(cx: &mut
     assert_eq!(exit, Some(0), "{}", terminal.read_with(cx, |t, _| t.text()));
     assert!(root.join("Gemfile.lock").exists());
     let resolved =
-        idecraft_languages::servers::resolve_for(idecraft_languages::LanguageId::Ruby, &root)
+        ferris_idea_languages::servers::resolve_for(ferris_idea_languages::LanguageId::Ruby, &root)
             .expect("a Ruby server");
     assert_eq!(
         resolved.args(),
@@ -299,7 +299,7 @@ fn obs_0069_rename_keeps_the_mark_and_changes_the_page(cx: &mut TestAppContext) 
             ("style.css", OBS_0069_STYLE),
         ],
     );
-    let (bench, cx) = window(&root, idecraft_core::IdeSettings::default(), cx);
+    let (bench, cx) = window(&root, ferris_idea_core::IdeSettings::default(), cx);
     let page_on_disk = || std::fs::read_to_string(root.join("index.html")).unwrap();
     let style = open(&bench, cx, &root.join("style.css"));
 
@@ -369,7 +369,7 @@ fn obs_0069_class_names_are_offered_in_html(cx: &mut TestAppContext) {
             ("style.css", OBS_0069_STYLE),
         ],
     );
-    let (bench, cx) = window(&root, idecraft_core::IdeSettings::default(), cx);
+    let (bench, cx) = window(&root, ferris_idea_core::IdeSettings::default(), cx);
     let page = open(&bench, cx, &root.join("index.html"));
     let rows = |cx: &mut VisualTestContext| bench.read_with(cx, |b, _| b.completion_rows());
     let items = |cx: &mut VisualTestContext| bench.read_with(cx, |b, _| b.completion_items());

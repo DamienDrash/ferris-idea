@@ -1,6 +1,8 @@
 # SPEC-0069: Go to Line and Recent Files
 
-- **Version:** 4 · **Date:** 2026-11-14 (v4: the generated ignore file also lists the window state of one user — open tabs, terminal tabs, pinned run configurations — and caches, and is extended line by line, behaviour 3a, AK-6; window check of 2026-11-14; v3 2026-11-13: Recently Changed Files and the edited-only key under the ids of the bundled keymaps, behaviour 9, AK-5; docs/research/KEYMAP_COVERAGE.md; v2 2026-11-06: side-by-side comparison OBS-0023 — current file first,
+- **Version:** 5 · **Date:** 2026-11-23 (v5: a navigation elsewhere closes Go to Line, Recent Files
+  and Recent Locations, and Escape closes them wherever the focus is, behaviour 10, AK-7; OBS-0119 K1);
+  2026-11-14 (v4: the generated ignore file also lists the window state of one user — open tabs, terminal tabs, pinned run configurations — and caches, and is extended line by line, behaviour 3a, AK-6; window check of 2026-11-14; v3 2026-11-13: Recently Changed Files and the edited-only key under the ids of the bundled keymaps, behaviour 9, AK-5; docs/research/KEYMAP_COVERAGE.md; v2 2026-11-06: side-by-side comparison OBS-0023 — current file first,
   tool windows, edited only, footer, Recent Locations)
 - **Sources:** GEN (a dialog jumps to `line:column`; a popup lists recently opened files; F-010, F-020), OSS
   (action ids `GotoLine` and `RecentFiles` of the ported keymaps; the reference keeps its machine-local
@@ -17,10 +19,10 @@ Jump to a position and back to recently used files from the keyboard.
 2. Enter puts the caret there, clamped to the text, scrolls it into view and returns to the editor;
    invalid input does nothing; Escape closes. [GEN]
 3. **Recent files:** every file opened in a tab moves to the front of the workspace's recent list (at most
-   50, kept in `.idecraft/recent-files`, missing files dropped when read). When IDECraft first writes
-   machine-local state into `.idecraft/`, it adds `.idecraft/.gitignore` listing `history/`,
+   50, kept in `.ferris-idea/recent-files`, missing files dropped when read). When Ferris IDEA first writes
+   machine-local state into `.ferris-idea/`, it adds `.ferris-idea/.gitignore` listing `history/`,
    `recent-files` and `agent-log.jsonl`, so such state does not appear as a change to commit. [GEN, OSS]
-   - **3a. What the file lists, and how it grows (v4).** `.idecraft/` holds project files that
+   - **3a. What the file lists, and how it grows (v4).** `.ferris-idea/` holds project files that
      are meant for version control (ADR-0021 class "Project": TOML, read and reviewed by people)
      and state of one user or one machine (class "State": machine-written, JSON or logs, caches).
      The generated file lists the state: besides the entries above and those other specifications
@@ -69,17 +71,31 @@ Jump to a position and back to recently used files from the keyboard.
    Enter or a click opens the file at the place. The places live as long as the window. [GEN;
    OBS-0023 item 7]
 9. **Recently changed files (v3):** `RecentChangedFiles` (no key in the bundled keymaps; View menu and Find Action, titled Recently Changed Files) opens the Recent Files popup of behaviour 4 with "Show edited only" on, so it lists the files changed in this session (behaviour 6a); the checkbox and its key switch back to all files. The key that flips "Show edited only" inside the Recent Files popup is the shortcut of `SwitcherRecentEditedChangedToggleCheckBox` in the keymap in use (⌘E on macOS, Ctrl+E elsewhere, the same chord that opened the popup), no longer a fixed key: a shortcut the user gives the action in Settings › Keymap works in the popup. Outside the popup the action does nothing. Recent Locations keeps ⇧⌘E for its own checkbox. `SwitcherIterateItems`, bound to the same chord, is not carried out: what it steps through is not known from its name. No MCP tool: the lists are window state, as before (behaviour 6). [OSS: ids and shortcuts of the bundled keymaps; GEN]
+10. **Closing (v5):** while Go to Line, Recent Files or Recent Locations is open, a navigation that
+   moves the caret to another place or file — Back and Forward, Go to Declaration and the other
+   jumps that leave a place for Back — closes the popup without a choice, as Escape does: the popup
+   belongs to the place it was opened at. Escape closes it also when the keyboard focus is no
+   longer in its field (a click into the editor, a navigation that took the focus); with the focus
+   in the field the popup handles Escape itself as before. The name popups that share the popup's
+   form (Rename, Change Signature, Move; SPEC-0074, SPEC-0113, SPEC-0114) are not closed by a
+   navigation, since they hold a name being typed. Before v5 the popup stayed open after ⌘B and
+   ⌘[ and took Escape only after a click into it (OBS-0119 K1, reproduced in a window of the test
+   harness with keys sent through the window, without an input method). [OBS-0119, GEN]
 
 ## Acceptance criteria
 - **AK-1** Parsing of `line[:column]` variants and invalid input; recent order, current file last, filter,
   persistence with missing files dropped, `.gitignore` written (unit tests).
-- **AK-2** In a real window (`idecraft ui --selftest`): ⌘L `1,4` Enter puts the caret at 1:4; ⌘E lists
+- **AK-2** In a real window (`ferris-idea ui --selftest`): ⌘L `1,4` Enter puts the caret at 1:4; ⌘E lists
   the current file last and Enter opens the previous file; the list is on disk.
 - **AK-3** Use by hand.
 - **AK-6 (v4)** The generated list names the window state and caches of behaviour 3a; a generated
   file of an earlier version gets the missing entries appended and keeps a line the user added;
   a file without the generated comment is left alone; writing the open tabs makes sure of the
   ignore file (unit tests).
+- **AK-7 (v5, behaviour 10)** In a window of the test harness, by keys sent through the window
+  (`crates/workbench/tests/it/keymap_gaps_obs0119.rs::go_to_line_closes_on_navigation_and_on_escape`):
+  ⌘L `6` Enter jumps; ⌘L again, then ⌘[ goes back to line 1 and the popup is closed; ⌘L, the
+  focus put into the editor, Escape closes the popup.
 
 - **AK-4 (v2)** Current file first (unit test `goto_model::tests::recent_order_filter_and_persistence`);
   recent places merge, keep the changed mark, leave out the caret's place, time in words (unit test
@@ -92,7 +108,7 @@ Removing entries from the list, keeping recent places across restarts, recently 
 across restarts (v3 lists the files changed in this session).
 
 ## Known deviations from the reference
-The reference keeps its recent list inside its project directory's workspace file; IDECraft keeps a
-plain list in `.idecraft/recent-files`. Recent Locations shows a filter field (the reference filters by
+The reference keeps its recent list inside its project directory's workspace file; Ferris IDEA keeps a
+plain list in `.ferris-idea/recent-files`. Recent Locations shows a filter field (the reference filters by
 typing without a field). Recent Files and Recent Locations are window conveniences without an MCP
 tool, as before; agents navigate with `read_file` and the editor tools.

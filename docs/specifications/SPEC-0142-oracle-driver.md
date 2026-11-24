@@ -1,6 +1,8 @@
 # SPEC-0142: Oracle connections through Instant Client
 
-- **Version:** 4 · **Date:** 2026-11-17 (v4: identity columns, comments, routines and triggers in the catalog, the
+- **Version:** 5 · **Date:** 2026-11-23 (v5: `NUMBER(p, s)` values keep their scale, behaviour 3b; a
+  `ROLLBACK` in auto-commit says it had nothing to undo, Manual keeps changes until `COMMIT`,
+  behaviour 3c; AK-9, AK-10 — OBS-0120 X1, X3, O4); 2026-11-17 (v4: identity columns, comments, routines and triggers in the catalog, the
   sequences behind identity columns left out, behaviour 5; plans on read-only profiles and over MCP,
   behaviour 6; AK-7, AK-8 — OBS-0083 L1, L2, L5); 2026-11-16 (v3: SSL mode `prefer` connects through `tcps://` to a
   server off the loopback, as `require` does, behaviour 2 — SPEC-0016 v3, IMP-0421); 2026-11-16 (v2: a PL/SQL unit that does not compile is an error with the
@@ -22,10 +24,10 @@
 ## Purpose
 Connect to Oracle databases like to the other systems: run scripts, browse the schema, read plans,
 honour read-only profiles. Oracle's client library (Instant Client) is not shipped: the user
-installs it, IDECraft loads it at runtime.
+installs it, Ferris IDEA loads it at runtime.
 
 ## Behaviour
-1. **Client library:** loaded once, on the first Oracle connection, from `IDECRAFT_ORACLE_CLIENT`,
+1. **Client library:** loaded once, on the first Oracle connection, from `FERRIS_IDEA_ORACLE_CLIENT`,
    else the newest `~/.local/opt/instantclient_*` holding `libclntsh`, else the system search path.
    If none loads, Test Connection and Connect say so and where to install it. [STD]
 2. **Connecting:** `oracle://user@host:port/SERVICE` (SPEC-0135) becomes `//host:port/SERVICE`;
@@ -44,12 +46,24 @@ installs it, IDECraft loads it at runtime.
    go through the driver. Blocking calls run off the UI thread. [STD, SPEC-0005]
 3a. **v2 – Units that do not compile:** Oracle stores a procedure, function, package, package
    body, trigger or type even when it does not compile and answers with a warning, not an error.
-   IDECraft reports such a statement as failed: the message starts with `ORA-24344` and names
+   Ferris IDEA reports such a statement as failed: the message starts with `ORA-24344` and names
    each compile error of the unit from `user_errors`, with its line and column in the unit
    (`line 3, column 3: PLS-00201: …`), at most ten. The error position points at the first one,
    counted from the statement's first line (for a trigger, whose lines Oracle counts from its
    body, the position is left out). With `OnError::Stop` the run stops there, as after any
    error. [STD]
+3b. **v5 – Numbers with a scale (OBS-0120 X3):** Oracle keeps no trailing zeros, so a value of a
+   `NUMBER(p, s)` column with `s > 0` is shown with exactly `s` digits after the point and a zero
+   before it (`4.00`, `0.05`, `-0.50`), as the other systems show decimals. Plain `NUMBER`,
+   `NUMBER(p)` and values with an exponent are shown as the driver gives them. [STD]
+3c. **v5 – Transactions (OBS-0120 O4):** in auto-commit every statement is committed when it ran,
+   so a later `ROLLBACK` has nothing to undo; Ferris IDEA then adds the note that auto-commit is on and
+   there was nothing to roll back to that statement's notices (Output and `run_sql`, SPEC-0093 v8
+   behaviour 6a). A `ROLLBACK TO` a savepoint and a `ROLLBACK` inside a transaction opened with
+   `SET TRANSACTION` (Manual mode, editing) get no note. In Manual mode (SPEC-0093 v3 behaviour 11)
+   changes stay invisible to other sessions until `COMMIT`, and `ROLLBACK` undoes them. Over MCP
+   (`run_sql`, one session per call) a script opens such a transaction with `SET TRANSACTION READ
+   WRITE`. [STD]
 4. **Read-only profiles** refuse DML, DDL and anonymous PL/SQL blocks (`BEGIN`/`DECLARE`) before
    they reach the server; queries run. `BEGIN` counts as a schema change for Oracle and, unless
    `TRAN`/`TRANSACTION`/`DISTRIBUTED` follows, for SQL Server too. [SPEC-0016]
@@ -64,7 +78,7 @@ installs it, IDECraft loads it at runtime.
    procedures (`user_objects`) and triggers (`user_triggers`: table, timing and events) are listed
    with the schema's objects; their definition is the DDL `DBMS_METADATA.GET_DDL` writes.
    Packages stay out of scope. [STD]
-6. **Plans:** Explain Plan writes into `PLAN_TABLE` under the statement id `IDECRAFT`, reads the
+6. **Plans:** Explain Plan writes into `PLAN_TABLE` under the statement id `FERRIS_IDEA`, reads the
    tree back (operation with options, object, cost, rows, predicates) and deletes its rows.
    Explain Analyze is refused with a reason (Oracle needs a different mechanism). [STD]
    **v4 (OBS-0083 L1):** the plan's own `DELETE` and `EXPLAIN PLAN` are not refused on a read-only
@@ -77,7 +91,7 @@ installs it, IDECraft loads it at runtime.
 
 ## Acceptance criteria
 - **AK-1** Unit tests: connect strings with and without TLS, refusals for read-only profiles,
-  `BEGIN` classification for Oracle and SQL Server, plan parsing (`idecraft_database` unit tests).
+  `BEGIN` classification for Oracle and SQL Server, plan parsing (`ferris_idea_database` unit tests).
 - **AK-2** Live tests against Oracle Database Free 23 in a container
   (`oracle.sh start` of the reference environment; `crates/database/tests/it/oracle.rs`): a script with a
   PL/SQL block, commit and rollback, an error with code and position, the catalog with keys,
@@ -89,7 +103,7 @@ installs it, IDECraft loads it at runtime.
   a script, Explain Plan, a read-only profile.
 - **AK-5 (v2, behaviour 3a)** Live against Oracle Free 23
   (`crates/database/tests/it/dialect_steps_live.rs::oracle_steps`, skipped without
-  `IDECRAFT_TEST_ORACLE`): a script with an anonymous block and a procedure ended by `/` lines,
+  `FERRIS_IDEA_TEST_ORACLE`): a script with an anonymous block and a procedure ended by `/` lines,
   `q'[…]'` holding `;` and `/`, a `CALL` and a failing query gives seven outcomes at their lines,
   the error with ORA-00904 and its column; Test Connection names Oracle and its version; a
   procedure calling an unknown name is an error with ORA-24344, PLS-00201 and line 3, pointing at
@@ -101,13 +115,20 @@ installs it, IDECraft loads it at runtime.
 
 - **AK-7 (v4, behaviours 5 and 6)** Live against Oracle Free 23 (`crates/database/tests/it/oracle.rs`):
   a read-only profile gives the plan of a query and of a `DELETE` without running it and leaves no
-  `IDECRAFT` rows (`read_only_profiles_explain`); a `GENERATED BY DEFAULT ON NULL AS IDENTITY`
+  `FERRIS_IDEA` rows (`read_only_profiles_explain`); a `GENERATED BY DEFAULT ON NULL AS IDENTITY`
   column is read with that clause and without a default, a column comment is read, and the DDL
   generated from the catalog creates a copy of the table (`identity_columns_and_their_ddl`).
 - **AK-8 (v4, behaviour 5)** Live: a procedure, a function and a trigger are listed with their kind
   and table, a function's definition names it, the sequence of an identity column is not listed
   (`routines_triggers_and_sequences`); unit `schema_objects::tests::{queries_per_dialect_read_the_catalogue,
   definition_queries_per_kind}`.
+- **AK-9 (v5, behaviours 3b, 3c)** Unit `oracle::tests::numbers_keep_their_scale_and_rollbacks_are_recognised`.
+- **AK-10 (v5, behaviours 3b, 3c)** Live against Oracle Free 23 (`tests/it/dialect_numbers_live.rs`):
+  `NUMBER(8,2)` reads `0.05`, `-0.50`, `4.00` (`numbers_in_edited_cells_and_their_scale`); in
+  auto-commit an `UPDATE` is seen by a second session at once and the following `ROLLBACK` carries
+  the note; after the statements Manual opens with, an `UPDATE` is unseen by the second session,
+  `ROLLBACK` undoes it without a note, and after `COMMIT` the second session sees the new value
+  (`oracle_transactions_auto_and_manual`).
 
 ## Out of scope
 Shipping Instant Client, Oracle Wallet and LDAP/TNS names, Kerberos, Explain Analyze
@@ -115,5 +136,5 @@ Shipping Instant Client, Oracle Wallet and LDAP/TNS names, Kerberos, Explain Ana
 tree, `DBMS_OUTPUT`.
 
 ## Known deviations from the reference
-The reference ships a JDBC driver on demand; IDECraft loads the user's Instant Client. Not
+The reference ships a JDBC driver on demand; Ferris IDEA loads the user's Instant Client. Not
 compared side by side yet (hand test 68).

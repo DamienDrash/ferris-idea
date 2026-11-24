@@ -4,14 +4,14 @@
 //!
 //! When a question is due, which answer is still wanted and what is marked is decided in
 //! [`crate::occurrence_model`]; the request itself is
-//! [`idecraft_languages::occurrences::document_highlights_in`].
+//! [`ferris_idea_languages::occurrences::document_highlights_in`].
 
 use std::path::PathBuf;
 use std::time::Instant;
 
+use ferris_idea_languages::lsp::LspError;
+use ferris_idea_languages::occurrences::{Highlights, MAX_TEXT_BYTES, document_highlights_in};
 use gpui::{AppContext, Context, Entity};
-use idecraft_languages::lsp::LspError;
-use idecraft_languages::occurrences::{Highlights, MAX_TEXT_BYTES, document_highlights_in};
 
 use super::WorkbenchView;
 use crate::EditorView;
@@ -67,14 +67,14 @@ impl WorkbenchView {
         let Some(path) = editor.read(cx).file_path().map(PathBuf::from) else {
             return;
         };
-        if idecraft_languages::LanguageId::detect(&path).is_none() {
+        if ferris_idea_languages::LanguageId::detect(&path).is_none() {
             return;
         }
         let automatic = self.occurrences_on;
         let request = {
             let root = &self.root;
             // A server that is starting or loading is not asked (behaviour 3).
-            let ready = || idecraft_languages::pool::loading(root, &path).is_none();
+            let ready = || ferris_idea_languages::pool::loading(root, &path).is_none();
             editor.update(cx, |e, cx| {
                 e.due_occurrences(Instant::now(), automatic, ready, cx)
             })
@@ -195,12 +195,14 @@ impl WorkbenchView {
             (None, _) => Some(End::NoName),
             (_, None) => Some(End::Failed("the editor has no file".into())),
             (Some(_), Some(_)) if large => Some(End::TooLarge),
-            (Some(_), Some(path)) => match idecraft_languages::LanguageId::detect(path) {
+            (Some(_), Some(path)) => match ferris_idea_languages::LanguageId::detect(path) {
                 None => Some(End::Failed(
                     LspError::NoServer(path.display().to_string()).to_string(),
                 )),
                 // Not asked and not queued while the server is loading (behaviour 3).
-                Some(_) => idecraft_languages::pool::loading(&self.root, path).map(End::NotReady),
+                Some(_) => {
+                    ferris_idea_languages::pool::loading(&self.root, path).map(End::NotReady)
+                }
             },
         };
         let symbol = symbol.unwrap_or_default();
@@ -250,12 +252,14 @@ impl WorkbenchView {
             (None, _) => Some(End::NoName),
             (_, None) => Some(End::Failed("the editor has no file".into())),
             (Some(_), Some(_)) if large => Some(End::TooLarge),
-            (Some(_), Some(path)) => match idecraft_languages::LanguageId::detect(path) {
+            (Some(_), Some(path)) => match ferris_idea_languages::LanguageId::detect(path) {
                 None => Some(End::Failed(
                     LspError::NoServer(path.display().to_string()).to_string(),
                 )),
                 // Not asked and not queued while the server is loading (behaviour 3).
-                Some(_) => idecraft_languages::pool::loading(&self.root, path).map(End::NotReady),
+                Some(_) => {
+                    ferris_idea_languages::pool::loading(&self.root, path).map(End::NotReady)
+                }
             },
         };
         let symbol = symbol.unwrap_or_default();

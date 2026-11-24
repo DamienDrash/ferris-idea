@@ -5,7 +5,7 @@
 //! one called `kotlin` or `java` are the package, the file name is the class (`zoo/Animals.kt` →
 //! `zoo.Animals` and `zoo.AnimalsKt`). A class with another name than its file (`zoo.Animal`) is
 //! never looked at, and classes inside a class that load later (companion objects, anonymous
-//! objects) are missed too. IDECraft therefore sends the lines again under paths that name these
+//! objects) are missed too. Ferris IDEA therefore sends the lines again under paths that name these
 //! classes; the paths exist only as names.
 
 use std::collections::BTreeMap;

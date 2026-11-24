@@ -1,11 +1,11 @@
-//! SPEC-0323 AK-12: a room on the real `idecraft-serve --stdio` process, over the real frames; no
+//! SPEC-0323 AK-12: a room on the real `ferris-idea-serve --stdio` process, over the real frames; no
 //! key store is involved on this path.
 
 use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
 use std::time::Duration;
 
-use idecraft_session::{ClientSession, Transport};
+use ferris_idea_session::{ClientSession, Transport};
 use serde_json::json;
 
 struct Serve {
@@ -14,7 +14,7 @@ struct Serve {
 }
 
 fn start(project: &std::path::Path, state: &std::path::Path) -> Serve {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_idecraft-serve"))
+    let mut child = Command::new(env!("CARGO_BIN_EXE_ferris-idea-serve"))
         .args(["serve", "--stdio", "--state-dir"])
         .arg(state)
         .arg(project)
@@ -22,7 +22,7 @@ fn start(project: &std::path::Path, state: &std::path::Path) -> Serve {
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
-        .expect("idecraft-serve starts");
+        .expect("ferris-idea-serve starts");
     let transport = Transport {
         reader: Box::new(child.stdout.take().unwrap()),
         writer: Box::new(child.stdin.take().unwrap()),

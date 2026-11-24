@@ -1,5 +1,5 @@
 //! The reference's main menus as data (`SPEC-0124`): labels, action ids and submenus. The menu bar
-//! of `idecraft-workbench` shows them; Search Everywhere titles an action with its menu label
+//! of `ferris-idea-workbench` shows them; Search Everywhere titles an action with its menu label
 //! (`SPEC-0031` v3), so "Split Right" finds `SplitVertically` (hand test 39).
 
 /// One entry of a menu.
@@ -45,7 +45,7 @@ const TOOL_WINDOWS: &[Entry] = &[
     A("Containers", "Containers.ToolWindow"),
     A("Profiler", "Profiler.ToolWindow"),
     A("Remote Host", "Remote.ToolWindow"),
-    A("AI Chat", "IDECraft.AiChat"),
+    A("AI Chat", "FerrisIDEA.AiChat"),
 ];
 
 /// The menus after the application menu, in the reference's order (`SPEC-0124` v3, hand test 50).
@@ -70,10 +70,16 @@ pub const MENUS: &[(&str, &[Entry])] = &[
             A("Close Tab", "CloseContent"),
             S,
             A("Remote Development…", "Remote.OpenProject"),
+            // SPEC-0323 v6 behaviour 37.
+            A("Share Project…", "Remote.ShareProject"),
+            // SPEC-0323 v7 behaviour 48.
+            A("Join Project by Link…", "Remote.JoinByLink"),
+            // SPEC-0323 v9 behaviour 61.
+            A("Room History…", "Room.ShowHistory"),
             S,
             A("Settings…", "ShowSettings"),
             // SPEC-0124 v8 behaviour 11: the Plugins page of Settings.
-            A("Plugins…", "IDECraft.SettingsPlugins"),
+            A("Plugins…", "FerrisIDEA.SettingsPlugins"),
             // SPEC-0124 v12 behaviour 14: the open platform's group of file properties, right
             // after the settings (SPEC-0336).
             Sub(
@@ -242,7 +248,7 @@ pub const MENUS: &[(&str, &[Entry])] = &[
                 "Decrease Font Size in All Editors",
                 "EditorDecreaseFontSizeGlobal",
             ),
-            // IDECraft's own: the split actions, which the open View menu does not hold.
+            // Ferris IDEA's own: the split actions, which the open View menu does not hold.
             S,
             A("Split Right", "SplitVertically"),
             A("Split Down", "SplitHorizontally"),
@@ -406,7 +412,7 @@ pub const MENUS: &[(&str, &[Entry])] = &[
             A("Rename…", "RenameElement"),
             A("Change Signature…", "ChangeSignature"),
             S,
-            // SPEC-0124 v8 behaviour 11: the open platform's group, with the refactorings IDECraft has.
+            // SPEC-0124 v8 behaviour 11: the open platform's group, with the refactorings Ferris IDEA has.
             Sub(
                 "Extract/Introduce",
                 &[
@@ -433,7 +439,7 @@ pub const MENUS: &[(&str, &[Entry])] = &[
             A("Pull Members Up…", "MembersPullUp"),
         ],
     ),
-    // SPEC-0124 v3 behaviour 5: the build actions IDECraft has (SPEC-0100 behaviours 9 and 18).
+    // SPEC-0124 v3 behaviour 5: the build actions Ferris IDEA has (SPEC-0100 behaviours 9 and 18).
     (
         "Build",
         &[
@@ -481,6 +487,8 @@ pub const MENUS: &[(&str, &[Entry])] = &[
                 "Toggle Temporary Line Breakpoint",
                 "ToggleTemporaryLineBreakpoint",
             ),
+            // SPEC-0127 v15 behaviour 31.
+            A("Toggle Breakpoint Enabled", "ToggleBreakpointEnabled"),
             A("View Breakpoints…", "ViewBreakpoints"),
             A("Mute Breakpoints", "XDebugger.MuteBreakpoints"),
         ],
@@ -495,26 +503,26 @@ pub const MENUS: &[(&str, &[Entry])] = &[
             Sub(
                 "AI Assistant",
                 &[
-                    A("AI Chat", "IDECraft.AiChat"),
-                    A("Explain Code", "IDECraft.AiExplainCode"),
+                    A("AI Chat", "FerrisIDEA.AiChat"),
+                    A("Explain Code", "FerrisIDEA.AiExplainCode"),
                     A(
                         "Explain Terminal Output with AI",
-                        "IDECraft.AiExplainTerminal",
+                        "FerrisIDEA.AiExplainTerminal",
                     ),
                     A(
                         "Attach Terminal Output to Chat",
-                        "IDECraft.AiAttachTerminalCommand",
+                        "FerrisIDEA.AiAttachTerminalCommand",
                     ),
-                    A("Share Terminal Tab with Chat", "IDECraft.AiShareTerminal"),
-                    A("Attach Run Output to Chat", "IDECraft.AiAttachRun"),
-                    A("Attach Problems to Chat", "IDECraft.AiAttachProblems"),
-                    A("Attach Git Diff to Chat", "IDECraft.AiAttachGitDiff"),
+                    A("Share Terminal Tab with Chat", "FerrisIDEA.AiShareTerminal"),
+                    A("Attach Run Output to Chat", "FerrisIDEA.AiAttachRun"),
+                    A("Attach Problems to Chat", "FerrisIDEA.AiAttachProblems"),
+                    A("Attach Git Diff to Chat", "FerrisIDEA.AiAttachGitDiff"),
                 ],
             ),
             A("Remote Host", "Remote.ToolWindow"),
             A("SSH Terminal", "Remote.OpenTerminal"),
             // The emergency stop of UI automation (SPEC-0319 behaviour 37).
-            A("Stop UI Automation", "IDECraft.StopUiAutomation"),
+            A("Stop UI Automation", "FerrisIDEA.StopUiAutomation"),
             S,
             // The request at the caret of a `.http` file (SPEC-0096 v4 behaviour 7).
             Sub(
@@ -522,7 +530,7 @@ pub const MENUS: &[(&str, &[Entry])] = &[
                 &[
                     A("Send Request at Caret", "Console.Execute.Multiline"),
                     // Every request of the file, one after another (SPEC-0096 v5 behaviour 8).
-                    A("Run All Requests in File", "IDECraft.HttpRunAllRequests"),
+                    A("Run All Requests in File", "FerrisIDEA.HttpRunAllRequests"),
                 ],
             ),
             Sub(
@@ -645,7 +653,7 @@ pub const MENUS: &[(&str, &[Entry])] = &[
                     A("Show Hidden Tabs", "TabList"),
                     A("Maximize Editor", "MaximizeEditorInSplit"),
                     S,
-                    A("Configure Editor Tabs…", "IDECraft.ConfigureEditorTabs"),
+                    A("Configure Editor Tabs…", "FerrisIDEA.ConfigureEditorTabs"),
                 ],
             ),
             S,
@@ -666,7 +674,7 @@ pub const MENUS: &[(&str, &[Entry])] = &[
             S,
             Sub(
                 "Diagnostics",
-                &[A("Keyboard Diagnostics", "IDECraft.KeyboardDiagnostics")],
+                &[A("Keyboard Diagnostics", "FerrisIDEA.KeyboardDiagnostics")],
             ),
         ],
     ),
@@ -720,7 +728,7 @@ pub const MAIN_TOOLBAR_RIGHT: &[&str] = &[
 ];
 
 /// The more-actions menu after the run widget (`SPEC-0061` v5 behaviour 19). OBS-0020 recorded
-/// the reference's content: running with coverage, profiling, and running with parameters; IDECraft
+/// the reference's content: running with coverage, profiling, and running with parameters; Ferris IDEA
 /// offers its own actions on the selected configuration without a button of their own (coverage
 /// and the parameter dialog belong to the run configurations, F-077).
 pub const RUN_WIDGET_MORE: &[Entry] = &[
@@ -732,13 +740,13 @@ pub const RUN_WIDGET_MORE: &[Entry] = &[
 ];
 
 /// The Settings button's menu at the right end of the main toolbar (`SPEC-0061` v6 behaviour 28,
-/// OBS-0020): the entries the reference has and IDECraft supports.
+/// OBS-0020): the entries the reference has and Ferris IDEA supports.
 pub const SETTINGS_BUTTON_MENU: &[Entry] = &[
     A("Settings…", "ShowSettings"),
-    A("Plugins…", "IDECraft.SettingsPlugins"),
+    A("Plugins…", "FerrisIDEA.SettingsPlugins"),
     S,
     A("Theme…", "QuickChangeScheme"),
-    A("Keymap…", "IDECraft.SettingsKeymap"),
+    A("Keymap…", "FerrisIDEA.SettingsKeymap"),
 ];
 
 #[cfg(test)]
@@ -812,7 +820,7 @@ mod tests {
         );
         // SPEC-0096 v5 AK-9.
         assert_eq!(
-            menu_title("IDECraft.HttpRunAllRequests"),
+            menu_title("FerrisIDEA.HttpRunAllRequests"),
             Some(("Run All Requests in File", "HTTP Client"))
         );
     }
@@ -909,7 +917,7 @@ mod tests {
         ] {
             assert_eq!(menu_title(id), Some((label, place)), "{id}");
         }
-        // No item for an action IDECraft does not have (behaviour 11).
+        // No item for an action Ferris IDEA does not have (behaviour 11).
         for id in ["RecentChanges", "EditorResetFontSizeGlobal"] {
             assert_eq!(menu_title(id), None, "{id}");
         }
@@ -994,7 +1002,7 @@ mod tests {
         let file = menu("File");
         let at = file
             .iter()
-            .position(|e| *e == A("Plugins…", "IDECraft.SettingsPlugins"))
+            .position(|e| *e == A("Plugins…", "FerrisIDEA.SettingsPlugins"))
             .expect("Plugins… in File");
         let Entry::Sub("File Properties", items) = file[at + 1] else {
             panic!("File Properties follows Plugins…: {:?}", file[at + 1]);
@@ -1291,7 +1299,7 @@ mod tests {
     #[test]
     fn items_added_from_the_reference_comparison() {
         for (id, label, place) in [
-            ("IDECraft.SettingsPlugins", "Plugins…", "File"),
+            ("FerrisIDEA.SettingsPlugins", "Plugins…", "File"),
             ("LocalHistory.ShowHistory", "Show History", "Local History"),
             ("ToggleInSelection", "Search in Selection Only", "Edit"),
             ("FindUsages", "Find Usages", "Find Usages"),
@@ -1374,7 +1382,7 @@ mod tests {
             .collect();
         assert_eq!(
             twice,
-            ["GotoAction", "IDECraft.AiChat", "Remote.ToolWindow"]
+            ["FerrisIDEA.AiChat", "GotoAction", "Remote.ToolWindow"]
         );
     }
 
@@ -1773,9 +1781,9 @@ mod tests {
             actions,
             [
                 "ShowSettings",
-                "IDECraft.SettingsPlugins",
+                "FerrisIDEA.SettingsPlugins",
                 "QuickChangeScheme",
-                "IDECraft.SettingsKeymap"
+                "FerrisIDEA.SettingsKeymap"
             ]
         );
         assert!(known.contains(&"ShowSettings") && known.contains(&"QuickChangeScheme"));

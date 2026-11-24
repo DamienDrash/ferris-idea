@@ -8,8 +8,8 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use ferris_idea_vcs::{GitError, HeadBlame, Repo};
 use gpui::{Context, Entity, WeakEntity, Window};
-use idecraft_vcs::{GitError, HeadBlame, Repo};
 
 use super::WorkbenchView;
 use crate::EditorView;
@@ -162,7 +162,7 @@ impl WorkbenchView {
     /// Reads the blame again for annotated editor views, in both groups of a split, whose HEAD
     /// text is no longer the one blamed: after a commit, checkout or pull (behaviours 8 and 13).
     /// `heads` holds the HEAD text per path as the gutter markers just read it; `None` for all
-    /// means: after a commit in IDECraft, refresh every annotated view.
+    /// means: after a commit in Ferris IDEA, refresh every annotated view.
     pub(super) fn refresh_annotations(
         &mut self,
         heads: Option<&[(PathBuf, Option<String>)]>,

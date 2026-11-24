@@ -90,7 +90,7 @@ impl EditorView {
     }
 
     /// The tooltip of the focused gutter icon (its name and what a click does).
-    pub fn focused_gutter_tip(&self) -> Option<idecraft_ui::tooltip::Tip> {
+    pub fn focused_gutter_tip(&self) -> Option<ferris_idea_ui::tooltip::Tip> {
         let icon = self.focused_icon()?;
         Some(self.gutter_icon_tip(icon).1)
     }
@@ -173,7 +173,8 @@ impl EditorView {
             }
             GutterIcon::Declaration(line) => cx.emit(EditorEvent::DeclarationMark(line)),
             GutterIcon::Framework(line) => cx.emit(EditorEvent::FrameworkMark(line)),
-            GutterIcon::Bookmark(_) => {}
+            // A swatch opens no colour picker yet (`SPEC-0042` v27 behaviour 48).
+            GutterIcon::Bookmark(_) | GutterIcon::Color(_) => {}
         }
     }
 }

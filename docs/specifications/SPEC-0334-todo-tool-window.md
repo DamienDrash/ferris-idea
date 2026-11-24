@@ -59,7 +59,7 @@ for the file being edited, and jump to each. Agents read the same list through M
    when it starts inside something the grammar captures as a comment, embedded languages
    included (a script block in HTML); a match is cut at the end of that comment. A plain-text
    file (`.txt`, `.text`) is searched as a whole, as if all of it were one comment. Any other
-   file — a language without a grammar, an unknown type — is not searched, because IDECraft
+   file — a language without a grammar, an unknown type — is not searched, because Ferris IDEA
    cannot tell its comments from its code; when such a file contains a match, it is counted as
    "not checked" (behaviour 22) instead. [OSS: comments only, plain text as one range; GEN: the
    rest]

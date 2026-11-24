@@ -5,10 +5,13 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
-use idecraft_profiler::{Engine, ProfileTarget, Unit, hot_spots, last_profile, profile};
+use ferris_idea_profiler::{Engine, ProfileTarget, Unit, hot_spots, last_profile, profile};
 
 fn scratch(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("idecraft-profiler-{name}-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!(
+        "ferris-idea-profiler-{name}-{}",
+        std::process::id()
+    ));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     dir
@@ -89,7 +92,7 @@ fn java_program_under_flight_recorder() {
     assert!(run.profile.roots[0].name.starts_with("Thread main"));
     // The reported package path is found under the source root.
     assert_eq!(
-        idecraft_profiler::find_source(&dir, "demo/Busy.java"),
+        ferris_idea_profiler::find_source(&dir, "demo/Busy.java"),
         Some(dir.join("src/main/java/demo/Busy.java"))
     );
     assert_eq!(last_profile(&out).unwrap(), run);
@@ -130,7 +133,8 @@ outer()\nprint('done')\n",
 
 #[test]
 fn native_program_under_sample() {
-    if !cfg!(target_os = "macos") || !Path::new(idecraft_profiler::SAMPLE).exists() || !has_cc() {
+    if !cfg!(target_os = "macos") || !Path::new(ferris_idea_profiler::SAMPLE).exists() || !has_cc()
+    {
         eprintln!("skipped: needs macOS sample and cc");
         return;
     }
@@ -158,8 +162,8 @@ int main(void) { outer(); printf(\"done\\n\"); return 0; }\n",
     let run = profile(&target, &dir.join("profiles"), Duration::from_secs(60)).unwrap();
     assert_eq!(run.plan.engine, Engine::Sample);
     // A launchd service (the CI runner) has no Developer Tools permission; the profile says so.
-    if run.profile.notes == [idecraft_profiler::SAMPLE_REFUSED] {
-        eprintln!("skipped: {}", idecraft_profiler::SAMPLE_REFUSED);
+    if run.profile.notes == [ferris_idea_profiler::SAMPLE_REFUSED] {
+        eprintln!("skipped: {}", ferris_idea_profiler::SAMPLE_REFUSED);
         return;
     }
     assert_eq!(run.exit_code, Some(0));
@@ -200,7 +204,7 @@ fn run_configuration_with_before_step() {
         return;
     };
     let dir = scratch("config");
-    std::fs::create_dir_all(dir.join(".idecraft")).unwrap();
+    std::fs::create_dir_all(dir.join(".ferris-idea")).unwrap();
     std::fs::write(
         dir.join("gen.py"),
         "open('data.txt', 'w').write('x' * 1000)\n",
@@ -212,15 +216,15 @@ fn run_configuration_with_before_step() {
     )
     .unwrap();
     std::fs::write(
-        dir.join(".idecraft/run.toml"),
+        dir.join(".ferris-idea/run.toml"),
         format!(
             "[[run]]\nname = \"gen\"\ncommand = [\"{py}\", \"gen.py\"]\n\n\
 [[run]]\nname = \"main\"\ncommand = [\"{py}\", \"main.py\"]\nbefore = [\"gen\"]\nenv = {{ MODE = \"ab\" }}\n"
         ),
     )
     .unwrap();
-    let configs = idecraft_core::load_run_configs(&dir);
-    let run = idecraft_profiler::profile_config(&dir, &configs, "main").unwrap();
+    let configs = ferris_idea_core::load_run_configs(&dir);
+    let run = ferris_idea_profiler::profile_config(&dir, &configs, "main").unwrap();
     assert_eq!(run.output.trim(), "2000");
     assert!(
         hot_spots(&run.profile).iter().any(|h| h.name == "work")
@@ -231,9 +235,9 @@ fn run_configuration_with_before_step() {
                 .any(|r| format!("{r:?}").contains("work"))
     );
     assert!(
-        dir.join(idecraft_profiler::PROFILES_DIR)
+        dir.join(ferris_idea_profiler::PROFILES_DIR)
             .join("last.json")
             .exists()
     );
-    assert!(idecraft_profiler::profile_config(&dir, &configs, "missing").is_err());
+    assert!(ferris_idea_profiler::profile_config(&dir, &configs, "missing").is_err());
 }

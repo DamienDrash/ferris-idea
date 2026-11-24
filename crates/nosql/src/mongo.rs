@@ -3,7 +3,7 @@
 
 use std::collections::BTreeSet;
 
-use idecraft_database::Secret;
+use ferris_idea_database::Secret;
 use mongodb::bson::{self, Bson, Document, doc};
 use mongodb::error::{ErrorKind, WriteFailure};
 use mongodb::options::{ClientOptions, FindOneOptions, FindOptions, IndexOptions};
@@ -139,7 +139,7 @@ impl MongoSession {
         }
         options.connect_timeout = Some(CONNECT_TIMEOUT);
         options.server_selection_timeout = Some(CONNECT_TIMEOUT);
-        options.app_name = Some("IDECraft".into());
+        options.app_name = Some("Ferris IDEA".into());
         let client = Client::with_options(options).map_err(|e| fail(e.to_string()))?;
         let database = endpoint.database.clone().unwrap_or_else(|| "test".into());
         let admin = client.database("admin");

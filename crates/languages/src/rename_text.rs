@@ -171,7 +171,7 @@ pub fn find_occurrences(
     if !root.is_dir() {
         return out;
     }
-    let own = idecraft_core::OwnSources::new(root);
+    let own = ferris_idea_core::OwnSources::new(root);
     let root = own.root().to_path_buf();
     let planned = |path: &Path| {
         plan.files
@@ -250,7 +250,7 @@ pub struct OutsideFile {
     /// The edits there.
     pub edits: Vec<Edit>,
     /// Why the file is not the project's own.
-    pub why: idecraft_core::NotOwn,
+    pub why: ferris_idea_core::NotOwn,
     /// The same in words, for the preview.
     pub reason: String,
 }
@@ -259,7 +259,7 @@ pub struct OutsideFile {
 /// returns them, each with the reason (v3 behaviour 7). The file the rename was started in stays:
 /// the user chose it.
 pub fn split_outside(root: &Path, plan: &mut RenamePlan, started_in: &Path) -> Vec<OutsideFile> {
-    let own = idecraft_core::OwnSources::new(root);
+    let own = ferris_idea_core::OwnSources::new(root);
     let started = started_in.canonicalize().ok();
     let mut outside = Vec::new();
     plan.files.retain(|f| {
@@ -352,7 +352,8 @@ mod tests {
 
     #[test]
     fn workspace_occurrences_skip_planned_edits() {
-        let dir = std::env::temp_dir().join(format!("idecraft-rename-text-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("ferris-idea-rename-text-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("node_modules")).unwrap();
         let dir = dir.canonicalize().unwrap();
@@ -435,8 +436,10 @@ mod tests {
     /// A Python project with a virtual environment, installed Node packages, an ignored file and
     /// an own file; each holds `total` in a comment.
     fn project(tag: &str) -> PathBuf {
-        let dir =
-            std::env::temp_dir().join(format!("idecraft-rename-own-{tag}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "ferris-idea-rename-own-{tag}-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         let write = |rel: &str, text: &str| {
             let p = dir.join(rel);

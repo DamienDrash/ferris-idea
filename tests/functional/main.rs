@@ -1,7 +1,7 @@
 //! Functional tests, one module per row of `docs/research/FEATURE_MATRIX.md` (ROADMAP M7.4).
 //!
 //! Written from the matrix row and its specification's acceptance criteria, not from the
-//! implementation: every test drives IDECraft from outside, through the `idecraft` command line and
+//! implementation: every test drives Ferris IDEA from outside, through the `ferris-idea` command line and
 //! MCP (stdio and the Streamable HTTP transport), on copies of `tests/reference-projects`. Rows
 //! that only a window shows name their window self-test steps in the module header
 //! (`//! self-test:`); rows without behaviour to test name the reason (`//! not-tested:`).

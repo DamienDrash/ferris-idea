@@ -9,8 +9,8 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use idecraft_debugger::{SourceBreakpoint, SpecialBreakpoints, known_adapters};
-use idecraft_workbench::debug_model::{Command, Controller, Kind, Launch, Update};
+use ferris_idea_debugger::{SourceBreakpoint, SpecialBreakpoints, known_adapters};
+use ferris_idea_workbench::debug_model::{Command, Controller, Kind, Launch, Update};
 
 const BUILD: &str = "buildscript {\n    repositories { mavenCentral() }\n    dependencies { classpath(\"org.jetbrains.kotlin:kotlin-gradle-plugin:2.0.21\") }\n}\n\nplugins { application }\napply(plugin = \"org.jetbrains.kotlin.jvm\")\n\nrepositories { mavenCentral() }\n";
 
@@ -177,7 +177,7 @@ fn project(name: &str, files: &[(&str, &str)]) -> Option<(Vec<String>, PathBuf)>
         eprintln!("skipped: kotlin-debug-adapter is not installed");
         return None;
     };
-    let dir = std::env::temp_dir().join(format!("idecraft-{name}-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let dir = std::fs::canonicalize(&dir).unwrap();
@@ -201,7 +201,7 @@ fn project(name: &str, files: &[(&str, &str)]) -> Option<(Vec<String>, PathBuf)>
         eprintln!("skipped: gradle with the Kotlin plugin 2.0.21 in its cache is not available");
         return None;
     }
-    if idecraft_core::trust::require_trusted(&dir).is_err() {
+    if ferris_idea_core::trust::require_trusted(&dir).is_err() {
         eprintln!("skipped: the temporary project is not trusted");
         return None;
     }
@@ -256,7 +256,7 @@ fn a_program_that_ends_at_once_is_reported_as_ended() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// A program still running when IDECraft asks for a lost stop is left alone: it stops at its
+/// A program still running when Ferris IDEA asks for a lost stop is left alone: it stops at its
 /// breakpoint later and runs to its end.
 #[test]
 fn a_program_that_runs_a_while_before_its_first_stop_is_left_alone() {

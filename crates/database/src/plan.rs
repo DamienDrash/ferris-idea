@@ -378,7 +378,7 @@ pub fn text_plan(rows: &Rows) -> Vec<PlanNode> {
 /// batch of its own and is switched off again whatever happens.
 /// The plan of `statement` through `EXPLAIN PLAN` and the user's `PLAN_TABLE` (`SPEC-0142`).
 async fn explain_oracle(session: &Session, statement: &str) -> Result<Plan, ExplainError> {
-    const ID: &str = "IDECRAFT";
+    const ID: &str = "FERRIS_IDEA";
     let crate::Driver::Oracle(oracle) = &session.driver else {
         unreachable!("Oracle plans need an Oracle session")
     };

@@ -1,5 +1,5 @@
 # Dynamic variables, continued headers, request settings (SPEC-0046 behaviours 2, 3 and 10) and the
-# parts of other request-file dialects that IDECraft recognises and never sends, runs or writes
+# parts of other request-file dialects that Ferris IDEA recognises and never sends, runs or writes
 # (behaviour 9). Environment "local".
 
 @base = http://{{host}}:{{port}}

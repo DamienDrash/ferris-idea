@@ -1,12 +1,12 @@
 //! SPEC-0093 v3 AK-7 and SPEC-0108 v4 AK-13: cancelling a running statement, the startup script and
-//! the statement time limit. SQLite always; PostgreSQL and MySQL live with `IDECRAFT_TEST_PG` /
-//! `IDECRAFT_TEST_MYSQL` (skipped without them).
+//! the statement time limit. SQLite always; PostgreSQL and MySQL live with `FERRIS_IDEA_TEST_PG` /
+//! `FERRIS_IDEA_TEST_MYSQL` (skipped without them).
 
 use crate::common;
 
 use std::time::{Duration, Instant};
 
-use idecraft_database::{
+use ferris_idea_database::{
     ConnectionProfile, Credentials, OnError, Outcome, ScriptRun, Session, SessionError,
 };
 
@@ -33,7 +33,7 @@ fn first(run: &ScriptRun) -> &Outcome {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn sqlite_statement_is_interrupted() {
-    let file = std::env::temp_dir().join(format!("idecraft-cancel-{}.db", std::process::id()));
+    let file = std::env::temp_dir().join(format!("ferris-idea-cancel-{}.db", std::process::id()));
     std::fs::write(&file, b"").unwrap();
     let p = ConnectionProfile::from_url("lite", &format!("sqlite:{}", file.display())).unwrap();
     let s = Session::connect(&p, &Credentials::NotNeeded).await.unwrap();
@@ -50,7 +50,7 @@ async fn sqlite_statement_is_interrupted() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn postgres_cancel_startup_script_and_time_limit() {
-    let Some(p) = live("IDECRAFT_TEST_PG") else {
+    let Some(p) = live("FERRIS_IDEA_TEST_PG") else {
         return;
     };
     let c = common::credentials(&p);
@@ -65,12 +65,12 @@ async fn postgres_cancel_startup_script_and_time_limit() {
 
     // The startup script runs before anything else; a failing one stops the connection.
     let mut started = p.clone();
-    started.options.startup_script = Some("set application_name = 'idecraft-startup'".into());
+    started.options.startup_script = Some("set application_name = 'ferris-idea-startup'".into());
     let s = Session::connect(&started, &c).await.unwrap();
     let run = s.run_script("show application_name", OnError::Stop).await;
     match first(&run) {
         Outcome::ResultSet { rows, .. } => {
-            assert_eq!(rows[0][0].as_deref(), Some("idecraft-startup"))
+            assert_eq!(rows[0][0].as_deref(), Some("ferris-idea-startup"))
         }
         other => panic!("{other:?}"),
     }
@@ -94,7 +94,7 @@ async fn postgres_cancel_startup_script_and_time_limit() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn mysql_cancel_and_time_limit() {
-    let Some(p) = live("IDECRAFT_TEST_MYSQL") else {
+    let Some(p) = live("FERRIS_IDEA_TEST_MYSQL") else {
         return;
     };
     let c = common::credentials(&p);

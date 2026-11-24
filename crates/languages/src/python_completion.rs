@@ -1,5 +1,5 @@
 //! Python completion on top of pyright (`SPEC-0072` v9 behaviours 34–42): signature and type from
-//! the resolved documentation, call parentheses, IDECraft's own postfix and live templates, and
+//! the resolved documentation, call parentheses, Ferris IDEA's own postfix and live templates, and
 //! imports from the standard library that the server does not offer.
 
 use std::collections::{BTreeMap, HashSet};
@@ -267,7 +267,7 @@ fn escape(text: &str) -> String {
         .replace('}', "\\}")
 }
 
-/// IDECraft's Python postfix templates for the name typed at char `character` of line `line_no`
+/// Ferris IDEA's Python postfix templates for the name typed at char `character` of line `line_no`
 /// in `line` (behaviour 38): those whose name starts with the typed name, each replacing
 /// expression and name. Empty when the name does not follow `expression.`, after `import`/`from`
 /// and on a number.
@@ -364,7 +364,7 @@ const LIVE: &[(&str, &str, &str, bool)] = &[
     ),
 ];
 
-/// IDECraft's Python live templates for the name typed at char `character` of `line`
+/// Ferris IDEA's Python live templates for the name typed at char `character` of `line`
 /// (behaviour 39): offered when the name stands alone at the start of a statement; `main` only
 /// at the top level. A template named exactly as typed is preselected.
 pub fn live_items(line: &str, character: usize) -> Vec<CompletionItem> {

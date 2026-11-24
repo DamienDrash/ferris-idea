@@ -3,7 +3,7 @@
 
 use std::path::PathBuf;
 
-use idecraft_editor::Edit;
+use ferris_idea_editor::Edit;
 
 /// Where char offset `at` lands after `edit`: unchanged before the edit, moved by the length
 /// difference after it, and at the end of the inserted text when the edit removed it.

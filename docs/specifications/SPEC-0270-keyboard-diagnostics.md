@@ -12,10 +12,10 @@
 
 ## Purpose
 Find out, on the user's own machine, why a shortcut does nothing or the wrong thing: whether the key
-reaches IDECraft at all, with which key and modifiers, and which action it resolved to.
+reaches Ferris IDEA at all, with which key and modifiers, and which action it resolved to.
 
 ## Behaviour
-1. **Switching:** the action `IDECraft.KeyboardDiagnostics` ("Keyboard Diagnostics", in Help ›
+1. **Switching:** the action `FerrisIDEA.KeyboardDiagnostics` ("Keyboard Diagnostics", in Help ›
    Diagnostics and in Find Action) turns the mode on; running it again turns it off. Turning it on
    starts with an empty list and says where the log is. [GEN]
 2. **Shown:** while on, a panel at the bottom right of the window lists the last 12 keystrokes, oldest
@@ -25,16 +25,16 @@ reaches IDECraft at all, with which key and modifiers, and which action it resol
    binds to it, and what had the focus (editor, project tree, popup, other). Changes of the held
    modifier keys get a row of their own ("modifiers held: ⌃⌥"), so a keyboard that reports ⌘ for the
    key labelled ⌥ shows up. The panel header names the keyboard layout. [GEN]
-3. **Log:** each row is also appended to `keyboard-diagnostics.log` in the IDECraft log folder
-   (`$IDECRAFT_LOG_DIR`, else `~/Library/Logs/IDECraft` on macOS, `%LOCALAPPDATA%\IDECraft\Logs` on
-   Windows, `$XDG_STATE_HOME/idecraft/log` or `~/.local/state/idecraft/log` elsewhere), one line per
+3. **Log:** each row is also appended to `keyboard-diagnostics.log` in the Ferris IDEA log folder
+   (`$FERRIS_IDEA_LOG_DIR`, else `~/Library/Logs/FerrisIDEA` on macOS, `%LOCALAPPDATA%\FerrisIDEA\Logs` on
+   Windows, `$XDG_STATE_HOME/ferris-idea/log` or `~/.local/state/ferris-idea/log` elsewhere), one line per
    keystroke: UTC time, event (`down`, `repeat`, `modifiers`) and tab-separated `name=value` fields
    `key`, `char`, `mods`, `us_key`, `stroke`, `bound`, `ran`, `focus`, `layout`. Over 1 MiB the log
    moves to `keyboard-diagnostics.log.1` first. [GEN]
 4. **No typed text:** a keystroke without ⌃, ⌘ or fn that types a character and has no keymap action
    is typed text; its key and character are neither shown nor logged (`key=(typed)`), so the log never
    holds what was typed, e.g. a password. Shortcuts stay visible. [GEN]
-5. **What it cannot see:** a keystroke the operating system or keyboard software takes before IDECraft
+5. **What it cannot see:** a keystroke the operating system or keyboard software takes before Ferris IDEA
    leaves no row; that absence is the finding. The hardware key code is not available from the toolkit
    (GPUI 0.2); the layout name, the key as the layout reports it and the US key stand in for it. [STD]
 6. **Agents:** the MCP tool `keyboard_diagnostics` returns the log's path, whether it exists, and its
@@ -57,16 +57,16 @@ How the toolkit (GPUI 0.2.2, macOS) delivers keys, read from its source: a key w
 method composing text) goes straight to the window's key handling and never through the text input
 system (`interpretKeyEvents`), so ⌃G is neither turned into a control character nor swallowed; the key
 is the layout's letter ignoring modifiers (`g` on QWERTZ too). Keys with ⌘ and no ⌃ go to the input
-system first, which hands them back as a command. IDECraft's editor resolves ⌃G to
+system first, which hands them back as a command. Ferris IDEA's editor resolves ⌃G to
 `SelectNextOccurrence` before the workbench sees it, and the menu bar's key equivalents only fire for
-keys IDECraft did not handle. Nothing in the code explains Nr. 8 and 9; the remaining suspects are an
+keys Ferris IDEA did not handle. Nothing in the code explains Nr. 8 and 9; the remaining suspects are an
 operating-system or keyboard-software modifier swap and an unfinished dead-key composition (German
 `^`, `´`, `` ` ``), during which the editor leaves every key to the input method. The mode settles it.
 [STD, GEN]
 
 ## Out of scope
-Recording key-up events, mouse buttons, remapping keys in IDECraft to undo an operating-system swap
+Recording key-up events, mouse buttons, remapping keys in Ferris IDEA to undo an operating-system swap
 (the keymap settings, SPEC-0105, do that).
 
 ## Known deviations from the reference
-Not compared with the reference. IDECraft shows the keystrokes live and never logs typed text.
+Not compared with the reference. Ferris IDEA shows the keystrokes live and never logs typed text.

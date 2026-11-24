@@ -89,7 +89,7 @@ pub(super) fn edit_action_of(event: &KeyDownEvent) -> Option<String> {
     if !primary {
         return None;
     }
-    let stroke = idecraft_ui::keymap::Keystroke::from_platform(
+    let stroke = ferris_idea_ui::keymap::Keystroke::from_platform(
         &event.keystroke.key,
         m.control,
         m.alt,

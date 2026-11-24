@@ -3,7 +3,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use idecraft_database::{ConnectionProfile, Dialect, Index, Table};
+use ferris_idea_database::{ConnectionProfile, Dialect, Index, Table};
 
 /// What is known about a connection's schema.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -22,7 +22,7 @@ pub enum Load {
 /// One connection with what is known about it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Conn {
-    /// The profile from `.idecraft/connections.toml`.
+    /// The profile from `.ferris-idea/connections.toml`.
     pub profile: ConnectionProfile,
     /// Its schema.
     pub load: Load,
@@ -36,7 +36,7 @@ pub struct Conn {
     pub tls: Option<bool>,
     /// The routines, triggers and types of its current schema, read with it (`SPEC-0089` v13
     /// behaviour 18, `SPEC-0013` v6 behaviour 18).
-    pub objects: Vec<idecraft_database::SchemaObject>,
+    pub objects: Vec<ferris_idea_database::SchemaObject>,
 }
 
 /// What is known about one level of a store's tree (`SPEC-0310` behaviour 5).
@@ -48,16 +48,16 @@ pub enum StoreLoad {
     /// Being read in the background.
     Loading,
     /// The children.
-    Loaded(Vec<idecraft_nosql::BrowseItem>),
+    Loaded(Vec<ferris_idea_nosql::BrowseItem>),
     /// Why it could not be read.
     Failed(String),
 }
 
-/// A non-relational store (`.idecraft/stores.toml`) with the levels read so far.
+/// A non-relational store (`.ferris-idea/stores.toml`) with the levels read so far.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StoreConn {
     /// The store profile.
-    pub profile: idecraft_nosql::StoreProfile,
+    pub profile: ferris_idea_nosql::StoreProfile,
     /// Children by tree path (`[]` is the store itself).
     pub levels: HashMap<Vec<String>, StoreLoad>,
 }
@@ -97,7 +97,7 @@ pub enum Node {
     /// The objects of one kind of a connection, e.g. its functions (`SPEC-0089` v13 behaviour 25).
     Objects(usize, String),
     /// A routine, trigger or type of a connection (`SPEC-0089` v13 behaviour 25).
-    Object(usize, idecraft_database::SchemaObject),
+    Object(usize, ferris_idea_database::SchemaObject),
     /// Read the connection's schema again (v3 behaviour 9).
     Retry(usize),
     /// Another schema of a connection (v3 behaviour 8).
@@ -394,7 +394,7 @@ pub fn kind_folder(kind: &str) -> String {
 /// How a routine, trigger or type is shown: label, grey text and icon. A PostgreSQL routine
 /// carries its arguments in the label, so overloads differ; a trigger shows its table and when it
 /// fires, a type what it is.
-pub fn object_row_text(o: &idecraft_database::SchemaObject) -> (String, String, &'static str) {
+pub fn object_row_text(o: &ferris_idea_database::SchemaObject) -> (String, String, &'static str) {
     match o.kind.as_str() {
         "trigger" => {
             let mut detail = o.table.clone().unwrap_or_default();
@@ -424,10 +424,10 @@ pub fn object_row_text(o: &idecraft_database::SchemaObject) -> (String, String, 
 }
 
 /// The folders of routines, triggers and types of a connection, in the order of
-/// `idecraft_database::object_kinds`, each with its count.
+/// `ferris_idea_database::object_kinds`, each with its count.
 fn object_rows(ci: usize, conn: &Conn, expanded: &HashSet<Node>, out: &mut Vec<Row>) {
-    for kind in idecraft_database::object_kinds(conn.profile.dialect) {
-        let of_kind: Vec<&idecraft_database::SchemaObject> =
+    for kind in ferris_idea_database::object_kinds(conn.profile.dialect) {
+        let of_kind: Vec<&ferris_idea_database::SchemaObject> =
             conn.objects.iter().filter(|o| o.kind == *kind).collect();
         if of_kind.is_empty() {
             continue;
@@ -746,7 +746,7 @@ fn table_rows(ci: usize, t: &Table, expanded: &HashSet<Node>, out: &mut Vec<Row>
                         4,
                         "primary key".into(),
                         format!("({})", t.primary_key.join(", ")),
-                        "idecraft/dbKeyPrimary",
+                        "ferris-idea/dbKeyPrimary",
                     ));
                 }
                 for fk in &t.foreign_keys {
@@ -762,7 +762,7 @@ fn table_rows(ci: usize, t: &Table, expanded: &HashSet<Node>, out: &mut Vec<Row>
                             fk.referenced_columns.join(", "),
                             fk.actions_sql().to_lowercase()
                         ),
-                        "idecraft/dbKeyForeign",
+                        "ferris-idea/dbKeyForeign",
                     ));
                 }
             }
@@ -773,7 +773,7 @@ fn table_rows(ci: usize, t: &Table, expanded: &HashSet<Node>, out: &mut Vec<Row>
                         4,
                         ix.name.clone(),
                         index_detail(ix),
-                        "idecraft/dbIndex",
+                        "ferris-idea/dbIndex",
                     ));
                 }
             }
@@ -818,24 +818,30 @@ mod store_tests {
     #[test]
     fn a_saved_redis_store_is_a_visible_row_with_system_and_address() {
         // SPEC-0310 AK-9: what the self-test reads after Save, without a window.
-        let redis = idecraft_database::catalogue().get("redis").unwrap().clone();
-        let mut form = idecraft_database::ConnectionForm::for_connector(&redis);
+        let redis = ferris_idea_database::catalogue()
+            .get("redis")
+            .unwrap()
+            .clone();
+        let mut form = ferris_idea_database::ConnectionForm::for_connector(&redis);
         form.name = "cache".into();
         form.host = "127.0.0.1".into();
         form.port = "1".into();
         form.database = "2".into();
-        let profile = idecraft_nosql::form_profile(&form, "new").unwrap().unwrap();
-        let dir = std::env::temp_dir().join(format!("idecraft-store-rows-{}", std::process::id()));
+        let profile = ferris_idea_nosql::form_profile(&form, "new")
+            .unwrap()
+            .unwrap();
+        let dir =
+            std::env::temp_dir().join(format!("ferris-idea-store-rows-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        idecraft_nosql::save_store(
+        ferris_idea_nosql::save_store(
             &dir,
             profile,
             None,
             None,
-            &idecraft_database::MemoryStore::default(),
+            &ferris_idea_database::MemoryStore::default(),
         )
         .unwrap();
-        let mut stores: Vec<StoreConn> = idecraft_nosql::load_stores(&dir)
+        let mut stores: Vec<StoreConn> = ferris_idea_nosql::load_stores(&dir)
             .unwrap()
             .into_iter()
             .map(|profile| StoreConn {
@@ -875,7 +881,7 @@ mod store_tests {
     fn store_rows_show_system_address_and_levels() {
         // SPEC-0310 AK-9 (model).
         let profile =
-            idecraft_nosql::StoreProfile::from_url("Cache", "redis://localhost:6380/2").unwrap();
+            ferris_idea_nosql::StoreProfile::from_url("Cache", "redis://localhost:6380/2").unwrap();
         let mut store = StoreConn {
             profile,
             levels: HashMap::new(),
@@ -892,7 +898,7 @@ mod store_tests {
             "Loading…"
         );
         let item = |label: &str, kind: &'static str, path: &[&str], expandable: bool| {
-            idecraft_nosql::BrowseItem {
+            ferris_idea_nosql::BrowseItem {
                 label: label.into(),
                 detail: String::new(),
                 path: path.iter().map(|s| (*s).to_owned()).collect(),
@@ -931,7 +937,7 @@ mod store_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use idecraft_database::{Column, ForeignKey};
+    use ferris_idea_database::{Column, ForeignKey};
 
     fn profile(name: &str) -> ConnectionProfile {
         ConnectionProfile::from_url(name, "sqlite:///tmp/shop.db").unwrap()
@@ -1053,8 +1059,8 @@ mod tests {
         open.insert(Node::Conn(0));
         assert_eq!(rows(&conns, &open)[1].label, "Loading…");
         // D21: with a keychain entry, the row says the system may ask first.
-        conns[0].profile.secret = Some(idecraft_database::SecretRef {
-            service: "idecraft".into(),
+        conns[0].profile.secret = Some(ferris_idea_database::SecretRef {
+            service: "ferris-idea".into(),
             account: "shop".into(),
         });
         assert!(rows(&conns, &open)[1].label.contains("keychain"));
@@ -1389,7 +1395,7 @@ mod tests {
     #[test]
     fn routines_triggers_and_types_in_folders() {
         let object = |kind: &str, name: &str, table: Option<&str>, detail: Option<&str>| {
-            idecraft_database::SchemaObject {
+            ferris_idea_database::SchemaObject {
                 name: name.into(),
                 kind: kind.into(),
                 table: table.map(str::to_owned),
@@ -1397,7 +1403,7 @@ mod tests {
             }
         };
         let mut p = profile("shop");
-        p.dialect = idecraft_database::Dialect::PostgreSql;
+        p.dialect = ferris_idea_database::Dialect::PostgreSql;
         let conns = vec![Conn {
             profile: p,
             load: Load::Loaded(Vec::new()),

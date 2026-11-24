@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, Once};
 use std::time::Duration;
 
-use idecraft_core::{
+use ferris_idea_core::{
     BeforeTask, RunEvent, SecondStart, entries_of, parse_run_configs, rewrite_run_toml, run_config,
     run_plan, running_instances, second_start, start_host_run, start_run, stop_instances,
 };
@@ -18,7 +18,7 @@ static OPENED: Mutex<Vec<String>> = Mutex::new(Vec::new());
 fn record_browser() {
     static ONCE: Once = Once::new();
     ONCE.call_once(|| {
-        idecraft_core::set_browser_opener(Some(Arc::new(|url: &str| {
+        ferris_idea_core::set_browser_opener(Some(Arc::new(|url: &str| {
             OPENED.lock().unwrap().push(url.to_owned());
             Ok(())
         })));
@@ -39,10 +39,12 @@ struct Root(PathBuf);
 
 impl Root {
     fn new(tag: &str) -> Self {
-        let p =
-            std::env::temp_dir().join(format!("idecraft-run-tasks-{tag}-{}", std::process::id()));
+        let p = std::env::temp_dir().join(format!(
+            "ferris-idea-run-tasks-{tag}-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&p);
-        std::fs::create_dir_all(p.join(".idecraft")).unwrap();
+        std::fs::create_dir_all(p.join(".ferris-idea")).unwrap();
         std::fs::create_dir_all(p.join("scripts")).unwrap();
         Self(p.canonicalize().unwrap())
     }
@@ -57,7 +59,7 @@ impl Drop for Root {
     }
 }
 
-const OLD: &str = r#"[idecraft]
+const OLD: &str = r#"[ferris-idea]
 format = 1
 kind = "run-configurations"
 
@@ -77,7 +79,7 @@ timeout = 30
 "#;
 
 /// The sample of the specification: a folder, the instance switch and the three kinds of tasks.
-const SAMPLE: &str = r#"[idecraft]
+const SAMPLE: &str = r#"[ferris-idea]
 format = 1
 kind = "run-configurations"
 
@@ -383,7 +385,7 @@ fn the_browser_opens_after_the_start_with_the_configurations_own_urls() {
         r#"[[run]]
 name = "api"
 command = ["sh", "-c", "echo api"]
-before_launch = [{ browser = "http://localhost:1/idecraft-test-not-mine" }]
+before_launch = [{ browser = "http://localhost:1/ferris-idea-test-not-mine" }]
 
 [[run]]
 name = "web"
@@ -391,19 +393,19 @@ command = ["sh", "-c", "echo web"]
 before = ["api"]
 before_launch = [
     { tool = ["sh", "-c", "echo tool"] },
-    { browser = "http://localhost:1/idecraft-test-own-a" },
-    { browser = "file://${workspace}/docs/idecraft-test-own-b.html" },
+    { browser = "http://localhost:1/ferris-idea-test-own-a" },
+    { browser = "file://${workspace}/docs/ferris-idea-test-own-b.html" },
 ]
 
 [[run]]
 name = "fails"
-command = ["idecraft-no-such-program-xyz"]
-before_launch = [{ browser = "http://localhost:1/idecraft-test-never-started" }]
+command = ["ferris-idea-no-such-program-xyz"]
+before_launch = [{ browser = "http://localhost:1/ferris-idea-test-never-started" }]
 "#,
     );
     assert!(configs.problems.is_empty(), "{:?}", configs.problems);
     let file_url = format!(
-        "file://{}/docs/idecraft-test-own-b.html",
+        "file://{}/docs/ferris-idea-test-own-b.html",
         root.path().to_string_lossy()
     );
     // The plan names what would be opened, on the last step only.
@@ -412,12 +414,12 @@ before_launch = [{ browser = "http://localhost:1/idecraft-test-never-started" }]
     assert_eq!(
         plan.last().unwrap().opens,
         [
-            "http://localhost:1/idecraft-test-own-a".to_owned(),
+            "http://localhost:1/ferris-idea-test-own-a".to_owned(),
             file_url.clone()
         ]
     );
     assert!(
-        opened("idecraft-test-own").is_empty(),
+        opened("ferris-idea-test-own").is_empty(),
         "a plan opens nothing"
     );
     // Streamed: the lines of the output say what was opened.
@@ -431,37 +433,37 @@ before_launch = [{ browser = "http://localhost:1/idecraft-test-never-started" }]
         })
         .collect();
     assert!(
-        lines.contains(&"Opened http://localhost:1/idecraft-test-own-a in the browser"),
+        lines.contains(&"Opened http://localhost:1/ferris-idea-test-own-a in the browser"),
         "{lines:?}"
     );
     assert_eq!(
-        opened("idecraft-test-own"),
+        opened("ferris-idea-test-own"),
         [
-            "http://localhost:1/idecraft-test-own-a".to_owned(),
+            "http://localhost:1/ferris-idea-test-own-a".to_owned(),
             file_url.clone()
         ]
     );
     // The URL of the configuration run before it was not opened.
-    assert!(opened("idecraft-test-not-mine").is_empty());
+    assert!(opened("ferris-idea-test-not-mine").is_empty());
     // Blocking (agents): the outcome of the last step says it.
     let runs = run_config(root.path(), &configs, "web").unwrap();
     assert!(runs[..runs.len() - 1].iter().all(|r| r.browser.is_empty()));
     assert_eq!(
         runs.last().unwrap().browser,
         [
-            "Opened http://localhost:1/idecraft-test-own-a in the browser".to_owned(),
+            "Opened http://localhost:1/ferris-idea-test-own-a in the browser".to_owned(),
             format!("Opened {file_url} in the browser"),
         ]
     );
-    assert_eq!(opened("idecraft-test-own").len(), 4);
+    assert_eq!(opened("ferris-idea-test-own").len(), 4);
     // A program that does not start opens nothing.
     let runs = run_config(root.path(), &configs, "fails").unwrap();
     assert!(runs[0].start_error.is_some());
-    assert!(opened("idecraft-test-never-started").is_empty());
+    assert!(opened("ferris-idea-test-never-started").is_empty());
     // A URL that passes the file's check but not the check after its variables are replaced is
     // not opened; the run goes on and says why.
     let unset = parse_run_configs(
-        "[[run]]\nname = \"web\"\ncommand = [\"true\"]\nbefore_launch = [{ browser = \"http://${env:IDECRAFT_TEST_NO_SUCH_HOST}/idecraft-test-unset\" }]\n",
+        "[[run]]\nname = \"web\"\ncommand = [\"true\"]\nbefore_launch = [{ browser = \"http://${env:FERRIS_IDEA_TEST_NO_SUCH_HOST}/ferris-idea-test-unset\" }]\n",
     );
     assert!(unset.problems.is_empty(), "{:?}", unset.problems);
     assert!(run_plan(root.path(), &unset, "web").is_err());
@@ -471,7 +473,7 @@ before_launch = [{ browser = "http://localhost:1/idecraft-test-never-started" }]
         runs[0].browser[0].starts_with("Open browser: the URL"),
         "{runs:?}"
     );
-    assert!(opened("idecraft-test-unset").is_empty());
+    assert!(opened("ferris-idea-test-unset").is_empty());
 }
 
 /// AK-9: the host of a remote project opens nothing and says so.
@@ -480,16 +482,16 @@ fn a_host_run_opens_nothing() {
     record_browser();
     let root = Root::new("host");
     let configs = parse_run_configs(
-        "[[run]]\nname = \"web\"\ncommand = [\"true\"]\nbefore_launch = [{ browser = \"http://localhost:1/idecraft-test-host\" }]\n",
+        "[[run]]\nname = \"web\"\ncommand = [\"true\"]\nbefore_launch = [{ browser = \"http://localhost:1/ferris-idea-test-host\" }]\n",
     );
     let handle = start_host_run(root.path(), &configs, "web").unwrap();
     let events: Vec<RunEvent> = handle.events.iter().collect();
     assert!(events.iter().any(|e| matches!(
         e,
         RunEvent::Output { text, .. }
-            if text == "Open browser: http://localhost:1/idecraft-test-host is not opened on the host"
+            if text == "Open browser: http://localhost:1/ferris-idea-test-host is not opened on the host"
     )));
-    assert!(opened("idecraft-test-host").is_empty());
+    assert!(opened("ferris-idea-test-host").is_empty());
 }
 
 /// AK-10: runs of this process are counted per configuration and workspace, and stopped.
@@ -570,12 +572,12 @@ fn the_browser_waits_for_its_port() {
         r#"[[run]]
 name = "server"
 command = ["sleep", "30"]
-before_launch = [{{ browser = "http://localhost:{port}/idecraft-test-waited", wait_port = {port} }}]
+before_launch = [{{ browser = "http://localhost:{port}/ferris-idea-test-waited", wait_port = {port} }}]
 
 [[run]]
 name = "gone"
 command = ["true"]
-before_launch = [{{ browser = "http://localhost:{never}/idecraft-test-never-up", wait_port = {never} }}]
+before_launch = [{{ browser = "http://localhost:{never}/ferris-idea-test-never-up", wait_port = {never} }}]
 "#
     );
     let configs = parse_run_configs(&text);
@@ -583,7 +585,7 @@ before_launch = [{{ browser = "http://localhost:{never}/idecraft-test-never-up",
     assert_eq!(
         configs.configs[0].before_launch,
         [BeforeTask::browser_after_port(
-            &format!("http://localhost:{port}/idecraft-test-waited"),
+            &format!("http://localhost:{port}/ferris-idea-test-waited"),
             port
         )]
     );
@@ -598,7 +600,7 @@ before_launch = [{{ browser = "http://localhost:{never}/idecraft-test-never-up",
     assert_eq!(
         plan[0].opens_after_port,
         [(
-            format!("http://localhost:{port}/idecraft-test-waited"),
+            format!("http://localhost:{port}/ferris-idea-test-waited"),
             port
         )]
     );
@@ -609,21 +611,21 @@ before_launch = [{{ browser = "http://localhost:{never}/idecraft-test-never-up",
     ));
     // The program runs, the port is closed: nothing is opened yet.
     std::thread::sleep(Duration::from_millis(400));
-    assert!(opened("idecraft-test-waited").is_empty());
+    assert!(opened("ferris-idea-test-waited").is_empty());
     let listener = std::net::TcpListener::bind(("127.0.0.1", port)).unwrap();
     let line = handle
         .events
         .iter()
         .find_map(|e| match e {
-            RunEvent::Output { text, .. } if text.contains("idecraft-test-waited") => Some(text),
+            RunEvent::Output { text, .. } if text.contains("ferris-idea-test-waited") => Some(text),
             _ => None,
         })
         .unwrap();
     assert_eq!(
         line,
-        format!("Opened http://localhost:{port}/idecraft-test-waited in the browser")
+        format!("Opened http://localhost:{port}/ferris-idea-test-waited in the browser")
     );
-    assert_eq!(opened("idecraft-test-waited").len(), 1);
+    assert_eq!(opened("ferris-idea-test-waited").len(), 1);
     drop(listener);
     stop_instances(root.path(), "server", Duration::from_secs(10)).unwrap();
     // A program that ends before its port opens: the page is not opened, and the output says so.
@@ -631,8 +633,8 @@ before_launch = [{{ browser = "http://localhost:{never}/idecraft-test-never-up",
     assert_eq!(
         outcomes[0].browser,
         [format!(
-            "Open browser: http://localhost:{never}/idecraft-test-never-up is not opened: the program ended before port {never} opened"
+            "Open browser: http://localhost:{never}/ferris-idea-test-never-up is not opened: the program ended before port {never} opened"
         )]
     );
-    assert!(opened("idecraft-test-never-up").is_empty());
+    assert!(opened("ferris-idea-test-never-up").is_empty());
 }

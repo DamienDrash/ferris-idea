@@ -17,20 +17,20 @@ reference uses, so a project shared between both IDEs behaves alike.
 
 ## Behaviour
 1. **Profile file:** the project's profile is `<project>/.idea/inspectionProfiles/Project_Default.xml`.
-   IDECraft reads it when the project opens and whenever it changes on disk. Each `inspection_tool`
-   whose `class` is the short name of one of IDECraft's inspections (SPEC-0125 v2 behaviour 7) or its
-   IDECraft id sets that inspection's on/off state (`enabled`) and severity (`level`: `ERROR` → error,
+   Ferris IDEA reads it when the project opens and whenever it changes on disk. Each `inspection_tool`
+   whose `class` is the short name of one of Ferris IDEA's inspections (SPEC-0125 v2 behaviour 7) or its
+   Ferris IDEA id sets that inspection's on/off state (`enabled`) and severity (`level`: `ERROR` → error,
    `WARNING` → warning, `WEAK WARNING`, `INFO`, `INFORMATION`, `TYPO` and others → weak warning).
    A missing file or a missing entry means the default. A file that cannot be read as XML is ignored
    and the status bar says so once. [OSS]
 2. **Writing:** a change writes the same file. Only deviations from the default are written; entries
-   whose `class` IDECraft does not know are kept unchanged and in their order; the `myName` option is
+   whose `class` Ferris IDEA does not know are kept unchanged and in their order; the `myName` option is
    `Project Default`. The `.idea` folder is created when missing. With no deviation left the file
    keeps its unknown entries, or is removed when it has none. Writing is atomic (temporary file and
    rename). [OSS, GEN]
 3. **Effect:** the profile applies to the editor's own problems, Inspect Code and the MCP tools
    (SPEC-0098 v3 behaviour 9); a change applies at once to the open editors. [OBS-0019]
-4. **Settings page:** Settings › Editor › **Inspections** lists IDECraft's inspections sorted by
+4. **Settings page:** Settings › Editor › **Inspections** lists Ferris IDEA's inspections sorted by
    language (Java, Kotlin, JavaScript and TypeScript, Python, Properties, Natural language, General)
    and name, each row with a checkbox, the name, the language and the severity; changed rows are
    drawn in the accent colour. The header names the profile ("Project Default · stored in project").
@@ -64,7 +64,7 @@ reference uses, so a project shared between both IDEs behaves alike.
   (`crates/mcp/tests/it/protocol.rs`).
 - **AK-4** Window self-test: the settings page lists the Java inspections; turning off
   `java.string-equality` removes the finding from the open editor and writes the profile file.
-- **AK-5** Side by side in OBS-0019 (re-check): a profile written by IDECraft is read by the
+- **AK-5** Side by side in OBS-0019 (re-check): a profile written by Ferris IDEA is read by the
   reference and the other way round.
 - **AK-6 (v2)** `INFORMATION` read as and written for the fix-only level (unit test
   `inspection_profile::tests::reads_the_reference_format`); `inspection_profile` with severity `info`
@@ -76,6 +76,6 @@ inspections, "Highlighting in editor" separate from the severity, custom severit
 of the reference's own inspections.
 
 ## Known deviations from the reference
-The reference offers an IDE-wide profile and named profiles besides the project's; IDECraft has the
+The reference offers an IDE-wide profile and named profiles besides the project's; Ferris IDEA has the
 project's profile only. Improvement: agents read and change the profile through MCP, and the file is
 the reference's, so both IDEs share one profile (IMP-0308).

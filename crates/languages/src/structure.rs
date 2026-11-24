@@ -323,7 +323,7 @@ mod tests {
         assert_eq!(names(&c)[0].0, "calc");
     }
 
-    /// SPEC-0079 v7 AK-9 (SPEC-0042 v17 behaviour 31): the elements of an HTML file stay in the
+    /// SPEC-0079 v7 AK-11 (SPEC-0042 v17 behaviour 31): the elements of an HTML file stay in the
     /// order of the document, below each parent.
     #[test]
     fn elements_keep_document_order() {

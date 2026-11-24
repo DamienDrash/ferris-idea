@@ -34,7 +34,7 @@ only after saving.
    (`didClose`) and shows the diagnostics published for the text the server has; diagnostics that arrive
    while the editor has newer text are skipped, the newer text's diagnostics follow. Opening and saving
    still ask for diagnostics as in SPEC-0070. [GEN]
-5. **MCP:** `idecraft mcp` switches the pool on too, so agents asking several questions about a project
+5. **MCP:** `ferris-idea mcp` switches the pool on too, so agents asking several questions about a project
    reuse its servers. [ADR-0008]
 6. **Lifetime:** quitting the IDE or ending the MCP session sends `shutdown` and `exit` to every pooled
    server and kills those that have not exited after 2 s; a server also sees its input closed when the
@@ -57,7 +57,7 @@ only after saving.
   (`tests/pool.rs`).
 - **AK-2** All language tests keep passing without the pool (`tests/servers.rs`, `tests/clangd.rs`,
   `tests/rust_analyzer.rs`).
-- **AK-3** In a real window (`idecraft ui --selftest`, with `clangd`): the self-test's diagnostics steps
+- **AK-3** In a real window (`ferris-idea ui --selftest`, with `clangd`): the self-test's diagnostics steps
   pass with the pool on.
 - **AK-4** By hand: typing an error in a C++ file underlines it within about a second without saving;
   fixing it removes the underline.
@@ -68,5 +68,5 @@ Incremental `didChange` ranges (whole text is sent; fine for files of normal siz
 servers, memory limits for idle servers.
 
 ## Known deviations from the reference
-The reference analyses with its own engine; IDECraft relies on the language servers. Diagnostics follow
+The reference analyses with its own engine; Ferris IDEA relies on the language servers. Diagnostics follow
 typing with up to 300 ms plus the server's own delay.

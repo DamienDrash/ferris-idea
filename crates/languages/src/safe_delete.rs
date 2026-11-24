@@ -329,7 +329,7 @@ pub fn file_mentions(root: &Path, file: &Path) -> Vec<Mention> {
         return Vec::new();
     }
     let me = file.canonicalize().unwrap_or_else(|_| file.to_path_buf());
-    let texts: Vec<(PathBuf, String)> = idecraft_core::OwnSources::new(root)
+    let texts: Vec<(PathBuf, String)> = ferris_idea_core::OwnSources::new(root)
         .files()
         .into_iter()
         .map(|rel| root.join(rel))

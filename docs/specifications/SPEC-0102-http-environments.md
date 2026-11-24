@@ -59,9 +59,9 @@ and keep tokens out of it.
    are refused with "several HTTP environments and none given: pass `environment` with one of
    dev, prod"; requests that use none are resolved without one. The agent log masks the private
    values of the environment used, also when it was not named. [ADR-0008, security first]
-5. **Private values:** IDECraft remembers which variables of an environment come from the private
+5. **Private values:** Ferris IDEA remembers which variables of an environment come from the private
    file. Their values go to the server the request names and into the resolved request shown to the
-   one who runs it; IDECraft writes them to no file: the agent log (SPEC-0053 behaviour 5) shows
+   one who runs it; Ferris IDEA writes them to no file: the agent log (SPEC-0053 behaviour 5) shows
    `{{name}}` in their place. The private file itself is never a request body (SPEC-0046 behaviour
    11). **v3 – Private values for agents:** what `http_requests` returns and what the dry run of
    `send_http_request` shows keep every value that comes from `http-client.private.env.json` as
@@ -78,7 +78,7 @@ and keep tokens out of it.
   (v5: AK-8).
 - **AK-2** MCP: a named environment with a private token, `env` overriding it, an unknown name refused
   with the defined names (`crates/mcp/tests/it/protocol.rs`: `http_requests_tool`).
-- **AK-3** In a real window (`idecraft ui --selftest`): a request whose host comes from
+- **AK-3** In a real window (`ferris-idea ui --selftest`): a request whose host comes from
   `http-client.env.json` reaches the local server and the Services window shows the environment.
 - **AK-4** By hand: switching between two environments next to the reference.
 - **AK-5** The variables of the private file are known by name (unit test in `env::tests`); a request
@@ -120,6 +120,6 @@ closes, warning when the private file is not ignored by version control.
 
 ## Known deviations from the reference
 The environment is chosen from a list in the Services window instead of a selector in the editor
-toolbar. (v5) Without a choice IDECraft says why nothing was sent and offers the list where the
+toolbar. (v5) Without a choice Ferris IDEA says why nothing was sent and offers the list where the
 answer is shown; it does not open a list on its own at the editor. Compared next to the reference in
 OBS-0061 (W2).

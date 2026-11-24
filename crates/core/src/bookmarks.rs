@@ -1,6 +1,6 @@
 //! Bookmarks of a project (`SPEC-0331`): lines of project files, each with an optional mnemonic
 //! and description, newest first; how they follow edits, renamed and deleted files, and the
-//! project file `.idecraft/bookmarks.toml` they are kept in. Toolkit-free so the window and the
+//! project file `.ferris-idea/bookmarks.toml` they are kept in. Toolkit-free so the window and the
 //! MCP server share it.
 
 use std::collections::BTreeSet;
@@ -10,7 +10,7 @@ use std::time::SystemTime;
 use serde::{Deserialize, Serialize};
 
 /// Where the bookmarks of a project are kept (behaviour 10).
-pub const BOOKMARKS_FILE: &str = ".idecraft/bookmarks.toml";
+pub const BOOKMARKS_FILE: &str = ".ferris-idea/bookmarks.toml";
 
 /// The kind in the file's envelope.
 pub const KIND: &str = "bookmarks";
@@ -668,7 +668,7 @@ mod tests {
 
     fn project(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
-            "idecraft-bookmarks-{name}-{}-{:?}",
+            "ferris-idea-bookmarks-{name}-{}-{:?}",
             std::process::id(),
             std::thread::current().id()
         ));
@@ -881,7 +881,7 @@ mod tests {
             );
         });
         let text = std::fs::read_to_string(root.join(BOOKMARKS_FILE)).unwrap();
-        assert!(text.starts_with("[idecraft]\nkind = \"bookmarks\"\nformat = 1\n"));
+        assert!(text.starts_with("[ferris-idea]\nkind = \"bookmarks\"\nformat = 1\n"));
         assert!(text.contains("line = 16\nmnemonic = \"1\"\n"));
         // Another process reads the same: lines, mnemonics, descriptions, newest first.
         let again = Store::open(&root);
@@ -903,7 +903,7 @@ mod tests {
 
         // Reading keeps only what it can stand for.
         let read = Bookmarks::parse(
-            "[idecraft]\nkind = \"bookmarks\"\nformat = 1\n\n\
+            "[ferris-idea]\nkind = \"bookmarks\"\nformat = 1\n\n\
              [[bookmark]]\nfile = \"a.rs\"\nline = 3\nmnemonic = \"x\"\n\n\
              [[bookmark]]\nfile = \"../out.rs\"\nline = 1\n\n\
              [[bookmark]]\nfile = \"/etc/passwd\"\nline = 1\n\n\
@@ -926,10 +926,10 @@ mod tests {
             ]
         );
         // A newer format and another kind are refused, and not overwritten.
-        let newer = "[idecraft]\nkind = \"bookmarks\"\nformat = 99\n";
+        let newer = "[ferris-idea]\nkind = \"bookmarks\"\nformat = 99\n";
         assert!(Bookmarks::parse(newer).is_err());
-        assert!(Bookmarks::parse("[idecraft]\nkind = \"breakpoints\"\nformat = 1\n").is_err());
-        std::fs::create_dir_all(root.join(".idecraft")).unwrap();
+        assert!(Bookmarks::parse("[ferris-idea]\nkind = \"breakpoints\"\nformat = 1\n").is_err());
+        std::fs::create_dir_all(root.join(".ferris-idea")).unwrap();
         std::fs::write(root.join(BOOKMARKS_FILE), newer).unwrap();
         let mut b = Bookmarks::default();
         b.toggle("a.rs", 0);

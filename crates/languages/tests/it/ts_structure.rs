@@ -4,12 +4,14 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use idecraft_languages::actions::{Refactoring, code_actions_in, plan_code_action_in};
-use idecraft_languages::insight::CallNode;
-use idecraft_languages::java_structure::TypeDirection;
-use idecraft_languages::ts_refactor::{extract_interface_in, pull_members_up_in, pull_targets_in};
-use idecraft_languages::ts_structure::{MarkKind, declaration_marks_in, type_hierarchy_in};
-use idecraft_languages::usages::usage_counts_in;
+use ferris_idea_languages::actions::{Refactoring, code_actions_in, plan_code_action_in};
+use ferris_idea_languages::insight::CallNode;
+use ferris_idea_languages::java_structure::TypeDirection;
+use ferris_idea_languages::ts_refactor::{
+    extract_interface_in, pull_members_up_in, pull_targets_in,
+};
+use ferris_idea_languages::ts_structure::{MarkKind, declaration_marks_in, type_hierarchy_in};
+use ferris_idea_languages::usages::usage_counts_in;
 
 const BASE: &str = "export interface Shape {\n  area(): number;\n}\n\nexport abstract class Base implements Shape {\n  abstract area(): number;\n\n  describe(): string {\n    return String(this.area());\n  }\n\n  private hidden(): void {}\n\n  static make(): void {}\n}\n";
 const SHAPES: &str = "import { Base as Root } from \"./base\";\n\nexport class Circle extends Root {\n  constructor(readonly r: number) {\n    super();\n  }\n\n  area() {\n    return this.r * this.r * 3;\n  }\n\n  override describe(): string {\n    return \"circle\";\n  }\n\n  hidden2 = 1;\n}\n\nexport class Square extends Root {\n  area(): number {\n    return 4;\n  }\n}\n";
@@ -25,17 +27,17 @@ impl Drop for Project {
 
 fn project(name: &str) -> Option<Project> {
     // Only typescript-language-server: TypeScript 7's own server is checked in servers.rs.
-    if !idecraft_languages::servers::resolve(idecraft_languages::LanguageId::TypeScript)
+    if !ferris_idea_languages::servers::resolve(ferris_idea_languages::LanguageId::TypeScript)
         .is_ok_and(|r| r.candidate.program == "typescript-language-server")
     {
         assert!(
-            std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+            ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
             "required tool missing: typescript-language-server"
         );
         eprintln!("skipped: typescript-language-server not installed");
         return None;
     }
-    let root = std::env::temp_dir().join(format!("idecraft-ts-{name}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-ts-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src")).unwrap();
     let root = root.canonicalize().unwrap();
@@ -236,7 +238,7 @@ async fn extract_field_with_the_server() {
     let file = root.join("src/field.ts");
     let text = "export class F {\n  m(): number {\n    return 40 + 2;\n  }\n}\n";
     std::fs::write(&file, text).unwrap();
-    let range = idecraft_languages::insight::Range {
+    let range = ferris_idea_languages::insight::Range {
         start_line: 2,
         start_character: 11,
         end_line: 2,
@@ -252,7 +254,7 @@ async fn extract_field_with_the_server() {
     let files = plan_code_action_in(root, &file, Some(text), &range, &field.title, WAIT)
         .await
         .unwrap();
-    let out = idecraft_languages::rename::apply_edits(text, &files[0].edits).unwrap();
+    let out = ferris_idea_languages::rename::apply_edits(text, &files[0].edits).unwrap();
     assert!(out.contains("readonly"), "{out}");
     assert!(out.contains("this."), "{out}");
 }
@@ -269,7 +271,7 @@ async fn inline_variable_is_applicable_on_a_use() {
     let text =
         "export function f(a: number): number {\n  const y = [1, 2, a];\n  return y.length;\n}\n";
     std::fs::write(&file, text).unwrap();
-    let caret = idecraft_languages::insight::Range {
+    let caret = ferris_idea_languages::insight::Range {
         start_line: 2,
         start_character: 9,
         end_line: 2,
@@ -288,7 +290,7 @@ async fn inline_variable_is_applicable_on_a_use() {
         .find(|a| a.title == "Convert default export to named export")
         .unwrap_or_else(|| panic!("{actions:?}"));
     assert!(export.disabled.as_deref().is_some_and(|r| !r.is_empty()));
-    let sorted = idecraft_languages::actions::applicable_first(actions.clone(), false);
+    let sorted = ferris_idea_languages::actions::applicable_first(actions.clone(), false);
     let first_disabled = sorted.iter().position(|a| a.disabled.is_some()).unwrap();
     assert!(
         sorted[first_disabled..]
@@ -296,14 +298,14 @@ async fn inline_variable_is_applicable_on_a_use() {
             .all(|a| a.disabled.is_some())
     );
     assert!(
-        idecraft_languages::actions::applicable_first(actions, true)
+        ferris_idea_languages::actions::applicable_first(actions, true)
             .iter()
             .all(|a| a.disabled.is_none())
     );
     let files = plan_code_action_in(root, &file, Some(text), &caret, "Inline variable", WAIT)
         .await
         .unwrap();
-    let out = idecraft_languages::rename::apply_edits(text, &files[0].edits).unwrap();
+    let out = ferris_idea_languages::rename::apply_edits(text, &files[0].edits).unwrap();
     assert!(out.contains("return [1, 2, a].length;"), "{out}");
     assert!(!out.contains("const y"), "{out}");
 }
@@ -327,7 +329,7 @@ async fn extract_interface_and_pull_up_are_valid_typescript() {
     )
     .await
     .unwrap();
-    let out = idecraft_languages::rename::apply_edits(SHAPES, &files[0].edits).unwrap();
+    let out = ferris_idea_languages::rename::apply_edits(SHAPES, &files[0].edits).unwrap();
     assert!(
         out.contains("export interface HasArea {\n  area(): number;\n}"),
         "{out}"
@@ -336,7 +338,7 @@ async fn extract_interface_and_pull_up_are_valid_typescript() {
         out.contains("class Circle extends Root implements HasArea {"),
         "{out}"
     );
-    idecraft_languages::rename::apply_files(&files).unwrap();
+    ferris_idea_languages::rename::apply_files(&files).unwrap();
     assert_no_errors(root, &shapes).await;
     // Pull an annotated method up across files.
     let more = format!(
@@ -363,7 +365,7 @@ async fn extract_interface_and_pull_up_are_valid_typescript() {
     .await
     .unwrap();
     assert_eq!(files.len(), 2, "{files:?}");
-    idecraft_languages::rename::apply_files(&files).unwrap();
+    ferris_idea_languages::rename::apply_files(&files).unwrap();
     let base = std::fs::read_to_string(root.join("src/base.ts")).unwrap();
     assert!(
         base.contains("  extra(): number { return 2; }\n}"),
@@ -373,7 +375,7 @@ async fn extract_interface_and_pull_up_are_valid_typescript() {
 }
 
 async fn assert_no_errors(root: &Path, file: &Path) {
-    let problems = idecraft_languages::lsp::file_diagnostics(root, file, WAIT)
+    let problems = ferris_idea_languages::lsp::file_diagnostics(root, file, WAIT)
         .await
         .unwrap();
     let errors: Vec<_> = problems.iter().filter(|p| p.severity == "error").collect();
@@ -386,7 +388,7 @@ async fn assert_no_errors(root: &Path, file: &Path) {
 /// the syntax trees (v6).
 #[tokio::test]
 async fn structure_through_the_entry_points_with_or_without_a_server() {
-    let root = std::env::temp_dir().join(format!("idecraft-ts-entry-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-ts-entry-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src")).unwrap();
     let root = root.canonicalize().unwrap();

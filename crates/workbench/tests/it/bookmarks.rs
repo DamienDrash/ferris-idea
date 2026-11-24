@@ -7,11 +7,11 @@
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_core::bookmarks::{BOOKMARKS_FILE, Store};
+use ferris_idea_ui::tool_windows::ToolWindow;
+use ferris_idea_workbench::bookmarks_model::Node;
+use ferris_idea_workbench::{EditorView, WorkbenchView};
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_core::bookmarks::{BOOKMARKS_FILE, Store};
-use idecraft_ui::tool_windows::ToolWindow;
-use idecraft_workbench::bookmarks_model::Node;
-use idecraft_workbench::{EditorView, WorkbenchView};
 
 const CART: &str = "package shop;
 
@@ -36,8 +36,10 @@ public class Cart {
 const FILE: &str = "src/shop/Cart.java";
 
 fn workspace(tag: &str) -> PathBuf {
-    let root =
-        std::env::temp_dir().join(format!("idecraft-bookmarks-{tag}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!(
+        "ferris-idea-bookmarks-{tag}-{}",
+        std::process::id()
+    ));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src/shop")).unwrap();
     std::fs::write(root.join(FILE), CART).unwrap();
@@ -382,8 +384,8 @@ fn another_writer_a_restart_and_a_renamed_file(cx: &mut TestAppContext) {
         b.set(
             FILE,
             13,
-            idecraft_core::bookmarks::Change::Set('z'),
-            idecraft_core::bookmarks::Change::Set("clears the cart".into()),
+            ferris_idea_core::bookmarks::Change::Set('z'),
+            ferris_idea_core::bookmarks::Change::Set("clears the cart".into()),
         )
     });
     for _ in 0..40 {
@@ -401,7 +403,7 @@ fn another_writer_a_restart_and_a_renamed_file(cx: &mut TestAppContext) {
     );
 
     // The file renamed through the file operations: the bookmarks are under the new name.
-    idecraft_core::file_ops::rename(&root, &root.join(FILE), "Basket.java").unwrap();
+    ferris_idea_core::file_ops::rename(&root, &root.join(FILE), "Basket.java").unwrap();
     for _ in 0..40 {
         cx.executor()
             .advance_clock(std::time::Duration::from_millis(100));

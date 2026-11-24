@@ -245,7 +245,7 @@ impl DapClient {
                     json!({
                         "seq": self.seq, "type": "response",
                         "request_seq": message["seq"], "command": message["command"],
-                        "success": false, "message": "not supported by IDECraft",
+                        "success": false, "message": "not supported by Ferris IDEA",
                     })
                 };
                 write_message(&mut self.stdin, &answer)?;

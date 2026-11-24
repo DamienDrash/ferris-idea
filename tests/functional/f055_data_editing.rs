@@ -104,7 +104,7 @@ fn applying_needs_modify_data_and_keyless_tables_are_refused() {
 #[test]
 fn postgresql_preview_uses_is_not_distinct_from() {
     let p = Project::empty();
-    if !live_connection(&p, "pg", "IDECRAFT_TEST_PG") {
+    if !live_connection(&p, "pg", "FERRIS_IDEA_TEST_PG") {
         return;
     }
     let mut ide = Ide::stdio(&p);

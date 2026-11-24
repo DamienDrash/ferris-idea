@@ -11,17 +11,25 @@
 #   ### Fixed
 #   - Something that works again (#123)
 #
-# A branch pushed before its pull request exists names its fragment after the branch
-# (`changelog.d/<branch>.md`) and writes `(#PR)`; `number` gives it the number once it is known.
+# A fragment may be named after its branch (`changelog.d/<branch>.md`) and write `(#PR)`; it never
+# needs renaming (decision of 2026-11-23): `assemble` finds the number in the subject of the squash
+# commit on main that added the file ("… (#123)"). A second push only to write the number started
+# the server CI's check of the pull request again (268 pull requests up to 2026-11-23).
+# A numbered fragment may still write `(#PR)`: it stands for the number of its file, and
+# `assemble` writes that number. So a plain rename (`git mv`) is enough, and a numbering commit
+# that kept only the rename but lost the text change (#975 and #980 on 2026-11-17, whose server
+# CI failed with "the line names no #N") can no longer break the check.
 #
 # Usage:
 #   scripts/changelog.sh check            checks every fragment (scripts/check-docs.sh runs it)
-#   scripts/changelog.sh assemble         moves every numbered fragment under `## Unreleased` in
+#   scripts/changelog.sh assemble         moves every fragment under `## Unreleased` in
 #                                         CHANGELOG.md, newest pull request first in each group,
-#                                         and deletes it; run first at the daily version cut
+#                                         and deletes it; run first at the daily version cut (a
+#                                         branch fragment takes the number of the squash commit
+#                                         that added it to main)
 #   scripts/changelog.sh number <name> <N>
 #                                         renames changelog.d/<name>.md to <N>.md and writes N
-#                                         for `#PR`
+#                                         for `#PR` (not needed any more, see above)
 #   scripts/changelog.sh selftest         runs the script's own tests in a temporary folder
 set -eu
 cd "$(dirname "$0")/.."
@@ -64,10 +72,10 @@ def parse(path):
         refs = REFS.search(line.rstrip())
         if not refs:
             problems.append(f'{where}: the line must end with its pull request, e.g. "(#123)"')
-        elif numbered and f'#{stem}' not in re.findall(r'#[0-9]+', refs.group(1)):
-            problems.append(f'{where}: the line names no #{stem}, the number of its file')
-        elif numbered and '#PR' in refs.group(1):
-            problems.append(f'{where}: "#PR" left in a numbered fragment')
+        elif numbered and '#PR' in refs.group(1) and f'#{stem}' in re.findall(r'#[0-9]+', refs.group(1)):
+            problems.append(f'{where}: the line names #{stem} and "#PR", which stands for #{stem}')
+        elif numbered and '#PR' not in refs.group(1) and f'#{stem}' not in re.findall(r'#[0-9]+', refs.group(1)):
+            problems.append(f'{where}: the line names no #{stem} (or "#PR"), the number of its file')
         elif not numbered and '#PR' not in refs.group(1):
             problems.append(f'{where}: a fragment named after its branch writes "(#PR)"')
         groups[group].append(line.rstrip())
@@ -99,12 +107,38 @@ def check(root):
     return 1 if problems else 0
 
 
+SQUASH = re.compile(r'\(#([1-9][0-9]*)\)\s*$')
+
+
+def merged_number(root, path):
+    """The pull request number of a branch fragment: from the subject of the newest commit of HEAD
+    that added the file, a squash merge whose subject ends with "(#N)". None when there is none."""
+    rel = path.relative_to(root).as_posix() if path.is_absolute() else path.as_posix()
+    try:
+        out = subprocess.run(['git', 'log', '-1', '--diff-filter=A', '--format=%s', 'HEAD', '--', rel],
+                             cwd=root, capture_output=True, text=True, check=True).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    m = SQUASH.search(out)
+    return m.group(1) if m else None
+
+
 def assemble(root):
     paths = fragments(root)
-    named = [p for p in paths if not p.stem.isdigit()]
-    if named:
-        for p in named:
-            print(f'{p}: no pull request number yet (scripts/changelog.sh number {p.stem} <N>)')
+    numbers, missing = {}, []
+    for p in paths:
+        if p.stem.isdigit():
+            numbers[p] = p.stem
+        else:
+            n = merged_number(root, p)
+            if n is None:
+                missing.append(p)
+            else:
+                numbers[p] = n
+    if missing:
+        for p in missing:
+            print(f'{p}: no pull request number: no squash commit "… (#N)" on this branch added it '
+                  f'(scripts/changelog.sh number {p.stem} <N>)')
         return 1
     parsed = []
     for p in paths:
@@ -113,7 +147,12 @@ def assemble(root):
             for q in problems:
                 print(q)
             return 1
-        parsed.append((int(p.stem), groups))
+        n = numbers[p]
+        if not p.stem.isdigit() and any(f'#{n}' in l for ls in groups.values() for l in ls):
+            print(f'{p}: names #{n} and "#PR", which stands for #{n}')
+            return 1
+        # `#PR` stands for the number of the fragment's pull request.
+        parsed.append((int(n), {g: [l.replace('#PR', f'#{n}') for l in ls] for g, ls in groups.items()}))
     if not parsed:
         print('no changelog fragments')
         return 0
@@ -182,7 +221,7 @@ def selftest():
         (root / 'changelog.d').mkdir()
         log = root / 'CHANGELOG.md'
         log.write_text('# Changelog\n\n## Unreleased\n\n### Added\n- Old thing (#10)\n\n### Fixed\n- Old fix (#9)\n\n'
-                       '## IDECraft v0.1.0 — 2026-11-01\n\nStage: Alpha\n\n### Added\n- First (#1)\n', encoding='utf-8')
+                       '## Ferris IDEA v0.1.0 — 2026-11-01\n\nStage: Alpha\n\n### Added\n- First (#1)\n', encoding='utf-8')
         frag = root / 'changelog.d'
         (frag / '12.md').write_text('### Fixed\n- A fix (SPEC-0001) (#12)\n### Security\n- Safer (#12)\n', encoding='utf-8')
         (frag / '11.md').write_text('### Added\n- New thing (#11, #13)\n### Fixed\n- Fix of 11 (#11)\n', encoding='utf-8')
@@ -200,7 +239,7 @@ def selftest():
                 '### Changed\n- Changed thing (#14)\n\n'
                 '### Fixed\n- A fix (SPEC-0001) (#12)\n- Fix of 11 (#11)\n- Old fix (#9)\n\n'
                 '### Security\n- Safer (#12)\n\n'
-                '## IDECraft v0.1.0 — 2026-11-01\n\nStage: Alpha\n\n### Added\n- First (#1)\n')
+                '## Ferris IDEA v0.1.0 — 2026-11-01\n\nStage: Alpha\n\n### Added\n- First (#1)\n')
         expect(f'assembled changelog:\n{text}', text == want)
         expect('fragments deleted, README kept', [p.name for p in fragments(root)] == [] and (frag / 'README.md').exists())
         expect('assemble without fragments', assemble(root) == 0 and log.read_text(encoding='utf-8') == want)
@@ -209,7 +248,7 @@ def selftest():
             '16.md': '### Added\n- Wrong number (#99)\n',
             '17.md': '### Improved\n- Unknown group (#17)\n',
             '18.md': '- Before a group (#18)\n',
-            '19.md': '### Added\n- Left placeholder (#PR)\n',
+            '19.md': '### Added\n- Placeholder and own number (#19, #PR)\n',
             'Branch.md': '### Added\n- Upper-case name (#PR)\n',
             'other.md': '### Added\n- Branch fragment with a number (#20)\n',
             '21.md': '### Added\n',
@@ -225,14 +264,90 @@ def selftest():
         for p in fragments(root):
             p.unlink()
         (frag / '30.md').write_text('### Added\n- Thirty (#30)\n', encoding='utf-8')
-        log.write_text('# Changelog\n\n## Unreleased\n\n## IDECraft v0.1.0 — 2026-11-01\n\nStage: Alpha\n', encoding='utf-8')
+        log.write_text('# Changelog\n\n## Unreleased\n\n## Ferris IDEA v0.1.0 — 2026-11-01\n\nStage: Alpha\n', encoding='utf-8')
         expect('assemble into an empty Unreleased', assemble(root) == 0)
         expect('empty Unreleased filled', log.read_text(encoding='utf-8') ==
-               '# Changelog\n\n## Unreleased\n\n### Added\n- Thirty (#30)\n\n## IDECraft v0.1.0 — 2026-11-01\n\nStage: Alpha\n')
+               '# Changelog\n\n## Unreleased\n\n### Added\n- Thirty (#30)\n\n## Ferris IDEA v0.1.0 — 2026-11-01\n\nStage: Alpha\n')
+    merge_selftest(expect)
     for f in failures:
         print(f'FAILED: {f}')
     print(f'changelog.sh selftest: {"ok" if not failures else f"{len(failures)} failure(s)"}')
     return 1 if failures else 0
+
+
+def merge_selftest(expect):
+    """2026-11-17: the numbering commits of #975 and #980 were plain renames that kept "(#PR)";
+    the server CI, merging such a branch into main's tip, refused "the line names no #N". Played
+    here in a tiny repository: a branch fragment, a plain `git mv` to its number, main assembling
+    and deleting other fragments meanwhile, then the merge as the server CI does it."""
+    import os
+    with tempfile.TemporaryDirectory() as tmp:
+        root = pathlib.Path(tmp)
+        env = {k: v for k, v in os.environ.items() if not k.startswith('GIT_')}
+        env.update(GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM='1')
+
+        def git(*a):
+            subprocess.run(['git', '-c', 'user.name=selftest', '-c', 'user.email=selftest@example.invalid',
+                            '-c', 'core.hooksPath=' + os.devnull, '-c', 'commit.gpgsign=false', *a],
+                           cwd=root, env=env, check=True, capture_output=True)
+
+        frag = root / 'changelog.d'
+        frag.mkdir()
+        (root / 'CHANGELOG.md').write_text('# Changelog\n\n## Unreleased\n\n## Ferris IDEA v0.1.0 — 2026-11-01\n',
+                                           encoding='utf-8')
+        (frag / '40.md').write_text('### Added\n- Forty, a long line like the others (#40)\n', encoding='utf-8')
+        (frag / '41.md').write_text('### Added\n- Forty-one, a long line like the others (#41)\n', encoding='utf-8')
+        git('init', '-q', '-b', 'main')
+        git('add', '-A')
+        git('commit', '-q', '-m', 'base')
+        git('checkout', '-q', '-b', 'topic')
+        (frag / 'topic.md').write_text('### Added\n- Topic, a long line like the others (#PR)\n', encoding='utf-8')
+        git('add', '-A')
+        git('commit', '-q', '-m', 'fragment')
+        git('mv', 'changelog.d/topic.md', 'changelog.d/42.md')
+        git('commit', '-q', '-m', 'only the rename')
+        git('checkout', '-q', 'main')
+        expect('main assembles', assemble(root) == 0)
+        git('add', '-A')
+        git('commit', '-q', '-m', 'version cut')
+        git('merge', '-q', '--no-edit', 'topic')
+        expect('a plainly renamed fragment passes the check after the merge', check(root) == 0)
+        expect('assemble after the merge', assemble(root) == 0)
+        text = (root / 'CHANGELOG.md').read_text(encoding='utf-8')
+        expect(f'"#PR" of 42.md assembled as #42:\n{text}', '- Topic, a long line like the others (#42)\n' in text
+               and '#PR' not in text)
+
+    # 2026-11-23: a branch fragment is never renamed; the squash commit that adds it to main names
+    # the pull request, and `assemble` takes the number from there.
+    with tempfile.TemporaryDirectory() as tmp:
+        root = pathlib.Path(tmp)
+        env = {k: v for k, v in os.environ.items() if not k.startswith('GIT_')}
+        env.update(GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM='1')
+
+        def git(*a):
+            subprocess.run(['git', '-c', 'user.name=selftest', '-c', 'user.email=selftest@example.invalid',
+                            '-c', 'core.hooksPath=' + os.devnull, '-c', 'commit.gpgsign=false', *a],
+                           cwd=root, env=env, check=True, capture_output=True)
+
+        frag = root / 'changelog.d'
+        frag.mkdir()
+        (root / 'CHANGELOG.md').write_text('# Changelog\n\n## Unreleased\n\n## Ferris IDEA v0.1.0 — 2026-11-01\n',
+                                           encoding='utf-8')
+        (frag / '50.md').write_text('### Fixed\n- Fifty (#50)\n', encoding='utf-8')
+        git('init', '-q', '-b', 'main')
+        git('add', '-A')
+        git('commit', '-q', '-m', 'base')
+        (frag / 'my-topic.md').write_text('### Added\n- Topic without a number (#PR)\n', encoding='utf-8')
+        git('add', '-A')
+        git('commit', '-q', '-m', 'Topic lands (#51)')
+        (frag / 'not-merged.md').write_text('### Added\n- Not on main yet (#PR)\n', encoding='utf-8')
+        expect('a branch fragment not added by a squash commit is refused', assemble(root) == 1)
+        (frag / 'not-merged.md').unlink()
+        expect('a branch fragment takes the number of its squash commit', assemble(root) == 0)
+        text = (root / 'CHANGELOG.md').read_text(encoding='utf-8')
+        expect(f'branch fragment assembled as #51:\n{text}', '- Topic without a number (#51)\n' in text
+               and '- Fifty (#50)\n' in text and '#PR' not in text)
+        expect('both fragments deleted', fragments(root) == [])
 
 
 args = sys.argv[1:]

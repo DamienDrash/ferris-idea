@@ -1,7 +1,7 @@
 # Coverage-guided fuzzing of the M8.2 targets with libFuzzer (nightly): docs/testing/HARDENING.md.
 # A workspace of its own, so the nightly-only build never touches the main workspace.
 [package]
-name = "idecraft-fuzz-targets"
+name = "ferris-idea-fuzz-targets"
 version = "0.0.0"
 edition = "2024"
 license = "LicenseRef-PolyForm-Shield-1.0.0"
@@ -14,7 +14,7 @@ cargo-fuzz = true
 members = ["."]
 
 [dependencies]
-idecraft-hardening = { path = "../crates/hardening" }
+ferris-idea-hardening = { path = "../crates/hardening" }
 libfuzzer-sys = "0.4"
 
 [[bin]]

@@ -15,13 +15,13 @@ use std::cell::{Cell, RefCell};
 use std::path::Path;
 use std::rc::Rc;
 
+use ferris_idea_workbench::semantics::{self, Reserved, Role};
+use ferris_idea_workbench::trust_model;
 use gpui::{
     Context, Entity, FocusHandle, InteractiveElement, IntoElement, KeyDownEvent, Keystroke,
     Modifiers, MouseButton, ParentElement, PromptButton, PromptLevel, Render, Styled,
     TestAppContext, VisualTestContext, Window, div, point, px,
 };
-use idecraft_workbench::semantics::{self, Reserved, Role};
-use idecraft_workbench::trust_model;
 
 /// The window behind the question: it counts the keys and clicks that reach it and has two places
 /// that take the focus.

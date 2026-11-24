@@ -69,7 +69,7 @@ fn sqlite_reference_schema() {
 #[test]
 fn postgresql_reference_schema() {
     let p = Project::empty();
-    if !live_connection(&p, "pg", "IDECRAFT_TEST_PG") {
+    if !live_connection(&p, "pg", "FERRIS_IDEA_TEST_PG") {
         return;
     }
     let mut ide = Ide::stdio(&p);
@@ -81,7 +81,7 @@ fn postgresql_reference_schema() {
 #[test]
 fn mysql_reference_schema() {
     let p = Project::empty();
-    if !live_connection(&p, "my", "IDECRAFT_TEST_MYSQL") {
+    if !live_connection(&p, "my", "FERRIS_IDEA_TEST_MYSQL") {
         return;
     }
     let mut ide = Ide::stdio(&p);

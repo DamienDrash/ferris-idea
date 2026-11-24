@@ -4,7 +4,7 @@
 use std::ops::Range;
 use std::time::{Duration, Instant};
 
-use idecraft_database::{Dialect, Outcome, Problem, Statement, split_statements};
+use ferris_idea_database::{Dialect, Outcome, Problem, Statement, split_statements};
 
 use crate::sql_console_model::{statement_at, statements_to_run};
 
@@ -213,7 +213,7 @@ pub struct CatalogCache {
     /// The default schema.
     pub schema: Option<String>,
     /// The other schemas, once listed.
-    pub others: Option<Vec<idecraft_database::SchemaEntry>>,
+    pub others: Option<Vec<ferris_idea_database::SchemaEntry>>,
 }
 
 /// Text of the unsafe-change popup's choices (behaviour 8).
@@ -231,7 +231,7 @@ pub type ByteEdit = (Range<usize>, String);
 /// The `⌥↩` entry of Inline on the `WITH` query at byte `offset` (`SPEC-0152` v2 behaviour 6): its
 /// title and byte edits; `None` where Inline is refused or the caret is on no `WITH` query.
 pub fn inline_fix(text: &str, dialect: Dialect, offset: usize) -> Option<(String, Vec<ByteEdit>)> {
-    let (name, edits) = idecraft_database::inline_cte(text, dialect, offset).ok()??;
+    let (name, edits) = ferris_idea_database::inline_cte(text, dialect, offset).ok()??;
     Some((
         format!("Inline common table expression `{name}`"),
         edits
@@ -284,68 +284,25 @@ pub fn files_to_inspect(
         .collect()
 }
 
-/// The char ranges of the block comments of `text` in `dialect`, as the splitter finds them
-/// (`SPEC-0005` v5 behaviour 19); empty for a dialect whose comments do not nest, where the syntax
-/// tree already ends a comment at its first `*/`.
-pub fn nested_comment_ranges(text: &str, dialect: Dialect) -> Vec<Range<usize>> {
-    if !(dialect.postgres_like() || dialect == Dialect::SqlServer) || !text.contains("/*") {
-        return Vec::new();
-    }
-    let char_at = |byte: usize| text[..byte].chars().count();
-    idecraft_database::block_comments(text, dialect)
+/// The runs of `text` the lexis of `dialect` decides, as char ranges with their capture name
+/// (`None`: a quoted name) — comments as the splitter finds them (`SPEC-0005` v5 behaviour 19),
+/// strings, quoted names, numbers, variables, separators and the dialect's keywords (v7 behaviour
+/// 20).
+pub fn dialect_layer(text: &str, dialect: Dialect) -> Vec<(Range<usize>, Option<&'static str>)> {
+    ferris_idea_database::dialect_colours(text, dialect)
         .into_iter()
-        .map(|r| char_at(r.start)..char_at(r.end))
+        .map(|c| (c.range, c.kind))
         .collect()
 }
 
-/// `spans` of the char range `range` with `comments` coloured as comment over whatever the syntax
-/// tree made of them (`SPEC-0005` v5 behaviour 19); sorted by start.
-pub fn with_comments(
-    spans: Vec<idecraft_languages::syntax::Span>,
-    comments: &[Range<usize>],
+/// `spans` of the char range `range` with `layer` laid over whatever the syntax tree made of the
+/// text (`SPEC-0005` v7 behaviour 20); sorted by start.
+pub fn with_dialect(
+    spans: Vec<ferris_idea_languages::syntax::Span>,
+    layer: &[(Range<usize>, Option<&'static str>)],
     range: Range<usize>,
-) -> Vec<idecraft_languages::syntax::Span> {
-    use idecraft_languages::syntax::Span;
-    let comments: Vec<Range<usize>> = comments
-        .iter()
-        .filter(|c| c.start < range.end && range.start < c.end)
-        .map(|c| c.start.max(range.start)..c.end.min(range.end))
-        .collect();
-    if comments.is_empty() {
-        return spans;
-    }
-    let mut out = Vec::new();
-    for span in spans {
-        // The parts of the span outside every comment.
-        let mut at = span.start;
-        for c in comments
-            .iter()
-            .filter(|c| c.start < span.end && span.start < c.end)
-        {
-            if at < c.start {
-                out.push(Span {
-                    start: at,
-                    end: c.start,
-                    kind: span.kind.clone(),
-                });
-            }
-            at = at.max(c.end);
-        }
-        if at < span.end {
-            out.push(Span {
-                start: at,
-                end: span.end,
-                kind: span.kind,
-            });
-        }
-    }
-    out.extend(comments.into_iter().map(|c| Span {
-        start: c.start,
-        end: c.end,
-        kind: "comment".into(),
-    }));
-    out.sort_by_key(|s| (s.start, s.end));
-    out
+) -> Vec<ferris_idea_languages::syntax::Span> {
+    ferris_idea_languages::syntax::with_layer(spans, layer, range)
 }
 
 /// The status line for a refactoring SQL files do not offer, as one whole sentence and a list
@@ -370,8 +327,8 @@ pub fn not_offered(refactoring: &str, keys: impl Fn(&str) -> String) -> String {
 /// `DELIMITER` and backticks, PostgreSQL's dollar quotes and `::` casts, SQL Server's `GO` lines
 /// and `NVARCHAR`, Oracle's `/` lines and `VARCHAR2`, SQLite's `AUTOINCREMENT` and `PRAGMA`.
 /// `None` when no family has a mark or two have as many (`SPEC-0192` v5 behaviour 3a).
-pub fn content_dialect(text: &str) -> Option<idecraft_database::Dialect> {
-    use idecraft_database::Dialect;
+pub fn content_dialect(text: &str) -> Option<ferris_idea_database::Dialect> {
+    use ferris_idea_database::Dialect;
     let code: Vec<String> = text
         .lines()
         .filter(|l| !l.trim_start().starts_with("--"))
@@ -424,16 +381,16 @@ pub fn content_dialect(text: &str) -> Option<idecraft_database::Dialect> {
 /// Whether a file written for `content` runs on a connection of `dialect`: the same dialect, or
 /// MySQL and MariaDB, which share their lexis.
 pub fn dialect_fits(
-    content: idecraft_database::Dialect,
-    dialect: idecraft_database::Dialect,
+    content: ferris_idea_database::Dialect,
+    dialect: ferris_idea_database::Dialect,
 ) -> bool {
-    use idecraft_database::Dialect::{MariaDb, MySql};
+    use ferris_idea_database::Dialect::{MariaDb, MySql};
     content == dialect || matches!((content, dialect), (MySql, MariaDb) | (MariaDb, MySql))
 }
 
 /// The hint for an unbound file whose text reads like another dialect than the connection offered
 /// for it (`SPEC-0192` v5 behaviour 3a, OBS-0068 L12); `None` when it fits or nothing is clear.
-pub fn dialect_hint(text: &str, offered: idecraft_database::Dialect) -> Option<String> {
+pub fn dialect_hint(text: &str, offered: ferris_idea_database::Dialect) -> Option<String> {
     let content = content_dialect(text)?;
     (!dialect_fits(content, offered)).then(|| {
         format!(
@@ -482,7 +439,7 @@ mod tests {
     /// SPEC-0192 v5 AK-10 (OBS-0068 L12): the dialect a file reads like, and the hint.
     #[test]
     fn the_dialect_a_file_reads_like() {
-        use idecraft_database::Dialect::*;
+        use ferris_idea_database::Dialect::*;
         let mysql = "-- for MySQL\ncreate table pd_note (id int primary key);\n\nDELIMITER //\ncreate procedure pd_two_sets()\nbegin\n  select 1;\nend //\nDELIMITER ;\n";
         assert_eq!(content_dialect(mysql), Some(MySql));
         assert_eq!(content_dialect("select `name` from t"), Some(MySql));
@@ -535,20 +492,20 @@ mod tests {
         assert!(!line.contains("language server"), "{line}");
         // SPEC-0028 v9 AK-16: the keys of the keymap in use, for macOS and for Linux.
         // SPEC-0152 v4 AK-8 (OBS-0068 N1): a whole sentence, not cut off.
-        let mac = idecraft_ui::keymap::Keymap::bundled_macos();
+        let mac = ferris_idea_ui::keymap::Keymap::bundled_macos();
         let line = not_offered("Extract Method", |a| mac.shortcut_label(a, true));
         assert_eq!(
             line,
             "Extract Method is not offered in SQL files. Offered: Rename (⇧F6), Inline (⌥⌘N) and the actions of ⌥↩."
         );
-        let linux = idecraft_ui::keymap::Keymap::bundled_default();
+        let linux = ferris_idea_ui::keymap::Keymap::bundled_default();
         let line = not_offered("Extract Method", |a| linux.shortcut_label(a, false));
         assert_eq!(
             line,
             "Extract Method is not offered in SQL files. Offered: Rename (Shift+F6), Inline (Ctrl+Alt+N) and the actions of Alt+Enter."
         );
     }
-    use idecraft_database::{DbError, inspect};
+    use ferris_idea_database::{DbError, inspect};
 
     /// SPEC-0152 v2 AK-5.
     #[test]
@@ -605,10 +562,10 @@ mod tests {
     }
 
     /// SPEC-0005 v5 AK-20 (OBS-0051 L7): after the inner `*/` the rest of a nested comment is
-    /// comment in PostgreSQL, code in MySQL.
+    /// comment in PostgreSQL, code in MySQL; v7 AK-23: the dialect's lexis over the tree.
     #[test]
     fn nested_comments_are_coloured_per_dialect() {
-        use idecraft_languages::syntax::Span;
+        use ferris_idea_languages::syntax::Span;
         let text = "/* a /* b */ c */ select 1";
         let tree = vec![
             Span {
@@ -627,26 +584,27 @@ mod tests {
                 kind: "keyword".into(),
             },
         ];
-        let pg = nested_comment_ranges(text, Dialect::PostgreSql);
-        assert_eq!(pg, vec![(0..17)]);
-        let spans = with_comments(tree.clone(), &pg, 0..text.len());
         let kind_at = |spans: &[Span], at: usize| {
             spans
                 .iter()
                 .find(|s| s.start <= at && at < s.end)
                 .map(|s| s.kind.clone())
         };
+        let pg = dialect_layer(text, Dialect::PostgreSql);
+        assert_eq!(pg[0], (0..17, Some("comment")));
+        let spans = with_dialect(tree.clone(), &pg, 0..text.len());
         assert_eq!(kind_at(&spans, 13).as_deref(), Some("comment"), "{spans:?}");
         assert_eq!(kind_at(&spans, 18).as_deref(), Some("keyword"));
-        // MySQL: the syntax tree's colours stay.
-        let my = nested_comment_ranges(text, Dialect::MySql);
-        assert!(my.is_empty());
-        let spans = with_comments(tree, &my, 0..text.len());
+        assert_eq!(kind_at(&spans, 25).as_deref(), Some("number"));
+        // MySQL: the comment ends at the first `*/`; the tree's colour of `c` stays.
+        let my = dialect_layer(text, Dialect::MySql);
+        assert_eq!(my[0], (0..12, Some("comment")));
+        let spans = with_dialect(tree, &my, 0..text.len());
         assert_eq!(kind_at(&spans, 13).as_deref(), Some("variable"));
         // Multi-byte text: char ranges.
         assert_eq!(
-            nested_comment_ranges("/*ä /* */ */x", Dialect::PostgreSql),
-            vec![(0..12)]
+            dialect_layer("/*ä /* */ */x", Dialect::PostgreSql)[0],
+            (0..12, Some("comment"))
         );
     }
 

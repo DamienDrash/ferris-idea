@@ -103,7 +103,7 @@ mod tests {
             let e = check_relative(bad).unwrap_err();
             assert_eq!(e.code, ErrorCode::Invalid, "{bad}");
         }
-        let dir = std::env::temp_dir().join(format!("idecraft-paths-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-paths-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("p/src")).unwrap();
         std::fs::create_dir_all(dir.join("outside")).unwrap();

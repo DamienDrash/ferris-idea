@@ -11,7 +11,7 @@
 
 ## Purpose
 Plugins can add more than commands: suggestions in the completion list, highlighting and comments
-for file types IDECraft does not know, a widget in the status bar and a list in a tool window —
+for file types Ferris IDEA does not know, a widget in the status bar and a list in a tool window —
 all inside the sandbox of ADR-0016, with no new host functions.
 
 ## Choice of extension points
@@ -35,10 +35,10 @@ configuration types are left out: they start programs, which the sandbox deliber
    bar after an explicit ⌃Space. [GEN]
 3. **File types (manifest `file_types`):** a plugin declares `[{name, extensions, line_comment,
    block_comment: [open, close], keywords, case_sensitive}]` (`case_sensitive` defaults to true;
-   at most 2 000 keywords; extensions without the dot). No plugin code runs for them: IDECraft
+   at most 2 000 keywords; extensions without the dot). No plugin code runs for them: Ferris IDEA
    colours comments, strings in `"` or `'` (with `\` escapes), numbers and keywords of such files
    itself, using the colours of its own languages. A file type never replaces a built-in language
-   (an extension IDECraft highlights stays IDECraft's); the first enabled plugin by file name wins
+   (an extension Ferris IDEA highlights stays Ferris IDEA's); the first enabled plugin by file name wins
    between plugins. Comment with Line Comment (⌘/) uses `line_comment`. [GEN]
 4. **Status bar widget (`status`):** an action of kind `status` (optional `files`) gets the editor
    context of SPEC-0156 behaviour 1 and answers `{text, tooltip}`; `text` is cut to 40 characters.
@@ -94,5 +94,5 @@ save, plugin-defined colours, Tree-sitter grammars from plugins, a marketplace.
 
 ## Known deviations from the reference
 The reference's plugins register these extension points with JVM code that runs inside the IDE and
-can draw any UI; IDECraft's plugins answer with data that IDECraft checks and shows itself
+can draw any UI; Ferris IDEA's plugins answer with data that Ferris IDEA checks and shows itself
 (IMP-0037). File types are declared, not programmed, so a broken plugin cannot slow typing.

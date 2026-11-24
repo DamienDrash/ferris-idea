@@ -3,7 +3,7 @@
 
 use std::collections::HashSet;
 
-use idecraft_core::{TestCase, TestReport, TestStatus, TestSuite, Totals};
+use ferris_idea_core::{TestCase, TestReport, TestStatus, TestSuite, Totals};
 
 /// Path of a row: suite indexes from the top, then optionally a test index.
 pub type RowPath = Vec<usize>;
@@ -324,7 +324,7 @@ pub fn test_source(
     path: &[usize],
     root: &std::path::Path,
 ) -> Option<(std::path::PathBuf, usize)> {
-    use idecraft_languages::jvm::MarkerKind;
+    use ferris_idea_languages::jvm::MarkerKind;
     let case = test_at(report, path)?;
     let (_, suite_path) = path.split_last()?;
     let mut suites = Vec::new();
@@ -354,7 +354,7 @@ pub fn test_source(
         let mut names: Vec<&str> = suites[k + 1..].iter().map(|s| s.name.as_str()).collect();
         names.push(&case.name);
         let full = names.join(" ");
-        let markers = idecraft_languages::js_tests::markers(&name_of(&file), &read(&file)?);
+        let markers = ferris_idea_languages::js_tests::markers(&name_of(&file), &read(&file)?);
         let line = markers
             .iter()
             .find(|m| m.kind == MarkerKind::TestMethod && m.class == full)
@@ -376,7 +376,7 @@ pub fn test_source(
     let file = module_file(root, &module)?;
     let own_class = parts[first_class..].last().copied().unwrap_or("");
     let name = case.name.split('[').next().unwrap_or(&case.name);
-    let markers = idecraft_languages::test_markers::markers(&name_of(&file), &read(&file)?);
+    let markers = ferris_idea_languages::test_markers::markers(&name_of(&file), &read(&file)?);
     let line = markers
         .iter()
         .find(|m| m.method.as_deref() == Some(name) && m.class == own_class)
@@ -455,7 +455,7 @@ pub fn test_details(case: &TestCase) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use idecraft_core::{ReportFormat, parse_report};
+    use ferris_idea_core::{ReportFormat, parse_report};
 
     const TAP: &str = "TAP version 13\n1..3\nok 1 - adds\nnot ok 2 - divides\n  ---\n  message: expected 2, got 3\n  ...\nok 3 - skips # SKIP no db\n";
 
@@ -535,7 +535,7 @@ mod tests {
 
     fn pytest_report() -> TestReport {
         TestReport {
-            format: idecraft_core::ReportFormat::Junit,
+            format: ferris_idea_core::ReportFormat::Junit,
             suites: vec![TestSuite {
                 name: "pytest".into(),
                 duration: Some(0.3),
@@ -599,7 +599,7 @@ mod tests {
     #[test]
     fn the_source_of_a_test() {
         let root =
-            std::env::temp_dir().join(format!("idecraft-test-source-{}", std::process::id()));
+            std::env::temp_dir().join(format!("ferris-idea-test-source-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("svc/tests")).unwrap();
         std::fs::write(
@@ -652,7 +652,7 @@ mod tests {
             Some((root.join("sum.test.js"), 0))
         );
         // A remembered run keeps no file: nothing to open.
-        let remembered = idecraft_core::tree_only(&jest);
+        let remembered = ferris_idea_core::tree_only(&jest);
         assert_eq!(test_source(&remembered, &[0, 0, 0], &root), None);
         let _ = std::fs::remove_dir_all(&root);
     }

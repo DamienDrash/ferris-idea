@@ -1,4 +1,4 @@
-//! `idecraft-serve` as a program (`SPEC-0321` AK-1, AK-10, AK-15, AK-17).
+//! `ferris-idea-serve` as a program (`SPEC-0321` AK-1, AK-10, AK-15, AK-17).
 #![cfg(unix)]
 
 use std::os::unix::fs::PermissionsExt;
@@ -6,10 +6,10 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
-use idecraft_remote::{ExecRoute, HostRoute, HostSpec, RemoteProject, ServeOptions};
-use idecraft_session::Op;
+use ferris_idea_remote::{ExecRoute, HostRoute, HostSpec, RemoteProject, ServeOptions};
+use ferris_idea_session::Op;
 
-const BIN: &str = env!("CARGO_BIN_EXE_idecraft-serve");
+const BIN: &str = env!("CARGO_BIN_EXE_ferris-idea-serve");
 
 fn scratch() -> (tempfile::TempDir, PathBuf) {
     let t = tempfile::tempdir().unwrap();
@@ -23,7 +23,7 @@ fn ak1_version_starts_with_the_product_and_version() {
     let out = Command::new(BIN).arg("--version").output().unwrap();
     let text = String::from_utf8_lossy(&out.stdout).into_owned();
     assert!(
-        text.starts_with(&format!("idecraft {}", env!("CARGO_PKG_VERSION"))),
+        text.starts_with(&format!("ferris-idea {}", env!("CARGO_PKG_VERSION"))),
         "{text}"
     );
 }
@@ -57,7 +57,7 @@ fn ak10_a_network_address_needs_the_explicit_switch() {
         .arg(&root)
         .args(["--key-file"])
         .arg(&root)
-        .env("IDECRAFT_CONFIG_DIR", &root)
+        .env("FERRIS_IDEA_CONFIG_DIR", &root)
         .stdin(Stdio::null())
         .output()
         .unwrap();
@@ -86,7 +86,7 @@ fn ak15_an_open_key_file_exits_78_before_listening() {
 #[test]
 fn ak15_the_file_store_is_not_offered_on_macos() {
     let _ = pair_refusal;
-    assert!(idecraft_pairing::keys::keychain_required());
+    assert!(ferris_idea_pairing::keys::keychain_required());
 }
 
 /// A stand-in for `docker` that really runs the line, with its own home folder.
@@ -144,27 +144,27 @@ fn ak17_a_project_opens_and_saves_through_an_exec_route() {
         "zero one\n"
     );
     // Copied once, under the home folder of the "container".
-    let installed: Vec<_> = std::fs::read_dir(root.join("home/.cache/idecraft/bin"))
+    let installed: Vec<_> = std::fs::read_dir(root.join("home/.cache/ferris-idea/bin"))
         .unwrap()
         .flatten()
         .collect();
     assert_eq!(installed.len(), 1);
-    p.close(idecraft_remote::Unsaved::Discard).unwrap();
+    p.close(ferris_idea_remote::Unsaved::Discard).unwrap();
 }
 
 /// Against a real engine or cluster (`SPEC-0321` AK-17), when the environment names one:
-/// `IDECRAFT_TEST_REAL_HOST` (host string), `IDECRAFT_TEST_REAL_FOLDER` (holding `a.txt`),
-/// `IDECRAFT_BACKENDS_DIR`, and optionally `IDECRAFT_TEST_REAL_PROGRAM` (the engine program).
+/// `FERRIS_IDEA_TEST_REAL_HOST` (host string), `FERRIS_IDEA_TEST_REAL_FOLDER` (holding `a.txt`),
+/// `FERRIS_IDEA_BACKENDS_DIR`, and optionally `FERRIS_IDEA_TEST_REAL_PROGRAM` (the engine program).
 #[test]
 fn ak17_a_real_container_or_pod() {
     let (Ok(host), Ok(folder)) = (
-        std::env::var("IDECRAFT_TEST_REAL_HOST"),
-        std::env::var("IDECRAFT_TEST_REAL_FOLDER"),
+        ferris_idea_core::product_var("FERRIS_IDEA_TEST_REAL_HOST"),
+        ferris_idea_core::product_var("FERRIS_IDEA_TEST_REAL_FOLDER"),
     ) else {
         return;
     };
     let mut exec = ExecRoute::new(HostSpec::parse(&host).unwrap()).unwrap();
-    if let Ok(program) = std::env::var("IDECRAFT_TEST_REAL_PROGRAM") {
+    if let Ok(program) = ferris_idea_core::product_var("FERRIS_IDEA_TEST_REAL_PROGRAM") {
         exec = exec.with_program(program.into());
     }
     let mut p = RemoteProject::open_route(
@@ -196,7 +196,7 @@ fn ak17_a_real_container_or_pod() {
     p.break_connection();
     p.reconnect().unwrap();
     assert!(p.session.doc("a.txt").unwrap().text().starts_with("real "));
-    p.close(idecraft_remote::Unsaved::Discard).unwrap();
+    p.close(ferris_idea_remote::Unsaved::Discard).unwrap();
 }
 
 #[test]
@@ -235,7 +235,7 @@ fn ak2_pair_without_a_folder_is_refused() {
             "--state-dir",
         ])
         .arg(&root)
-        .env("IDECRAFT_CONFIG_DIR", &root)
+        .env("FERRIS_IDEA_CONFIG_DIR", &root)
         .stdin(Stdio::null())
         .output()
         .unwrap();

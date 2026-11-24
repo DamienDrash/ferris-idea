@@ -7,7 +7,7 @@
 //!   whose name in the file follows; ⌥↩ "Expand column list" on `*`.
 //! - 122 (SPEC-0019 v2/v3, D45): the column's own definition and check in `CREATE TABLE` of a file
 //!   are renamed with it.
-//! - 90 (SPEC-0164, D32): on PostgreSQL (`IDECRAFT_TEST_PG` with its password file; skipped
+//! - 90 (SPEC-0164, D32): on PostgreSQL (`FERRIS_IDEA_TEST_PG` with its password file; skipped
 //!   without): ⇧F6 on a view, ⌘F6 changes a column's type in the database, a refused change is told
 //!   in the dialog and the status bar and the dialog stays answerable.
 
@@ -15,8 +15,8 @@
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_workbench::WorkbenchView;
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_workbench::WorkbenchView;
 
 pub(crate) fn sqlite(db: &Path, sql: &str) -> String {
     let out = std::process::Command::new("sqlite3")
@@ -37,15 +37,17 @@ pub(crate) fn has_sqlite() -> bool {
 
 /// A workspace with one SQLite connection `shop` made by `schema`, and the SQL files `files`.
 pub(crate) fn workspace(tag: &str, schema: &str, files: &[(&str, &str)]) -> PathBuf {
-    let root =
-        std::env::temp_dir().join(format!("idecraft-dbrefactor-{tag}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!(
+        "ferris-idea-dbrefactor-{tag}-{}",
+        std::process::id()
+    ));
     let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir_all(root.join(".idecraft")).unwrap();
+    std::fs::create_dir_all(root.join(".ferris-idea")).unwrap();
     let root = root.canonicalize().unwrap();
     let db = root.join("shop.db");
     sqlite(&db, schema);
     std::fs::write(
-        root.join(".idecraft/connections.toml"),
+        root.join(".ferris-idea/connections.toml"),
         format!(
             "[[connection]]\nid = \"shop\"\nname = \"shop\"\ndialect = \"sqlite\"\npath = \"{}\"\n",
             db.display()
@@ -358,20 +360,20 @@ impl Drop for SecretFile {
     }
 }
 
-/// The reference server of the URL in `url_var` (e.g. `IDECRAFT_TEST_PG`) as connection `id`, with
+/// The reference server of the URL in `url_var` (e.g. `FERRIS_IDEA_TEST_PG`) as connection `id`, with
 /// its password read from the file named by `<url_var>_PASSWORD_FILE` into this process's test
 /// secrets folder (0700, a file 0600, removed when the returned guard is dropped): the window
 /// never asks the keychain. `None` without them.
 pub(crate) fn reference(
     url_var: &str,
     id: &str,
-) -> Option<(idecraft_database::ConnectionProfile, SecretFile)> {
-    use idecraft_database::SecretStore;
+) -> Option<(ferris_idea_database::ConnectionProfile, SecretFile)> {
+    use ferris_idea_database::SecretStore;
     let url = std::env::var(url_var).ok()?;
     let file = std::env::var(format!("{url_var}_PASSWORD_FILE")).ok()?;
     let password = std::fs::read_to_string(file).ok()?;
     let base = std::env::temp_dir().join(format!(
-        "idecraft-dbrefactor-secrets-{}",
+        "ferris-idea-dbrefactor-secrets-{}",
         std::process::id()
     ));
     std::fs::create_dir_all(&base).unwrap();
@@ -379,45 +381,72 @@ pub(crate) fn reference(
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&base, std::fs::Permissions::from_mode(0o700)).unwrap();
     }
-    let dir = idecraft_database::test_store::use_dir(base);
+    let dir = ferris_idea_database::test_store::use_dir(base);
     let account = format!("connection:{id}-{}", std::process::id());
-    let reference = idecraft_database::SecretRef {
-        service: "idecraft".into(),
+    let reference = ferris_idea_database::SecretRef {
+        service: "ferris-idea".into(),
         account: account.clone(),
     };
-    idecraft_database::test_store::DirStore::new(&dir)
+    ferris_idea_database::test_store::DirStore::new(&dir)
         .set(
             &reference,
-            &idecraft_database::Secret::new(password.trim_end()),
+            &ferris_idea_database::Secret::new(password.trim_end()),
         )
         .unwrap();
-    let mut profile = idecraft_database::ConnectionProfile::from_url(id, &url).unwrap();
+    let mut profile = ferris_idea_database::ConnectionProfile::from_url(id, &url).unwrap();
     profile.id = id.into();
     profile.secret = Some(reference);
-    Some((profile, SecretFile(dir.join("idecraft").join(account))))
+    Some((profile, SecretFile(dir.join("ferris-idea").join(account))))
+}
+
+/// Drops the PostgreSQL schemas `<prefix><pid>` that runs ended early left behind, before a test
+/// makes its own (OBS-0083 L11): only those of processes no longer running, never this run's.
+pub(crate) fn pg_drop_leftovers(profile: &ferris_idea_database::ConnectionProfile, prefix: &str) {
+    for row in pg_run(profile, "select nspname from pg_namespace") {
+        let Some(name) = row.into_iter().next().flatten() else {
+            continue;
+        };
+        let Some(pid) = name
+            .strip_prefix(prefix)
+            .filter(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+            .and_then(|p| p.parse::<u32>().ok())
+        else {
+            continue;
+        };
+        let alive = pid == std::process::id()
+            || std::process::Command::new("kill")
+                .args(["-0", &pid.to_string()])
+                .stderr(std::process::Stdio::null())
+                .status()
+                .is_ok_and(|s| s.success());
+        if !alive {
+            pg_run(profile, &format!("drop schema if exists {name} cascade"));
+        }
+    }
 }
 
 /// Runs `sql` on `profile` outside the window; the rows of the last result.
 pub(crate) fn pg_run(
-    profile: &idecraft_database::ConnectionProfile,
+    profile: &ferris_idea_database::ConnectionProfile,
     sql: &str,
 ) -> Vec<Vec<Option<String>>> {
     let credentials =
-        idecraft_database::resolve_credentials(profile, &idecraft_database::SystemStore).unwrap();
+        ferris_idea_database::resolve_credentials(profile, &ferris_idea_database::SystemStore)
+            .unwrap();
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .unwrap();
     rt.block_on(async {
-        let s = idecraft_database::Session::connect(profile, &credentials)
+        let s = ferris_idea_database::Session::connect(profile, &credentials)
             .await
             .unwrap();
-        let run = s.run_script(sql, idecraft_database::OnError::Stop).await;
+        let run = s.run_script(sql, ferris_idea_database::OnError::Stop).await;
         let mut rows = Vec::new();
         for o in run.outcomes {
             match o.outcome {
-                idecraft_database::Outcome::Error(e) => panic!("{e:?} in {sql}"),
-                idecraft_database::Outcome::ResultSet { rows: r, .. } => rows = r,
+                ferris_idea_database::Outcome::Error(e) => panic!("{e:?} in {sql}"),
+                ferris_idea_database::Outcome::ResultSet { rows: r, .. } => rows = r,
                 _ => {}
             }
         }
@@ -428,11 +457,12 @@ pub(crate) fn pg_run(
 /// Hand test 90 (SPEC-0164, D32) and the derived index name of hand test 78, on PostgreSQL.
 #[gpui::test]
 fn hand_test_90_views_types_and_refusals_on_postgres(cx: &mut TestAppContext) {
-    let Some((mut profile, secret)) = reference("IDECRAFT_TEST_PG", "pg") else {
-        eprintln!("skipped: IDECRAFT_TEST_PG or its password file is not set");
+    let Some((mut profile, secret)) = reference("FERRIS_IDEA_TEST_PG", "pg") else {
+        eprintln!("skipped: FERRIS_IDEA_TEST_PG or its password file is not set");
         return;
     };
     let scratch = format!("ht90_{}", std::process::id());
+    pg_drop_leftovers(&profile, "ht90_");
     pg_run(
         &profile,
         &format!(
@@ -447,11 +477,12 @@ fn hand_test_90_views_types_and_refusals_on_postgres(cx: &mut TestAppContext) {
     // The window works in the scratch schema.
     profile.options.startup_script = Some(format!("set search_path to {scratch}"));
     let sql = "select name from ht_a;\nselect a_id from ht_b;\nselect * from ht_v;\nselect b.menge from ht_b b;\n";
-    let root = std::env::temp_dir().join(format!("idecraft-dbrefactor-90-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-dbrefactor-90-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     let root = root.canonicalize().unwrap();
-    idecraft_database::save_profiles(&root, std::slice::from_ref(&profile)).unwrap();
+    ferris_idea_database::save_profiles(&root, std::slice::from_ref(&profile)).unwrap();
     std::fs::write(root.join("ht.sql"), sql).unwrap();
     let (bench, cx) = window(&root, cx);
     open_with(&bench, cx, &root.join("ht.sql"), "pg");

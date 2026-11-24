@@ -7,13 +7,13 @@
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_core::notifications::Kind;
+use ferris_idea_ui::tool_windows::{Side, ToolWindow};
+use ferris_idea_workbench::WorkbenchView;
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_core::notifications::Kind;
-use idecraft_ui::tool_windows::{Side, ToolWindow};
-use idecraft_workbench::WorkbenchView;
 
 fn workspace(tag: &str, files: &[(&str, &str)]) -> PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-f086-{tag}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-f086-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     for (name, text) in files {
@@ -184,9 +184,9 @@ fn run_and_debug_follow_the_current_file(cx: &mut TestAppContext) {
     open(&bench, cx, "notes.txt");
     assert!(!enabled(&bench, cx));
     // A configuration written later and chosen in the run widget.
-    std::fs::create_dir_all(root.join(".idecraft")).unwrap();
+    std::fs::create_dir_all(root.join(".ferris-idea")).unwrap();
     std::fs::write(
-        root.join(".idecraft/run.toml"),
+        root.join(".ferris-idea/run.toml"),
         "[[run]]\nname = \"api\"\ncommand = [\"echo\", \"api\"]\n",
     )
     .unwrap();

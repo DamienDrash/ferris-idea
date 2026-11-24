@@ -68,7 +68,7 @@ where the types are known from the file.
 - **AK-3** MCP: a Kotlin identity comparison with its fix (`crates/mcp/tests/it/protocol.rs`:
   `inspect_code_tool`).
 - **AK-4** Window self-test (`java_inspection_steps`): `a === b` on Strings appears as an
-  "IDECraft: …" problem; ⌥↩ offers "Replace with '=='" first and Enter applies it.
+  "Ferris IDEA: …" problem; ⌥↩ offers "Replace with '=='" first and Enter applies it.
 - **AK-5** Hand test (round 4): a Kotlin project next to the reference.
 
 - **AK-6 (v2)** In one file: an unused private property, function, class and constructor property and
@@ -86,11 +86,11 @@ Smart casts, nullability and data flow, generics, extension functions and types 
 or libraries, `when` subjects, Kotlin compiler warnings (the language server reports those).
 
 ## Known deviations from the reference
-The reference resolves all types and finds more; IDECraft reports only where the file shows the
+The reference resolves all types and finds more; Ferris IDEA reports only where the file shows the
 types. Not compared side by side.
 
 v2 (OBS-0035): the reference also greys public declarations that nothing in the project uses
-(`owner`, `friendly`, `Person` in the observed file). IDECraft reports only what the file alone can
+(`owner`, `friendly`, `Person` in the observed file). Ferris IDEA reports only what the file alone can
 decide; unused public Kotlin declarations need a project-wide index of Kotlin uses (SPEC-0316 indexes
 Java declarations only) and stay out. Because matching is by name, an unused private declaration that
 shares its name with something else in the file is missed.

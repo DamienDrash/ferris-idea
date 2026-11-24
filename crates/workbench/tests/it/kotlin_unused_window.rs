@@ -9,8 +9,8 @@
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_workbench::{EditorView, WorkbenchView};
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_workbench::{EditorView, WorkbenchView};
 
 const FOLD: &str = "package demo
 
@@ -69,7 +69,7 @@ public class App {
 ";
 
 fn workspace() -> PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-kt-unused-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-kt-unused-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src/demo")).unwrap();
     std::fs::write(root.join("src/demo/Fold.kt"), FOLD).unwrap();
@@ -146,10 +146,10 @@ fn kotlin_unused_declarations_appear_in_the_editor(cx: &mut TestAppContext) {
     assert_eq!(
         unused(&editor, cx),
         [
-            "IDECraft: Function 'countValue' is never used",
-            "IDECraft: Property 'label' is never used",
-            "IDECraft: Class 'Inner' is never used",
-            "IDECraft: Property 'sizes' is never used",
+            "Ferris IDEA: Function 'countValue' is never used",
+            "Ferris IDEA: Property 'label' is never used",
+            "Ferris IDEA: Class 'Inner' is never used",
+            "Ferris IDEA: Property 'sizes' is never used",
         ]
     );
     // The entry points of the other Kotlin file are not reported.

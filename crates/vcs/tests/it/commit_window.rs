@@ -4,7 +4,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use idecraft_vcs::{CommitOptions, GitError, Repo, parse_author};
+use ferris_idea_vcs::{CommitOptions, GitError, Repo, parse_author};
 
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
@@ -22,7 +22,7 @@ fn git(dir: &Path, args: &[&str]) -> String {
 
 /// A repository with `readme.txt` committed, then `second.txt` in a second commit.
 fn repo(tag: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("idecraft-cw-{tag}-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-cw-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let dir = dir.canonicalize().unwrap();
@@ -105,7 +105,7 @@ fn amend_replaces_the_last_commit() {
 
 #[test]
 fn amend_needs_a_commit_and_a_message() {
-    let dir = std::env::temp_dir().join(format!("idecraft-cw-empty-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-cw-empty-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     git(&dir, &["init", "-q", "-b", "main"]);

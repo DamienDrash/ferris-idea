@@ -19,9 +19,13 @@ pub struct Integration {
 
 /// The integration for `program` (zsh or bash, by file name), with its files written under
 /// `dir`; `None` for other programs, when the files cannot be written, or when
-/// `IDECRAFT_SHELL_INTEGRATION=0`.
+/// `FERRIS_IDEA_SHELL_INTEGRATION=0`.
 pub fn prepare(program: &str, dir: &Path) -> Option<Integration> {
-    if std::env::var("IDECRAFT_SHELL_INTEGRATION").is_ok_and(|v| v == "0") {
+    // The switch's former name counts while it is not set (`SPEC-0356` behaviour 6).
+    const FORMER_SWITCH: &str = "IDECRAFT_SHELL_INTEGRATION"; // rebrand:keep
+    let switch =
+        std::env::var("FERRIS_IDEA_SHELL_INTEGRATION").or_else(|_| std::env::var(FORMER_SWITCH));
+    if switch.is_ok_and(|v| v == "0") {
         return None;
     }
     let name = Path::new(program).file_name()?.to_str()?;
@@ -45,7 +49,7 @@ pub fn prepare(program: &str, dir: &Path) -> Option<Integration> {
                 args: Vec::new(),
                 env: vec![
                     ("ZDOTDIR".into(), zdot.to_string_lossy().into_owned()),
-                    ("IDECRAFT_USER_ZDOTDIR".into(), user),
+                    ("FERRIS_IDEA_USER_ZDOTDIR".into(), user),
                 ],
             })
         }
@@ -67,7 +71,7 @@ pub fn prepare(program: &str, dir: &Path) -> Option<Integration> {
 /// Default folder for the generated files: per user under the system's temporary folder.
 pub fn default_dir() -> PathBuf {
     let user = std::env::var("USER").unwrap_or_else(|_| "user".into());
-    std::env::temp_dir().join(format!("idecraft-shell-integration-{user}"))
+    std::env::temp_dir().join(format!("ferris-idea-shell-integration-{user}"))
 }
 
 fn write_all(dir: &Path, files: &[(&str, &str)]) -> Option<()> {
@@ -90,7 +94,8 @@ mod tests {
 
     #[test]
     fn zsh_and_bash_only() {
-        let dir = std::env::temp_dir().join(format!("idecraft-integration-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("ferris-idea-integration-{}", std::process::id()));
         let zsh = prepare("/bin/zsh", &dir).unwrap();
         assert!(zsh.args.is_empty());
         assert_eq!(zsh.env[0].1, dir.join("zsh").to_string_lossy());

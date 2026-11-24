@@ -8,8 +8,8 @@
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_workbench::{CommitView, EditorView, WorkbenchView};
 use gpui::{Entity, EntityInputHandler, Focusable, TestAppContext, VisualTestContext, px};
-use idecraft_workbench::{CommitView, EditorView, WorkbenchView};
 
 fn git(dir: &Path, args: &[&str]) -> bool {
     std::process::Command::new("git")
@@ -22,7 +22,7 @@ fn git(dir: &Path, args: &[&str]) -> bool {
 /// A repository with one commit, a changed file and a source file; `None` without `git`.
 fn workspace(tag: &str) -> Option<PathBuf> {
     let root = std::env::temp_dir().join(format!(
-        "idecraft-chords-in-text-inputs-{tag}-{}",
+        "ferris-idea-chords-in-text-inputs-{tag}-{}",
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&root);

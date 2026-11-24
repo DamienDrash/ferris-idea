@@ -3,18 +3,18 @@
 //! documentation on a configuration key, in the code and in the configuration files; the marks of
 //! beans and injection points and the resolved values an editor shows.
 //!
-//! What a key leads to is decided in [`idecraft_languages::spring_nav`]; this module asks it for
+//! What a key leads to is decided in [`ferris_idea_languages::spring_nav`]; this module asks it for
 //! the caret's place and opens what it answers.
 
 use std::ops::Range;
 use std::path::Path;
 
+use ferris_idea_languages::find_usages::{Target, UsageSearch, UsageSource};
+use ferris_idea_languages::insight::Location;
+use ferris_idea_languages::spring::SpringModel;
+use ferris_idea_languages::spring_nav::{KeyInfo, KeySite, MarkKind};
+use ferris_idea_languages::ts_structure::MarkTarget;
 use gpui::{Context, Window};
-use idecraft_languages::find_usages::{Target, UsageSearch, UsageSource};
-use idecraft_languages::insight::Location;
-use idecraft_languages::spring::SpringModel;
-use idecraft_languages::spring_nav::{KeyInfo, KeySite, MarkKind};
-use idecraft_languages::ts_structure::MarkTarget;
 
 use super::WorkbenchView;
 use crate::decl_marks_model::{BEAN, INJECTION, LineMark};
@@ -24,7 +24,7 @@ use crate::nav_model::Place;
 fn location(root: &Path, file: &Path, line: usize, column: usize, length: usize) -> Location {
     Location {
         path: root.join(file),
-        range: idecraft_languages::insight::Range {
+        range: ferris_idea_languages::insight::Range {
             start_line: line as u64,
             start_character: column as u64,
             end_line: line as u64,
@@ -104,7 +104,7 @@ pub(crate) fn folder_of(root: &Path, file: &Path) -> String {
 }
 
 /// One row of a chooser of defining lines: file and line, its profile and the value as shown.
-fn definition_row(d: &idecraft_languages::spring_nav::KeyDefinition) -> String {
+fn definition_row(d: &ferris_idea_languages::spring_nav::KeyDefinition) -> String {
     let mut row = file_line(&d.file, d.line);
     if let Some(p) = &d.profile {
         row.push_str(&format!("  profile {p}"));
@@ -361,7 +361,7 @@ impl WorkbenchView {
                         e.read(cx)
                             .state
                             .buffer
-                            .position_to_offset(idecraft_editor::Position::new(line, 0))
+                            .position_to_offset(ferris_idea_editor::Position::new(line, 0))
                             .ok()
                     })
                     .map_or(super::JvmPopupPlace::Top, |offset| {
@@ -417,7 +417,7 @@ mod tests {
                 "a.name=Shop\n".to_owned(),
             ),
         ];
-        let model = idecraft_languages::spring::model_of(&files);
+        let model = ferris_idea_languages::spring::model_of(&files);
         let root = Path::new("/project");
         let (marks, folds) = decorations(&model, root, Path::new("src/A.java"), true);
         let rows: Vec<(usize, &str, Vec<&Path>)> = marks

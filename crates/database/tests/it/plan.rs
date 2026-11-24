@@ -1,11 +1,11 @@
 //! SPEC-0020 (v2: every measured statement rolled back) against the reference databases: SQLite always, PostgreSQL/MySQL when
-//! `IDECRAFT_TEST_PG` / `IDECRAFT_TEST_MYSQL` / `IDECRAFT_TEST_MARIADB` are set.
+//! `FERRIS_IDEA_TEST_PG` / `FERRIS_IDEA_TEST_MYSQL` / `FERRIS_IDEA_TEST_MARIADB` are set.
 
 use crate::common;
 
 use std::path::Path;
 
-use idecraft_database::{
+use ferris_idea_database::{
     ConnectionProfile, ExplainError, OnError, Outcome, PlanNode, Session, explain,
 };
 
@@ -47,7 +47,7 @@ async fn refusals(s: &Session) {
 
 #[tokio::test]
 async fn sqlite_plans() {
-    let dir = std::env::temp_dir().join(format!("idecraft-plan-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-plan-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let sql =
@@ -126,14 +126,14 @@ async fn server_plans_with(s: &Session, query: &str) {
 
 #[tokio::test]
 async fn postgres_plans() {
-    if let Ok(url) = std::env::var("IDECRAFT_TEST_PG") {
+    if let Ok(url) = ferris_idea_core::product_var("FERRIS_IDEA_TEST_PG") {
         server_plans(&connect(&url).await).await;
     }
 }
 
 #[tokio::test]
 async fn mysql_plans() {
-    if let Ok(url) = std::env::var("IDECRAFT_TEST_MYSQL") {
+    if let Ok(url) = ferris_idea_core::product_var("FERRIS_IDEA_TEST_MYSQL") {
         let s = connect(&url).await;
         // With the reference schema's foreign keys (since #414) MySQL, like MariaDB, reaches the
         // grid's movements through `movement_warehouse_fk`, so the full scan is checked on a filter.
@@ -144,7 +144,7 @@ async fn mysql_plans() {
 
 #[tokio::test]
 async fn mariadb_plans() {
-    if let Ok(url) = std::env::var("IDECRAFT_TEST_MARIADB") {
+    if let Ok(url) = ferris_idea_core::product_var("FERRIS_IDEA_TEST_MARIADB") {
         let s = connect(&url).await;
         // MariaDB starts the grid's join from the two warehouses and reaches movements by index,
         // so the full scan is checked on a filter; fresh statistics give the row estimate.

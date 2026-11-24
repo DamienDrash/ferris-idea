@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::Duration;
 
-use idecraft_session::{Backend, ErrorCode, Right, RpcError, StreamIn};
+use ferris_idea_session::{Backend, ErrorCode, Right, RpcError, StreamIn};
 use serde_json::{Value, json};
 
 use crate::{HostOptions, add, invalid, number};

@@ -552,7 +552,7 @@ fn add_class(
 }
 
 /// Whether `item` is one of the server's own members, which can have an origin: not a template,
-/// a keyword or a name IDECraft added.
+/// a keyword or a name Ferris IDEA added.
 pub fn takes_origin(item: &CompletionItem) -> bool {
     item.raw.is_some() && !matches!(item.kind.as_deref(), Some("snippet" | "keyword" | "text"))
 }

@@ -66,6 +66,45 @@ pub fn range_text(text: &str, range: &Range) -> Option<String> {
     text.get(a..b).map(str::to_owned)
 }
 
+/// The one edit that turns `before` into `after`: the part between their common start and common
+/// end (characters), so an editor keeps everything around it, the caret included. Used by fixes
+/// that compute a file's new text, such as adding a missing bundle key (`SPEC-0163` v3).
+pub fn edit_between(before: &str, after: &str) -> Edit {
+    let prefix: usize = before
+        .chars()
+        .zip(after.chars())
+        .take_while(|(a, b)| a == b)
+        .map(|(a, _)| a.len_utf8())
+        .sum();
+    let suffix: usize = before[prefix..]
+        .chars()
+        .rev()
+        .zip(after[prefix..].chars().rev())
+        .take_while(|(a, b)| a == b)
+        .map(|(a, _)| a.len_utf8())
+        .sum();
+    let position = |byte: usize| {
+        let head = &before[..byte];
+        let line_start = head.rfind('\n').map_or(0, |i| i + 1);
+        (
+            head.matches('\n').count() as u64,
+            head[line_start..].chars().count() as u64,
+        )
+    };
+    let (start_line, start_character) = position(prefix);
+    let (end_line, end_character) = position(before.len() - suffix);
+    Edit {
+        range: Range {
+            start_line,
+            start_character,
+            end_line,
+            end_character,
+        },
+        old_text: before[prefix..before.len() - suffix].to_owned(),
+        new_text: after[prefix..after.len() - suffix].to_owned(),
+    }
+}
+
 /// Applies `edits` to `text`, checking each edit's old text (behaviour 4).
 pub fn apply_edits(text: &str, edits: &[Edit]) -> Result<String, String> {
     let mut spans = Vec::new();
@@ -246,7 +285,7 @@ pub async fn plan_rename_in(
     new_name: &str,
     wait: Duration,
 ) -> Result<RenamePlan, LspError> {
-    // A class or id of a stylesheet or an HTML file is renamed from IDECraft's own syntax trees,
+    // A class or id of a stylesheet or an HTML file is renamed from Ferris IDEA's own syntax trees,
     // in every stylesheet and HTML file with its mark kept (`SPEC-0042` v22 behaviour 38).
     if crate::html_css::is_stylesheet(file) || crate::html_css::is_html(file) {
         let content = match text {
@@ -310,9 +349,98 @@ pub async fn plan_rename_in(
     result
 }
 
+/// Why nothing can be renamed at a place (`SPEC-0074` v2 behaviour 5): the status bar's message.
+pub const NOT_RENAMEABLE: &str = "Cannot rename this element: the caret should be on an identifier";
+
+/// The keyword, literal or built-in type at (`line`, `character`) of `text` (the file at `path`), as
+/// the file's syntax tree highlights it (`SPEC-0074` v2 behaviour 5): nothing to rename there.
+/// `None` on a name, or when the file has no grammar. A contextual keyword used as a name (Java
+/// `var record = …`) is a name in the tree and so not refused.
+pub fn keyword_at(path: &Path, text: &str, line: usize, character: usize) -> Option<String> {
+    let language = crate::LanguageId::detect(path)?;
+    let tsx = path
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("tsx"));
+    let doc = crate::syntax::SyntaxDocument::new(language, tsx, text).ok()?;
+    let line_start: usize = text
+        .split_inclusive('\n')
+        .take(line)
+        .map(|l| l.chars().count())
+        .sum();
+    let line_len = text
+        .split_inclusive('\n')
+        .nth(line)
+        .map_or(0, |l| l.chars().count());
+    let at = line_start + character;
+    // The whole line, so a span is not cut at the caret; right after a word still means it.
+    let spans = doc.highlight_range(line_start..line_start + line_len);
+    let span = spans
+        .iter()
+        .find(|s| s.start <= at && at < s.end)
+        .or_else(|| spans.iter().find(|s| s.end == at))?;
+    let not_a_name = span.kind.starts_with("keyword")
+        || matches!(
+            span.kind.as_str(),
+            "type.builtin" | "constant.builtin" | "boolean"
+        );
+    not_a_name.then(|| {
+        text.chars()
+            .skip(span.start)
+            .take(span.end - span.start)
+            .collect()
+    })
+}
+
+/// Asks the server whether the symbol at (`line`, `character`) of `file` can be renamed
+/// (`textDocument/prepareRename`, `SPEC-0074` v2 behaviour 5): `Some(false)` when it answers
+/// `null` or with an error (the protocol's way to say there is nothing to rename there),
+/// `Some(true)` when it names a range, `None` when it cannot tell (no server, no
+/// `prepareProvider`, no answer in time, the document changed meanwhile).
+pub async fn can_rename(
+    root: &Path,
+    file: &Path,
+    text: Option<&str>,
+    line: u64,
+    character: u64,
+    wait: Duration,
+) -> Option<bool> {
+    let o = Opened::open_text(root, file, text, wait).await.ok()?;
+    let answer = async {
+        // A server without rename leaves the place to Ferris IDEA's own text rename.
+        if o.capabilities["renameProvider"]["prepareProvider"] != true {
+            return None;
+        }
+        let position = o.position(line, character);
+        match o.ask("textDocument/prepareRename", position).await {
+            Ok(answer) => Some(!answer.is_null()),
+            // Content modified (-32801) and cancelled (-32800) say nothing about the place.
+            Err(LspError::Response { code, .. }) if code != -32801 && code != -32800 => Some(false),
+            Err(_) => None,
+        }
+    }
+    .await;
+    o.close().await;
+    answer
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// SPEC-0163 v3 behaviour 3: the edit of a computed new text is only the changed part.
+    #[test]
+    fn edit_between_two_texts() {
+        let before = "a=1\nä=2";
+        let after = "a=1\nä=2\nkey=\n";
+        let e = edit_between(before, after);
+        assert_eq!((e.range.start_line, e.range.start_character), (1, 3));
+        assert_eq!((e.range.end_line, e.range.end_character), (1, 3));
+        assert_eq!(e.old_text, "");
+        assert_eq!(e.new_text, "\nkey=\n");
+        assert_eq!(apply_edits(before, &[e]).unwrap(), after);
+        let same = edit_between("x", "x");
+        assert!(same.old_text.is_empty() && same.new_text.is_empty());
+    }
 
     fn edit(sl: u64, sc: u64, el: u64, ec: u64, old: &str, new: &str) -> Edit {
         Edit {
@@ -351,7 +479,8 @@ mod tests {
     /// SPEC-0148 v2 behaviour 6 (hand test 74, D29).
     #[test]
     fn a_java_type_takes_its_file_along() {
-        let dir = std::env::temp_dir().join(format!("idecraft-java-file-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("ferris-idea-java-file-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let lager = dir.join("Lager.java");
         let text = "package demo;\n\npublic class Lager {\n}\n";
@@ -406,7 +535,7 @@ mod tests {
 
     #[test]
     fn stale_file_refuses_whole_plan() {
-        let dir = std::env::temp_dir().join(format!("idecraft-rename-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-rename-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let (a, b) = (dir.join("a.c"), dir.join("b.c"));
         std::fs::write(&a, "add").unwrap();
@@ -431,5 +560,44 @@ mod tests {
         assert_eq!(apply_plan(&plan).unwrap().len(), 2);
         assert_eq!(std::fs::read_to_string(&b).unwrap(), "sum");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// SPEC-0074 v2 AK-4 (window check A12, R1): keywords, literals and built-in types are not
+    /// offered for renaming, names are; a contextual keyword used as a name is a name.
+    #[test]
+    fn keywords_are_not_renameable() {
+        let java = Path::new("/p/src/Lab.java");
+        let text = "package lab;\n\npublic record Item(String name, int count) {\n    void f() { var record = 1; boolean b = true; }\n}\n";
+        // `record` (line 2, column 7), on its first letter and right after it.
+        assert_eq!(keyword_at(java, text, 2, 7).as_deref(), Some("record"));
+        assert_eq!(keyword_at(java, text, 2, 10).as_deref(), Some("record"));
+        assert_eq!(keyword_at(java, text, 2, 0).as_deref(), Some("public"));
+        assert_eq!(keyword_at(java, text, 2, 32).as_deref(), Some("int"));
+        // The record's name and a parameter are names.
+        assert_eq!(keyword_at(java, text, 2, 15), None);
+        assert_eq!(keyword_at(java, text, 2, 26), None);
+        // `var record = 1`: here `record` is a variable.
+        let line3 = "    void f() { var record = 1; boolean b = true; }";
+        let at = line3.find("record").unwrap();
+        assert_eq!(keyword_at(java, text, 3, at + 1), None);
+        let at = line3.find("true").unwrap();
+        assert_eq!(keyword_at(java, text, 3, at).as_deref(), Some("true"));
+        let rust = Path::new("/p/src/lib.rs");
+        assert_eq!(
+            keyword_at(rust, "pub fn calc() {}\n", 0, 4).as_deref(),
+            Some("fn")
+        );
+        assert_eq!(keyword_at(rust, "pub fn calc() {}\n", 0, 8), None);
+        let python = Path::new("/p/a.py");
+        assert_eq!(
+            keyword_at(python, "def calc():\n    return None\n", 1, 6).as_deref(),
+            Some("return")
+        );
+        assert_eq!(
+            keyword_at(python, "def calc():\n    return None\n", 0, 5),
+            None
+        );
+        // A file without a grammar: nothing to say.
+        assert_eq!(keyword_at(Path::new("/p/notes.txt"), "class x", 0, 1), None);
     }
 }

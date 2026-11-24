@@ -1,6 +1,6 @@
 # SPEC-0080: Parameter Info
 
-- **Version:** 4 · **Date:** 2026-11-14 (v4: `MethodOverloadSwitchUp` and `MethodOverloadSwitchDown` choose the highlighted signature, behaviour 8, AK-6; eighth package of docs/research/KEYMAP_COVERAGE.md; v3: `NextParameter` and `PrevParameter` move the caret from argument to argument while parameter info is shown, behaviour 7, AK-5; sixth package of docs/research/KEYMAP_COVERAGE.md); 2026-10-31 (v2: opens by itself after `(`)
+- **Version:** 5 · **Date:** 2026-11-18 (v5: where the popup stands when it is wider than the room right of the caret, behaviour 9, AK-7; window check 2026-11-18 gap P1, F-031); 2026-11-14 (v4: `MethodOverloadSwitchUp` and `MethodOverloadSwitchDown` choose the highlighted signature, behaviour 8, AK-6; eighth package of docs/research/KEYMAP_COVERAGE.md; v3: `NextParameter` and `PrevParameter` move the caret from argument to argument while parameter info is shown, behaviour 7, AK-5; sixth package of docs/research/KEYMAP_COVERAGE.md); 2026-10-31 (v2: opens by itself after `(`)
 - **Sources:** GEN (the signatures of the called function above the caret, with the current parameter
   highlighted; F-031), OSS (action id `ParameterInfo` with ⌘P / Ctrl+P in the ported keymaps), STD (LSP
   `textDocument/signatureHelp` with parameter label offsets and active parameter), SPEC-0072 (requests
@@ -43,7 +43,7 @@ See which arguments a call takes, and which one you are typing, without leaving 
    argument, the caret goes to the start of that argument" from `PrevNextParameterHandler.java`
    and `ParameterInfoControllerBase.java` of the open platform, logic template. The open
    platform finds the arguments in its syntax tree and, with parameter name hints on completion,
-   also leaves the call with Tab; IDECraft reads the text and never leaves the call]
+   also leaves the call with Tab; Ferris IDEA reads the text and never leaves the call]
 8. **Choosing an overload (v4):** while parameter info shows more than one signature,
    `MethodOverloadSwitchDown` (⌥↓ in the bundled macOS keymap, Ctrl+Down in the default one)
    highlights the signature below the highlighted one and `MethodOverloadSwitchUp` (⌥↑,
@@ -56,12 +56,20 @@ See which arguments a call takes, and which one you are typing, without leaving 
    tool: `signature_help` already returns every overload. [OSS: ids, keys and the titles
    "Previous Method Overload" and "Next Method Overload" of the open platform; GEN]
 
+9. **Placement (v5):** the popup stands over the caret's line whenever it fits there, under it
+   when only that fits, else on the roomier side, and starts at the caret. It moves left only as
+   far as it must to stay inside the editor area, and never further left than the editor area's
+   edge: a popup wider than the room right of the caret (the twelve overloads of Java's
+   `List.of`) is shifted, not turned around to end at the caret, so it never covers the project
+   tree. Its size is taken from the longest signature in the editor font and the number of
+   signatures; the window keeps it inside its edges. [GEN; window check 2026-11-18 P1]
+
 ## Acceptance criteria
 - **AK-1** Parsing of signature help: parameter labels as UTF-16 offsets and as plain strings, active
   parameter per signature or global, empty and null answers (unit test); with clangd on unsaved text the
   second argument of `add(1, 2)` is active (integration test).
 - **AK-2** MCP `signature_help` reports the active parameter (protocol test with clangd).
-- **AK-3** In a real window (`idecraft ui --selftest`, with clangd): typing `calc(` opens the
+- **AK-3** In a real window (`ferris-idea ui --selftest`, with clangd): typing `calc(` opens the
   signature by itself; typing `)` leaves the call and closes it; after Backspace ⌘P shows it again;
   Escape closes it.
 - **AK-4** Use by hand: several parameters, overloads (C++), moving with the arrow keys.
@@ -79,6 +87,14 @@ See which arguments a call takes, and which one you are typing, without leaving 
   (`eighth_package_keymap.rs::overloads_are_chosen_in_parameter_info`). With a language server:
   not checked.
 
+- **AK-7 (v5, behaviour 9)** Placement without a window: over the line, under it near the top,
+  shifted left only as far as needed, never left of the editor area, starting at the caret when
+  it fits (`popup_place::tests::parameter_info_over_the_line_at_the_caret`,
+  `wide_parameter_info_stays_over_the_editor`); in a window of the test harness the twelve
+  overloads of `List.of` at a caret far right stand over the editor at the caret's line
+  (`eighth_package_keymap.rs::wide_parameter_info_stays_over_the_editor`, macOS). The editor
+  drawn empty under the popup's line (window check P1): window check needed.
+
 ## Out of scope
 Opening after accepting a completion, a setting for the delay, parameter name hints inside the code, documentation in the popup, rewriting the arguments for another overload (v4: choosing which overload is highlighted is behaviour 8).
 
@@ -87,7 +103,7 @@ The signatures come from the language server; the delay is fixed at the referenc
 be changed yet.
 - v3: Tab never leaves the call and never switches to another overload; the reference's
   `MethodOverloadSwitchUp` and `MethodOverloadSwitchDown` belong to its parameter name hints on
-  completion, which IDECraft does not have. Not compared next to the reference.
+  completion, which Ferris IDEA does not have. Not compared next to the reference.
 - v4: the reference's two actions belong to its Java support, where they also put the arguments
-  of the other overload into the code; IDECraft chooses the highlighted signature in every
+  of the other overload into the code; Ferris IDEA chooses the highlighted signature in every
   language and changes no text. Not compared next to the reference.

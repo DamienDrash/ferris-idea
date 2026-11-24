@@ -5,8 +5,8 @@
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_vcs::{OpOutcome, Repo, UpdateInfo};
 use gpui::{AppContext, Context, Entity, Window};
-use idecraft_vcs::{OpOutcome, Repo, UpdateInfo};
 
 use super::WorkbenchView;
 use crate::BranchesEvent;
@@ -26,7 +26,7 @@ pub(super) struct GitUi {
     pub(super) offer_delete_next: Option<String>,
     /// Show this update information at the next frame.
     pub(super) update_info_next: Option<UpdateInfo>,
-    /// The last update's information (`IDECraft.ShowUpdateInfo`).
+    /// The last update's information (`FerrisIDEA.ShowUpdateInfo`).
     pub(super) last_update_info: Option<UpdateInfo>,
 }
 
@@ -88,7 +88,8 @@ impl WorkbenchView {
                     move |r| {
                         let out = r.rename_branch(&old, &new)?;
                         if let Some(key) = key {
-                            let _ = idecraft_core::rename_branch_favorite(&root, &key, &old, &new);
+                            let _ =
+                                ferris_idea_core::rename_branch_favorite(&root, &key, &old, &new);
                         }
                         Ok(out)
                     },
@@ -114,13 +115,13 @@ impl WorkbenchView {
     /// 25); `None` outside a repository.
     pub(super) fn favorites_key(&self) -> Option<String> {
         let repo = Repo::discover(&self.root).ok()?;
-        Some(idecraft_core::repo_key(&self.root, repo.workdir()?))
+        Some(ferris_idea_core::repo_key(&self.root, repo.workdir()?))
     }
 
     /// The favourite branches of the workspace's repository.
-    pub(super) fn branch_favorites(&self) -> idecraft_core::RepoFavorites {
+    pub(super) fn branch_favorites(&self) -> ferris_idea_core::RepoFavorites {
         let key = self.favorites_key().unwrap_or_else(|| ".".into());
-        idecraft_core::BranchFavorites::load(&self.root).of(&key)
+        ferris_idea_core::BranchFavorites::load(&self.root).of(&key)
     }
 
     /// Saves a favourite marked or unmarked in the branch popup, the Git log's branches pane or a
@@ -137,7 +138,7 @@ impl WorkbenchView {
             return;
         };
         self.status = Some(
-            match idecraft_core::set_branch_favorite(&self.root, &key, name, remote, favorite) {
+            match ferris_idea_core::set_branch_favorite(&self.root, &key, name, remote, favorite) {
                 Ok(true) => format!("{name} marked as favourite"),
                 Ok(false) => format!("{name} unmarked as favourite"),
                 Err(e) => format!("Could not save favourites: {e}"),
@@ -230,7 +231,7 @@ impl WorkbenchView {
                 cx.notify();
                 return true;
             }
-            "IDECraft.ShowUpdateInfo" => {
+            "FerrisIDEA.ShowUpdateInfo" => {
                 match self.git_ui.last_update_info.clone() {
                     Some(info) => self.show_update_info(info, window, cx),
                     None => self.status = Some("No update in this session yet".into()),
@@ -252,7 +253,7 @@ impl WorkbenchView {
         };
         match id {
             "CheckinFiles" => {
-                let w = idecraft_ui::tool_windows::ToolWindow::Commit;
+                let w = ferris_idea_ui::tool_windows::ToolWindow::Commit;
                 if !self.tool_window_shown(w) {
                     self.toggle_tool_window(w, window, cx);
                 }
@@ -264,29 +265,9 @@ impl WorkbenchView {
                     window.focus(&view.read(cx).focus(cx));
                 }
             }
-            "ChangesView.Revert" => {
-                let title = format!("Roll back the changes of {path}?");
-                self.show_jvm_popup(
-                    title,
-                    vec!["Rollback".into(), "Cancel".into()],
-                    window,
-                    cx,
-                    move |this, i, _window, cx| {
-                        if i != 0 {
-                            return;
-                        }
-                        let done = Repo::discover(&this.root)
-                            .and_then(|r| r.rollback(std::slice::from_ref(&path), false, false));
-                        this.status = Some(match done {
-                            Ok(_) => format!("Rolled back {path}"),
-                            Err(e) => format!("Rollback failed: {e}"),
-                        });
-                        for editor in this.editors.values() {
-                            editor.update(cx, |e, cx| e.check_disk(cx));
-                        }
-                    },
-                );
-            }
+            // Every changed file, the current one checked, then a confirmation naming the number
+            // (SPEC-0109 v4 behaviour 12, OBS-0119 K4).
+            "ChangesView.Revert" => self.ask_rollback_files(Some(path), window, cx),
             "Vcs.ShowTabbedFileHistory" => {
                 if self.git_log.is_none() {
                     self.toggle_git_log(window, cx);
@@ -310,6 +291,127 @@ impl WorkbenchView {
         }
         cx.notify();
         true
+    }
+
+    /// Rollback (`ChangesView.Revert`, ⌥⌘Z; `SPEC-0109` v4 behaviour 12): a list of the changed
+    /// files with check boxes, `current` (repository-relative) checked; Enter asks to confirm with
+    /// the number of files, and the confirmation rolls the checked files back.
+    pub fn ask_rollback_files(
+        &mut self,
+        current: Option<String>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let status = Repo::discover(&self.root).and_then(|r| r.status());
+        let (rows, checked) = match status {
+            Ok(status) => crate::vcs_ops_model::rollback_rows(&status, current.as_deref()),
+            Err(e) => {
+                self.status = Some(format!("Rollback failed: {e}"));
+                cx.notify();
+                return;
+            }
+        };
+        if rows.is_empty() {
+            self.status = Some("No changes to roll back".into());
+            cx.notify();
+            return;
+        }
+        let headings = vec![false; rows.len()];
+        let items = rows.clone();
+        let view = cx.new(|cx| {
+            crate::ChoiceView::new("Rollback: check the files".into(), items, cx)
+                .with_checks(checked, headings)
+                .with_none_allowed()
+        });
+        self.jvm_popup_place = super::JvmPopupPlace::Top;
+        self._jvm_popup_events = Some(cx.subscribe_in(
+            &view,
+            window,
+            move |this, _, event: &crate::ChoiceEvent, window, cx| {
+                this.jvm_popup = None;
+                this.focus_active(window, cx);
+                if let crate::ChoiceEvent::ChosenMany(chosen) = event {
+                    let paths: Vec<String> = chosen
+                        .iter()
+                        .filter_map(|i| rows.get(*i).cloned())
+                        .collect();
+                    if !paths.is_empty() {
+                        this.confirm_rollback_files(paths, window, cx);
+                    }
+                }
+                cx.notify();
+            },
+        ));
+        let focus = view.read(cx).focus();
+        window.focus(&focus);
+        self.close_on_focus_out(super::popups::Popup::RunMarker, &view, &focus, window, cx);
+        self.jvm_popup = Some(view);
+        cx.notify();
+    }
+
+    /// The confirmation of Rollback for `paths`, Rollback first (behaviour 12).
+    fn confirm_rollback_files(
+        &mut self,
+        paths: Vec<String>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let title = crate::vcs_ops_model::rollback_question(&paths);
+        let button = crate::vcs_ops_model::rollback_button(paths.len());
+        self.show_jvm_popup(
+            title,
+            vec![button, "Cancel".into()],
+            window,
+            cx,
+            move |this, i, _window, cx| {
+                if i == 0 {
+                    this.rollback_files(&paths, cx);
+                }
+            },
+        );
+    }
+
+    /// Rolls `paths` (repository-relative) back to HEAD: the Local History keeps their state
+    /// before under the label "Before Rollback" and names the step "Rollback"; open editors show
+    /// what the rollback wrote (behaviour 12).
+    pub fn rollback_files(&mut self, paths: &[String], cx: &mut Context<Self>) {
+        let repo = Repo::discover(&self.root);
+        let workdir = repo
+            .as_ref()
+            .ok()
+            .and_then(|r| r.workdir().map(Path::to_path_buf))
+            .map(|w| w.canonicalize().unwrap_or(w));
+        let files: Vec<PathBuf> = workdir
+            .iter()
+            .flat_map(|w| paths.iter().map(move |p| w.join(p)))
+            .collect();
+        let refs: Vec<&Path> = files.iter().map(PathBuf::as_path).collect();
+        ferris_idea_languages::undo_group::record_history_before(&self.root, &refs, "Rollback");
+        let done = repo.and_then(|r| r.rollback(paths, false, false));
+        self.status = Some(match done {
+            Ok(o) => {
+                let n = o.restored.len() + o.unstaged.len() + o.deleted.len();
+                let existing: Vec<&Path> = refs.iter().copied().filter(|p| p.exists()).collect();
+                ferris_idea_languages::undo_group::record_history(
+                    &self.root,
+                    &existing,
+                    Some("Rollback"),
+                );
+                for file in &files {
+                    let file = file.canonicalize().unwrap_or(file.clone());
+                    if let Some(editor) = self.editors.get(&file) {
+                        editor.update(cx, |e, cx| e.reload_from_disk(cx));
+                    }
+                }
+                self.refresh_annotations(None, cx);
+                match n {
+                    1 => "Rolled back 1 file".to_owned(),
+                    n => format!("Rolled back {n} files"),
+                }
+            }
+            Err(e) => format!("Rollback failed: {e}"),
+        });
+        cx.notify();
     }
 
     /// Opens the stash dialog (`Git.Stash`, `SPEC-0106` v3 behaviour 14).
@@ -400,7 +502,7 @@ impl WorkbenchView {
         self.update_operation(
             "Reset".into(),
             |r| {
-                let done = r.reset_to_upstream(false, idecraft_vcs::REMOTE_TIMEOUT);
+                let done = r.reset_to_upstream(false, ferris_idea_vcs::REMOTE_TIMEOUT);
                 let info = done.as_ref().ok().and_then(|p| p.info.clone());
                 (crate::vcs_ops_model::reset_report(&done), info)
             },

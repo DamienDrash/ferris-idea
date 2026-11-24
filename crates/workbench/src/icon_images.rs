@@ -63,13 +63,26 @@ fn image(key: &str, dark: bool) -> Option<Arc<Image>> {
     if let Some(i) = cache.get(&(key.to_owned(), dark)) {
         return Some(i.clone());
     }
-    let svg = idecraft_ui::icons::svg(key, dark)?;
+    let svg = ferris_idea_ui::icons::svg(key, dark)?;
     let i = Arc::new(Image::from_bytes(
         ImageFormat::Svg,
         swap_red_blue(&doubled(svg)),
     ));
     cache.insert((key.to_owned(), dark), i.clone());
     Some(i)
+}
+
+/// Ferris IDEA's app icon (brand package, ADR-0018) as an image, for the Welcome window's column
+/// (`SPEC-0355` behaviour 5).
+pub fn app_icon() -> Arc<Image> {
+    static ICON: OnceLock<Arc<Image>> = OnceLock::new();
+    ICON.get_or_init(|| {
+        Arc::new(Image::from_bytes(
+            ImageFormat::Svg,
+            swap_red_blue(ferris_idea_ui::brand::APP_ICON_SVG.as_bytes()),
+        ))
+    })
+    .clone()
 }
 
 /// A 16 px icon element for `key` in the variant of the chosen theme, or an empty spacer if the
@@ -84,7 +97,7 @@ pub fn icon(key: &str) -> gpui::AnyElement {
 /// Whether icons drawn on `background` need the dark theme's variant (light strokes): the
 /// background is dark, such as the blue of a selected tool window button in the light themes (D4,
 /// hand test 28).
-pub fn dark_variant_on(background: idecraft_ui::theme::Rgba) -> bool {
+pub fn dark_variant_on(background: ferris_idea_ui::theme::Rgba) -> bool {
     let [r, g, b] =
         [16, 8, 0].map(|shift| f32::from(((background.rgb >> shift) & 0xff) as u8) / 255.0);
     0.2126 * r + 0.7152 * g + 0.0722 * b < 0.5
@@ -117,7 +130,7 @@ pub fn icon_sized_disabled(key: &str, size: f32) -> gpui::AnyElement {
 /// contrasts with it.
 pub fn icon_on_sized(
     key: &str,
-    background: idecraft_ui::theme::Rgba,
+    background: ferris_idea_ui::theme::Rgba,
     size: f32,
 ) -> gpui::AnyElement {
     match image(key, dark_variant_on(background)) {
@@ -152,10 +165,10 @@ mod tests {
     /// SPEC-0061 v4 behaviour 12: 20 px stripe icons are rasterised at twice their size too.
     #[test]
     fn twenty_pixel_icons_are_doubled() {
-        let svg = idecraft_ui::icons::svg("toolwindows/project@20x20", true).unwrap();
+        let svg = ferris_idea_ui::icons::svg("toolwindows/project@20x20", true).unwrap();
         let out = String::from_utf8(doubled(svg)).unwrap();
         assert!(out.contains(r#"width="40""#) && out.contains(r#"height="40""#));
-        let small = idecraft_ui::icons::svg("toolwindows/project", true).unwrap();
+        let small = ferris_idea_ui::icons::svg("toolwindows/project", true).unwrap();
         assert!(
             String::from_utf8(doubled(small))
                 .unwrap()
@@ -165,7 +178,7 @@ mod tests {
 
     #[test]
     fn icon_variant_follows_the_background() {
-        let rgba = |rgb| idecraft_ui::theme::Rgba { rgb, alpha: 255 };
+        let rgba = |rgb| ferris_idea_ui::theme::Rgba { rgb, alpha: 255 };
         assert!(dark_variant_on(rgba(0x3574f0)));
         assert!(dark_variant_on(rgba(0x2b2d30)));
         assert!(!dark_variant_on(rgba(0xffffff)));

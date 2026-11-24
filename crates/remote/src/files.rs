@@ -63,6 +63,21 @@ pub fn cksum(data: &[u8]) -> String {
     format!("{} {}", !crc, data.len())
 }
 
+/// The order of a folder's entries everywhere they are shown (`SPEC-0253` v3 behaviour 9):
+/// folders first, then files; each group by name without regard to case (`alpha`, `beta`,
+/// `Zeta`), names equal but for case in byte order.
+pub fn entry_order(a: &RemoteEntry, b: &RemoteEntry) -> std::cmp::Ordering {
+    a.kind
+        .cmp(&b.kind)
+        .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+        .then_with(|| a.name.cmp(&b.name))
+}
+
+/// Sorts `entries` by [`entry_order`].
+pub fn sort_entries(entries: &mut [RemoteEntry]) {
+    entries.sort_by(entry_order);
+}
+
 const LIST: &str = r#"cd -- "$1" || exit 2
 for f in * .*; do
   case "$f" in .|..) continue;; esac
@@ -79,7 +94,7 @@ exec cat -- "$1""#;
 const WRITE: &str = r#"f=$1
 if [ -e "$f" ]; then have=$(cksum < "$f" | awk '{print $1" "$2}') || exit 4; else have=absent; fi
 if [ "$2" != any ] && [ "$have" != "$2" ]; then echo "$have" >&2; exit 3; fi
-t="$f.idecraft-$$"
+t="$f.ferris-idea-$$"
 if [ -e "$f" ]; then cp -p -- "$f" "$t" || exit 4; fi
 if cat > "$t" && mv -f -- "$t" "$f"; then exit 0; fi
 rm -f -- "$t"; exit 4"#;
@@ -312,7 +327,18 @@ impl Remote {
         let out = self.sh(WRITE, &[path, want], Some(bytes), Duration::from_secs(120))?;
         match out.exit_code {
             Some(0) => Ok(cksum(bytes)),
-            Some(3) => Err(RemoteError::Changed(path.to_owned())),
+            Some(3) => Err(RemoteError::Changed {
+                path: path.to_owned(),
+                expected: want.to_owned(),
+                // The write script prints the host's stamp as its last line on a mismatch.
+                host: out
+                    .stderr
+                    .lines()
+                    .map(str::trim)
+                    .rfind(|l| !l.is_empty())
+                    .unwrap_or("unknown")
+                    .to_owned(),
+            }),
             _ => Err(failed(&out)),
         }
     }
@@ -334,6 +360,39 @@ mod tests {
         assert!(protects_home("/home/me", "/home/me/src/../"));
         assert!(!protects_home("/home/me", "/home/me/src"));
         assert!(!protects_home("/home/me", "/home/meow"));
+    }
+
+    /// SPEC-0253 v3 AK-7: folders first, then files, by name without regard to case.
+    #[test]
+    fn entries_sort_folders_first_without_regard_to_case() {
+        let e = |name: &str, kind| RemoteEntry {
+            name: name.into(),
+            kind,
+            link: false,
+        };
+        let mut entries = vec![
+            e("Zeta.txt", EntryKind::File),
+            e("beta", EntryKind::Dir),
+            e("alpha.txt", EntryKind::File),
+            e("Alpha", EntryKind::Dir),
+            e("readonly", EntryKind::File),
+            e("alpha", EntryKind::Dir),
+            e("_x", EntryKind::File),
+        ];
+        sort_entries(&mut entries);
+        let names: Vec<&str> = entries.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(
+            names,
+            [
+                "Alpha",
+                "alpha",
+                "beta",
+                "_x",
+                "alpha.txt",
+                "readonly",
+                "Zeta.txt"
+            ]
+        );
     }
 
     #[test]

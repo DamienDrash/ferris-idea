@@ -1,8 +1,8 @@
-//! IDECraft's backend on a remote host (`SPEC-0158`): the headless `idecraft mcp <folder>` runs on
+//! Ferris IDEA's backend on a remote host (`SPEC-0158`): the headless `ferris-idea mcp <folder>` runs on
 //! the machine that holds the code, reached through the system `ssh`, and the IDE or local agents
 //! call its tools (search, inspections, language servers, builds) over the SSH channel.
 //!
-//! The backend is an IDECraft binary on the host: one on `PATH` or in `~/.cache/idecraft/bin` with
+//! The backend is a Ferris IDEA binary on the host: one on `PATH` or in `~/.cache/ferris-idea/bin` with
 //! the same version, else — when the host runs the same system and processor — a copy of the local
 //! binary uploaded there. Nothing else is installed.
 
@@ -13,7 +13,7 @@ use std::process::{Child, ChildStdin, ChildStdout, Stdio};
 use crate::ssh::{Remote, RemoteError, quote};
 
 /// Where uploaded backends live on the host (below the home folder).
-pub const BACKEND_DIR: &str = ".cache/idecraft/bin";
+pub const BACKEND_DIR: &str = ".cache/ferris-idea/bin";
 
 /// The host's system and processor as `uname -sm` prints them, e.g. `Linux x86_64`.
 pub fn host_platform(remote: &Remote) -> Result<String, RemoteError> {
@@ -46,7 +46,7 @@ pub fn same_platform(a: &str, b: &str) -> bool {
 
 /// The path of the uploaded backend of `version` in `dir` (both relative to the home folder).
 pub fn backend_path(dir: &str, version: &str) -> String {
-    format!("{dir}/idecraft-{version}")
+    format!("{dir}/ferris-idea-{version}")
 }
 
 /// A short name for this build of the binary: its size and modification time.
@@ -63,7 +63,7 @@ pub fn fingerprint(binary: &Path) -> String {
 /// How the backend was found or brought to the host.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Installed {
-    /// An `idecraft` of this version was already there (path on the host).
+    /// An `ferris-idea` of this version was already there (path on the host).
     Present(String),
     /// The local binary was uploaded to this path.
     Uploaded(String),
@@ -78,7 +78,7 @@ impl Installed {
     }
 }
 
-/// Finds an IDECraft of `version` on the host (the one uploaded to `~/<dir>`, then `PATH`), or
+/// Finds a Ferris IDEA of `version` on the host (the one uploaded to `~/<dir>`, then `PATH`), or
 /// uploads `local_binary` there when the platforms match; refuses with what to install otherwise
 /// (behaviour 2). `dir` is normally [`BACKEND_DIR`].
 pub fn ensure_backend(
@@ -113,10 +113,10 @@ pub(crate) fn ensure_backend_on(
         backend_path(dir, version),
         fingerprint(local_binary)
     );
-    let want = format!("idecraft {version}");
-    // `$HOME`-relative path first, then whatever `idecraft` is on PATH.
+    let want = format!("ferris-idea {version}");
+    // `$HOME`-relative path first, then whatever `ferris-idea` is on PATH.
     let probe = route.sh(
-        "for p in \"$HOME/$1\" \"$(command -v idecraft 2>/dev/null)\"; do \
+        "for p in \"$HOME/$1\" \"$(command -v ferris-idea 2>/dev/null)\"; do \
          [ -n \"$p\" ] && [ -x \"$p\" ] && [ \"$(\"$p\" --version 2>/dev/null | cut -d' ' -f1-2)\" = \"$2\" ] && \
          { echo \"$p\"; exit 0; }; done; exit 1",
         &[&path, &want],
@@ -139,7 +139,7 @@ pub(crate) fn ensure_backend_on(
         let local = local_platform();
         if !same_platform(&found, &local) {
             return Err(RemoteError::Failed(format!(
-                "{}: the host runs {found}, this IDECraft is built for {local}; install IDECraft \
+                "{}: the host runs {found}, this Ferris IDEA is built for {local}; install Ferris IDEA \
                  {version} there (on PATH or as ~/{path})",
                 route.label()
             )));
@@ -178,7 +178,7 @@ fn upload(route: &crate::route::Route, local: &Path, path: &str) -> Result<(), R
     Ok(())
 }
 
-/// A running backend: `idecraft mcp <folder>` on the host, spoken to with MCP over SSH (behaviour
+/// A running backend: `ferris-idea mcp <folder>` on the host, spoken to with MCP over SSH (behaviour
 /// 3). Ends when dropped.
 pub struct Backend {
     child: Child,
@@ -231,8 +231,10 @@ impl Backend {
             "initialize",
             serde_json::json!({
                 "protocolVersion": "2025-03-26",
-                "capabilities": {},
-                "clientInfo": {"name": "idecraft-remote", "version": env!("CARGO_PKG_VERSION")},
+                // The backend's tools are listed for others: all of them (SPEC-0006 v58
+                // behaviour 18); a backend before v58 lists all anyway.
+                "capabilities": {"experimental": {"ferris-idea/tools": {"groups": ["all"]}}},
+                "clientInfo": {"name": "ferris-idea-remote", "version": env!("CARGO_PKG_VERSION")},
             }),
         )?;
         b.server = format!(
@@ -292,7 +294,7 @@ impl Backend {
                 .map_err(|e| RemoteError::Failed(format!("the backend stopped: {e}")))?;
             if n == 0 {
                 return Err(RemoteError::Failed(
-                    "the backend ended (is IDECraft installed and the folder there?)".into(),
+                    "the backend ended (is Ferris IDEA installed and the folder there?)".into(),
                 ));
             }
             let Ok(msg) = serde_json::from_str::<serde_json::Value>(line.trim()) else {
@@ -444,7 +446,7 @@ mod tests {
         assert!(!same_platform("Linux x86_64", "Darwin arm64"));
         assert_eq!(
             backend_path(BACKEND_DIR, "0.0.1"),
-            ".cache/idecraft/bin/idecraft-0.0.1"
+            ".cache/ferris-idea/bin/ferris-idea-0.0.1"
         );
         assert!(local_platform().contains(' '));
         assert_eq!(Installed::Uploaded("$HOME/x".into()).path(), "$HOME/x");

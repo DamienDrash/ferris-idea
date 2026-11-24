@@ -37,7 +37,7 @@ pub struct HostPlatform {
     pub platform: String,
 }
 
-/// The Rust target of a `uname -sm` answer, if IDECraft builds for it.
+/// The Rust target of a `uname -sm` answer, if Ferris IDEA builds for it.
 pub fn target_triple(platform: &str) -> Option<&'static str> {
     let norm = platform.trim().to_lowercase().replace("aarch64", "arm64");
     Some(match norm.as_str() {
@@ -59,7 +59,7 @@ pub fn local_target() -> Option<&'static str> {
 /// The folders searched for backend builds, in order.
 fn backend_folders(local_binary: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
-    if let Some(d) = std::env::var_os("IDECRAFT_BACKENDS_DIR") {
+    if let Some(d) = ferris_idea_core::product_var_os("FERRIS_IDEA_BACKENDS_DIR") {
         out.push(PathBuf::from(d));
     }
     if let Some(dir) = local_binary.parent() {
@@ -72,9 +72,9 @@ fn backend_folders(local_binary: &Path) -> Vec<PathBuf> {
 /// The name of the backend program for a target.
 pub fn backend_program(target: &str) -> &'static str {
     if target.contains("windows") {
-        "idecraft-serve.exe"
+        "ferris-idea-serve.exe"
     } else {
-        "idecraft-serve"
+        "ferris-idea-serve"
     }
 }
 
@@ -96,7 +96,7 @@ pub fn select_build(host: &HostPlatform, local_binary: &Path) -> Result<PathBuf,
     Err(RemoteError::Failed(match target {
         Some(t) => format!(
             "no backend build for {} ({t}) in {}; run scripts/build-backends.sh to build it, or \
-             install idecraft-serve on the host and start it with --pair",
+             install ferris-idea-serve on the host and start it with --pair",
             host.platform,
             backend_folders(local_binary)
                 .iter()
@@ -105,7 +105,7 @@ pub fn select_build(host: &HostPlatform, local_binary: &Path) -> Result<PathBuf,
                 .join(", ")
         ),
         None => format!(
-            "IDECraft has no backend build for {}; install idecraft-serve on the host yourself \
+            "Ferris IDEA has no backend build for {}; install ferris-idea-serve on the host yourself \
              and start it with --pair",
             host.platform
         ),
@@ -204,10 +204,10 @@ pub fn detect(route: &Route) -> Result<HostPlatform, RemoteError> {
     }
 }
 
-/// The name on a Windows host: `%LOCALAPPDATA%\idecraft\bin\idecraft-serve-<version>-<sha12>.exe`.
+/// The name on a Windows host: `%LOCALAPPDATA%\ferris-idea\bin\ferris-idea-serve-<version>-<sha12>.exe`.
 pub fn windows_backend_path(version: &str, sha: &str) -> String {
     format!(
-        "$env:LOCALAPPDATA\\idecraft\\bin\\idecraft-serve-{version}-{}.exe",
+        "$env:LOCALAPPDATA\\ferris-idea\\bin\\ferris-idea-serve-{version}-{}.exe",
         &sha[..12.min(sha.len())]
     )
 }
@@ -342,7 +342,7 @@ mod tests {
 
     #[test]
     fn ak2_a_missing_build_is_refused_with_what_to_do() {
-        let binary = PathBuf::from("/nonexistent/idecraft");
+        let binary = PathBuf::from("/nonexistent/ferris-idea");
         let e = select_build(
             &HostPlatform {
                 family: HostFamily::Posix,
@@ -394,8 +394,8 @@ mod tests {
         let t = "x86_64-unknown-linux-gnu";
         let folder = dir.path().join("backends").join(t);
         std::fs::create_dir_all(&folder).unwrap();
-        std::fs::write(folder.join("idecraft-serve"), b"x").unwrap();
-        let binary = dir.path().join("idecraft");
+        std::fs::write(folder.join("ferris-idea-serve"), b"x").unwrap();
+        let binary = dir.path().join("ferris-idea");
         let picked = select_build(
             &HostPlatform {
                 family: HostFamily::Posix,
@@ -404,7 +404,7 @@ mod tests {
             &binary,
         )
         .unwrap();
-        assert_eq!(picked, folder.join("idecraft-serve"));
+        assert_eq!(picked, folder.join("ferris-idea-serve"));
     }
 
     #[test]
@@ -419,7 +419,7 @@ mod tests {
     fn windows_scripts_check_the_hash_before_moving() {
         let sha = "ab".repeat(32);
         let path = windows_backend_path("0.11.0", &sha);
-        assert!(path.ends_with("idecraft-serve-0.11.0-abababababab.exe"));
+        assert!(path.ends_with("ferris-idea-serve-0.11.0-abababababab.exe"));
         let s = windows_upload_script(&path, &sha);
         let hash = s.find("Get-FileHash").unwrap();
         let mv = s.find("Move-Item").unwrap();

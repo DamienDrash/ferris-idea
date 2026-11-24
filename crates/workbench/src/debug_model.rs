@@ -6,10 +6,12 @@ use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
 use std::time::Duration;
 
-use idecraft_debugger::{Breakpoint, DebugSession, Frame, SourceBreakpoint, StopState, Variable};
+use ferris_idea_debugger::{
+    Breakpoint, DebugSession, Frame, SourceBreakpoint, StopState, Variable,
+};
 use serde_json::json;
 
-pub use idecraft_debugger::saved::*;
+pub use ferris_idea_debugger::saved::*;
 
 /// Frames fetched when the program stops.
 const FRAMES: usize = 50;
@@ -52,7 +54,7 @@ pub enum Command {
     /// Replace the line breakpoints of a file (1-based lines, with their conditions).
     Breakpoints(PathBuf, Vec<SourceBreakpoint>),
     /// Replace the exception and method breakpoints (`SPEC-0146`).
-    Special(idecraft_debugger::SpecialBreakpoints),
+    Special(ferris_idea_debugger::SpecialBreakpoints),
     /// Children of a structured variable.
     Children(i64),
     /// Local variables of another frame.
@@ -166,7 +168,7 @@ pub enum Update {
     /// Completions for the expression text they were asked for (v11 behaviour 22).
     Completions(String, Vec<String>),
     /// The threads with state and group (v12 behaviour 28).
-    ThreadInfos(Vec<idecraft_debugger::ThreadInfo>),
+    ThreadInfos(Vec<ferris_idea_debugger::ThreadInfo>),
     /// A thread dump for the console (v12 behaviour 26).
     Dump(String),
     /// The value of an Inspect or referring-objects tab under its key (v12 behaviours 30, 31).
@@ -185,8 +187,8 @@ pub enum Update {
     Failed(String),
 }
 
-pub use idecraft_debugger::Kind;
-pub use idecraft_languages::debug_plan::{plan, plan_run_config, program_of};
+pub use ferris_idea_debugger::Kind;
+pub use ferris_idea_languages::debug_plan::{plan, plan_run_config, program_of};
 
 /// What to debug.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -210,15 +212,15 @@ pub struct Launch {
     /// Shell command that builds the program first (Kotlin); empty for none.
     pub prepare: String,
     /// Exception and method breakpoints (`SPEC-0146`).
-    pub special: idecraft_debugger::SpecialBreakpoints,
+    pub special: ferris_idea_debugger::SpecialBreakpoints,
     /// Attach to this running program instead of starting `program` (`SPEC-0147`).
-    pub attach: Option<idecraft_debugger::Target>,
+    pub attach: Option<ferris_idea_debugger::Target>,
     /// The adapter and the program run on the host of a remote project (`SPEC-0322`); `program`,
     /// `cwd`, `interpreter` are then host paths.
     pub remote: Option<crate::debug_remote::RemoteLaunch>,
     /// Chrome's profile folder for a page (`SPEC-0133` v3 behaviour 2): one per project, outside
     /// it; `None` for everything else.
-    pub browser: Option<idecraft_debugger::BrowserProfile>,
+    pub browser: Option<ferris_idea_debugger::BrowserProfile>,
 }
 
 /// How long a page session waits for the previous session on the same profile to close its
@@ -237,7 +239,7 @@ impl Controller {
         let (commands, command_rx) = channel();
         let (update_tx, updates) = channel();
         std::thread::Builder::new()
-            .name("idecraft-debug".into())
+            .name("ferris-idea-debug".into())
             .spawn(move || run(launch, &command_rx, &update_tx))
             .expect("a debug session needs a thread");
         Self { commands, updates }
@@ -260,7 +262,7 @@ fn java_session(
     mut arguments: serde_json::Value,
     breakpoints: &BTreeMap<PathBuf, Vec<SourceBreakpoint>>,
 ) -> Result<(DebugSession, BTreeMap<PathBuf, Vec<Breakpoint>>), String> {
-    let server = idecraft_languages::java_debug::JavaDebugServer::start(&launch.cwd)?;
+    let server = ferris_idea_languages::java_debug::JavaDebugServer::start(&launch.cwd)?;
     // Attaching needs no class path: the JVM already runs (SPEC-0147 behaviour 3).
     if let Some(target) = &launch.attach {
         // java-debug evaluates nothing without the project's name: no expression, no breakpoint
@@ -288,7 +290,7 @@ fn java_session(
     ]
     .into_iter()
     .chain(
-        idecraft_languages::java_roots::source_roots(&launch.cwd)
+        ferris_idea_languages::java_roots::source_roots(&launch.cwd)
             .iter()
             .map(|r| launch.cwd.join(r).join(&relative)),
     )
@@ -312,14 +314,14 @@ fn java_session(
 /// The adapter of `server`, kept alive with the connection; exception types go to jdtls's debug
 /// settings (D30).
 fn java_client(
-    server: idecraft_languages::java_debug::JavaDebugServer,
-) -> Result<idecraft_debugger::DapClient, String> {
+    server: ferris_idea_languages::java_debug::JavaDebugServer,
+) -> Result<ferris_idea_debugger::DapClient, String> {
     let address = server.dap_address();
     let server = std::sync::Arc::new(std::sync::Mutex::new(server));
     let settings = server.clone();
     let (host, sources) = (server.clone(), server.clone());
     Ok(
-        idecraft_debugger::DapClient::connect(&address, Some(Box::new(server)))
+        ferris_idea_debugger::DapClient::connect(&address, Some(Box::new(server)))
             .map_err(|e| e.to_string())?
             .with_exception_types(Box::new(move |types| {
                 settings
@@ -328,7 +330,7 @@ fn java_client(
                     .set_exception_types(types)
             }))
             // Debug settings and the build of changed sources for hot swap (SPEC-0091 v12).
-            .with_host(Box::new(idecraft_debugger::FnHost {
+            .with_host(Box::new(ferris_idea_debugger::FnHost {
                 settings: Box::new(move |s| {
                     host.lock()
                         .map_err(|_| "jdtls is gone".to_owned())?
@@ -348,7 +350,7 @@ fn java_client(
 fn top_locals(
     session: &mut DebugSession,
     id: i64,
-) -> Result<Vec<Variable>, idecraft_debugger::DapError> {
+) -> Result<Vec<Variable>, ferris_idea_debugger::DapError> {
     let scopes = session.scopes(id)?;
     let (locals, mut extra) = frame_scopes(&scopes);
     let mut vars = match locals {
@@ -402,12 +404,12 @@ fn end(session: DebugSession) -> Update {
 fn browser_profile(
     launch: &Launch,
     send: &dyn Fn(Update),
-) -> Result<idecraft_debugger::ProfileLock, String> {
+) -> Result<ferris_idea_debugger::ProfileLock, String> {
     let profile = launch
         .browser
         .as_ref()
         .ok_or("no folder for the browser profile (no home folder)")?;
-    let lock = idecraft_debugger::ProfileLock::acquire(&profile.folder, PROFILE_WAIT)
+    let lock = ferris_idea_debugger::ProfileLock::acquire(&profile.folder, PROFILE_WAIT)
         .ok_or("the browser of the previous session of this project is still closing")?;
     let old = profile
         .prepare()
@@ -436,7 +438,7 @@ fn run(launch: Launch, commands: &Receiver<Command>, updates: &Sender<Update>) {
     // behaviour 5). Attaching to a running program does not.
     if launch.attach.is_none()
         && launch.remote.is_none()
-        && let Err(why) = idecraft_core::trust::require_trusted(&launch.cwd)
+        && let Err(why) = ferris_idea_core::trust::require_trusted(&launch.cwd)
     {
         send(Update::Failed(why));
         return;
@@ -459,7 +461,7 @@ fn run(launch: Launch, commands: &Receiver<Command>, updates: &Sender<Update>) {
     // (SPEC-0039 v7 behaviour 11).
     if launch.kind == Kind::Go
         && launch.attach.is_none()
-        && let Err(why) = idecraft_debugger::go_command(&launch.args)
+        && let Err(why) = ferris_idea_debugger::go_command(&launch.args)
     {
         send(Update::Failed(why));
         return;
@@ -498,9 +500,9 @@ fn run(launch: Launch, commands: &Receiver<Command>, updates: &Sender<Update>) {
         crate::debug_remote::start(&launch, remote, arguments.clone(), &breakpoints, &send)
     } else if let Some(target) = &launch.attach
         && let Some(Some(runtime)) = attach_runtime
-        && runtime != idecraft_debugger::Runtime::Java
+        && runtime != ferris_idea_debugger::Runtime::Java
     {
-        idecraft_debugger::attach(
+        ferris_idea_debugger::attach(
             runtime,
             target,
             &launch.adapter,
@@ -508,9 +510,13 @@ fn run(launch: Launch, commands: &Receiver<Command>, updates: &Sender<Update>) {
             &breakpoints,
             &launch.special,
         )
-    } else if let Some(Some(idecraft_debugger::Runtime::Java)) = attach_runtime {
+    } else if let Some(Some(ferris_idea_debugger::Runtime::Java)) = attach_runtime {
         match launch.attach.as_ref().map(|t| {
-            idecraft_debugger::attach_arguments(idecraft_debugger::Runtime::Java, t, &launch.cwd)
+            ferris_idea_debugger::attach_arguments(
+                ferris_idea_debugger::Runtime::Java,
+                t,
+                &launch.cwd,
+            )
         }) {
             Some(Ok(arguments)) => java_session(&launch, arguments, &breakpoints),
             Some(Err(e)) => Err(e),
@@ -524,7 +530,7 @@ fn run(launch: Launch, commands: &Receiver<Command>, updates: &Sender<Update>) {
         launch.kind,
         Kind::Node | Kind::PackageScript | Kind::Browser
     ) {
-        idecraft_debugger::JsDebugServer::start(&launch.adapter)
+        ferris_idea_debugger::JsDebugServer::start(&launch.adapter)
             .and_then(|server| {
                 let address = server.address();
                 DebugSession::launch_js(
@@ -539,7 +545,7 @@ fn run(launch: Launch, commands: &Receiver<Command>, updates: &Sender<Update>) {
             .map_err(|e| e.to_string())
     } else if launch.kind == Kind::Go {
         // Delve serves the session on its own socket and ends with it.
-        idecraft_debugger::launch_go(&launch.adapter, arguments, &breakpoints, &launch.special)
+        ferris_idea_debugger::launch_go(&launch.adapter, arguments, &breakpoints, &launch.special)
             .map_err(|e| e.to_string())
     } else {
         DebugSession::launch(
@@ -563,7 +569,7 @@ fn run(launch: Launch, commands: &Receiver<Command>, updates: &Sender<Update>) {
     }
     send(Update::Running);
     let mut sent = 0;
-    // Program output and the debug console (logpoints, the note that IDECraft evaluates
+    // Program output and the debug console (logpoints, the note that Ferris IDEA evaluates
     // conditions, SPEC-0178 behaviour 6) go to the same console, in the order they came (D17).
     let mut flush = |session: &mut DebugSession| {
         let all = session.transcript();
@@ -654,18 +660,18 @@ fn run(launch: Launch, commands: &Receiver<Command>, updates: &Sender<Update>) {
                     }
                     Ok(Command::Special(special)) => {
                         if let Err(e) = session.set_special_breakpoints(&special) {
-                            send(Update::Output(format!("[IDECraft] {e}\n")));
+                            send(Update::Output(format!("[Ferris IDEA] {e}\n")));
                         }
                     }
                     Ok(Command::Pause) => {
                         if let Err(e) = session.pause(thread) {
-                            send(Update::Output(format!("[IDECraft] Pause: {e}\n")));
+                            send(Update::Output(format!("[Ferris IDEA] Pause: {e}\n")));
                         }
                     }
                     // SPEC-0091 v12 behaviour 27.
                     Ok(Command::PauseAll) => {
                         if let Err(e) = session.pause_all(thread, false) {
-                            send(Update::Output(format!("[IDECraft] Pause All: {e}\n")));
+                            send(Update::Output(format!("[Ferris IDEA] Pause All: {e}\n")));
                         }
                     }
                     // Hot swap works while the program runs (v12 behaviour 37).
@@ -731,7 +737,7 @@ fn run(launch: Launch, commands: &Receiver<Command>, updates: &Sender<Update>) {
             Command::ResumeAll => session.resume_all(thread),
             Command::PauseAll => {
                 if let Err(e) = session.pause_all(thread, true) {
-                    send(Update::Output(format!("[IDECraft] Pause All: {e}\n")));
+                    send(Update::Output(format!("[Ferris IDEA] Pause All: {e}\n")));
                 }
                 if let Ok(threads) = session.threads() {
                     send(Update::Threads(threads, thread));
@@ -741,7 +747,7 @@ fn run(launch: Launch, commands: &Receiver<Command>, updates: &Sender<Update>) {
             Command::ForceReturn(frame) => {
                 if let Err(e) = session.force_return(frame) {
                     send(Update::Output(format!(
-                        "[IDECraft] Force Return: {}\n",
+                        "[Ferris IDEA] Force Return: {}\n",
                         error_summary(&e.to_string())
                     )));
                 }
@@ -750,7 +756,7 @@ fn run(launch: Launch, commands: &Receiver<Command>, updates: &Sender<Update>) {
             Command::ThrowException(frame) => {
                 if let Err(e) = session.throw_exception(frame, "") {
                     send(Update::Output(format!(
-                        "[IDECraft] Throw Exception: {}\n",
+                        "[Ferris IDEA] Throw Exception: {}\n",
                         error_summary(&e.to_string())
                     )));
                 }
@@ -766,7 +772,7 @@ fn run(launch: Launch, commands: &Receiver<Command>, updates: &Sender<Update>) {
                         ));
                     }
                     Err(e) => send(Update::Output(format!(
-                        "[IDECraft] Threads: {}\n",
+                        "[Ferris IDEA] Threads: {}\n",
                         error_summary(&e.to_string())
                     ))),
                 }
@@ -822,7 +828,7 @@ fn run(launch: Launch, commands: &Receiver<Command>, updates: &Sender<Update>) {
             Command::Settings(settings) => {
                 if let Err(e) = session.update_settings(&settings) {
                     send(Update::Output(format!(
-                        "[IDECraft] {}\n",
+                        "[Ferris IDEA] {}\n",
                         error_summary(&e.to_string())
                     )));
                 }
@@ -852,7 +858,7 @@ fn run(launch: Launch, commands: &Receiver<Command>, updates: &Sender<Update>) {
                 Ok(()) => Ok(()),
                 Err(e) => {
                     send(Update::Output(format!(
-                        "[IDECraft] Reset Frame: {}\n",
+                        "[Ferris IDEA] Reset Frame: {}\n",
                         error_summary(&e.to_string())
                     )));
                     continue;
@@ -882,7 +888,7 @@ fn run(launch: Launch, commands: &Receiver<Command>, updates: &Sender<Update>) {
                     },
                     Ok(targets) => send(Update::StepTargets(targets)),
                     Err(e) => send(Update::Output(format!(
-                        "[IDECraft] Smart Step Into: {}\n",
+                        "[Ferris IDEA] Smart Step Into: {}\n",
                         error_summary(&e.to_string())
                     ))),
                 }
@@ -901,7 +907,7 @@ fn run(launch: Launch, commands: &Receiver<Command>, updates: &Sender<Update>) {
                     Ok(()) => Ok(()),
                     Err(e) => {
                         send(Update::Output(format!(
-                            "[IDECraft] Force Run to Cursor: {e}\n"
+                            "[Ferris IDEA] Force Run to Cursor: {e}\n"
                         )));
                         continue;
                     }
@@ -923,7 +929,9 @@ fn run(launch: Launch, commands: &Receiver<Command>, updates: &Sender<Update>) {
             Command::RunToLine(path, line) => match session.run_to_line(thread, &path, line) {
                 Ok(()) => Ok(()),
                 Err(e) => {
-                    send(Update::Output(format!("[IDECraft] Run to Cursor: {e}\n")));
+                    send(Update::Output(format!(
+                        "[Ferris IDEA] Run to Cursor: {e}\n"
+                    )));
                     continue;
                 }
             },
@@ -962,7 +970,7 @@ fn run(launch: Launch, commands: &Receiver<Command>, updates: &Sender<Update>) {
             }
             Command::Special(special) => {
                 if let Err(e) = session.set_special_breakpoints(&special) {
-                    send(Update::Output(format!("[IDECraft] {e}\n")));
+                    send(Update::Output(format!("[Ferris IDEA] {e}\n")));
                 }
                 continue;
             }
@@ -1046,7 +1054,7 @@ fn report_steps(
     session: &mut DebugSession,
     kind: Kind,
     thread: i64,
-    done: Result<(), idecraft_debugger::DapError>,
+    done: Result<(), ferris_idea_debugger::DapError>,
     what: &str,
     stack: &mut Vec<Frame>,
     send: &dyn Fn(Update),
@@ -1077,7 +1085,7 @@ fn report_steps(
         Ok(_) => false,
         Err(e) => {
             send(Update::Output(format!(
-                "[IDECraft] {what}: {}\n",
+                "[Ferris IDEA] {what}: {}\n",
                 error_summary(&e.to_string())
             )));
             // Show where the program is now; if it ended, the wait reports that.
@@ -1106,7 +1114,7 @@ fn build_changed(session: &mut DebugSession, files: Vec<PathBuf>) -> Update {
     match session.build_changed(&files, HOT_SWAP_BUILD) {
         Ok(()) => Update::CodeChanged(files),
         Err(e) => Update::Output(format!(
-            "[IDECraft] Hot swap: {}\n",
+            "[Ferris IDEA] Hot swap: {}\n",
             error_summary(&e.to_string())
         )),
     }
@@ -1120,7 +1128,7 @@ fn source_file_name(name: &str) -> String {
 
 /// The thread dump's text for the console (`SPEC-0091` v12 behaviour 26): a header, then per
 /// thread `"name" STATE group` and its frames, `running` for a thread that is not suspended.
-pub fn dump_text(threads: &[(idecraft_debugger::ThreadInfo, Vec<Frame>)]) -> String {
+pub fn dump_text(threads: &[(ferris_idea_debugger::ThreadInfo, Vec<Frame>)]) -> String {
     let mut out = format!("Thread dump: {} threads\n", threads.len());
     for (t, frames) in threads {
         let mut head = format!("\"{}\"", t.name);
@@ -1205,27 +1213,27 @@ pub fn arguments(launch: &Launch) -> serde_json::Value {
             "cwd": launch.cwd,
         }),
         // Chrome with the project's own profile outside the project, never the user's; without a
-        // window for the self-test or when `IDECRAFT_BROWSER_HEADLESS` is set.
-        Kind::Browser => idecraft_debugger::browser_launch(
+        // window for the self-test or when `FERRIS_IDEA_BROWSER_HEADLESS` is set.
+        Kind::Browser => ferris_idea_debugger::browser_launch(
             &launch.program.to_string_lossy(),
             &launch.cwd,
-            &idecraft_debugger::chrome().unwrap_or_default(),
+            &ferris_idea_debugger::chrome().unwrap_or_default(),
             &launch
                 .browser
                 .as_ref()
                 .map(|b| b.folder.clone())
                 .unwrap_or_default(),
             BROWSER_HEADLESS.load(std::sync::atomic::Ordering::Relaxed)
-                || std::env::var_os("IDECRAFT_BROWSER_HEADLESS").is_some(),
+                || ferris_idea_core::product_var_os("FERRIS_IDEA_BROWSER_HEADLESS").is_some(),
         ),
-        Kind::Node => idecraft_debugger::node_launch(
+        Kind::Node => ferris_idea_debugger::node_launch(
             &launch.program,
             None,
             &launch.args,
             &launch.cwd,
             &launch.env,
         ),
-        Kind::PackageScript => idecraft_debugger::node_launch(
+        Kind::PackageScript => ferris_idea_debugger::node_launch(
             &launch.program,
             Some(&launch.program),
             &launch.args,
@@ -1233,7 +1241,7 @@ pub fn arguments(launch: &Launch) -> serde_json::Value {
             &launch.env,
         ),
         // The words after `go`; a command Delve cannot debug is refused before this is used.
-        Kind::Go => idecraft_debugger::go_launch(&launch.args, &launch.cwd, &launch.env)
+        Kind::Go => ferris_idea_debugger::go_launch(&launch.args, &launch.cwd, &launch.env)
             .unwrap_or_else(|_| json!({})),
     }
 }
@@ -1647,7 +1655,7 @@ pub struct VarRow {
 /// no label matches, the adapter's list stays.
 pub fn targets_on_line(targets: Vec<(i64, String)>, line: &str) -> Vec<(i64, String)> {
     let called = |label: &str| {
-        let name = idecraft_debugger::target_method(label);
+        let name = ferris_idea_debugger::target_method(label);
         !name.is_empty()
             && line.match_indices(name).any(|(at, _)| {
                 let before = line[..at].chars().next_back();
@@ -1695,7 +1703,7 @@ pub fn one_line(value: &str) -> String {
 /// id.
 pub fn row_value(value: &str) -> (String, Option<std::ops::Range<usize>>) {
     let text = one_line(value);
-    let id = idecraft_debugger::values::id_range(&text);
+    let id = ferris_idea_debugger::values::id_range(&text);
     (text, id)
 }
 
@@ -1703,7 +1711,7 @@ pub fn row_value(value: &str) -> (String, Option<std::ops::Range<usize>>) {
 /// `Class@id` (java-debug, the JDWP object id) or a hexadecimal address `0x…` (Python's and the
 /// native debuggers' default texts); `None` for values without one (numbers, strings).
 pub fn object_id(value: &str) -> Option<String> {
-    idecraft_debugger::extras::object_id_of(value)
+    ferris_idea_debugger::extras::object_id_of(value)
 }
 
 /// The expression of row `i` for Evaluate and Add to Watches (`SPEC-0091` v11 behaviour 23): a
@@ -1747,7 +1755,7 @@ pub struct VarTree {
     owner: i64,
     fields: Vec<Variable>,
     /// Which rows are hidden (`SPEC-0091` v12 behaviour 34).
-    filters: idecraft_debugger::extras::VarFilters,
+    filters: ferris_idea_debugger::extras::VarFilters,
     /// Values of rows shown in another view or by a renderer, by the row's container and name:
     /// the text and, for the element views, the reference whose children the row then shows
     /// (v12 behaviours 32, 33).
@@ -1774,7 +1782,7 @@ impl VarTree {
 
     fn push(&self, vars: &[Variable], depth: usize, parent: i64, out: &mut Vec<VarRow>) {
         for v in vars {
-            if idecraft_debugger::extras::hidden_row(&self.filters, &v.name, &v.value) {
+            if ferris_idea_debugger::extras::hidden_row(&self.filters, &v.name, &v.value) {
                 continue;
             }
             let mut var = v.clone();
@@ -1799,7 +1807,7 @@ impl VarTree {
     }
 
     /// Hides rows by `filters` (`SPEC-0091` v12 behaviour 34).
-    pub fn set_filters(&mut self, filters: idecraft_debugger::extras::VarFilters) {
+    pub fn set_filters(&mut self, filters: ferris_idea_debugger::extras::VarFilters) {
         self.filters = filters;
     }
 
@@ -1998,7 +2006,7 @@ pub fn drop_echo(echo: &mut Option<String>, text: &str) -> String {
 }
 
 /// The breakpoints of `path` the session reports as not bound, by the 0-based line asked for,
-/// with the reason the tooltip names: the adapter's, else IDECraft's hint (`SPEC-0127` v5
+/// with the reason the tooltip names: the adapter's, else Ferris IDEA's hint (`SPEC-0127` v5
 /// behaviour 14). Function breakpoints (no line asked for) are left out.
 pub fn unbound_lines(path: &std::path::Path, placed: &[Breakpoint]) -> BTreeMap<usize, String> {
     placed
@@ -2009,7 +2017,7 @@ pub fn unbound_lines(path: &std::path::Path, placed: &[Breakpoint]) -> BTreeMap<
             let reason = b
                 .reason
                 .clone()
-                .unwrap_or_else(|| idecraft_debugger::unbound_hint(path));
+                .unwrap_or_else(|| ferris_idea_debugger::unbound_hint(path));
             Some((line, reason))
         })
         .collect()
@@ -2029,8 +2037,153 @@ pub fn quick_text(expression: &str, result: &Result<String, String>) -> String {
     }
 }
 
+/// What the status bar says after Remove All Breakpoints (in File) (`SPEC-0127` v15 behaviour
+/// 32).
+pub fn removed_breakpoints_note(removed: usize, in_file: bool) -> String {
+    let place = if in_file { " in this file" } else { "" };
+    match removed {
+        0 => format!("No breakpoints{place} to remove"),
+        1 => format!("1 breakpoint removed{place}"),
+        n => format!("{n} breakpoints removed{place}"),
+    }
+}
+
+/// How many expressions the history of the expression field keeps (`SPEC-0091` v21 behaviour 46).
+pub const EVAL_HISTORY_LIMIT: usize = 50;
+
+/// The history of the expression field (`SPEC-0091` v21 behaviour 46): the evaluated expressions,
+/// newest first and each once; ↑ goes back through them, ↓ forward and past the newest to the
+/// text that was in the field before ↑.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct EvalHistory {
+    items: Vec<String>,
+    at: Option<usize>,
+    draft: String,
+}
+
+impl EvalHistory {
+    /// The expressions, newest first.
+    pub fn items(&self) -> &[String] {
+        &self.items
+    }
+
+    /// Takes an evaluated expression: on top, an earlier copy removed, at most
+    /// [`EVAL_HISTORY_LIMIT`] kept; browsing starts again from the top.
+    pub fn push(&mut self, expression: &str) {
+        self.at = None;
+        let e = expression.trim();
+        if e.is_empty() {
+            return;
+        }
+        self.items.retain(|i| i != e);
+        self.items.insert(0, e.to_owned());
+        self.items.truncate(EVAL_HISTORY_LIMIT);
+    }
+
+    /// ↑ with `current` in the field: the next older expression, or `None` at the oldest or
+    /// without a history.
+    pub fn older(&mut self, current: &str) -> Option<String> {
+        let next = match self.at {
+            None if self.items.is_empty() => return None,
+            None => {
+                self.draft = current.to_owned();
+                0
+            }
+            Some(i) if i + 1 < self.items.len() => i + 1,
+            Some(_) => return None,
+        };
+        self.at = Some(next);
+        Some(self.items[next].clone())
+    }
+
+    /// ↓: the next newer expression, past the newest the text from before ↑, `None` when not
+    /// browsing.
+    pub fn newer(&mut self) -> Option<String> {
+        match self.at? {
+            0 => {
+                self.at = None;
+                Some(std::mem::take(&mut self.draft))
+            }
+            i => {
+                self.at = Some(i - 1);
+                Some(self.items[i - 1].clone())
+            }
+        }
+    }
+
+    /// Typing ends browsing: the next ↑ starts from the newest again.
+    pub fn stop_browsing(&mut self) {
+        self.at = None;
+    }
+}
+
 #[cfg(test)]
 mod tests {
+
+    /// SPEC-0091 AK-26 (v21, behaviour 46): the history keeps evaluated expressions newest first
+    /// and each once; ↑ goes back and stops at the oldest, ↓ comes forward and past the newest
+    /// gives back the text typed before ↑; an evaluation or typing starts again from the top.
+    #[test]
+    fn the_expression_history_goes_back_and_forward() {
+        let mut h = EvalHistory::default();
+        assert_eq!(h.older("x"), None, "no history yet");
+        assert_eq!(h.newer(), None);
+        for e in ["total", "i", " ", "total * 2", "i "] {
+            h.push(e);
+        }
+        assert_eq!(
+            h.items(),
+            ["i", "total * 2", "total"],
+            "blank left out, `i` once"
+        );
+        assert_eq!(h.older("tot").as_deref(), Some("i"));
+        assert_eq!(h.older("i").as_deref(), Some("total * 2"));
+        assert_eq!(h.older("total * 2").as_deref(), Some("total"));
+        assert_eq!(h.older("total"), None, "the oldest stays");
+        assert_eq!(h.newer().as_deref(), Some("total * 2"));
+        assert_eq!(h.newer().as_deref(), Some("i"));
+        assert_eq!(
+            h.newer().as_deref(),
+            Some("tot"),
+            "the typed text comes back"
+        );
+        assert_eq!(h.newer(), None, "not browsing any more");
+        h.older("");
+        h.older("");
+        h.stop_browsing();
+        assert_eq!(
+            h.older("").as_deref(),
+            Some("i"),
+            "typing starts from the newest"
+        );
+        h.push("total");
+        assert_eq!(
+            h.older("").as_deref(),
+            Some("total"),
+            "evaluating moves it on top"
+        );
+        for n in 0..EVAL_HISTORY_LIMIT + 5 {
+            h.push(&format!("e{n}"));
+        }
+        assert_eq!(h.items().len(), EVAL_HISTORY_LIMIT);
+        assert_eq!(h.items()[0], format!("e{}", EVAL_HISTORY_LIMIT + 4));
+    }
+
+    /// SPEC-0127 AK-20 (v15, behaviour 32): what the status bar says after removing all
+    /// breakpoints.
+    #[test]
+    fn the_removal_of_all_breakpoints_is_counted() {
+        assert_eq!(
+            removed_breakpoints_note(0, false),
+            "No breakpoints to remove"
+        );
+        assert_eq!(
+            removed_breakpoints_note(1, true),
+            "1 breakpoint removed in this file"
+        );
+        assert_eq!(removed_breakpoints_note(3, false), "3 breakpoints removed");
+    }
+
     /// SPEC-0091 AK-24 (v19): the hint reads as one line for a value and an error.
     #[test]
     fn quick_evaluation_reads_as_one_line() {
@@ -2044,10 +2197,10 @@ mod tests {
     }
 
     /// SPEC-0127 v5 AK-9: the unbound lines are the lines asked for, with the adapter's reason or
-    /// IDECraft's hint; bound ones and function breakpoints are left out.
+    /// Ferris IDEA's hint; bound ones and function breakpoints are left out.
     #[test]
     fn unbound_lines_by_requested_line() {
-        use idecraft_debugger::{Breakpoint, EvaluatedBy};
+        use ferris_idea_debugger::{Breakpoint, EvaluatedBy};
         let bp = |verified: bool, requested: Option<u64>, reason: Option<&str>| Breakpoint {
             id: None,
             verified,
@@ -2056,7 +2209,7 @@ mod tests {
             reason: reason.map(str::to_owned),
             evaluated_by: EvaluatedBy::Adapter,
         };
-        let missing = std::path::Path::new("/nonexistent/idecraft/Main.kt");
+        let missing = std::path::Path::new("/nonexistent/ferris-idea/Main.kt");
         let lines = super::unbound_lines(
             missing,
             &[
@@ -2217,13 +2370,13 @@ mod tests {
             eprintln!("skipped: an environment is active in the test process");
             return;
         }
-        let root = std::env::temp_dir().join(format!("idecraft-pydebug-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("ferris-idea-pydebug-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join(".venv/bin")).unwrap();
         let root = root.canonicalize().unwrap();
         std::fs::write(root.join(".venv/pyvenv.cfg"), "version = 3.12.4\n").unwrap();
         std::fs::write(root.join(".venv/bin/python"), "").unwrap();
-        let config = |command: &[&str]| idecraft_core::RunConfig {
+        let config = |command: &[&str]| ferris_idea_core::RunConfig {
             name: "app".into(),
             command: command.iter().map(|s| s.to_string()).collect(),
             cwd: None,
@@ -2238,6 +2391,7 @@ mod tests {
             allow_multiple: false,
             before_launch: Vec::new(),
             verbatim: false,
+            http: None,
         };
         let (kind, interpreter, program, args) =
             plan_run_config(&root, &config(&["python3", "app.py", "-v"]), &root)
@@ -2324,7 +2478,7 @@ mod tests {
 
     #[test]
     fn breakpoints_file_round_trip() {
-        let root = std::env::temp_dir().join(format!("idecraft-bp-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("ferris-idea-bp-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let parsed = parse_breakpoints(
             &root,
@@ -2516,7 +2670,7 @@ mod tests {
         all.insert(PathBuf::from("/w/a.c"), vec![SourceBreakpoint::from(3)]);
         assert!(unless_muted(true, all.clone()).is_empty());
         assert_eq!(unless_muted(false, all.clone()), all);
-        let special = idecraft_debugger::SpecialBreakpoints {
+        let special = ferris_idea_debugger::SpecialBreakpoints {
             caught: true,
             ..Default::default()
         };
@@ -2530,7 +2684,7 @@ mod tests {
 
     #[test]
     fn library_frames_by_hint_source_and_name() {
-        let root = std::env::temp_dir().join(format!("idecraft-frames-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("ferris-idea-frames-{}", std::process::id()));
         std::fs::create_dir_all(&root).unwrap();
         let own = root.join("Dbg.java");
         std::fs::write(&own, "class Dbg {}\n").unwrap();
@@ -2542,7 +2696,7 @@ mod tests {
             deemphasized,
         };
         let outside =
-            std::env::temp_dir().join(format!("idecraft-lib-{}.java", std::process::id()));
+            std::env::temp_dir().join(format!("ferris-idea-lib-{}.java", std::process::id()));
         std::fs::write(&outside, "class Lib {}\n").unwrap();
         assert!(!library_frame(
             &frame("Dbg.main(String[])", Some(own.clone()), false),
@@ -2917,7 +3071,7 @@ mod tests {
 
     #[test]
     fn java_main_classes() {
-        let dir = std::env::temp_dir().join(format!("idecraft-javaplan-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-javaplan-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("Dbg.java"), "package demo;\nclass Dbg {}\n").unwrap();
         let cmd = |s: &[&str]| s.iter().map(|s| s.to_string()).collect::<Vec<_>>();
@@ -2983,14 +3137,14 @@ mod tests {
             line: 15,
             deemphasized: false,
         };
-        let worker = idecraft_debugger::ThreadInfo {
+        let worker = ferris_idea_debugger::ThreadInfo {
             id: 9,
             name: "worker-1".into(),
             state: "WAIT".into(),
             group: "main".into(),
             suspended: false,
         };
-        let main = idecraft_debugger::ThreadInfo {
+        let main = ferris_idea_debugger::ThreadInfo {
             id: 1,
             name: "main".into(),
             suspended: true,
@@ -3002,7 +3156,7 @@ mod tests {
             "Thread dump: 2 threads\n\"main\"\n\tat Hot.main(String[]) (Hot.java:15)\n\n\"worker-1\" WAIT (group main)\n\trunning\n\n"
         );
         assert_eq!(
-            idecraft_debugger::extras::stack_location("\tat Hot.main(String[]) (Hot.java:15)"),
+            ferris_idea_debugger::extras::stack_location("\tat Hot.main(String[]) (Hot.java:15)"),
             Some(("Hot.java".into(), 15))
         );
         // v13: a JDK frame names its class file, not jdtls's address.
@@ -3016,7 +3170,7 @@ mod tests {
         let mut items = var("items", 5);
         items.evaluate_name = Some("items".into());
         let mut tree = VarTree::new(vec![var("this$0", 0), none, items]);
-        tree.set_filters(idecraft_debugger::extras::VarFilters {
+        tree.set_filters(ferris_idea_debugger::extras::VarFilters {
             statics: true,
             synthetic: false,
             nulls: false,
@@ -3039,7 +3193,8 @@ mod tests {
         tree.set_override((0, "items".into()), None);
         assert_eq!(tree.rows()[0].var.value, "1");
 
-        let root = std::env::temp_dir().join(format!("idecraft-findfile-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("ferris-idea-findfile-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("src/dbg")).unwrap();
         std::fs::create_dir_all(root.join("target/x")).unwrap();
@@ -3058,18 +3213,20 @@ mod tests {
     /// record's text. Skipped without jdtls or the plugin.
     #[test]
     fn a_java_stop_in_a_records_method_reports_the_fields_it_uses() {
-        if idecraft_languages::java_debug::java_debug_plugin().is_none()
-            || !idecraft_languages::java_debug::java_debug_usable()
-            || idecraft_languages::servers::resolve(idecraft_languages::LanguageId::Java).is_err()
+        if ferris_idea_languages::java_debug::java_debug_plugin().is_none()
+            || !ferris_idea_languages::java_debug::java_debug_usable()
+            || ferris_idea_languages::servers::resolve(ferris_idea_languages::LanguageId::Java)
+                .is_err()
         {
             eprintln!("skipped: jdtls or java-debug is missing");
             return;
         }
-        let dir = std::env::temp_dir().join(format!("idecraft-javarecord-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("ferris-idea-javarecord-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let root = dir.canonicalize().unwrap();
-        idecraft_core::trust::trust_for_process(&root);
+        ferris_idea_core::trust::trust_for_process(&root);
         let file = root.join("Dbg.java");
         std::fs::write(
             &file,

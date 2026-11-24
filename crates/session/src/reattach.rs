@@ -57,23 +57,35 @@ pub fn private_dir(dir: &Path) -> Result<PathBuf, PrivateError> {
     Ok(dir.to_path_buf())
 }
 
-/// Creates `dir` as needed (no POSIX modes on this system).
+/// What a build without POSIX modes says instead of making something private (`SPEC-0321` v6
+/// behaviour 8a): it refuses rather than write a file or folder others could read.
+#[cfg(not(unix))]
+const NOT_PRIVATE: &str = "private files and folders are not supported on this platform yet";
+
+/// Refused: without POSIX modes the folder cannot be made private yet.
 #[cfg(not(unix))]
 pub fn private_dir(dir: &Path) -> Result<PathBuf, PrivateError> {
-    std::fs::create_dir_all(dir).map_err(|e| PrivateError::Io(dir.to_path_buf(), e.to_string()))?;
-    Ok(dir.to_path_buf())
+    Err(PrivateError::Io(dir.to_path_buf(), NOT_PRIVATE.into()))
 }
 
-/// Appends one line to `path`.
+/// Refused: without POSIX modes the file cannot be made private yet.
 #[cfg(not(unix))]
 pub fn append_private(path: &Path, line: &str) -> std::io::Result<()> {
-    use std::io::Write;
-    let mut f = std::fs::OpenOptions::new()
-        .append(true)
-        .create(true)
-        .open(path)?;
-    f.write_all(line.as_bytes())?;
-    f.write_all(b"\n")
+    let _ = (path, line);
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        NOT_PRIVATE,
+    ))
+}
+
+/// Refused: without POSIX modes the file cannot be made private yet.
+#[cfg(not(unix))]
+pub fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let _ = (path, bytes);
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        NOT_PRIVATE,
+    ))
 }
 
 /// Writes `bytes` to `path` with mode 0600 through a temporary file and a rename (`SPEC-0262`).
@@ -112,13 +124,13 @@ pub fn append_private(path: &Path, line: &str) -> std::io::Result<()> {
     f.write_all(b"\n")
 }
 
-/// The default folder of reattach sockets: `$XDG_RUNTIME_DIR/idecraft`, else
-/// `~/.cache/idecraft/run`.
+/// The default folder of reattach sockets: `$XDG_RUNTIME_DIR/ferris-idea`, else
+/// `~/.cache/ferris-idea/run`.
 pub fn default_run_dir() -> Option<PathBuf> {
     if let Some(d) = std::env::var_os("XDG_RUNTIME_DIR").filter(|d| !d.is_empty()) {
-        return Some(PathBuf::from(d).join("idecraft"));
+        return Some(PathBuf::from(d).join("ferris-idea"));
     }
-    std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache/idecraft/run"))
+    std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache/ferris-idea/run"))
 }
 
 /// The socket of session `id` in `dir`.
@@ -142,7 +154,7 @@ pub fn peer_uid(stream: &std::os::unix::net::UnixStream) -> std::io::Result<u32>
     }
 }
 
-/// Connects standard input and output to the socket of session `id` (`idecraft serve --attach`);
+/// Connects standard input and output to the socket of session `id` (`ferris-idea serve --attach`);
 /// returns when either side ends. Nothing but the bytes passes; the token travels inside.
 #[cfg(unix)]
 pub fn bridge_stdio(dir: &Path, id: &str) -> std::io::Result<()> {
@@ -202,7 +214,7 @@ mod tests {
         let e = check_peer(0, 501).unwrap_err();
         assert!(e.to_string().contains("refused before reading"), "{e}");
 
-        let dir = std::env::temp_dir().join(format!("idecraft-run-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-run-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();

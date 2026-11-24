@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::time::Duration;
 
-use idecraft_debugger::{
+use ferris_idea_debugger::{
     DebugSession, JsDebugServer, Runtime, SourceBreakpoint, StopState, Target, attach,
     attach_arguments, can_debug_unattended, classify, known_adapters, lldb_dap,
 };
@@ -16,7 +16,7 @@ const WAIT: Duration = Duration::from_secs(30);
 
 fn skip(reason: &str) {
     assert!(
-        std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+        ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
         "required tool missing: {reason}"
     );
     eprintln!("skipped: {reason}");
@@ -30,7 +30,7 @@ fn adapter(name: &str) -> Option<Vec<String>> {
 }
 
 fn temp(tag: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("idecraft-attach-{tag}-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-attach-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::canonicalize(&dir).unwrap()

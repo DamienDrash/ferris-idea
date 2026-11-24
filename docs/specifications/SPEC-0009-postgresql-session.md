@@ -31,7 +31,7 @@ with values as text and precise errors.
 
 ## Acceptance criteria
 Integration criteria run against a PostgreSQL server given by the environment variable
-`IDECRAFT_TEST_PG` (a SPEC-0008 URL, e.g. the reference database); without it they are skipped.
+`FERRIS_IDEA_TEST_PG` (a SPEC-0008 URL, e.g. the reference database); without it they are skipped.
 - **AK-1** `select count(*), sum(delta) from movement` on the reference database gives one result set
   with values `10000` and `-30`.
 - **AK-2** A script with two SELECTs gives two result sets in order.

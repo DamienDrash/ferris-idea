@@ -1,4 +1,4 @@
-# SPEC-0325: Secure WebSocket endpoint of `idecraft serve` (first slice of M18)
+# SPEC-0325: Secure WebSocket endpoint of `ferris-idea serve` (first slice of M18)
 
 - **Version:** 1 · **Date:** 2026-11-09
 - **Sources:** [`REMOTE_AND_MOBILE.md`](../architecture/REMOTE_AND_MOBILE.md) section M18 and the
@@ -9,14 +9,14 @@
   and `draft-ietf-tls-ecdhe-mlkem` (group `X25519MLKEM768`, `0x11EC`) (`STD`). Crates: `rustls` with
   its `ring` provider, `libcrux-ml-kem` (already chosen in ADR-0025 §10), `tokio-tungstenite`
   (`OSS`, section "Dependencies"). No observation of the reference is needed: a browser path to
-  `idecraft serve` is IDECraft's own scope.
+  `ferris-idea serve` is Ferris IDEA's own scope.
 - **Feature matrix rows:** M18 (no reference counterpart)
 - **Reuses, does not replace:** frames and sessions of `Backend` (ADR-0026), rights of ADR-0025 §4,
   rooms, roles and links of SPEC-0323.
 
 ## Purpose
 
-A browser cannot speak SSH or the paired Noise channel. `idecraft serve --wss <folder>` gives it a
+A browser cannot speak SSH or the paired Noise channel. `ferris-idea serve --wss <folder>` gives it a
 third path to the same backend: WebSocket over TLS 1.3 with a hybrid post-quantum key exchange,
 authenticated before anything reaches the backend. On top runs the session protocol unchanged.
 This slice has no web client; it ships a small connection check page (see behaviour 16).
@@ -132,7 +132,7 @@ This slice has no web client; it ships a small connection check page (see behavi
 - **AK-5** Given a foreign, `null`, `http:` or missing `Origin`, the upgrade answers 403; given a foreign `Host`, 421; an over-long request head is refused.
 - **AK-6** Given every served answer, the security headers of behaviour 10 are present.
 - **AK-7** Given no credential within the limit, a wrong credential, or an `organisation` link, the connection closes with 1008 and the same reason, and the backend saw no session; the secret is in no log.
-- **AK-8** Given the owner credential on the real `idecraft-serve --wss` process, a session opens over real frames, reads a file and is capped to `--wss-rights`: without `edit` a `doc.edit` is `not_granted`.
+- **AK-8** Given the owner credential on the real `ferris-idea-serve --wss` process, a session opens over real frames, reads a file and is capped to `--wss-rights`: without `edit` a `doc.edit` is `not_granted`.
 - **AK-9** Given a room and an `anonymous` link, a guest connects, must `room.join`, is a viewer, cannot edit; once the link is revoked, new connections are refused and the session ends within a second.
 - **AK-10** Given more failures than the limit from one address, that address is refused even with a good credential until the block passes.
 - **AK-11** A text message after authentication closes the connection; a session frame split over two WebSocket messages arrives whole.

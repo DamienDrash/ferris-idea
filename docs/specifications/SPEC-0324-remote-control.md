@@ -7,20 +7,20 @@
   [`ADR-0026`](../adr/0026-session-protocol-window-and-serve.md), SPEC-0317, SPEC-0318,
   SPEC-0321, SPEC-0323 (`GEN`). QR symbols: ISO/IEC 18004 (`STD`). Crate for the QR encoder:
   `qrcode` (MIT or Apache-2.0, `OSS`, chosen here as ADR-0025 §10 requires). No observation of the
-  reference is needed: remote control of a running IDE from another device is IDECraft's own scope.
+  reference is needed: remote control of a running IDE from another device is Ferris IDEA's own scope.
 - **Feature matrix rows:** M16 (no reference counterpart)
 - **Reuses, does not replace:** the pairing, key store, channel and listener of `crates/pairing`
   (SPEC-0321 behaviours 13–23); the rights and audit of `Backend` (SPEC-0317, SPEC-0318).
 
 ## Purpose
 
-A project on this machine, served by `idecraft serve --pair <folder>`, can be used from another
+A project on this machine, served by `ferris-idea serve --pair <folder>`, can be used from another
 paired device without exposing it to the network: the device can read and edit the unsaved
 buffers of the session, run, debug, use terminals and tests, use Git, drive agent tools and receive
 notifications, within rights set per device, with a log and revocation that act at once.
 
-This slice is headless: the accepting side is `idecraft serve`; the device side is the window
-(`paired://`, SPEC-0321) or the command line `idecraft device`. The desktop window accepting
+This slice is headless: the accepting side is `ferris-idea serve`; the device side is the window
+(`paired://`, SPEC-0321) or the command line `ferris-idea device`. The desktop window accepting
 devices for its own local project, its "Pair a device" UI, the relay and mobile clients are not
 part of it (see "Out of scope").
 
@@ -32,21 +32,21 @@ part of it (see "Out of scope").
    `--listen` address is refused unless `--allow-network` is also given, and the start line says
    the listener is reachable from the network (SPEC-0321 behaviour 13, unchanged). [ADR-0025 §5]
 2. **A device is bound to one project.** A session of a paired device needs a backend with a fixed
-   folder. `idecraft serve --pair` without `<folder>` is refused before anything listens, and
+   folder. `ferris-idea serve --pair` without `<folder>` is refused before anything listens, and
    `session.hello` from a device on a backend without a fixed folder answers `denied`. A device
    can name no other folder. Serving several projects means several listeners (one port each).
    [ADR-0025 §4; deviation from SPEC-0321 behaviour 13, where the folder was optional, because
    a device would otherwise read any folder of the user.]
 3. `--qr` opens the pairing window with a 256-bit secret instead of the short code, and shows a QR
-   code plus a link `idecraft-pair://v1/<address>?k=<host key hex>&s=<secret>` that carries the
+   code plus a link `ferris-idea-pair://v1/<address>?k=<host key hex>&s=<secret>` that carries the
    address, the host's static public key and the secret. The device derives the pairing key from
    the secret exactly as from a short code (label `idecraft-pair-v2`), and **checks that the
-   responder's static key equals `k`** before it shows any digits. `idecraft device pair <link>`
+   responder's static key equals `k`** before it shows any digits. `ferris-idea device pair <link>`
    takes the link. The link is written only to the console of `serve`, like the code. The window
    field and `remote_pair_start` take a short code only; a link there is future window work. [ADR-0025 §2]
 4. Digits are confirmed on both sides as in SPEC-0321 behaviour 17. No MCP tool confirms digits,
    widens a right or switches remote access on; these are user actions. The confirmation prompt
-   on a command line (`serve --pair` and `idecraft device pair`) reads a terminal only: with
+   on a command line (`serve --pair` and `ferris-idea device pair`) reads a terminal only: with
    standard input not a terminal the pairing is declined and says so. [ADR-0025 §2, §4]
 
 ### Connection paths
@@ -59,7 +59,7 @@ part of it (see "Out of scope").
    stays on its loopback address. The Noise channel runs end to end through the SSH pipe, with the
    same pins, so an SSH server sees only ciphertext. [ADR-0025 §1b, §7]
 7. The channel carries over any byte pipe. Pins are stored per path string. Adding a path to a
-   host already pinned (`idecraft device add-path` / MCP `remote_pair_add_path`) copies the pin; the
+   host already pinned (`ferris-idea device add-path` / MCP `remote_pair_add_path`) copies the pin; the
    next handshake proves the key, so no new digits are needed. [GEN]
 
 ### Rights, log, revocation
@@ -103,9 +103,9 @@ part of it (see "Out of scope").
 
 ### Command line and MCP (ADR-0008)
 
-15. `idecraft device pair <address> [--code <code>] | <link>`, `device hosts`, `device forget <address>`,
+15. `ferris-idea device pair <address> [--code <code>] | <link>`, `device hosts`, `device forget <address>`,
     `device add-path <address> <new path>` and `device call <address> <folder> <method> [<json>]`.
-    `idecraft-serve` has the same commands. `device call` prints the result as JSON and exits non-zero
+    `ferris-idea-serve` has the same commands. `device call` prints the result as JSON and exits non-zero
     with the error. [GEN]
 16. MCP tools on the accepting machine, each logged and needing the user-granted `ssh` right:
     `device_list` (never a key), `device_log {fingerprint?, limit?}`, `device_restrict {fingerprint, rights}`

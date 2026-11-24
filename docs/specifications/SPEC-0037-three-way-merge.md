@@ -73,7 +73,7 @@ Character-level merging inside words, ignoring whitespace, the editor UI (SPEC-0
 ## Known deviations from the reference
 Git's `zealous_alnum` level (joining conflicts separated only by lines without letters or digits) is not
 applied; such conflicts stay separate, each resolvable on its own. Git also joins two conflicts with at
-most three unchanged lines between them into one, lines in between included; IDECraft keeps them apart
+most three unchanged lines between them into one, lines in between included; Ferris IDEA keeps them apart
 (v3: measured with three conflicts two lines apart, which `git merge-file` writes as one block and
-IDECraft lists as three), so the open-conflict count of such a file is higher than the number of marker
+Ferris IDEA lists as three), so the open-conflict count of such a file is higher than the number of marker
 blocks Git wrote into the working tree, and each of them can be resolved on its own.

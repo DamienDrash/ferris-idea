@@ -416,7 +416,7 @@ impl TodoToolView {
     /// A toolbar button with its declared tooltip; `label` is drawn, or `icon_key`'s icon.
     fn tool(
         &self,
-        control: &'static idecraft_ui::tooltip::Control,
+        control: &'static ferris_idea_ui::tooltip::Control,
         label: &'static str,
         on: bool,
         enabled: bool,
@@ -680,7 +680,7 @@ impl Render for TodoToolView {
                                     items,
                                     ..
                                 } => d
-                                    .child(icon(idecraft_ui::icons::file_icon(name)))
+                                    .child(icon(ferris_idea_ui::icons::file_icon(name)))
                                     .child(div().flex_none().child(name.clone()))
                                     .when(!folder.is_empty(), |d| d.child(dim(folder.clone())))
                                     .child(dim(count_label(*items))),

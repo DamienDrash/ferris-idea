@@ -1,7 +1,0 @@
-<!-- IDECraft own icon, PolyForm Shield License 1.0.0 (LICENSE.md). -->
-<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-<path d="M2.5 4C2.5 3.17 3.17 2.5 4 2.5H12C12.83 2.5 13.5 3.17 13.5 4V9.5C13.5 10.33 12.83 11 12 11H7L4 13.5V11C3.17 11 2.5 10.33 2.5 9.5V4Z" fill="#43454A" stroke="#CED0D6" stroke-linejoin="round"/>
-<circle cx="5.5" cy="6.75" r="0.75" fill="#CED0D6"/>
-<circle cx="8" cy="6.75" r="0.75" fill="#CED0D6"/>
-<circle cx="10.5" cy="6.75" r="0.75" fill="#CED0D6"/>
-</svg>

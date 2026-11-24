@@ -1,6 +1,6 @@
 # SPEC-0320: Type hierarchy, usage counts, gutter marks and class refactorings for JavaScript and TypeScript
 
-- **Version:** 8 · **Date:** 2026-11-13 (v8: a usage count is the number of places Find Usages lists, without the members that implement or override the counted one, behaviour 5a, AK-18, OBS-0028 T8); 2026-11-13 (v7: IDECraft's own Extract Variable where the server offers no extraction, TypeScript 7's `tsc --lsp`; behaviours 23–27, AK-17, OBS-0028 T4); 2026-11-11 (v6: without `tsconfig.json`/`jsconfig.json` the structure comes from the syntax trees also with a server, behaviour 21, found with a real server in PR 525; v5: script files without the language server — hierarchy, marks and inheritors from the project's syntax trees; members count implementations and overrides, behaviours 21–22, F-036; v2: gutter marks for Java, behaviours 17–18; v3: gutter marks for Kotlin, behaviour 19; v4: marks after an edit, behaviour 20)
+- **Version:** 8 · **Date:** 2026-11-13 (v8: a usage count is the number of places Find Usages lists, without the members that implement or override the counted one, behaviour 5a, AK-18, OBS-0028 T8); 2026-11-13 (v7: Ferris IDEA's own Extract Variable where the server offers no extraction, TypeScript 7's `tsc --lsp`; behaviours 23–27, AK-17, OBS-0028 T4); 2026-11-11 (v6: without `tsconfig.json`/`jsconfig.json` the structure comes from the syntax trees also with a server, behaviour 21, found with a real server in PR 525; v5: script files without the language server — hierarchy, marks and inheritors from the project's syntax trees; members count implementations and overrides, behaviours 21–22, F-036; v2: gutter marks for Java, behaviours 17–18; v3: gutter marks for Kotlin, behaviour 19; v4: marks after an edit, behaviour 20)
 - **Sources:** OBS-0028 items 2, 6, 9 (L2, L6, L10); STD (LSP 3.17 `textDocument/definition`,
   `textDocument/references`, `textDocument/documentSymbol`, `textDocument/hover`, `textDocument/codeAction`;
   typescript-language-server has no type hierarchy provider), GEN (what Extract Interface, Extract
@@ -168,7 +168,7 @@ moves the implementation; `abstract` is an MCP option. [OBS-0028 item 9, GEN]
 **Extract Variable without the server's help (v7, OBS-0028 T4).**
 
 23. **When:** in a `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs` or `.cjs` file, Extract Variable
-    (and Refactor This) use IDECraft's own action "Extract variable" when the language server offers no
+    (and Refactor This) use Ferris IDEA's own action "Extract variable" when the language server offers no
     matching action there or cannot be asked. typescript-language-server offers one (its "Extract to
     constant in enclosing scope", SPEC-0095 v6 behaviour 2); TypeScript 7's own server (`tsc --lsp`,
     SPEC-0042 v12 behaviour 21) offers no refactoring at all, checked with typescript-go 7.0.2. A bare

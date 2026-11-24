@@ -3,8 +3,8 @@
 
 use std::path::Path;
 
-use idecraft_languages::endpoints::EndpointHit;
-use idecraft_languages::everywhere::{
+use ferris_idea_languages::endpoints::EndpointHit;
+use ferris_idea_languages::everywhere::{
     ActionHit, Categories, Everywhere, FileHit, SymbolHit, TextHit,
 };
 
@@ -158,7 +158,7 @@ impl Filter {
                 ..Categories::NONE
             },
             // The endpoints are no category of `search_everywhere`: the tab searches the rows
-            // of the Endpoints model (`idecraft_languages::endpoints::search_endpoints`).
+            // of the Endpoints model (`ferris_idea_languages::endpoints::search_endpoints`).
             Filter::Endpoints => Categories::NONE,
         }
     }
@@ -466,7 +466,7 @@ mod tests {
     /// wrap; their keys come from the keymap.
     #[test]
     fn group_steps_go_to_the_first_result_of_a_group() {
-        use idecraft_ui::keymap::{Keymap, Keystroke};
+        use ferris_idea_ui::keymap::{Keymap, Keystroke};
         // Any row that is no heading is a result.
         let file = |name: &str| Row::Calculator(name.into());
         // Rows 0, 3 and 6 are headings.
@@ -532,11 +532,11 @@ mod tests {
         assert_eq!(popup_action(PREV_GROUP), Some(PopupKey::PrevGroup));
     }
 
-    /// SPEC-0067 v7 AK-8: choosing and switching tabs follow the keymap; ⇧Enter, Up, Down and
+    /// SPEC-0067 v7 AK-10: choosing and switching tabs follow the keymap; ⇧Enter, Up, Down and
     /// Escape are fixed keys.
     #[test]
     fn popup_keys_follow_the_keymap() {
-        use idecraft_ui::keymap::{Keymap, Keystroke};
+        use ferris_idea_ui::keymap::{Keymap, Keystroke};
         let stroke = |text: &str| Keystroke::parse(text).expect("a keystroke");
         for keymap in [Keymap::bundled_macos(), Keymap::bundled_default()] {
             let of = |key: &str, shift: bool, text: &str| {
@@ -705,7 +705,7 @@ mod tests {
     /// shared search, and lists its hits without a heading.
     #[test]
     fn endpoints_tab_rows() {
-        use idecraft_languages::endpoints::{Endpoint, EndpointKind, search_endpoints};
+        use ferris_idea_languages::endpoints::{Endpoint, EndpointKind, search_endpoints};
         assert_eq!(Filter::ALL.len(), 7);
         assert_eq!(Filter::ALL[6], Filter::Endpoints);
         assert_eq!(Filter::Endpoints.label(), "Endpoints");

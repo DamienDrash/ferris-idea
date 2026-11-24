@@ -4,7 +4,7 @@
 use std::collections::HashSet;
 use std::ops::Range;
 
-use idecraft_languages::insight::Symbol;
+use ferris_idea_languages::insight::Symbol;
 
 /// Indices of the symbols to show for `query`: those whose name contains every typed word
 /// (ignoring case), together with their parents so the tree stays readable (behaviour 3).
@@ -79,7 +79,7 @@ pub fn closed_at_start(symbols: &[Symbol], line: u64, character: u64) -> HashSet
         .filter(|&i| {
             let s = &symbols[i];
             s.depth > 0
-                && idecraft_languages::structure::is_type(s)
+                && ferris_idea_languages::structure::is_type(s)
                 && has_children(symbols, i)
                 && !(s.path.is_none() && s.contains(line, character))
         })
@@ -131,7 +131,7 @@ pub fn matched_ranges(name: &str, query: &str) -> Vec<Range<usize>> {
     out
 }
 
-pub use idecraft_languages::structure::without_packages;
+pub use ferris_idea_languages::structure::without_packages;
 
 #[cfg(test)]
 mod tests {

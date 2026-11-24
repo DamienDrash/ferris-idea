@@ -1,4 +1,4 @@
-# SPEC-0158: IDECraft's backend on a remote host
+# SPEC-0158: Ferris IDEA's backend on a remote host
 
 - **Version:** 4 · **Date:** 2026-11-16 (v2 2026-11-03: symbols, problems and run configurations
   through the backend, behaviours 7–9; v3 2026-11-07: post-quantum key exchange required on the SSH
@@ -12,25 +12,25 @@
 - **Feature matrix rows:** F-083
 
 ## Purpose
-Work with a project on another machine through IDECraft's own analysis there, instead of
+Work with a project on another machine through Ferris IDEA's own analysis there, instead of
 copying the project or browsing file by file.
 
 ## Behaviour
-1. **Backend:** the backend is the headless `idecraft mcp <folder>` started on the host through
+1. **Backend:** the backend is the headless `ferris-idea mcp <folder>` started on the host through
    the system `ssh` with the options of SPEC-0121 (batch mode, strict host keys, no passwords,
    hybrid post-quantum key exchange only; a host without one is refused, ADR-0025 v3).
    The IDE talks to it over the SSH channel; it ends when the IDE leaves the host or closes. [GEN,
    STD]
-2. **Finding or bringing IDECraft:** an IDECraft of the same version uploaded earlier by this build
-   (`~/.cache/idecraft/bin/idecraft-<version>-<build>`) or an `idecraft` on the host's `PATH` that
+2. **Finding or bringing Ferris IDEA:** a Ferris IDEA of the same version uploaded earlier by this build
+   (`~/.cache/ferris-idea/bin/ferris-idea-<version>-<build>`) or an `ferris-idea` on the host's `PATH` that
    reports the same version is used. Otherwise, when the host has the same system and processor
    (`uname -sm`), this build is uploaded there through a temporary file, made executable and renamed
    into place. A host with another platform is refused with what to install ("the host runs Linux
-   x86_64, this IDECraft is built for Darwin arm64; install IDECraft … there"). [GEN]
+   x86_64, this Ferris IDEA is built for Darwin arm64; install Ferris IDEA … there"). [GEN]
 3. **The backend's rights** on the host are those of the host's project (its own agent permissions,
    SPEC-0053); it reads and runs nothing more than the local backend would. [SPEC-0053]
 4. **Window:** in the Remote Host window (SPEC-0121) "Start Backend" starts it for the folder shown;
-   the header then shows "Backend: idecraft <version> in <folder>", its help line names `?text`,
+   the header then shows "Backend: ferris-idea <version> in <folder>", its help line names `?text`,
    `@symbol`, `!` and `>`, and the status bar says how it was installed ("uploaded" or "found on
    the host") and how many tools it has. Leaving the host stops it. **v4:** when the header is too
    narrow, the host's folder, the backend line and the help line are shortened, never the
@@ -83,18 +83,18 @@ copying the project or browsing file by file.
   opens it; `@` finds a function of a host file and Enter opens its line; `>` lists the host's run
   configuration and Enter opens an SSH terminal tab that runs it; the status bar reports the
   host-side check of an opened file.
-- **AK-5** Hand test (round 4, no. 84): a Linux VM or server with IDECraft installed, and a Mac
+- **AK-5** Hand test (round 4, no. 84): a Linux VM or server with Ferris IDEA installed, and a Mac
   over SSH with upload; search and agent calls next to the reference's remote development.
 - **AK-6 (v4)** Hand tests 84 and 184 in a window of the test harness with real keys and mouse
   clicks, against the system `sshd` started as the current user with a home folder of the test's
-  own, and this build's `idecraft` as the backend (`crates/app/tests/it/f083_handtests.rs`;
+  own, and this build's `ferris-idea` as the backend (`crates/app/tests/it/f083_handtests.rs`;
   skipped without `sshd`). `hand_test_84_backend_on_a_host_with_keys`: a folder typed into the
   field with Enter, Start Backend clicked uploads this build ("uploaded" in the status bar);
   `?text` and Enter list the hits as `file:line  text`, ↓ and Enter open the second hit at its
-  line, a double click the first; Hosts ends the backend on the host; an `idecraft` on the host's
-  `PATH` is used ("found on the host") and nothing is uploaded; on a Linux host without IDECraft
-  (the Docker VM of the reference environment, when `IDECRAFT_TEST_DOCKER_SSH` is set) the error
-  names both platforms and what to install. `hand_test_84_an_agent_inspects_the_host_project`: `idecraft mcp` plans
+  line, a double click the first; Hosts ends the backend on the host; an `ferris-idea` on the host's
+  `PATH` is used ("found on the host") and nothing is uploaded; on a Linux host without Ferris IDEA
+  (the Docker VM of the reference environment, when `FERRIS_IDEA_TEST_DOCKER_SSH` is set) the error
+  names both platforms and what to install. `hand_test_84_an_agent_inspects_the_host_project`: `ferris-idea mcp` plans
   with `remote_backend_start`, starts it with the `ssh` and `run` rights, `remote_backend_call`
   runs `inspect_code` there, `remote_backend_stop` ends it; start and call are logged, the call
   without its arguments. `hand_test_184_symbols_problems_and_runs_on_the_host_with_keys`: `@name`
@@ -112,4 +112,4 @@ platform, Windows hosts.
 
 ## Known deviations from the reference
 The window stays a full local IDE that edits copies of the host's files (SPEC-0121); the backend
-adds IDECraft's tools on the host instead of moving the whole IDE there.
+adds Ferris IDEA's tools on the host instead of moving the whole IDE there.

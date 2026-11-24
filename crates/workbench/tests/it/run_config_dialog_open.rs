@@ -3,20 +3,20 @@
 
 #![cfg(target_os = "macos")]
 
+use ferris_idea_workbench::{RunChooserEvent, WorkbenchView};
 use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext, point, px};
-use idecraft_workbench::{RunChooserEvent, WorkbenchView};
 
 fn workspace(tag: &str) -> std::path::PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-d1-{tag}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-d1-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir_all(root.join(".idecraft")).unwrap();
+    std::fs::create_dir_all(root.join(".ferris-idea")).unwrap();
     let mut text = String::new();
     for i in 0..8 {
         text.push_str(&format!(
             "[[run]]\nname = \"c{i}\"\ncommand = [\"echo\", \"{i}\"]\n\n"
         ));
     }
-    std::fs::write(root.join(".idecraft/run.toml"), text).unwrap();
+    std::fs::write(root.join(".ferris-idea/run.toml"), text).unwrap();
     std::fs::write(
         root.join("package.json"),
         "{\"name\": \"x\", \"scripts\": {\"dev\": \"echo dev\", \"build\": \"echo b\"}}\n",
@@ -68,7 +68,7 @@ fn editor_open_with_focus(bench: &Entity<WorkbenchView>, cx: &mut VisualTestCont
     // The menu items stay enabled: the focused element is in the drawn frame.
     let enabled = cx.update(|window, cx| {
         window.is_action_available(
-            &idecraft_workbench::menu_bar::IdeAction {
+            &ferris_idea_workbench::menu_bar::IdeAction {
                 id: "editRunConfigurations".into(),
             },
             cx,
@@ -96,11 +96,11 @@ fn the_edit_event_opens_the_editor(cx: &mut TestAppContext) {
 /// chooser.
 #[gpui::test]
 fn clicking_edit_configurations_opens_the_editor(cx: &mut TestAppContext) {
-    idecraft_workbench::hit_targets::enable();
+    ferris_idea_workbench::hit_targets::enable();
     let root = workspace("click");
     let (bench, cx) = open(&root, cx);
     let center = |name: &str| {
-        let r = idecraft_workbench::hit_targets::get(name).expect("drawn");
+        let r = ferris_idea_workbench::hit_targets::get(name).expect("drawn");
         point(px(r.x + r.w / 2.), px(r.y + r.h / 2.))
     };
     for select_only in [true, false] {
@@ -145,7 +145,7 @@ fn clicking_edit_configurations_opens_the_editor(cx: &mut TestAppContext) {
     let _ = std::fs::remove_dir_all(&root);
 }
 
-/// SPEC-0087 v7 AK-9: typing in the list filters its rows by name; Backspace edits the text,
+/// SPEC-0087 v7 AK-11: typing in the list filters its rows by name; Backspace edits the text,
 /// Escape first clears it and then closes the list, Enter chooses the highlighted row, and a
 /// digit picks its row only while nothing is typed.
 #[gpui::test]

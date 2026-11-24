@@ -25,7 +25,7 @@ PostgreSQL session (SPEC-0009).
    position; none is guessed. The same holds for MariaDB (SPEC-0116). [STD, IMP-0008]
 
 ## Acceptance criteria
-Integration criteria run against a MySQL server given by `IDECRAFT_TEST_MYSQL` (a SPEC-0008 URL);
+Integration criteria run against a MySQL server given by `FERRIS_IDEA_TEST_MYSQL` (a SPEC-0008 URL);
 without it they are skipped.
 - **AK-1** `select count(*), sum(delta) from movement` gives `10000` and `-30`.
 - **AK-2** Two SELECTs give two result sets in order.

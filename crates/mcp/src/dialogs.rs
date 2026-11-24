@@ -13,14 +13,14 @@ use serde::Serialize;
 pub enum Presentation {
     /// The platform's alert: readable and pressable by accessibility clients.
     NativeAlert,
-    /// Drawn by IDECraft in the window: not visible to accessibility clients (ADR-0019).
+    /// Drawn by Ferris IDEA in the window: not visible to accessibility clients (ADR-0019).
     Drawn,
 }
 
 /// One answer of a dialog and how an agent gives the same answer.
 #[derive(Debug, Clone, Copy, Serialize)]
 pub struct Decision {
-    /// What the user decides, in IDECraft's words.
+    /// What the user decides, in Ferris IDEA's words.
     pub answer: &'static str,
     /// The MCP tool that makes the same decision; `None` when reserved or not offered yet.
     pub tool: Option<&'static str>,
@@ -70,9 +70,9 @@ const fn reserved(answer: &'static str, reason: &'static str) -> Decision {
 }
 
 /// The command line form of every tool call (`SPEC-0281` behaviour 5).
-pub const CLI: &str = "idecraft call <folder> <tool> '<json arguments>'";
+pub const CLI: &str = "ferris-idea call <folder> <tool> '<json arguments>'";
 
-/// Every modal dialog IDECraft shows (`SPEC-0281` behaviour 2).
+/// Every modal dialog Ferris IDEA shows (`SPEC-0281` behaviour 2).
 pub const DIALOGS: &[Dialog] = &[
     Dialog {
         id: "quit-unsaved",
@@ -84,12 +84,12 @@ pub const DIALOGS: &[Dialog] = &[
             tool(
                 "Save All and Quit",
                 "quit_ide",
-                "pending=save_all (needs the `quit` right; `idecraft quit --save-all`)",
+                "pending=save_all (needs the `quit` right; `ferris-idea quit --save-all`)",
             ),
             tool(
                 "Quit Without Saving",
                 "quit_ide",
-                "pending=discard (`idecraft quit --discard`)",
+                "pending=discard (`ferris-idea quit --discard`)",
             ),
             tool(
                 "Cancel (see what is pending)",
@@ -102,7 +102,7 @@ pub const DIALOGS: &[Dialog] = &[
             "crates/mcp/tests/it/protocol.rs::quit_ide_reports_pending_work_and_needs_the_quit_right",
             "crates/workbench/src/dialogs.rs::the_quit_question_is_drawn_with_its_message_detail_and_buttons",
             "crates/app/src/f084_handtests.rs::hand_test_203_quit_ide_with_an_unsaved_file",
-            "crates/app/src/f084_handtests.rs::hand_test_204_idecraft_quit_in_the_terminal",
+            "crates/app/src/f084_handtests.rs::hand_test_204_ferris_idea_quit_in_the_terminal",
         ],
     },
     Dialog {
@@ -1017,7 +1017,7 @@ mod tests {
 
     #[test]
     fn every_tool_and_test_named_exists() {
-        let tools: HashSet<String> = crate::IdeServer::tool_router()
+        let tools: HashSet<String> = crate::IdeServer::all_tools()
             .list_all()
             .into_iter()
             .map(|t| t.name.to_string())

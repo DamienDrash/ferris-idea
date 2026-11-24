@@ -90,7 +90,7 @@ scope and filter the list showed; security first, CLAUDE.md rule 12).**
    - **The limit of the list does not limit Replace All:** when the list stopped at 1 000 matches
      (`1000+`), Replace All changes every match of the same search, also those not listed.
    - Behaviour 15 holds unchanged: a file that is not the project's own changes only with the
-     toggle; version control data, IDECraft's data, files behind a symbolic link and files outside
+     toggle; version control data, Ferris IDEA's data, files behind a symbolic link and files outside
      the project never.
    - **Status bar:** `Replaced N occurrences in M files`, followed where it applies by the files
      left unchanged with the reason (behaviour 15), the files that could not be written or changed
@@ -119,7 +119,7 @@ behaviour 13, SPEC-0318 v8 behaviour 13).**
 ## Acceptance criteria
 - **AK-1** Rows per file and match, match position after trimming the line, selection skipping file rows
   without wrapping, summary texts (unit test).
-- **AK-2** In a real window (`idecraft ui --selftest`): ⇧⌘F and typing list `3 matches in 2 files` of the
+- **AK-2** In a real window (`ferris-idea ui --selftest`): ⇧⌘F and typing list `3 matches in 2 files` of the
   Git fixture; Down and Enter open the second match's file.
 - **AK-3** Use by hand: options, file mask, large project, scrolling, preview of the reference compared.
 - **AK-4 (v2)** Replacements: all, one, with regex groups, char offsets after non-ASCII text (unit test

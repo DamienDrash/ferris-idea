@@ -1,10 +1,10 @@
 //! The project's inspection profile (`SPEC-0315` behaviours 1–3, data of behaviour 6): which of
-//! IDECraft's inspections are on and how serious they are, kept where the reference keeps its
+//! Ferris IDEA's inspections are on and how serious they are, kept where the reference keeps its
 //! project profile, `.idea/inspectionProfiles/Project_Default.xml` (the directory-based project
 //! format of `intellij-community`), so both IDEs share it.
 //!
 //! An `inspection_tool` whose `class` is an inspection id or a short name that stands for exactly
-//! that inspection is IDECraft's and is rewritten; every other child of the profile is kept
+//! that inspection is Ferris IDEA's and is rewritten; every other child of the profile is kept
 //! verbatim and in its order. A short name standing for several inspections (`unused`) or one of
 //! two names of an inspection (`EmptyFinallyBlock`) is kept verbatim too, but still applies to
 //! its inspections when no entry of their own exists.
@@ -27,7 +27,7 @@ pub const PROFILE_NAME: &str = "Project Default";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Item {
-    /// One of IDECraft's inspections with its state; `inner` is the element's content as read.
+    /// One of Ferris IDEA's inspections with its state; `inner` is the element's content as read.
     Tool {
         id: &'static str,
         enabled: bool,
@@ -50,7 +50,7 @@ pub struct Profile {
     items: Vec<Item>,
 }
 
-/// The class IDECraft writes for `id`: its short name when that names exactly this inspection
+/// The class Ferris IDEA writes for `id`: its short name when that names exactly this inspection
 /// and the inspection has no other, else the id.
 fn class_of(id: &'static str) -> &'static str {
     let mut names = short_names(id);
@@ -237,7 +237,7 @@ impl Profile {
 
     /// The profile file's text (behaviour 2); `None` when nothing is left to write.
     pub fn render(&self) -> Option<String> {
-        // An entry of IDECraft's that says what the default says is no deviation.
+        // An entry of Ferris IDEA's that says what the default says is no deviation.
         let written: Vec<&Item> = self
             .items
             .iter()
@@ -548,7 +548,7 @@ mod tests {
 
     fn temp(name: &str) -> PathBuf {
         let dir =
-            std::env::temp_dir().join(format!("idecraft-iprof-{name}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("ferris-idea-iprof-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join(".idea")).unwrap();
         dir

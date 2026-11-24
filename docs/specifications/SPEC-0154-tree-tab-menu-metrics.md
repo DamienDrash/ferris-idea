@@ -11,7 +11,7 @@
 - **Feature matrix rows:** F-087
 
 ## Purpose
-Trees, tabs and menus have the reference's proportions, so IDECraft looks like it next to it.
+Trees, tabs and menus have the reference's proportions, so Ferris IDEA looks like it next to it.
 
 ## Behaviour
 1. **Trees** (Project, Database, Structure, Hierarchy, Run, Debug, Services, Build Tools): rows of

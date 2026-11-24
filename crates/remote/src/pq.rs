@@ -1,7 +1,7 @@
-//! The shared options of every IDECraft call of the system `ssh`, with the required hybrid
+//! The shared options of every Ferris IDEA call of the system `ssh`, with the required hybrid
 //! post-quantum key exchange (ADR-0025 v3 section 1a, PO-STATUS question 29).
 //!
-//! Every SSH path — remote host commands and files, the backend and `idecraft serve`, the SSH
+//! Every SSH path — remote host commands and files, the backend and `ferris-idea serve`, the SSH
 //! terminal, Docker over SSH, database tunnels and Git over SSH — builds its `ssh` command line
 //! from [`ssh_options`] (Git through `crate::git_ssh_command`). The options come first on the command
 //! line, so nothing in `~/.ssh/config` or in extra arguments can weaken them (OpenSSH keeps the
@@ -17,7 +17,7 @@ use std::sync::{Mutex, OnceLock};
 
 use crate::ssh::RemoteError;
 
-/// Hybrid post-quantum key exchanges IDECraft allows, in order of preference.
+/// Hybrid post-quantum key exchanges Ferris IDEA allows, in order of preference.
 ///
 /// - `mlkem768x25519-sha256`: ML-KEM-768 (FIPS 203) with X25519, OpenSSH 9.9 and later, the
 ///   default from 10.0.
@@ -36,7 +36,7 @@ pub const PQ_KEX: [&str; 3] = [
 pub const PQ_KEX_ML_KEM: [&str; 1] = ["mlkem768x25519-sha256"];
 
 /// Environment variable that selects the stricter policy (`mlkem`); it can only narrow the set.
-pub const KEX_POLICY_ENV: &str = "IDECRAFT_SSH_KEX";
+pub const KEX_POLICY_ENV: &str = "FERRIS_IDEA_SSH_KEX";
 
 /// Which post-quantum key exchanges are allowed.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -49,10 +49,14 @@ pub enum KexPolicy {
 }
 
 impl KexPolicy {
-    /// The policy of this process: [`KexPolicy::MlKemOnly`] when `IDECRAFT_SSH_KEX=mlkem`, else
+    /// The policy of this process: [`KexPolicy::MlKemOnly`] when `FERRIS_IDEA_SSH_KEX=mlkem`, else
     /// the default. Any other value keeps the default; nothing weakens it.
     pub fn current() -> Self {
-        Self::parse(std::env::var(KEX_POLICY_ENV).ok().as_deref())
+        Self::parse(
+            ferris_idea_core::product_var(KEX_POLICY_ENV)
+                .ok()
+                .as_deref(),
+        )
     }
 
     /// The policy named by `value` (`mlkem`, `ml-kem` or `mlkem-only`, any case).
@@ -178,7 +182,8 @@ fn on_path(name: &str, skip: &Path) -> Option<PathBuf> {
 
 /// The `ssh` stand-in for programs that start `ssh` from `PATH` themselves (the Docker Compose CLI
 /// with an `ssh://` engine): `<folder>/ssh` runs the system `ssh` with [`ssh_options`] and the
-/// route over jump hosts (`crate::jump`) before its own arguments. Returns the folder to put first
+/// route over jump hosts (`crate::jump`) before its own arguments, and `-F <Ferris IDEA's file>` for
+/// Ferris IDEA's own aliases (`SPEC-0121` v6 behaviour 1b). Returns the folder to put first
 /// on `PATH`. The folder and the script are private to the user (0700); the script is written anew
 /// each time.
 pub(crate) fn ssh_shim_dir() -> Result<PathBuf, RemoteError> {
@@ -206,10 +211,16 @@ pub(crate) fn ssh_shim_dir() -> Result<PathBuf, RemoteError> {
         crate::jump::own_proxy_command_setting(),
     );
     let real = crate::ssh::quote(&real);
+    let own = crate::own_hosts::stand_in_step(
+        crate::own_hosts::stand_in_file().as_deref(),
+        &real,
+        &options,
+    );
     let script = format!(
-        "#!/bin/sh\n# Written by IDECraft: the system ssh with the post-quantum key exchange on every hop (ADR-0025).\n\
+        "#!/bin/sh\n# Written by Ferris IDEA: the system ssh with the post-quantum key exchange on every hop (ADR-0025).\n\
          {lib}\
          idc_config \"$@\"\n\
+         {own}\
          conf=$({real} {options} -G \"$@\" </dev/null 2>/dev/null)\n\
          host=$(printf '%s\\n' \"$conf\" | sed -n 's/^hostname //p' | head -n 1)\n\
          idc_route \"$conf\" \"$idc_cfg\" \"$host\" || exit 255\n\

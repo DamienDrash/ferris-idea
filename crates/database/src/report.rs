@@ -1,5 +1,5 @@
 //! "Report a problem with this database" (`SPEC-0301`): a report built on the user's machine,
-//! without credentials, data or (unless the user keeps them) host and database names. IDECraft never
+//! without credentials, data or (unless the user keeps them) host and database names. Ferris IDEA never
 //! sends it (ADR-0007); the user copies it or opens a prefilled issue in the browser.
 
 use serde::Serialize;
@@ -8,9 +8,9 @@ use crate::ConnectionProfile;
 use crate::connector::{Connector, Origin};
 
 /// Where reports go unless the setting or the definition says otherwise: a prefilled issue from the
-/// template in IDECraft's repository (GitHub Issues, the project owner 2026-11-05; usable by others after
+/// template in Ferris IDEA's repository (GitHub Issues, the project owner 2026-11-05; usable by others after
 /// GO-4).
-pub const DEFAULT_REPORT_URL: &str = "https://github.com/DamienDrash/idecraft/issues/new?template=database-system-problem.md&title={title}&body={body}";
+pub const DEFAULT_REPORT_URL: &str = "https://github.com/DamienDrash/ferris-idea/issues/new?template=database-system-problem.md&title={title}&body={body}";
 
 /// Most characters of the body put into an issue URL (behaviour 4).
 pub const URL_BODY_LIMIT: usize = 6000;
@@ -93,12 +93,12 @@ impl Report {
     }
 }
 
-/// IDECraft's version, stage and platform, e.g. `0.8.0 (alpha, macos-aarch64)`.
+/// Ferris IDEA's version, stage and platform, e.g. `0.8.0 (alpha, macos-aarch64)`.
 pub fn ide_version() -> String {
     format!(
         "{} ({}, {}-{})",
-        idecraft_core::release::VERSION,
-        idecraft_core::release::STAGE,
+        ferris_idea_core::release::VERSION,
+        ferris_idea_core::release::STAGE,
         std::env::consts::OS,
         std::env::consts::ARCH
     )
@@ -121,7 +121,7 @@ pub fn build_report(input: &ReportInput<'_>) -> Report {
     };
     let mut body = String::new();
     body.push_str("## Environment\n\n");
-    body.push_str(&format!("- IDECraft: {}\n", ide_version()));
+    body.push_str(&format!("- Ferris IDEA: {}\n", ide_version()));
     body.push_str(&format!(
         "- Database system: {} (`{}`, {}, status {}, family {})\n",
         c.name,
@@ -331,7 +331,7 @@ pub fn destination(setting: &str, connector: &Connector) -> Option<String> {
 /// Checks a URL template typed into the settings (behaviour 5).
 pub fn check_template(template: &str) -> Result<(), String> {
     // The same check as Settings › Advanced Settings (SPEC-0337 behaviour 5).
-    idecraft_core::advanced_settings::check_report_url(template)
+    ferris_idea_core::advanced_settings::check_report_url(template)
 }
 
 /// The issue URL for `report` (behaviour 4): `{title}` and `{body}` filled in URL-encoded, the body

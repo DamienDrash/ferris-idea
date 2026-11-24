@@ -92,7 +92,7 @@ impl Render for PluginRunDialog {
                     .child(self.confirmation.title.clone()),
             )
             .child(div().text_color(c(p.ui_muted)).text_xs().child(
-                "Plugins cannot start programs. IDECraft starts exactly this, without a shell:",
+                "Plugins cannot start programs. Ferris IDEA starts exactly this, without a shell:",
             ))
             .child(
                 div()

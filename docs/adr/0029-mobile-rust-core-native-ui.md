@@ -17,8 +17,8 @@ twice in two more languages.
 
 ## Decision
 
-1. **One Rust crate is the shared core** (`crates/mobile`, `idecraft-mobile`). It reuses
-   `idecraft-pairing` and `idecraft-session` unchanged in protocol. A phone is a window-side client:
+1. **One Rust crate is the shared core** (`crates/mobile`, `ferris-idea-mobile`). It reuses
+   `ferris-idea-pairing` and `ferris-idea-session` unchanged in protocol. A phone is a window-side client:
    same handshake, same pins, same rights. No session method was added for it.
 2. **The interface is native:** SwiftUI on iOS, Jetpack Compose on Android. Design tokens and
    behaviour follow ADR-0009 where they fit touch.
@@ -41,9 +41,9 @@ twice in two more languages.
      same reason as on iOS.
 5. **Paths:** direct TCP to a listener started with `--allow-network`, or a VPN address. A phone has
    no `ssh`, so `@ssh` hosts are refused and named. A relay is a later step of M16.
-6. **Android links OpenSSL** only because `idecraft-session` depends on `idecraft-core`, which depends
-   on `idecraft-http` and `native-tls`. It is unused at run time by this core. Splitting the
-   session's client half from `idecraft-core` removes it and is the better end state; left for later
+6. **Android links OpenSSL** only because `ferris-idea-session` depends on `ferris-idea-core`, which depends
+   on `ferris-idea-http` and `native-tls`. It is unused at run time by this core. Splitting the
+   session's client half from `ferris-idea-core` removes it and is the better end state; left for later
    because it touches the backend.
 
 ## App store rules for running code locally

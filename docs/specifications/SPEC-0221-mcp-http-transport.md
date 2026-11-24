@@ -10,7 +10,7 @@
 - **Feature matrix rows:** F-084
 
 ## Purpose
-MCP clients reach the IDECraft window that is already running — its open files, unsaved buffers and
+MCP clients reach the Ferris IDEA window that is already running — its open files, unsaved buffers and
 settings — instead of starting a separate headless process, without letting other local users, other
 programs without the token, or web pages drive the IDE.
 
@@ -62,7 +62,7 @@ programs without the token, or web pages drive the IDE.
     v4 behaviours 7–9 describe, naming the client from its `initialize` request. [GEN, IMP-0007]
 12. The window serves `quit_ide` (SPEC-0261 v2): it reports the unsaved files and running programs of
     every project window and quits as the client chose. A server without a window (stdio) answers
-    `quit_ide` with an error that names `idecraft quit`. [GEN, IMP-0002]
+    `quit_ide` with an error that names `ferris-idea quit`. [GEN, IMP-0002]
 
 ## Acceptance criteria
 - **AK-1** Protocol over HTTP: without `Authorization` and with a wrong token → 401, nothing reaches MCP;

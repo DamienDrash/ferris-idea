@@ -5,7 +5,7 @@ use std::io;
 use std::net::{TcpStream, ToSocketAddrs};
 use std::time::Duration;
 
-use idecraft_session::Transport;
+use ferris_idea_session::Transport;
 
 use crate::channel::{Channel, Limits, Pipe};
 use crate::code::PairLink;
@@ -26,7 +26,7 @@ pub const HANDSHAKE_LIMIT: Duration = Duration::from_secs(10);
 #[derive(Debug, thiserror::Error)]
 pub enum PairError {
     /// The host cannot be reached.
-    #[error("{address}: cannot connect: {why}. Is `idecraft serve --pair` running there?")]
+    #[error("{address}: cannot connect: {why}. Is `ferris-idea serve --pair` running there?")]
     Connect {
         /// Address given.
         address: String,
@@ -152,7 +152,7 @@ impl PendingPairing {
             }
             _ => {
                 "the host did not confirm that it stored this device; nothing was stored here. \
-                 Pair again; if the host runs an older IDECraft, update it first"
+                 Pair again; if the host runs an older Ferris IDEA, update it first"
             }
         };
         Err(PairError::Handshake {
@@ -173,7 +173,7 @@ pub fn default_device_name() -> String {
     std::env::var("HOSTNAME")
         .ok()
         .filter(|h| !h.is_empty())
-        .unwrap_or_else(|| "IDECraft window".to_owned())
+        .unwrap_or_else(|| "Ferris IDEA window".to_owned())
 }
 
 /// Pairs with the listener at `address` using its short `code`, up to the digits.

@@ -4,13 +4,13 @@
 
 #![cfg(target_os = "macos")]
 
+use ferris_idea_workbench::WorkbenchView;
+use ferris_idea_workbench::everywhere_model::{Filter, GOTO_ENDPOINT, Row, SELECT_ITEM};
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_workbench::WorkbenchView;
-use idecraft_workbench::everywhere_model::{Filter, GOTO_ENDPOINT, Row, SELECT_ITEM};
 
 fn workspace(tag: &str) -> std::path::PathBuf {
     let root = std::env::temp_dir().join(format!(
-        "idecraft-endpoint-search-{tag}-{}",
+        "ferris-idea-endpoint-search-{tag}-{}",
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&root);
@@ -140,7 +140,7 @@ fn goto_url_opens_the_endpoints_tab_and_enter_opens_the_handler(cx: &mut TestApp
 fn a_project_without_endpoints_and_switching_to_the_tab(cx: &mut TestAppContext) {
     cx.executor().allow_parking();
     let root = std::env::temp_dir().join(format!(
-        "idecraft-endpoint-search-none-{}",
+        "ferris-idea-endpoint-search-none-{}",
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&root);

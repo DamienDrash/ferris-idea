@@ -7,7 +7,7 @@
 
 use std::path::{Path, PathBuf};
 
-use idecraft_languages::reference_name;
+use ferris_idea_languages::reference_name;
 
 /// The action that opens the popup.
 pub const POPUP: &str = "CopyReferencePopupGroup";
@@ -89,7 +89,7 @@ impl Scope<'_> {
         if self.remote.is_some() {
             return None;
         }
-        let source = idecraft_core::source_roots::containing(self.source_roots, path)?;
+        let source = ferris_idea_core::source_roots::containing(self.source_roots, path)?;
         reference_name::below(path, source)
     }
 

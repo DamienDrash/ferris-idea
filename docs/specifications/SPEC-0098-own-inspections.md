@@ -1,6 +1,6 @@
 # SPEC-0098: Own inspections and Inspect Code
 
-- **Version:** 14 · **Date:** 2026-11-16 (v14: a name not defined in a function can be imported from a module of the project or of the standard library, behaviour 19a, AK-18; headless check of F-033 on 2026-11-16, OBS-0072; no observation of the reference yet); 2026-11-15 (v13: unused declarations of Kotlin files in the editor, `@Suppress` for IDECraft's Kotlin findings, behaviours 27 and 28, AK-17; decision of the coordinator under the Project Owner's general authority of 2026-11-13, no observation of the reference); 2026-11-14 (v12: unused declarations in the editor from the project reference index, behaviour 26, AK-16, OBS-0050 W1, W2, W6, W7; v11: Java lambda simplifications, behaviours 22–25, AK-14 and AK-15, OBS-0050; v10: Inspect Current File and Run Inspection by Name from the keymap, behaviours 20 and 21, AK-13; eighth package of docs/research/KEYMAP_COVERAGE.md; v9: IDECraft's own Python quick fixes at an unused import, an unused local and a name not defined, behaviours 17–19, AK-12, OBS-0034 part 14 Q1–Q3; decisions of the agent while the Project Owner was not reachable); 2026-11-12 (v3: descriptions, scope dialog, results by inspection with a
+- **Version:** 14 · **Date:** 2026-11-16 (v14: a name not defined in a function can be imported from a module of the project or of the standard library, behaviour 19a, AK-18; headless check of F-033 on 2026-11-16, OBS-0072; no observation of the reference yet); 2026-11-15 (v13: unused declarations of Kotlin files in the editor, `@Suppress` for Ferris IDEA's Kotlin findings, behaviours 27 and 28, AK-17; decision of the coordinator under the Project Owner's general authority of 2026-11-13, no observation of the reference); 2026-11-14 (v12: unused declarations in the editor from the project reference index, behaviour 26, AK-16, OBS-0050 W1, W2, W6, W7; v11: Java lambda simplifications, behaviours 22–25, AK-14 and AK-15, OBS-0050; v10: Inspect Current File and Run Inspection by Name from the keymap, behaviours 20 and 21, AK-13; eighth package of docs/research/KEYMAP_COVERAGE.md; v9: Ferris IDEA's own Python quick fixes at an unused import, an unused local and a name not defined, behaviours 17–19, AK-12, OBS-0034 part 14 Q1–Q3; decisions of the agent while the Project Owner was not reachable); 2026-11-12 (v3: descriptions, scope dialog, results by inspection with a
   description pane and fixes, the project's profile — OBS-0019 items 3, 6, 7; v4: one inspection on a
   scope, global inspections — defects F032-2, F032-4; v5: Python names that shadow a name of an outer
   scope, own findings in `file_diagnostics` — OBS-0034 L6; v6: Python methods that do not use
@@ -46,7 +46,7 @@ Catch likely bugs that the language servers do not report, in the editor and for
 people and agents alike.
 
 ## Behaviour
-1. **Rules:** IDECraft has its own inspections, each a tree-sitter query with a check, a stable id, a
+1. **Rules:** Ferris IDEA has its own inspections, each a tree-sitter query with a check, a stable id, a
    name, a level (warning or weak warning) and a message. The first set: [GEN]
    - `java.empty-catch`, `kotlin.empty-catch`: a `catch` block with nothing in it, not even a comment;
    - `java.string-equality`: `==`/`!=` between a string literal and an expression other than `null`;
@@ -59,7 +59,7 @@ people and agents alike.
 2. Unsupported languages and unparsable text produce no syntax findings; conflict markers are still
    found.
 3. **Editor:** findings appear with the language-server problems (SPEC-0070): wavy underline, counters,
-   F2/⇧F2, Problems tool window. Their message starts with "IDECraft: ". They are recomputed whenever
+   F2/⇧F2, Problems tool window. Their message starts with "Ferris IDEA: ". They are recomputed whenever
    the syntax tree is reparsed, never on stale trees. [GEN]
 4. **Inspect Code:** the action `InspectCode` (Search Everywhere; no default shortcut, as in the
    reference) runs every inspection over the project files off the UI thread (files over 1 MiB,
@@ -70,7 +70,7 @@ people and agents alike.
    finding has path, 0-based line and column, char offset, id, name, level and message (v8: in
    `findings`, behaviour 16). [ADR-0008]
 
-6. **Descriptions (v3):** every inspection has a description in IDECraft's own words: what it reports,
+6. **Descriptions (v3):** every inspection has a description in Ferris IDEA's own words: what it reports,
    why it matters, and a short example of the reported code and, where a fix exists, of the fixed
    code. It is shown by a second ⌘F1 (SPEC-0078 v2), in the description pane of the results
    (behaviour 8) and on the settings page (SPEC-0315). Agents read it with `inspection_profile`
@@ -132,14 +132,14 @@ people and agents alike.
     - **Message:** it names the kind of the reported name, the outer scope and the 1-based line of
       the outer binding: "Parameter 'item' shadows the name 'item' of the module (line 12)",
       "Local variable 'total' shadows the name 'total' of the enclosing function 'report' (line
-      3)". The wording is IDECraft's own.
+      3)". The wording is Ferris IDEA's own.
     - It is turned off or given another severity in the project's profile (behaviour 9,
       SPEC-0315) like every inspection; there is no suppression comment for Python (none of the
       Python rules has one). It has no quick fix: the fix is a rename (SPEC-0074).
 13. **Own findings in `file_diagnostics` (v5):** the MCP tool `file_diagnostics` returns, after the
-    language server's diagnostics, IDECraft's own findings of the file as the editor shows them
+    language server's diagnostics, Ferris IDEA's own findings of the file as the editor shows them
     (behaviour 3, after the profile, the suppressions and the project dictionary): `source`
-    `IDECraft`, `code` the inspection id, `severity` `error`, `warning` or — for a weak warning —
+    `Ferris IDEA`, `code` the inspection id, `severity` `error`, `warning` or — for a weak warning —
     `information`, the range as 0-based lines and characters (Unicode scalar values), the message
     without a prefix, `unnecessary` for the unused rules. Findings of the level "no highlighting"
     are left out, as in the editor. The file is read from disk; a file over 1 MiB gets none. An
@@ -158,7 +158,7 @@ people and agents alike.
       instance or its class). The finding stands on the method's name.
     - **Never reported:**
       - a method with any decorator (`@staticmethod`, `@classmethod`, `@property`,
-        `@abstractmethod`, `@override`, or one IDECraft does not know: a decorator may pass
+        `@abstractmethod`, `@override`, or one Ferris IDEA does not know: a decorator may pass
         the instance on);
       - a method whose name starts and ends with two underscores (`__init__`, `__eq__`): the
         language calls it on the instance;
@@ -176,7 +176,7 @@ people and agents alike.
       there. A class without base classes can still be subclassed elsewhere; the rule accepts
       that, as it is a weak warning.
     - **Message:** "Method 'area' does not use 'self'; it could be a static method or a
-      function". The wording is IDECraft's own.
+      function". The wording is Ferris IDEA's own.
     - It follows the profile (behaviour 9, SPEC-0315) and appears in `inspect_code` and
       `file_diagnostics` (behaviour 13) like `python.shadows-name`. Its quick fix is
       behaviour 15 (v7; none before).
@@ -229,7 +229,7 @@ people and agents alike.
       link is not read and gives no findings (security first).
     - **What was left out is said in one line:** `2 folders and 1 file not inspected (libraries
       and ignored files)` — the topmost folder or the single file each, version control data and
-      `.idecraft` not counted, as in SPEC-0029 behaviour 10; for a named path that is not read,
+      `.ferris-idea` not counted, as in SPEC-0029 behaviour 10; for a named path that is not read,
       the path with the reason. The window shows the line under the results of the Inspection tab
       (also when nothing was found). `inspect_code` answers with an object: `findings` (the
       findings of behaviour 5, as before) and, when something was left out, `not_inspected` (that
@@ -240,14 +240,14 @@ people and agents alike.
       workspace file: a use in a library counts as a use. Findings are reported only for the
       files of the run. [GEN; decision]
 
-17. **Python quick fixes of IDECraft's own (v9, OBS-0034 part 14, F-033):** pyright offers no quick
+17. **Python quick fixes of Ferris IDEA's own (v9, OBS-0034 part 14, F-033):** pyright offers no quick
     fix at its "is not accessed" and "is not defined" diagnostics, so ⌥↩ offered nothing there.
-    IDECraft finds these places itself from the syntax tree and the scopes of the file (the
+    Ferris IDEA finds these places itself from the syntax tree and the scopes of the file (the
     binding rules of SPEC-0330, "Naming and binding" of The Python Language Reference), without a
     language server. Decisions, each the safer variant:
     - **Shown nowhere by default:** the three inspections `python.unused-import`,
       `python.unused-variable` and `python.unresolved-name` have the level "No highlighting,
-      only fix" (SPEC-0315 v2 behaviour 7). pyright already marks the places, and a place IDECraft
+      only fix" (SPEC-0315 v2 behaviour 7). pyright already marks the places, and a place Ferris IDEA
       would get wrong is never shown as a problem; the fixes are in ⌥↩ at the place. The level
       can be raised in the inspection profile.
     - **Left out where the syntax does not tell:** a file with `import *`, `globals()`,
@@ -295,7 +295,7 @@ people and agents alike.
     behaviour 40); shallower modules first, at most five. "Create parameter" stays last, and a
     place with an import but no parameter to create offers only the imports. The project is the
     nearest folder above the file with `pyproject.toml`, `setup.py`, `setup.cfg`, `.git` or
-    `.idecraft`, else the file's folder; its modules are named by their path below it (`pkg/
+    `.ferris-idea`, else the file's folder; its modules are named by their path below it (`pkg/
     util.py` → `pkg.util`, `pkg/__init__.py` → `pkg`, a leading `src/` left out), the file itself
     is left out, and hidden folders, virtual environments (`venv`, `env`), `node_modules`,
     `__pycache__`, `build`, `dist`, `site-packages` and `target` are not searched; at most 2000
@@ -325,7 +325,7 @@ people and agents alike.
     `java.anonymous-to-lambda` ("Anonymous class can be a lambda", weak warning; short name
     `Convert2Lambda`) reports `new T() { … }` when all of these hold, on the text from `new` to
     the closing parenthesis of the arguments: [OBS-0050, STD]
-    - `T` is a functional interface IDECraft knows without types: one of `Runnable`, `Callable`,
+    - `T` is a functional interface Ferris IDEA knows without types: one of `Runnable`, `Callable`,
       `Comparator`, `ThreadFactory`, `FileFilter`, `FilenameFilter`, `PathMatcher`,
       `UncaughtExceptionHandler`, `ActionListener`, `PropertyChangeListener` or an interface of
       `java.util.function` (simple or qualified name), or an interface declared in the same file
@@ -381,7 +381,7 @@ people and agents alike.
 26. **Unused declarations in the editor (v12, OBS-0050 W1, W2, W6, W7):** the editor of a Java
     file of the project shows the findings of `java.unused-declaration` (SPEC-0316 v3) of that
     file, as Inspect Code would report them for it, with the look of the other unused findings
-    (greyed text, a warning in the counter; "IDECraft: Method 'getCount()' is never used").
+    (greyed text, a warning in the counter; "Ferris IDEA: Method 'getCount()' is never used").
     [OBS-0050, GEN]
     - **From the project index, off the UI thread.** The project window refreshes the reference
       index (SPEC-0316 behaviour 2) on a background thread when it opens its first Java file, after
@@ -424,7 +424,7 @@ people and agents alike.
     10) of that file the way behaviour 26 shows Java's: from the same reference index, with the
     same readiness, the 300 ms rest after the re-parse, the background step that an edit cancels,
     the same budget (SPEC-0260 v5, `editor_unused_kotlin_ms_p95`) and the same look
-    ("IDECraft: Function 'helper' is never used"). The project window builds the index when it
+    ("Ferris IDEA: Function 'helper' is never used"). The project window builds the index when it
     opens its first Java **or Kotlin** file; a refresh lets every open Java and Kotlin editor
     check again. Uses count across the languages both ways (SPEC-0316 v4 behaviour 9): a Kotlin
     function that only Java calls is not reported, nor a Java method that only Kotlin calls. [GEN]
@@ -439,7 +439,7 @@ people and agents alike.
       inspections for class".
     - **Not covered:** Kotlin scripts (`.kts`, they stay word files of SPEC-0316 behaviour 1),
       remote documents, and what behaviour 26 leaves out.
-28. **Suppressing IDECraft's Kotlin findings (v13):** every own finding of a Kotlin file
+28. **Suppressing Ferris IDEA's Kotlin findings (v13):** every own finding of a Kotlin file
     (`kotlin.*`, SPEC-0140, behaviour 27) is left out when the declaration it lies in, or a
     declaration around that one, carries `@Suppress("…")` or `@kotlin.Suppress("…")` with a
     matching name, or the file carries `@file:Suppress("…")`. A name matches as in SPEC-0125 v2
@@ -464,7 +464,7 @@ people and agents alike.
   line and column (unit tests `inspections::tests`).
 - **AK-2** MCP: `inspect_code` over the project and over a folder (`crates/mcp/tests/it/protocol.rs`:
   `inspect_code_tool`).
-- **AK-3** In a real window (`idecraft ui --selftest`): an empty catch block in a Java file appears among
+- **AK-3** In a real window (`ferris-idea ui --selftest`): an empty catch block in a Java file appears among
   the editor's problems; Inspect Code lists it under its file on the Inspection tab.
 - **AK-4** By hand: Inspect Code on a real project next to the reference.
 - **AK-5 (v3)** Every inspection has a description of at least two sentences (unit test
@@ -488,7 +488,7 @@ people and agents alike.
   description, turned off by the profile (unit tests `inspections::tests`).
 - **AK-8 (v5, behaviour 13)** Findings as diagnostics: severity, source, code, range in characters
   on a line with non-ASCII text, "no highlighting" left out (unit test
-  `inspections::tests::findings_as_diagnostics`); `idecraft call <folder> file_diagnostics` on a
+  `inspections::tests::findings_as_diagnostics`); `ferris-idea call <folder> file_diagnostics` on a
   Python file lists pyright's diagnostics and `python.shadows-name`; `inspect_code` lists it
   without a server (`crates/mcp/tests/it/protocol.rs`: `inspect_code_tool`).
 - **AK-9 (v6, behaviour 14)** A method that does not use `self`, also an `async` one, one with
@@ -499,7 +499,7 @@ people and agents alike.
   `class A(object)` counts as without base (unit tests `python_inspections::tests`); listed in
   the catalogue with a description, weak, turned off and raised by the profile (unit tests
   `inspections::tests`); `inspect_code` without a server (`crates/mcp/tests/it/protocol.rs`:
-  `inspect_code_tool`); `idecraft call <folder> file_diagnostics` on a Python file.
+  `inspect_code_tool`); `ferris-idea call <folder> file_diagnostics` on a Python file.
 - **AK-10 (v7, behaviour 15)** The fix "Make method static" on a method with `self` alone, with
   further parameters, with an annotated `self`, on an `async def`, with tabs as indentation,
   with `\r\n` line endings, with a parameter list over several lines and with spaces or a
@@ -508,7 +508,7 @@ people and agents alike.
   over several methods; the fix among the fixes at the caret, which is what ⌥↩ lists (unit tests
   `python_inspections::tests`, `inspections::tests`); MCP: `inspect_code` names the fix and
   `fix_inspection` previews and writes it (`crates/mcp/tests/it/protocol.rs`:
-  `inspect_code_tool`); `idecraft call <folder> fix_inspection` on a Python file. In the
+  `inspect_code_tool`); `ferris-idea call <folder> fix_inspection` on a Python file. In the
   window by hand: ⌥↩ on the method name.
 - **AK-11 (v8, behaviour 16)** In a project with `.venv/lib/python3.12/site-packages/x.py`,
   `node_modules/y.js`, a file ignored by `.gitignore` and an own file, each with a finding: the
@@ -604,24 +604,24 @@ the tree, injected code, language-server diagnostics in the results, export and 
 reports.
 
 ## Known deviations from the reference
-The reference's inspection set is far larger and configurable; IDECraft starts with a small set of
+The reference's inspection set is far larger and configurable; Ferris IDEA starts with a small set of
 rules that the language servers miss. v3: compared side by side in OBS-0019; the tree groups by inspection without the reference's
 language and category levels.
 v5: the shadowing rule was seen in the reference on one case only (OBS-0034 item 33: a parameter
 with the name of a module variable); which other bindings the reference reports was not observed,
-so IDECraft's set follows the language's binding rules and stays with parameters, assignments,
-loop and `with` targets. The message is worded by IDECraft and adds the outer binding's line.
+so Ferris IDEA's set follows the language's binding rules and stays with parameters, assignments,
+loop and `with` targets. The message is worded by Ferris IDEA and adds the outer binding's line.
 v11 (OBS-0050): the three lambda simplifications are weak warnings instead of warnings (IMP-0410),
 so a file such as the observation's counts zero warnings and three weak warnings where the
 reference counts seven warnings (four of them unused declarations, see Out of scope). The fix of
 an anonymous class gives the simplest form in one step and the messages name the result
 (IMP-0411); the reference needs one fix per layer.
 v12: the reference marks unused non-private declarations in the editor of a one-file project
-(OBS-0050); whether it does so in a project of many files was not seen. IDECraft shows them in
+(OBS-0050); whether it does so in a project of many files was not seen. Ferris IDEA shows them in
 every project from the reference index, with uses counted by name (SPEC-0316 known deviations),
 so a name used anywhere keeps its declarations quiet.
 v14: the reference was not observed for an import fix in Python (OBS-0034 item 58 had a name no
-module defines); OBS-0072 plans the comparison. IDECraft offers one fix per module instead of one
+module defines); OBS-0072 plans the comparison. Ferris IDEA offers one fix per module instead of one
 entry that asks for the module afterwards, and does not search installed third-party packages.
 Improvement: every inspection is also available to agents with machine-readable ids and positions, and
 runs headless (IMP-0035).

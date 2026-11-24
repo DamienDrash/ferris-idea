@@ -13,12 +13,12 @@ use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
+use ferris_idea_editor::Motion;
+use ferris_idea_vcs::{ChunkKind, Conflict, Operation, Outcome, Repo, Resolution};
 use gpui::{
     ClipboardItem, Context, EventEmitter, FocusHandle, KeyDownEvent, MouseButton, MouseDownEvent,
     MouseMoveEvent, Window, div, font, point, prelude::*, px,
 };
-use idecraft_editor::Motion;
-use idecraft_vcs::{ChunkKind, Conflict, Operation, Outcome, Repo, Resolution};
 
 use crate::merge_session::{MergeSession, ResultLine, counter, side_words};
 use crate::palette::Palette;
@@ -68,10 +68,16 @@ pub struct MergeView {
     /// Headers of the left and right column.
     sides: (String, String),
     scroll: gpui::ScrollHandle,
+    /// The row of file tabs, which rolls sideways when the tabs do not fit (v8 behaviour 28).
+    tabs_scroll: gpui::ScrollHandle,
     /// Left edge of the result column in the window, from the last frame (for clicks).
     result_x: Rc<Cell<f32>>,
     /// The mouse button went down in the result column and is still held.
     dragging: bool,
+    /// A merge of plain texts outside Git (a file changed on an SSH host, `SPEC-0121` v7
+    /// behaviour 4a): Apply hands the result to this file's editor through
+    /// [`MergeEvent::Resolved`] and writes nothing itself.
+    target: Option<PathBuf>,
 }
 
 impl EventEmitter<MergeEvent> for MergeView {}
@@ -95,6 +101,16 @@ fn char_column(text: &str, drawn: usize) -> usize {
         at += width;
     }
     text.chars().count()
+}
+
+/// A header text that gives way: its own width while there is room, then cut with "…" on one
+/// line (v8 behaviour 28).
+fn one_line(d: gpui::Div) -> gpui::Div {
+    d.flex_initial()
+        .min_w_0()
+        .overflow_hidden()
+        .whitespace_nowrap()
+        .text_ellipsis()
 }
 
 /// Rows each region takes: its longest column, and one row for a change without lines.
@@ -152,8 +168,49 @@ impl MergeView {
             focus: cx.focus_handle(),
             sides,
             scroll: gpui::ScrollHandle::new(),
+            tabs_scroll: gpui::ScrollHandle::new(),
             result_x: Rc::new(Cell::new(0.)),
             dragging: false,
+            target: None,
+        }
+    }
+
+    /// A merge of three texts outside Git (`SPEC-0121` v7 behaviour 4a): `base` in the middle,
+    /// `ours` on the left under `sides.0`, `theirs` on the right under `sides.1`; `name` is the
+    /// file tab. Apply emits [`MergeEvent::Resolved`] with `target` and the result, then
+    /// [`MergeEvent::Finished`]; nothing is written by the view.
+    pub fn for_texts(
+        target: PathBuf,
+        name: String,
+        texts: [String; 3],
+        sides: (String, String),
+        cx: &mut Context<Self>,
+    ) -> Self {
+        let [base, ours, theirs] = texts;
+        let conflict = Conflict {
+            path: name,
+            base: Some(base),
+            ours: Some(ours),
+            theirs: Some(theirs),
+            has_base: true,
+            has_ours: true,
+            has_theirs: true,
+            binary: false,
+        };
+        Self {
+            root: target.parent().map(Path::to_path_buf).unwrap_or_default(),
+            sessions: vec![MergeSession::new(&conflict, false)],
+            file: 0,
+            error: None,
+            note: None,
+            ask: None,
+            focus: cx.focus_handle(),
+            sides,
+            scroll: gpui::ScrollHandle::new(),
+            tabs_scroll: gpui::ScrollHandle::new(),
+            result_x: Rc::new(Cell::new(0.)),
+            dragging: false,
+            target: Some(target),
         }
     }
 
@@ -186,6 +243,7 @@ impl MergeView {
             self.note = None;
             self.ask = None;
             self.scroll.set_offset(point(px(0.), px(0.)));
+            self.tabs_scroll.scroll_to_item(i);
             cx.notify();
         }
     }
@@ -341,7 +399,19 @@ impl MergeView {
             Outcome::Text(text) => Some(text.clone()),
             Outcome::Side(_) => None,
         };
-        let done = idecraft_vcs::Repo::discover(&self.root)
+        if let Some(target) = self.target.clone() {
+            // Plain texts: the workbench takes the result over; nothing is written here.
+            let Some(text) = text else {
+                self.error = Some("Take a side or edit the result first".to_owned());
+                cx.notify();
+                return false;
+            };
+            cx.emit(MergeEvent::Resolved(target, Some(text)));
+            self.sessions.clear();
+            cx.emit(MergeEvent::Finished);
+            return true;
+        }
+        let done = ferris_idea_vcs::Repo::discover(&self.root)
             .and_then(|repo| {
                 repo.apply_resolution(&path, &outcome)?;
                 Ok(repo.workdir().map(|w| w.join(&path)))
@@ -617,7 +687,7 @@ impl Render for MergeView {
             None => (
                 Vec::new(),
                 Vec::new(),
-                idecraft_editor::Position::new(0, 0),
+                ferris_idea_editor::Position::new(0, 0),
                 None,
             ),
         };
@@ -862,6 +932,31 @@ impl Render for MergeView {
             .session()
             .map(|s| counter(s.counts()))
             .unwrap_or_default();
+        // A file with choices or edits not applied carries a mark.
+        let names: Vec<String> = files
+            .into_iter()
+            .enumerate()
+            .map(|(i, f)| {
+                if dirty.get(i) == Some(&true) {
+                    format!("{f} *")
+                } else {
+                    f
+                }
+            })
+            .collect();
+        // The tab row is never narrower than the shown tab, which it rolls into view (v8
+        // behaviour 28): its name as drawn and the tab's padding.
+        let shown_tab = names.get(shown).map_or(0., |name| {
+            let style = window.text_style();
+            let size = style.font_size.to_pixels(window.rem_size());
+            let line = window.text_system().shape_line(
+                name.clone().into(),
+                size,
+                &[style.to_run(name.len())],
+                None,
+            );
+            line.width / px(1.) + 2. * 8. + 1.
+        });
         let question = self.ask.map(|ask| match ask {
             MergeAsk::Close => {
                 let n = dirty.iter().filter(|d| **d).count();
@@ -915,24 +1010,23 @@ impl Render for MergeView {
                     )
                     // The file tabs give way, so the count and the buttons (Apply, Close) always
                     // stay in the header, also next to an open side window (SPEC-0101 v5
-                    // behaviour 10, OBS-0022 L3).
+                    // behaviour 10, OBS-0022 L3). They give way as a row that rolls; each tab
+                    // keeps the width of its name (v8 behaviour 28).
                     .child(
                         div()
-                            .flex_1()
-                            .min_w_0()
-                            .overflow_hidden()
+                            .id("merge-files")
+                            .flex_initial()
+                            .min_w(px(shown_tab))
+                            .overflow_x_scroll()
+                            .track_scroll(&self.tabs_scroll)
                             .flex()
                             .items_center()
                             .gap_2()
-                            .children(files.into_iter().enumerate().map(|(i, f)| {
-                                // A file with choices or edits not applied carries a mark.
-                                let name = if dirty.get(i) == Some(&true) {
-                                    format!("{f} *")
-                                } else {
-                                    f
-                                };
+                            .children(names.into_iter().enumerate().map(|(i, name)| {
                                 div()
                                     .id(("merge-file", i))
+                                    .flex_none()
+                                    .whitespace_nowrap()
                                     .px_2()
                                     .py(px(2.))
                                     .rounded(px(4.))
@@ -940,7 +1034,16 @@ impl Render for MergeView {
                                     .when(i != shown, |d| {
                                         d.text_color(c(p.ui_muted)).hover(|s| s.bg(c(p.tree_hover)))
                                     })
-                                    .child(name)
+                                    .child(name.clone())
+                                    .relative()
+                                    .semantics(
+                                        Semantics::new(Role::Tab)
+                                            .name(name)
+                                            .test_id(format!("merge-file-{i}"))
+                                            .selected(i == shown)
+                                            .action(AxAction::Click)
+                                            .effects(&[Effect::None]),
+                                    )
                                     .on_click(cx.listener(
                                         move |this, _: &gpui::ClickEvent, _, cx| {
                                             this.select_file(i, cx)
@@ -948,16 +1051,23 @@ impl Render for MergeView {
                                     ))
                             })),
                     )
+                    // The note and the count share the room the tabs leave, each on one line and
+                    // cut with "…" (v8 behaviour 28); what is left stays empty before the buttons.
                     .when_some(self.note.clone(), |d, note| {
                         d.child(
-                            div()
-                                .min_w_0()
-                                .overflow_hidden()
+                            one_line(div())
                                 .text_color(c(p.ui_muted))
-                                .child(note),
+                                .child(note.clone())
+                                .relative()
+                                .semantics(
+                                    Semantics::new(Role::Status)
+                                        .name(note)
+                                        .test_id("merge-note"),
+                                ),
                         )
                     })
-                    .child(div().flex_none().text_color(c(p.ui_muted)).child(count))
+                    .child(one_line(div()).text_color(c(p.ui_muted)).child(count))
+                    .child(div().flex_1())
                     .child(
                         button("merge-resolve-simple", "Resolve Simple", open > 0 && !whole)
                             .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {

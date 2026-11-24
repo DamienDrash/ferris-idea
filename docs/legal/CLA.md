@@ -1,20 +1,23 @@
-# IDECraft Contributor License Agreement
+# Ferris IDEA Contributor License Agreement
 
-**Version 1.0 · 2026-11-16**
+**Version 1.1 · 2026-11-23**
 
-This agreement is between you and the licensor of IDECraft named in [LICENSE.md](../../LICENSE.md)
-("the licensor"). It applies to every contribution you submit to IDECraft from the day you accept
+Version 1.1 only renames the project: IDECraft is now called Ferris IDEA. The terms are the same as in
+version 1.0 of 2026-11-16, and "Ferris IDEA" includes the project under its former name IDECraft.
+
+This agreement is between you and the licensor of Ferris IDEA named in [LICENSE.md](../../LICENSE.md)
+("the licensor"). It applies to every contribution you submit to Ferris IDEA from the day you accept
 it. Read it before you open a pull request whose content you want merged.
 
 You keep the copyright in your contribution. This agreement gives the licensor the rights it needs
-to ship your contribution in IDECraft under any license, now and later, without asking you again.
+to ship your contribution in Ferris IDEA under any license, now and later, without asking you again.
 
 ## 1. Definitions
 
 - **"You"** means the person who accepts this agreement, or, if you contribute on behalf of an
   employer or another organisation, that organisation as well (see section 6).
-- **"Contribution"** means any work you submit to the IDECraft repository, its issue tracker or its
-  discussions with the intent that it be included in IDECraft: code, documentation, tests, images,
+- **"Contribution"** means any work you submit to the Ferris IDEA repository, its issue tracker or its
+  discussions with the intent that it be included in Ferris IDEA: code, documentation, tests, images,
   translations and changes to them. A work you mark in writing as "not a contribution" is not one.
 - **"Submit"** means any form of communication sent to the project for this purpose, such as a pull
   request, a patch, a comment with code, or an issue with an attached file.
@@ -27,7 +30,7 @@ reproduce, prepare derivative works of, publicly display, publicly perform, subl
 your contributions and such derivative works.
 
 This includes the right for the licensor to license your contributions under terms other than the
-current license of IDECraft, including proprietary and commercial terms, and it covers types of use
+current license of Ferris IDEA, including proprietary and commercial terms, and it covers types of use
 that are not yet known when you accept this agreement.
 
 ## 3. Patent license
@@ -38,7 +41,7 @@ offer to sell, sell, import and otherwise transfer your contributions. It covers
 claims you can license that are necessarily infringed by your contribution alone, or by your
 contribution combined with the work it was submitted to.
 
-If anyone starts patent litigation claiming that IDECraft or a contribution infringes a patent, the
+If anyone starts patent litigation claiming that Ferris IDEA or a contribution infringes a patent, the
 patent licenses granted to that party under this agreement end on the date the litigation is filed.
 
 ## 4. What you confirm
@@ -76,7 +79,7 @@ the pull request.
 
 Put this sentence in the description of your first pull request, with your GitHub login:
 
-> I have read the IDECraft Contributor License Agreement, version 1.0, and I accept it for all my
+> I have read the Ferris IDEA Contributor License Agreement, version 1.1, and I accept it for all my
 > contributions. — @your-login
 
 Your acceptance covers your later contributions too, until a new version of this agreement is

@@ -247,6 +247,31 @@ pub fn with_extension(name: &str, kind: NewKind) -> String {
     }
 }
 
+/// Checks that `target`, which need not exist yet, stays inside `root` once every folder on its way
+/// is followed: the nearest part of it that exists, with its links resolved, must lie inside the
+/// root. A folder of the workspace that is a link to a place outside it is no way out
+/// (`SPEC-0006` v57 behaviour 5).
+pub fn stays_inside(root: &Path, target: &Path) -> Result<(), FileOpError> {
+    let canonical_root = root.canonicalize().map_err(io)?;
+    let outside = || FileOpError::OutsideWorkspace(target.to_path_buf());
+    if target
+        .components()
+        .any(|c| matches!(c, Component::ParentDir))
+    {
+        return Err(outside());
+    }
+    let mut existing = target;
+    while existing.symlink_metadata().is_err() {
+        existing = existing.parent().ok_or_else(outside)?;
+    }
+    let resolved = existing.canonicalize().map_err(io)?;
+    if resolved.starts_with(&canonical_root) {
+        Ok(())
+    } else {
+        Err(outside())
+    }
+}
+
 /// `path` made absolute against `root` and checked to lie inside it (without following a link
 /// at the last component).
 pub(crate) fn inside(root: &Path, path: &Path) -> Result<PathBuf, FileOpError> {
@@ -364,12 +389,20 @@ pub fn create(root: &Path, dir: &Path, name: &str, kind: NewKind) -> Result<Path
     if target.symlink_metadata().is_ok() {
         return Err(FileOpError::Exists(target));
     }
+    // The folders of `name` may run through a link; nothing is created outside the root.
+    let in_folder = if kind == NewKind::Directory {
+        target.clone()
+    } else {
+        target.parent().unwrap_or(&dir).to_path_buf()
+    };
+    stays_inside(root, &in_folder)?;
+    std::fs::create_dir_all(&in_folder).map_err(io)?;
+    // Checked again once the folders exist, in case one was replaced by a link meanwhile.
+    stays_inside(root, &in_folder)?;
     if kind == NewKind::Directory {
-        std::fs::create_dir_all(&target).map_err(io)?;
         return Ok(target);
     }
-    let parent = target.parent().unwrap_or(&dir).to_path_buf();
-    std::fs::create_dir_all(&parent).map_err(io)?;
+    let parent = in_folder;
     let file = display_name(&target);
     let root = root.canonicalize().map_err(io)?;
     let text = template(&root, &parent, &file, kind);
@@ -1146,8 +1179,10 @@ mod tests {
     }
 
     fn fixture(name: &str) -> PathBuf {
-        let dir =
-            std::env::temp_dir().join(format!("idecraft-file-ops-{name}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "ferris-idea-file-ops-{name}-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("src/main/java/com/acme")).unwrap();
         std::fs::write(dir.join("a.txt"), "a").unwrap();
@@ -1220,6 +1255,48 @@ mod tests {
             Err(FileOpError::OutsideWorkspace(_))
         ));
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    /// `SPEC-0006` v57 behaviour 5: a folder of the workspace that links outside it is no way
+    /// out for the folders of a new name (OBS-0082).
+    #[cfg(unix)]
+    #[test]
+    fn create_never_writes_through_a_link_to_outside() {
+        let root = fixture("create-link");
+        let outside = std::env::temp_dir().join(format!(
+            "ferris-idea-file-ops-create-link-outside-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&outside);
+        std::fs::create_dir_all(&outside).unwrap();
+        std::os::unix::fs::symlink(&outside, root.join("out")).unwrap();
+        for (name, kind) in [
+            ("out/new/x.txt", NewKind::File),
+            ("out/x.txt", NewKind::File),
+            ("out/d1/d2", NewKind::Directory),
+        ] {
+            assert!(
+                matches!(
+                    create(&root, &root, name, kind),
+                    Err(FileOpError::OutsideWorkspace(_))
+                ),
+                "{name}"
+            );
+        }
+        assert_eq!(
+            std::fs::read_dir(&outside).unwrap().count(),
+            0,
+            "nothing outside"
+        );
+        // A link to a folder inside the workspace stays usable.
+        std::fs::create_dir(root.join("inner")).unwrap();
+        std::os::unix::fs::symlink(root.join("inner"), root.join("in")).unwrap();
+        assert!(create(&root, &root, "in/sub/y.txt", NewKind::File).is_ok());
+        assert!(root.join("inner/sub/y.txt").is_file());
+        assert!(stays_inside(&root, &root.join("brand/new/z.txt")).is_ok());
+        assert!(stays_inside(&root, &root.join("out/z.txt")).is_err());
+        let _ = std::fs::remove_dir_all(root);
+        let _ = std::fs::remove_dir_all(outside);
     }
 
     #[test]

@@ -1,4 +1,4 @@
-//! `idecraft serve` (`SPEC-0317` v2 detail 6, `ADR-0026`, M10.3): the headless backend of a
+//! `ferris-idea serve` (`SPEC-0317` v2 detail 6, `ADR-0026`, M10.3): the headless backend of a
 //! remote project. `--stdio` speaks the session protocol on standard input and output (the SSH
 //! channel); standard error carries log lines only. `--attach <session>` bridges standard input
 //! and output to a waiting session's reattach socket. `--pair` (`SPEC-0321`) starts the encrypted
@@ -15,9 +15,59 @@ use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::Duration;
 
-use idecraft_session::{Backend, BackendConfig, Transport};
+use ferris_idea_session::{Backend, BackendConfig, Transport};
+
+/// Whether `arg` asks for the usage: `--help` or `-h` (`SPEC-0321` v6 behaviour 1a).
+pub fn is_help(arg: &str) -> bool {
+    matches!(arg, "-h" | "--help")
+}
+
+/// The usage of `ferris-idea serve` (and `ferris-idea-serve serve`), printed by `--help`
+/// (`SPEC-0321` v6 behaviour 1a): every option the parser accepts.
+pub const SERVE_USAGE: &str = "\
+usage: ferris-idea serve [<folder>] --stdio [--state-dir <dir>] [--run-dir <dir>] [--reattach-minutes <n>]
+       ferris-idea serve [<folder>] --pair [--listen <addr>:<port>] [--allow-network] [--new-device]
+                      [--grant <rights>] [--key-file] [--qr]
+       ferris-idea serve [<folder>] --wss --wss-cert <file> --wss-key <file> --wss-origin <origin>…
+                      [--wss-rights <rights>] [--listen <addr>:<port>] [--allow-network]
+       ferris-idea serve --attach <session> [--run-dir <dir>]
+       ferris-idea serve --devices | --revoke <fingerprint> | --rights <fingerprint> <rights>
+                      | --device-log | --device-log-of <fingerprint> | --access-off  [--key-file]
+       ferris-idea serve --help
+(ferris-idea-serve serve … takes the same arguments.)
+
+The headless backend of a remote project.
+modes:
+  --stdio                     speak the session protocol on standard input and output (SSH)
+  --pair                      listen for paired devices, encrypted; loopback unless allowed
+  --wss                       serve browsers over secure WebSocket; TLS only, authenticated
+  --attach <session>          bridge standard input and output to a waiting session
+options:
+  --state-dir <dir>           folder of the key store and the audit log (default: settings folder)
+  --run-dir <dir>             folder of the reattach sockets
+  --reattach-minutes <n>      how long a session waits to be reattached, 1 to 60
+  --listen <addr>:<port>      address to listen on (--pair, --wss)
+  --allow-network             allow an address other than loopback
+  --new-device                open a pairing window although devices are paired
+  --grant <rights>            rights of the device paired now (default: view)
+  --key-file                  keep keys in a file instead of the system keychain
+  --qr                        also show the pairing link as a QR code
+  --wss-cert <file>           certificate chain (PEM)
+  --wss-key <file>            private key (PEM), readable by its owner only
+  --wss-origin <origin>       an https origin browsers may connect from (repeatable)
+  --wss-rights <rights>       rights of browser sessions
+devices:
+  --devices                   list the paired devices
+  --revoke <fingerprint>      forget a paired device
+  --rights <fingerprint> <rights>  set a device's rights
+  --device-log                show the newest lines of the access log
+  --device-log-of <fingerprint>    the same for one device
+  --access-off                switch remote access off; a running listener closes everything
+  -h, --help                  print this help
+";
 
 struct Options {
+    help: bool,
     folder: Option<PathBuf>,
     stdio: bool,
     attach: Option<String>,
@@ -28,23 +78,24 @@ struct Options {
     listen: Option<std::net::SocketAddr>,
     allow_network: bool,
     new_device: bool,
-    grant: Option<Vec<idecraft_session::Right>>,
+    grant: Option<Vec<ferris_idea_session::Right>>,
     key_file: bool,
     devices: bool,
     revoke: Option<String>,
     qr: bool,
-    rights: Option<(String, Vec<idecraft_session::Right>)>,
+    rights: Option<(String, Vec<ferris_idea_session::Right>)>,
     device_log: Option<Option<String>>,
     access_off: bool,
     wss: bool,
     wss_cert: Option<PathBuf>,
     wss_key: Option<PathBuf>,
     wss_origins: Vec<String>,
-    wss_rights: Option<Vec<idecraft_session::Right>>,
+    wss_rights: Option<Vec<ferris_idea_session::Right>>,
 }
 
 fn parse(args: &[String]) -> Result<Options, String> {
     let mut o = Options {
+        help: false,
         folder: None,
         stdio: false,
         attach: None,
@@ -77,6 +128,11 @@ fn parse(args: &[String]) -> Result<Options, String> {
                 .ok_or_else(|| format!("{name} needs a value"))
         };
         match a.as_str() {
+            // The help wins over everything after it; nothing is started.
+            "-h" | "--help" => {
+                o.help = true;
+                return Ok(o);
+            }
             "--stdio" => o.stdio = true,
             "--wss" => o.wss = true,
             "--wss-cert" => o.wss_cert = Some(PathBuf::from(value("--wss-cert")?)),
@@ -140,19 +196,24 @@ fn peer() -> String {
     }
 }
 
-/// Runs `idecraft serve …`.
+/// Runs `ferris-idea serve …`.
 pub fn serve_cli(args: &[String]) -> ExitCode {
     let o = match parse(args) {
         Ok(o) => o,
         Err(e) => {
             eprintln!("error: {e}");
+            eprint!("{SERVE_USAGE}");
             return ExitCode::from(2);
         }
     };
+    if o.help {
+        print!("{SERVE_USAGE}");
+        return ExitCode::SUCCESS;
+    }
     let run_dir = o
         .run_dir
         .clone()
-        .or_else(idecraft_session::reattach::default_run_dir);
+        .or_else(ferris_idea_session::reattach::default_run_dir);
     if let Some(id) = &o.attach {
         let Some(dir) = run_dir else {
             eprintln!("error: no folder for reattach sockets (HOME unset)");
@@ -160,7 +221,7 @@ pub fn serve_cli(args: &[String]) -> ExitCode {
         };
         #[cfg(unix)]
         {
-            return match idecraft_session::reattach::bridge_stdio(&dir, id) {
+            return match ferris_idea_session::reattach::bridge_stdio(&dir, id) {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(e) => {
                     eprintln!("error: session {id} cannot be reattached: {e}");
@@ -175,7 +236,11 @@ pub fn serve_cli(args: &[String]) -> ExitCode {
             return ExitCode::FAILURE;
         }
     }
-    let Some(state) = o.state_dir.clone().or_else(idecraft_core::user_config_dir) else {
+    let Some(state) = o
+        .state_dir
+        .clone()
+        .or_else(ferris_idea_core::user_config_dir)
+    else {
         eprintln!("error: no folder for the key store and the audit log (HOME unset)");
         return ExitCode::from(2);
     };
@@ -195,7 +260,7 @@ pub fn serve_cli(args: &[String]) -> ExitCode {
         return pair::switch_off(&state, o.key_file);
     }
     if !o.stdio && !o.pair && !o.wss {
-        eprintln!("error: idecraft serve needs --stdio, --pair or --wss");
+        eprintln!("error: ferris-idea serve needs --stdio, --pair or --wss");
         return ExitCode::from(2);
     }
     if [o.stdio, o.pair, o.wss].into_iter().filter(|m| *m).count() > 1 {
@@ -203,38 +268,43 @@ pub fn serve_cli(args: &[String]) -> ExitCode {
         return ExitCode::from(2);
     }
     let mut config = BackendConfig {
-        build: idecraft_core::release::version_line(),
+        build: ferris_idea_core::release::version_line(),
         folder: o.folder.clone(),
-        state_dir: o.state_dir.clone().or_else(idecraft_core::user_config_dir),
+        state_dir: o
+            .state_dir
+            .clone()
+            .or_else(ferris_idea_core::user_config_dir),
         run_dir,
         peer: peer(),
-        registry: idecraft_editor::documents::DocumentRegistry::global().clone(),
+        registry: ferris_idea_editor::documents::DocumentRegistry::global().clone(),
         ..BackendConfig::default()
     };
     if let Some(m) = o.reattach_minutes {
         config.reattach = Duration::from_secs(m * 60);
     }
     // Untrusted host projects run nothing until the window trusts them (SPEC-0318 behaviour 5).
-    idecraft_core::trust::enforce();
+    ferris_idea_core::trust::enforce();
     // Git over SSH on the host follows the host's own settings (SPEC-0318 v5 behaviour 33).
-    if let Some(file) = idecraft_core::ide_settings_file() {
-        let settings = idecraft_core::load_ide_settings(&file);
-        idecraft_remote::set_azure_classic_kex(settings.git.ssh.allow_classic_kex_for_azure_devops);
-        idecraft_remote::set_own_proxy_command(settings.ssh.allow_own_proxy_command);
+    if let Some(file) = ferris_idea_core::ide_settings_file() {
+        let settings = ferris_idea_core::load_ide_settings(&file);
+        ferris_idea_remote::set_azure_classic_kex(
+            settings.git.ssh.allow_classic_kex_for_azure_devops,
+        );
+        ferris_idea_remote::set_own_proxy_command(settings.ssh.allow_own_proxy_command);
     }
     let backend = Backend::new(config);
     // Language servers, search, Git, terminals, runs, ports, the debug-adapter start and the
     // host's MCP tools (SPEC-0318).
-    idecraft_host::bind(
+    ferris_idea_host::bind(
         &backend,
-        idecraft_host::HostOptions {
+        ferris_idea_host::HostOptions {
             #[cfg(feature = "mcp")]
             mcp: Some(Arc::new(ServeMcp)),
-            ..idecraft_host::HostOptions::default()
+            ..ferris_idea_host::HostOptions::default()
         },
     );
     // The project room of this folder, if it has one (SPEC-0323); nothing more listens.
-    idecraft_session::room::bind(&backend, idecraft_session::room::RoomConfig::default());
+    ferris_idea_session::room::bind(&backend, ferris_idea_session::room::RoomConfig::default());
     if o.pair {
         let options = pair::PairOptions {
             addr: o.listen.unwrap_or_else(pair::default_address),
@@ -275,24 +345,24 @@ pub fn serve_cli(args: &[String]) -> ExitCode {
     backend.serve(transport);
     // Standard input ended (bye or a broken channel): wait for the session to end.
     backend.wait_idle(Duration::from_secs(u64::MAX / 4));
-    idecraft_languages::pool::shutdown();
+    ferris_idea_languages::pool::shutdown();
     ExitCode::SUCCESS
 }
 
 /// `mcp <folder>`: the MCP server over standard input and output.
 #[cfg(feature = "mcp")]
 pub fn mcp_stdio(path: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
-    let workspace = idecraft_core::Workspace::open(path)?;
+    let workspace = ferris_idea_core::Workspace::open(path)?;
     // Untrusted projects are served in safe mode (SPEC-0278 behaviour 11).
-    idecraft_core::trust::enforce();
+    ferris_idea_core::trust::enforce();
     let runtime = tokio::runtime::Runtime::new()?;
-    idecraft_languages::pool::enable();
-    let served = runtime.block_on(idecraft_mcp::serve_stdio(workspace));
-    idecraft_languages::pool::shutdown();
+    ferris_idea_languages::pool::enable();
+    let served = runtime.block_on(ferris_idea_mcp::serve_stdio(workspace));
+    ferris_idea_languages::pool::shutdown();
     served.map_err(|e| e.to_string().into())
 }
 
-/// The host's MCP tools for `mcp.*` (SPEC-0318 behaviour 29): IDECraft's MCP server for the host
+/// The host's MCP tools for `mcp.*` (SPEC-0318 behaviour 29): Ferris IDEA's MCP server for the host
 /// project, with that project's agent rights and safe mode.
 #[cfg(feature = "mcp")]
 struct ServeMcp;
@@ -313,11 +383,11 @@ fn mcp_runtime() -> Result<&'static tokio::runtime::Runtime, String> {
 }
 
 #[cfg(feature = "mcp")]
-impl idecraft_host::McpBridge for ServeMcp {
+impl ferris_idea_host::McpBridge for ServeMcp {
     fn tools(&self, root: &std::path::Path) -> Result<serde_json::Value, String> {
-        let ws = idecraft_core::Workspace::open(root).map_err(|e| e.to_string())?;
-        let server = idecraft_mcp::IdeServer::new(ws);
-        mcp_runtime()?.block_on(idecraft_mcp::call::list_tools(server))
+        let ws = ferris_idea_core::Workspace::open(root).map_err(|e| e.to_string())?;
+        let server = ferris_idea_mcp::IdeServer::new(ws);
+        mcp_runtime()?.block_on(ferris_idea_mcp::call::list_tools(server))
     }
 
     fn call(
@@ -326,9 +396,9 @@ impl idecraft_host::McpBridge for ServeMcp {
         tool: &str,
         arguments: serde_json::Value,
     ) -> Result<serde_json::Value, String> {
-        use idecraft_mcp::call::{Answer, call_once};
-        let ws = idecraft_core::Workspace::open(root).map_err(|e| e.to_string())?;
-        let server = idecraft_mcp::IdeServer::new(ws);
+        use ferris_idea_mcp::call::{Answer, call_once};
+        let ws = ferris_idea_core::Workspace::open(root).map_err(|e| e.to_string())?;
+        let server = ferris_idea_mcp::IdeServer::new(ws);
         match mcp_runtime()?.block_on(call_once(server, tool, arguments))? {
             Answer::Ok(v) => Ok(v),
             Answer::ToolError(m) => Err(m),
@@ -373,5 +443,36 @@ mod tests {
         assert!(w.wss);
         assert_eq!(w.wss_origins, ["https://a.test"]);
         assert!(parse(&args("--wss-rights root")).is_err());
+    }
+
+    /// `SPEC-0321` v6 behaviour 1a, AK-23.
+    #[test]
+    fn help_is_asked_for_anywhere_among_the_options() {
+        let args = |s: &str| s.split_whitespace().map(str::to_owned).collect::<Vec<_>>();
+        for line in ["--help", "-h", "--pair --help", "/p --stdio -h"] {
+            let o = parse(&args(line)).unwrap();
+            assert!(o.help, "{line}");
+        }
+        assert!(!parse(&args("--stdio")).unwrap().help);
+        assert!(is_help("--help") && is_help("-h") && !is_help("--helpful"));
+    }
+
+    /// Every option the parser accepts is in the usage.
+    #[test]
+    fn usage_names_every_option() {
+        let source = include_str!("lib.rs");
+        let parser =
+            &source[source.find("fn parse(").unwrap()..source.find("/// The peer").unwrap()];
+        let mut seen = 0;
+        for piece in parser.split('"').skip(1).step_by(2) {
+            if piece.starts_with('-') && piece.len() > 1 && !piece.contains(' ') {
+                assert!(
+                    SERVE_USAGE.contains(piece),
+                    "{piece} is missing in the usage"
+                );
+                seen += 1;
+            }
+        }
+        assert!(seen >= 25, "only {seen} options found");
     }
 }

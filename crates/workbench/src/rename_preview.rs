@@ -5,9 +5,9 @@
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_languages::rename::RenamePlan;
+use ferris_idea_languages::rename_text::{Occurrence, OccurrenceKind, OutsideFile};
 use gpui::{Context, EventEmitter, FocusHandle, KeyDownEvent, Window, div, prelude::*, px};
-use idecraft_languages::rename::RenamePlan;
-use idecraft_languages::rename_text::{Occurrence, OccurrenceKind, OutsideFile};
 
 use crate::palette::Palette;
 use crate::workbench_view::c;

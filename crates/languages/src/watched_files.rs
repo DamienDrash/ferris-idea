@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 use std::path::{Component, Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use idecraft_core::{EXCLUDED_DIRS, FileChange, Snapshot, Workspace, diff};
+use ferris_idea_core::{EXCLUDED_DIRS, FileChange, Snapshot, Workspace, diff};
 use serde_json::{Value, json};
 
 use crate::LanguageId;
@@ -268,8 +268,8 @@ impl DiskWatch {
         }
         let changes = self.look(root);
         let sources = changes.iter().any(|(path, _)| {
-            idecraft_core::source_roots::is_jvm_source(path)
-                || idecraft_core::source_roots::is_jvm_build_file(path)
+            ferris_idea_core::source_roots::is_jvm_source(path)
+                || ferris_idea_core::source_roots::is_jvm_build_file(path)
         });
         if !changes.is_empty() {
             crate::pool::disk_changed(root, changes);
@@ -284,7 +284,7 @@ mod tests {
 
     fn temp(tag: &str) -> PathBuf {
         let dir =
-            std::env::temp_dir().join(format!("idecraft-watched-{tag}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("ferris-idea-watched-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir.canonicalize().unwrap()
@@ -356,7 +356,7 @@ mod tests {
         for file in [
             ".git/HEAD",
             ".idea/workspace.xml",
-            ".idecraft/settings.toml",
+            ".ferris-idea/settings.toml",
             ".gradle/8.5/x.bin",
             "target/classes/A.class",
             "module/target/A.java",

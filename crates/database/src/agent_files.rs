@@ -1,6 +1,6 @@
 //! Which files a session opened for an agent may reach (`SPEC-0012` v3 behaviour 15).
 //!
-//! A file database runs inside IDECraft with the rights of the user. An agent that may run SQL on
+//! A file database runs inside Ferris IDEA with the rights of the user. An agent that may run SQL on
 //! one must not reach other files through it: for agents the rules of `read_file` hold. SQLite
 //! statements are checked here before they run; DuckDB closes its own file access (see
 //! `duckdb.rs`).
@@ -157,8 +157,10 @@ mod tests {
     use super::*;
 
     fn scratch(tag: &str) -> std::path::PathBuf {
-        let dir =
-            std::env::temp_dir().join(format!("idecraft-agent-files-{tag}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "ferris-idea-agent-files-{tag}-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("ws/data")).unwrap();
         std::fs::write(dir.join("ws/data/inside.db"), "").unwrap();

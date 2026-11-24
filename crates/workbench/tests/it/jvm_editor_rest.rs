@@ -9,8 +9,8 @@
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_workbench::{EditorView, WorkbenchView};
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_workbench::{EditorView, WorkbenchView};
 
 const ANIMALS: &str = "package zoo
 
@@ -44,7 +44,8 @@ public class Main {
 ";
 
 fn workspace(tag: &str) -> PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-jvm-rest-{tag}-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-jvm-rest-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src/zoo")).unwrap();
     std::fs::create_dir_all(root.join("src/shop")).unwrap();
@@ -173,10 +174,12 @@ fn the_setting_keeps_the_imports_open(cx: &mut TestAppContext) {
     let root = workspace("imports-off");
     let (bench, cx) = window(&root, cx);
     cx.update(|_, cx| {
-        let mut settings = idecraft_workbench::appearance::ide_settings(cx);
+        let mut settings = ferris_idea_workbench::appearance::ide_settings(cx);
         assert!(settings.editor.fold_imports, "on by default");
         settings.editor.fold_imports = false;
-        cx.set_global(idecraft_workbench::appearance::CurrentIdeSettings(settings));
+        cx.set_global(ferris_idea_workbench::appearance::CurrentIdeSettings(
+            settings,
+        ));
     });
     let java = open(&bench, cx, &root.join("src/shop/Main.java"));
     for _ in 0..30 {
@@ -198,9 +201,9 @@ fn tabs_and_tree_show_the_kind_of_the_declaration(cx: &mut TestAppContext) {
     // Files that are not open: read from disk, as the project tree shows them.
     assert_eq!(icon(cx, "src/shop/Main.java"), "nodes/class");
     assert_eq!(icon(cx, "src/shop/Pet.java"), "nodes/interface");
-    assert_eq!(icon(cx, "src/shop/Circle.java"), "idecraft/record");
-    assert_eq!(icon(cx, "src/shop/Marker.java"), "idecraft/annotation");
-    assert_eq!(icon(cx, "src/zoo/Registry.kt"), "idecraft/object");
+    assert_eq!(icon(cx, "src/shop/Circle.java"), "ferris-idea/record");
+    assert_eq!(icon(cx, "src/shop/Marker.java"), "ferris-idea/annotation");
+    assert_eq!(icon(cx, "src/zoo/Registry.kt"), "ferris-idea/object");
     // A Kotlin file with several declarations, or with functions, is a file.
     assert_eq!(icon(cx, "src/zoo/Animals.kt"), "fileTypes/kotlin");
     assert_eq!(icon(cx, "src/zoo/Main.kt"), "fileTypes/kotlin");
@@ -328,14 +331,14 @@ fn a_one_line_method_stays_folded_when_methods_are_added(cx: &mut TestAppContext
         !java.read_with(cx, |e, _| e.folded_regions()).is_empty()
     });
     assert_eq!(java.read_with(cx, |e, _| e.folded_regions()), [(3, 5)]);
-    let range = |sl, sc, el, ec| idecraft_languages::insight::Range {
+    let range = |sl, sc, el, ec| ferris_idea_languages::insight::Range {
         start_line: sl,
         start_character: sc,
         end_line: el,
         end_character: ec,
     };
     // From the end of the method's last line to the start of the closing brace's line.
-    let edit = idecraft_languages::rename::Edit {
+    let edit = ferris_idea_languages::rename::Edit {
         range: range(5, 5, 6, 0),
         old_text: "\n".into(),
         new_text: "\n\n    @Override\n    public String owner() {\n        return null;\n    }\n"

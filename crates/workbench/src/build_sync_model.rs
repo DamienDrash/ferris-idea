@@ -25,7 +25,7 @@ fn normalized(path: &Path) -> String {
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
     std::fs::read_to_string(path)
-        .map(|t| idecraft_core::buildtools::normalized_build_text(&name, &t))
+        .map(|t| ferris_idea_core::buildtools::normalized_build_text(&name, &t))
         .unwrap_or_default()
 }
 
@@ -124,7 +124,8 @@ mod tests {
     /// badge comes back with the next change.
     #[test]
     fn changes_wait_for_a_sync() {
-        let dir = std::env::temp_dir().join(format!("idecraft-build-sync-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("ferris-idea-build-sync-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let pom = dir.join("pom.xml");

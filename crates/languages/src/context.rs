@@ -74,10 +74,17 @@ pub enum UsageKind {
     Read,
     /// It names a type: an annotation, `extends`, `implements` (v4; syntax trees only).
     Type,
+    /// The type of a method's receiver, `func (r Rect) Area()` (v12, Go).
+    Receiver,
+    /// The type of a composite literal, `Rect{W: 2}`: a struct initialization (v12, Go).
+    #[serde(rename = "struct_initialization")]
+    StructInit,
     /// It declares something of the same name, such as an overload (v4; syntax trees only).
     Declaration,
     /// Anything else.
     Other,
+    /// A mention in a comment, no code usage (v12 behaviour 30, Go).
+    Comment,
 }
 
 impl UsageKind {
@@ -89,8 +96,11 @@ impl UsageKind {
             UsageKind::Write => "Writes",
             UsageKind::Read => "Reads",
             UsageKind::Type => "Type usages",
+            UsageKind::Receiver => "Receivers",
+            UsageKind::StructInit => "Struct initializations",
             UsageKind::Declaration => "Declarations",
             UsageKind::Other => "Other usages",
+            UsageKind::Comment => "Usages in comments",
         }
     }
 }
@@ -373,7 +383,7 @@ mod tests {
     /// OBS-0027: a Java place without symbols gets its type and package from the syntax tree.
     #[test]
     fn java_owner_from_the_syntax_tree() {
-        let dir = std::env::temp_dir().join(format!("idecraft-owner-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-owner-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("Dog.java");
         std::fs::write(
@@ -414,7 +424,7 @@ mod tests {
     /// SPEC-0081 v2 AK-4.
     #[test]
     fn the_innermost_type_names_the_place() {
-        let dir = std::env::temp_dir().join(format!("idecraft-ctx-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-ctx-{}", std::process::id()));
         let file = dir.join("src/lab/inventory/Discounts.java");
         let s = discounts();
         let c = context_of(&dir, &file, Some(&s), 10, 4);
@@ -437,7 +447,7 @@ mod tests {
     /// SPEC-0081 v2 AK-4.
     #[test]
     fn the_module_is_the_nearest_build_folder() {
-        let dir = std::env::temp_dir().join(format!("idecraft-mod-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-mod-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("shop/src/main/java/a")).unwrap();
         std::fs::write(dir.join("shop/pom.xml"), "<project/>").unwrap();

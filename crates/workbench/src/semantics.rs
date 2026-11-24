@@ -17,12 +17,12 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
+pub use ferris_idea_uidriver::{
+    AxAction, Effect, Rect, Reserved, Role, Semantics, StopSource, TextClass, Tree, TreeBuilder,
+};
 use gpui::{
     App, InteractiveElement, IntoElement, MouseDownEvent, MouseMoveEvent, ParentElement,
     ScrollWheelEvent, StatefulInteractiveElement, Styled, Window, div, px,
-};
-pub use idecraft_uidriver::{
-    AxAction, Effect, Rect, Reserved, Role, Semantics, StopSource, TextClass, Tree, TreeBuilder,
 };
 
 /// The self-test wants the tree.
@@ -358,7 +358,7 @@ pub fn automation_overlay(window: &Window) -> Option<gpui::AnyElement> {
         return None;
     }
     let p = crate::palette::Palette::current();
-    let c = |color: idecraft_ui::theme::Rgba| -> gpui::Hsla {
+    let c = |color: ferris_idea_ui::theme::Rgba| -> gpui::Hsla {
         gpui::rgba((color.rgb << 8) | u32::from(color.alpha)).into()
     };
     let accent = c(p.accent);

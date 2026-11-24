@@ -1,6 +1,6 @@
 [package]
-name = "idecraft-mobile"
-description = "The shared core of the IDECraft mobile apps: pairing and project access over the paired channel, bound to Swift and Kotlin with UniFFI (ADR-0029, SPEC-0326)"
+name = "ferris-idea-mobile"
+description = "The shared core of the Ferris IDEA mobile apps: pairing and project access over the paired channel, bound to Swift and Kotlin with UniFFI (ADR-0029, SPEC-0326)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -22,8 +22,8 @@ path = "src/bin/uniffi-bindgen.rs"
 required-features = ["bindgen"]
 
 [dependencies]
-idecraft-pairing.workspace = true
-idecraft-session.workspace = true
+ferris-idea-pairing.workspace = true
+ferris-idea-session.workspace = true
 serde.workspace = true
 serde_json = "1"
 thiserror.workspace = true

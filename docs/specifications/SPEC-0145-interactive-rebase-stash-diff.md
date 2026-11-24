@@ -31,7 +31,7 @@ operations SPEC-0106 left out.
 3. **Checks before starting:** the first kept commit may not be squash or fixup; a reword
    needs a message. The rebase itself checks again that the list holds each commit since the
    base exactly once and that ids are commit ids. [STD]
-4. **Running:** IDECraft writes the todo list and lets Git copy it in (`sequence.editor`), so
+4. **Running:** Ferris IDEA writes the todo list and lets Git copy it in (`sequence.editor`), so
    no editor opens; reword runs as `pick` plus `exec git commit --amend --only -F <file>` with
    the message in a file under the Git directory, so the text never passes through a shell.
    Squash keeps both messages — the first as the subject, the squashed one in the body — fixup the

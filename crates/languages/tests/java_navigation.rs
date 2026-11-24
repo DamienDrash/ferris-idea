@@ -5,11 +5,11 @@
 
 use std::time::Duration;
 
-use idecraft_languages::context::{UsageKind, contexts_in};
-use idecraft_languages::find_usages::find_usages_in;
-use idecraft_languages::insight::{LocationKind, locations_in, symbols_in};
-use idecraft_languages::pool;
-use idecraft_languages::structure::{ordered, with_inherited_in};
+use ferris_idea_languages::context::{UsageKind, contexts_in};
+use ferris_idea_languages::find_usages::find_usages_in;
+use ferris_idea_languages::insight::{LocationKind, locations_in, symbols_in};
+use ferris_idea_languages::pool;
+use ferris_idea_languages::structure::{ordered, with_inherited_in};
 
 const DISCOUNT: &str = "package lab.inventory;\n\n/** A rule that lowers a price. */\npublic interface Discount {\n    /** Returns the price in cents after this rule. */\n    int apply(int cents);\n}\n";
 
@@ -19,15 +19,15 @@ const CHILD: &str = "package lab.inventory;\n\npublic class Child extends Discou
 
 #[tokio::test]
 async fn implementations_usages_and_inherited_members() {
-    if idecraft_languages::servers::resolve(idecraft_languages::LanguageId::Java).is_err() {
+    if ferris_idea_languages::servers::resolve(ferris_idea_languages::LanguageId::Java).is_err() {
         assert!(
-            std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+            ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
             "required tool missing: jdtls"
         );
         eprintln!("skipped: jdtls not installed");
         return;
     }
-    let root = std::env::temp_dir().join(format!("idecraft-java-nav-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-java-nav-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     let dir = root.join("shop/src/main/java/lab/inventory");
     std::fs::create_dir_all(&dir).unwrap();
@@ -67,7 +67,7 @@ async fn implementations_usages_and_inherited_members() {
         )
         .await
         {
-            Err(idecraft_languages::lsp::LspError::Timeout(..))
+            Err(ferris_idea_languages::lsp::LspError::Timeout(..))
                 if std::time::Instant::now() < until => {}
             other => break other.unwrap(),
         }

@@ -11,9 +11,9 @@
 use crate::changelist_model::ListOp;
 use std::path::{Path, PathBuf};
 
-use idecraft_languages::quick_definition::{MAX_TARGETS, Source};
-use idecraft_ui::tool_windows::ToolWindow;
-use idecraft_vcs::CommitAction;
+use ferris_idea_languages::quick_definition::{MAX_TARGETS, Source};
+use ferris_idea_ui::tool_windows::ToolWindow;
+use ferris_idea_vcs::CommitAction;
 
 /// The part of the window whose focus an action's key needs. The keys of these actions belong to
 /// other actions everywhere else (F2 is Next Error in the editor, ⌘D duplicates a line).
@@ -326,7 +326,7 @@ pub fn usage_grouping(id: &str) -> Option<&'static str> {
 }
 
 /// Exclude of the Find tool window (`SPEC-0293` v9 behaviour 25); the keymap files bind no key
-/// to it, IDECraft gives it Delete and Backspace in the window.
+/// to it, Ferris IDEA gives it Delete and Backspace in the window.
 pub const USAGE_EXCLUDE: &str = "UsageView.Exclude";
 /// Include of the Find tool window: ⇧⌫ on macOS, Shift+Delete elsewhere.
 pub const USAGE_INCLUDE: &str = "UsageView.Include";
@@ -728,12 +728,12 @@ pub const SWITCHER_ITERATE: &str = "SwitcherIterateItems";
 
 /// Whether the single keystroke `stroke` is a shortcut of `action` in `keymap`.
 pub fn is_shortcut_of(
-    keymap: &idecraft_ui::keymap::Keymap,
+    keymap: &ferris_idea_ui::keymap::Keymap,
     action: &str,
-    stroke: &idecraft_ui::keymap::Keystroke,
+    stroke: &ferris_idea_ui::keymap::Keystroke,
 ) -> bool {
     keymap.shortcuts(action).iter().any(|s| {
-        matches!(s, idecraft_ui::keymap::Shortcut::Keyboard { first, second: None } if first == stroke)
+        matches!(s, ferris_idea_ui::keymap::Shortcut::Keyboard { first, second: None } if first == stroke)
     })
 }
 
@@ -856,8 +856,8 @@ pub const SHOW_ALL_AFFECTED: &str = "VcsHistory.ShowAllAffected";
 pub const NO_AFFECTED_FILES: &str = "The selected commit changes no files";
 
 /// The rows of the list of a commit's files: the change letter and the path.
-pub fn affected_rows(changes: &[idecraft_vcs::CommitChange]) -> Vec<String> {
-    use idecraft_vcs::ChangeKind;
+pub fn affected_rows(changes: &[ferris_idea_vcs::CommitChange]) -> Vec<String> {
+    use ferris_idea_vcs::ChangeKind;
     changes
         .iter()
         .map(|c| {
@@ -1016,12 +1016,12 @@ pub fn reformat_file_title(name: &str) -> String {
 /// lines of `changes`, 0-based first and last, runs that touch merged, only deleted lines left
 /// out, clipped to `within` (0-based first and last line of a selection) when given.
 pub fn changed_ranges(
-    changes: &[idecraft_vcs::LineChange],
+    changes: &[ferris_idea_vcs::LineChange],
     within: Option<(usize, usize)>,
 ) -> Vec<(usize, usize)> {
     let mut runs: Vec<(usize, usize)> = changes
         .iter()
-        .filter(|c| c.kind != idecraft_vcs::LineChangeKind::Deleted && c.new_end >= c.new_start)
+        .filter(|c| c.kind != ferris_idea_vcs::LineChangeKind::Deleted && c.new_end >= c.new_start)
         .map(|c| (c.new_start - 1, c.new_end - 1))
         .filter_map(|(a, b)| match within {
             None => Some((a, b)),
@@ -1110,7 +1110,7 @@ mod tests {
     #[test]
     fn reformat_file_rows_ranges_and_lines() {
         use ReformatOption::*;
-        use idecraft_vcs::{LineChange, LineChangeKind};
+        use ferris_idea_vcs::{LineChange, LineChangeKind};
         assert_eq!(
             reformat_file_rows(true, true),
             [Selection, ChangedLines, OptimizeImports]
@@ -1171,7 +1171,7 @@ mod tests {
     /// both bundled keymaps hold the actions.
     #[test]
     fn overloads_step_and_wrap() {
-        use idecraft_ui::keymap::{Keymap, Keystroke};
+        use ferris_idea_ui::keymap::{Keymap, Keystroke};
         assert_eq!(overload_step(3, 0, true), Some(1));
         assert_eq!(overload_step(3, 2, true), Some(0));
         assert_eq!(overload_step(3, 0, false), Some(2));
@@ -1193,7 +1193,7 @@ mod tests {
     /// SPEC-0086 AK-34 (v12): a commit's files as rows; the action belongs to the Git log.
     #[test]
     fn affected_rows_name_letter_and_path() {
-        use idecraft_vcs::{ChangeKind, CommitChange};
+        use ferris_idea_vcs::{ChangeKind, CommitChange};
         let change = |path: &str, kind| CommitChange {
             path: path.into(),
             kind,
@@ -1219,7 +1219,7 @@ mod tests {
     impl Scratch {
         fn new(test: &str) -> Self {
             let dir = std::env::temp_dir().join(format!(
-                "idecraft-keymap-actions-{test}-{}",
+                "ferris-idea-keymap-actions-{test}-{}",
                 std::process::id()
             ));
             let _ = std::fs::remove_dir_all(&dir);
@@ -1305,7 +1305,7 @@ mod tests {
     /// Module in the rest of the Commit window, in both bundled keymaps; nothing elsewhere.
     #[test]
     fn the_message_history_key_belongs_to_the_message_field() {
-        use idecraft_ui::keymap::{Keymap, Keystroke, Shortcut};
+        use ferris_idea_ui::keymap::{Keymap, Keystroke, Shortcut};
         assert_eq!(scope_of(MESSAGE_HISTORY), Some(Scope::CommitMessage));
         assert_eq!(commit_op(MESSAGE_HISTORY), Some(CommitOp::MessageHistory));
         let chord = Keystroke::parse("control M").unwrap();
@@ -1337,7 +1337,7 @@ mod tests {
     /// itself go before the input's editing actions; the actions of the part around it do not.
     #[test]
     fn only_the_inputs_own_actions_go_before_its_editing() {
-        use idecraft_ui::keymap::{Keymap, Keystroke};
+        use ferris_idea_ui::keymap::{Keymap, Keystroke};
         let bound = |keymap: &Keymap, chord: &str| -> Vec<String> {
             keymap
                 .actions_for(&Keystroke::parse(chord).unwrap(), None)
@@ -1389,7 +1389,7 @@ mod tests {
     /// of a part of the window, as the specification lists them.
     #[test]
     fn the_control_letter_chords_of_the_parts_are_the_listed_ones() {
-        use idecraft_ui::keymap::{Keymap, Keystroke};
+        use ferris_idea_ui::keymap::{Keymap, Keystroke};
         let mac = Keymap::bundled_macos();
         let mut found: Vec<(Scope, char)> = Vec::new();
         for letter in 'A'..='Z' {
@@ -1432,7 +1432,7 @@ mod tests {
     /// a line; what the status bar says for each answer of the window.
     #[test]
     fn send_eof_is_an_action_of_the_run_window() {
-        use idecraft_ui::keymap::{Keymap, Keystroke};
+        use ferris_idea_ui::keymap::{Keymap, Keystroke};
         assert_eq!(SEND_EOF, "SendEOF");
         assert_eq!(scope_of(SEND_EOF), Some(Scope::Run));
         for (keymap, key) in [
@@ -1508,7 +1508,7 @@ mod tests {
     /// window; their keys of both bundled keymaps run them first there and not at all elsewhere.
     #[test]
     fn changelist_actions_run_in_the_commit_window() {
-        use idecraft_ui::keymap::{Keymap, Keystroke, Shortcut};
+        use ferris_idea_ui::keymap::{Keymap, Keystroke, Shortcut};
         for (id, op) in [
             (NEW_CHANGELIST, ListOp::New),
             (EDIT_CHANGELIST, ListOp::Edit),
@@ -1568,7 +1568,7 @@ mod tests {
     /// focused tree; elsewhere (the terminal, a field) no action takes them and they are typed.
     #[test]
     fn tree_node_keys_need_a_focused_tree() {
-        use idecraft_ui::keymap::{Keymap, Keystroke};
+        use ferris_idea_ui::keymap::{Keymap, Keystroke};
         for keymap in [Keymap::bundled_macos(), Keymap::bundled_default()] {
             for (chord, id) in [
                 ("ADD", crate::tree_nav::EXPAND_NODE),
@@ -1592,7 +1592,7 @@ mod tests {
     /// SPEC-0275 AK-31 (v13): ⌘− is Collapse All in a tree and Collapse in the editor.
     #[test]
     fn expand_all_and_collapse_all_need_a_focused_tree() {
-        use idecraft_ui::keymap::{Keymap, Keystroke};
+        use ferris_idea_ui::keymap::{Keymap, Keystroke};
         let mac = Keymap::bundled_macos();
         let bound = |text: &str| -> Vec<String> {
             mac.actions_for(&Keystroke::parse(text).unwrap(), None)
@@ -1689,7 +1689,7 @@ mod tests {
             assert_eq!(scope_of(id), Some(Scope::Todo), "{id}");
             assert_eq!(todo_grouping(id), Some(toggle), "{id}");
             let name = format!("todo-{toggle}");
-            let control = idecraft_ui::tooltip::TODO_TOOLBAR
+            let control = ferris_idea_ui::tooltip::TODO_TOOLBAR
                 .iter()
                 .find(|c| c.name == name)
                 .unwrap_or_else(|| panic!("{name} is a button"));
@@ -1712,13 +1712,13 @@ mod tests {
             ids(&["UsageGrouping.Module"])
         );
         // Their chords in the macOS keymap, with what else is bound there.
-        let mac = idecraft_ui::keymap::Keymap::bundled_macos();
+        let mac = ferris_idea_ui::keymap::Keymap::bundled_macos();
         for (chord, id) in [
             ("control M", "TodoViewGroupByShowModules"),
             ("control P", "TodoViewGroupByShowPackages"),
             ("control F", "TodoViewGroupByFlattenPackage"),
         ] {
-            let stroke = idecraft_ui::keymap::Keystroke::parse(chord).expect("a chord");
+            let stroke = ferris_idea_ui::keymap::Keystroke::parse(chord).expect("a chord");
             let all: Vec<String> = mac
                 .actions_for(&stroke, None)
                 .into_iter()
@@ -1762,7 +1762,7 @@ mod tests {
         for toggle in toggles {
             let name = format!("find-usages-{toggle}");
             assert!(
-                idecraft_ui::tooltip::FIND_USAGES_TOOLBAR
+                ferris_idea_ui::tooltip::FIND_USAGES_TOOLBAR
                     .iter()
                     .any(|c| c.name == name),
                 "{name}"
@@ -1814,8 +1814,8 @@ mod tests {
         assert_eq!(parameter_action(&["EditorTab", NEXT_PARAMETER]), Some(true));
         assert_eq!(parameter_action(&[PREV_PARAMETER]), Some(false));
         assert_eq!(parameter_action(&["EditorTab"]), None);
-        let mac = idecraft_ui::keymap::Keymap::bundled_macos();
-        let k = |text: &str| idecraft_ui::keymap::Keystroke::parse(text).unwrap();
+        let mac = ferris_idea_ui::keymap::Keymap::bundled_macos();
+        let k = |text: &str| ferris_idea_ui::keymap::Keystroke::parse(text).unwrap();
         assert_eq!(
             parameter_action(&mac.actions_for(&k("TAB"), None)),
             Some(true)
@@ -1862,7 +1862,7 @@ mod tests {
         extensions.dedup();
         assert_eq!(extensions.len(), SCRATCH_KINDS.len());
 
-        let dir = std::env::temp_dir().join(format!("idecraft-scratch-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-scratch-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let first = create_scratch(&dir.join("scratches"), "sql").unwrap();
         assert_eq!(first.file_name().unwrap(), "scratch.sql");
@@ -1906,7 +1906,7 @@ mod tests {
         );
         for change in changes {
             let name = format!("find-usages-{change}");
-            let control = idecraft_ui::tooltip::FIND_USAGES_TOOLBAR
+            let control = ferris_idea_ui::tooltip::FIND_USAGES_TOOLBAR
                 .iter()
                 .find(|c| c.name == name)
                 .unwrap_or_else(|| panic!("{name}"));
@@ -1918,10 +1918,10 @@ mod tests {
             assert_eq!(scope_of(id), Some(Scope::Find), "{id}");
         }
         // The keys: the bundled macOS keymap binds the filters and groupings to ⌃R, ⌃W, ⌃I,
-        // ⌃D and ⌃O, Include to ⇧⌫; Exclude has Delete and Backspace from IDECraft.
-        let mac = idecraft_ui::keymap::Keymap::bundled_macos();
-        let k = |text: &str| idecraft_ui::keymap::Keystroke::parse(text).unwrap();
-        let is_shortcut_of = |keymap: &idecraft_ui::keymap::Keymap, id: &str, key| {
+        // ⌃D and ⌃O, Include to ⇧⌫; Exclude has Delete and Backspace from Ferris IDEA.
+        let mac = ferris_idea_ui::keymap::Keymap::bundled_macos();
+        let k = |text: &str| ferris_idea_ui::keymap::Keystroke::parse(text).unwrap();
+        let is_shortcut_of = |keymap: &ferris_idea_ui::keymap::Keymap, id: &str, key| {
             keymap.actions_for(&key, None).contains(&id)
         };
         for (id, key) in [
@@ -2062,7 +2062,7 @@ mod tests {
     /// SPEC-0069 AK-5 (v3).
     #[test]
     fn the_edited_only_key_is_the_actions_shortcut() {
-        use idecraft_ui::keymap::{Keymap, Keystroke};
+        use ferris_idea_ui::keymap::{Keymap, Keystroke};
         let k = |text: &str| Keystroke::parse(text).unwrap();
         let mac = Keymap::bundled_macos();
         assert!(is_shortcut_of(&mac, EDITED_ONLY_ACTION, &k("meta E")));

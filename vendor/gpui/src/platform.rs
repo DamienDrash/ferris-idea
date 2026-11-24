@@ -1,4 +1,4 @@
-// Modified by IDECraft: adds PromptButton::Safe and prompt_focused_answer (see ../IDECRAFT.md).
+// Modified by Ferris IDEA: adds PromptButton::Safe, prompt_focused_answer, withdraw_prompt and capture_frame (see ../FERRIS_IDEA.md).
 mod app_menu;
 mod keyboard;
 mod keystroke;
@@ -479,6 +479,10 @@ pub(crate) trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
         detail: Option<&str>,
         answers: &[PromptButton],
     ) -> Option<oneshot::Receiver<usize>>;
+    /// Ferris IDEA change (see ../FERRIS_IDEA.md): closes the platform alert that the latest `prompt`
+    /// of this window shows, without an answer — only while that alert is the one on the screen,
+    /// never another one. The default does nothing (the platform has no alert of its own).
+    fn withdraw_prompt(&self) {}
     fn activate(&self);
     fn is_active(&self) -> bool;
     fn is_hovered(&self) -> bool;
@@ -499,6 +503,11 @@ pub(crate) trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
     fn on_close(&self, callback: Box<dyn FnOnce()>);
     fn on_appearance_changed(&self, callback: Box<dyn FnMut()>);
     fn draw(&self, scene: &Scene);
+    /// Ferris IDEA change (FERRIS_IDEA.md, change 8): draws `scene` into an image of the window's
+    /// own, as RGBA in device pixels; `None` where the renderer gives no read-back.
+    fn capture_frame(&self, _scene: &Scene) -> Option<image::RgbaImage> {
+        None
+    }
     fn completed_frame(&self) {}
     fn sprite_atlas(&self) -> Arc<dyn PlatformAtlas>;
 
@@ -1361,7 +1370,7 @@ pub enum PromptButton {
     Cancel(SharedString),
     /// Other button
     Other(SharedString),
-    /// IDECraft change (see ../IDECRAFT.md): the prompt's safe answer — it grants nothing and
+    /// Ferris IDEA change (see ../FERRIS_IDEA.md): the prompt's safe answer — it grants nothing and
     /// removes or closes nothing — which holds the keyboard focus (`prompt_focused_answer`).
     /// Otherwise like `Other`; as the first answer it is also the default (Return).
     Safe(SharedString),
@@ -1383,7 +1392,7 @@ impl PromptButton {
         PromptButton::Cancel(label.into())
     }
 
-    /// IDECraft change: create the prompt's safe answer, the one that holds the keyboard focus.
+    /// Ferris IDEA change: create the prompt's safe answer, the one that holds the keyboard focus.
     pub fn safe(label: impl Into<SharedString>) -> Self {
         PromptButton::Safe(label.into())
     }
@@ -1393,7 +1402,7 @@ impl PromptButton {
         matches!(self, PromptButton::Cancel(_))
     }
 
-    /// IDECraft change: whether this is the prompt's named safe answer.
+    /// Ferris IDEA change: whether this is the prompt's named safe answer.
     pub fn is_safe(&self) -> bool {
         matches!(self, PromptButton::Safe(_))
     }
@@ -1409,7 +1418,7 @@ impl PromptButton {
     }
 }
 
-/// IDECraft change (see ../IDECRAFT.md): the answer of a prompt that holds the keyboard focus when
+/// Ferris IDEA change (see ../FERRIS_IDEA.md): the answer of a prompt that holds the keyboard focus when
 /// the prompt appears — its safe answer: the one the prompt names (`PromptButton::Safe`), else the
 /// first cancel answer (the one Escape gives) wherever it stands, else the first answer, the
 /// declared default that Return gives. With macOS keyboard navigation on, Space presses the focused

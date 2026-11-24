@@ -12,13 +12,13 @@ file in from disk or a URL after seeing exactly what it contains.
 
 ## Behaviour
 0. **Exchange format (ADR-0021).** A shared definition is a `.idcconnector` file that starts with
-   the envelope `[idecraft]` (`kind = "connector"`, `format = 1`, `id`, `name`, optional `author`,
+   the envelope `[ferris-idea]` (`kind = "connector"`, `format = 1`, `id`, `name`, optional `author`,
    `licence`, `homepage`, `min_version`), followed by `[connector]` with the remaining top-level keys
    of SPEC-0300 (`family`, `category`, `note`, `aliases`, `report_url`, …) and the tables
    `[connection]`, `[sql]`, `[introspection]`. The SPEC-0300 layout (top-level `format = 1`) stays
    readable; a file with both layouts, a `kind` other than `connector` or a newer `format` is refused
-   with that reason ("written by a newer IDECraft, format 2; this version reads up to 1"). Problem
-   paths name the table (`connector.family`, `idecraft.kind`). [ADR-0021]
+   with that reason ("written by a newer Ferris IDEA, format 2; this version reads up to 1"). Problem
+   paths name the table (`connector.family`, `ferris-idea.kind`). [ADR-0021]
 1. **Import from a file or a URL.** The New Data Source list ends with "Import database system…";
    it asks for a file path (`.idcconnector` or `.toml`) or an `https://` URL (e.g. the raw URL of an
    issue attachment). A URL is fetched only on the user's click, with a
@@ -30,7 +30,7 @@ file in from disk or a URL after seeing exactly what it contains.
    disable Save. An id that already exists asks "Replace <name>?" for a user or imported file and is
    refused for a built-in. Nothing is stored before Save. [GEN]
 3. **Storing.** Save writes the file as received (text unchanged) to `connectors/<id>.idcconnector`
-   in the IDECraft settings folder (SPEC-0300 behaviour 2) atomically, removing an older
+   in the Ferris IDEA settings folder (SPEC-0300 behaviour 2) atomically, removing an older
    `<id>.toml` of the same system, records its origin (file path or URL, and
    the time) in `connectors/imported.json` (machine-written state, ADR-0021), and reloads the catalogue; the system appears with the
    badge `Imported`. Files placed into the folder by hand show as `User`. [SPEC-0300]
@@ -41,11 +41,11 @@ file in from disk or a URL after seeing exactly what it contains.
    so a shared copy never claims Supported. "Share…" copies the definition to the clipboard and
    opens a prefilled GitHub issue from the template `connector-definition.md` (title
    `[connector] <name>`, body with the summary and the definition in a code block, cut like
-   SPEC-0301 behaviour 4); nothing is sent by IDECraft (project owner 2026-11-05, ADR-0007).
+   SPEC-0301 behaviour 4); nothing is sent by Ferris IDEA (project owner 2026-11-05, ADR-0007).
 5. **Export a connection profile.** Tools › Database › "Export Connection…" and Find Action
    (`Database.ExportConnection`) write the connection selected in the Database tool window as a
    `.idcsources` file: the envelope (`kind = "sources"`, `format = 1`) and one `[[connection]]` table
-   as in `.idecraft/connections.toml`, without `secret`, without agent permissions and without the
+   as in `.ferris-idea/connections.toml`, without `secret`, without agent permissions and without the
    user name (MCP: `include_user`). If the connection's system is a user or imported one, its
    definition is written next to it as `<id>.idcconnector`. [SPEC-0008, ADR-0021]
 6. **Remove.** A user or imported system's context menu offers "Remove"; profiles using it stay
@@ -66,7 +66,7 @@ file in from disk or a URL after seeing exactly what it contains.
   existing user id replaced only when confirmed, built-in id refused (unit tests with a temporary
   folder).
 - **AK-2** URL import: `http://` refused before any network access; `validate_connector` never
-  fetches (protocol test); size and redirect limits in `idecraft_http::fetch_small_text`.
+  fetches (protocol test); size and redirect limits in `ferris_idea_http::fetch_small_text`.
 - **AK-3** Export: built-in exported without `status` and `tested`; round trip export → import
   gives the same system; profile export has no `secret`, no `ai`, user only when asked; share issue
   URL from the template (unit tests).

@@ -71,7 +71,7 @@ See how the tables of a database hang together without leaving the window or exp
     behaviour 4) and fits. [GEN]
 11. **Export (v2):** an export menu offers Mermaid, PlantUML, DOT, SVG and PNG (1×, 2×, 4×). Text
     formats are copied to the clipboard and written; every export is written to
-    `.idecraft/diagrams/<connection>.<ext>` (name made file-safe), and the status bar names the file.
+    `.ferris-idea/diagrams/<connection>.<ext>` (name made file-safe), and the status bar names the file.
     Exports are complete (SPEC-0022 v2 behaviour 8) but use the box positions as moved (SVG/PNG). There
     is no web target and nothing is uploaded. **v8:** after PNG 4× the menu offers yEd GraphML
     (`.graphml`) and draw.io (`.drawio`) (SPEC-0022 v4 behaviours 15–17). Both are text formats:
@@ -134,7 +134,7 @@ See how the tables of a database hang together without leaving the window or exp
   lines and grows the canvas, layout resets (unit tests `er_layout::tests`).
 - **AK-5 (v2)** Window self-test: the diagram opens fitted (zoom ≤ 100 %, every box inside the visible
   area), ⌘= / ⌘- / ⌘0 change the zoom, dragging `orders` moves it and its line, Layout puts it back,
-  the SVG export is written under `.idecraft/diagrams/`.
+  the SVG export is written under `.ferris-idea/diagrams/`.
 - **AK-6 (v2)** MCP `er_diagram` with `layout`, `positions` and the fit zoom (protocol test).
 - **AK-7 (v2)** Hand test 120: zoom, fit, dragging and export next to the reference.
 - **AK-8 (v3)** Geometry for `unit_price_cents integer`, `moved_at timestamp without time zone` and
@@ -161,7 +161,7 @@ See how the tables of a database hang together without leaving the window or exp
   (`crates/workbench/tests/it/db_handtest_retest.rs` `hand_test_120_boxes_hold_their_text_and_the_diagram_fits`):
   the diagram opens fitted with the canvas inside its area; name and type, measured in the diagram
   font, keep a gap and no name is shortened; ⌘=, ⌘0 (100 %), ⇧⌘0 fits again; a moved box keeps its
-  lines and Layout (⌥L) puts it back; SVG and PNG are written under `.idecraft/diagrams` with whole
+  lines and Layout (⌥L) puts it back; SVG and PNG are written under `.ferris-idea/diagrams` with whole
   names and types.
 - **AK-15 (v8, behaviour 16)** The rule of behaviour 16, measured segment by segment against every
   box rectangle (`er_layout::tests::lines_go_around_boxes`), for a schema in the shape of OBS-0068
@@ -182,7 +182,7 @@ See how the tables of a database hang together without leaving the window or exp
   dependency skip a layer draws, in the layered layout, every line at least 8 px from every box that
   is not its end and leads at least one around; after a box is dragged to the far right no line
   touches a foreign box; ⌥E with ↓ to "yEd GraphML" and to "draw.io" and Enter write
-  `.idecraft/diagrams/<connection>.graphml` and `.drawio` holding the documents of SPEC-0022 v4 for
+  `.ferris-idea/diagrams/<connection>.graphml` and `.drawio` holding the documents of SPEC-0022 v4 for
   the drawing as moved, put the same text on the clipboard, and a table and a column named with
   markup characters appear in them only escaped.
 - **AK-17 (v8)** Hand test: the diagram and its PNG of the PostgreSQL reference schema next to the

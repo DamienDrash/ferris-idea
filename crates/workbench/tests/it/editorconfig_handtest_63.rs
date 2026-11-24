@@ -8,15 +8,17 @@
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
+use ferris_idea_workbench::{EditorView, WorkbenchView};
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
-use idecraft_workbench::{EditorView, WorkbenchView};
 
 const EDITORCONFIG: &str = "root = true\n\n[*]\ntrim_trailing_whitespace = true\ninsert_final_newline = true\n\n[*.py]\nindent_style = space\nindent_size = 4\n\n[Makefile]\nindent_style = tab\ntab_width = 8\n\n[*.bat]\nend_of_line = crlf\n";
 
 fn workspace() -> PathBuf {
-    let root =
-        std::env::temp_dir().join(format!("idecraft-editorconfig-63-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!(
+        "ferris-idea-editorconfig-63-{}",
+        std::process::id()
+    ));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     std::fs::write(root.join(".editorconfig"), EDITORCONFIG).unwrap();
@@ -37,7 +39,7 @@ fn window(
     cx.update(|cx| {
         cx.set_global(IdeSettingsFile(settings.join("settings.toml")));
         cx.set_global(ThemeFile(settings.join("theme")));
-        cx.set_global(CurrentIdeSettings(idecraft_core::IdeSettings::default()));
+        cx.set_global(CurrentIdeSettings(ferris_idea_core::IdeSettings::default()));
     });
     let at = root.to_path_buf();
     let window = cx.add_window(move |_, cx| WorkbenchView::new(&at, cx));

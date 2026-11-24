@@ -3,10 +3,10 @@
 **Stand:** 2026-11-04 · Commit `8c8bf1b` · erzeugt von `scripts/functional.sh` · Grundlage: [Feature-Matrix](FEATURE_MATRIX.md), Tests: `tests/functional/`
 
 Je Zeile der Feature-Matrix ein Testmodul, geschrieben aus Zeile und Akzeptanzkriterien der Spezifikation,
-nicht aus der Implementierung. Die Tests bedienen IDECraft nur von außen: Befehlszeile `idecraft`, MCP über
+nicht aus der Implementierung. Die Tests bedienen Ferris IDEA nur von außen: Befehlszeile `ferris-idea`, MCP über
 stdio und über den HTTP-Transport des Fensters, auf Kopien von `tests/reference-projects` und gegen die
 Referenzdatenbanken. Verhalten, das nur ein Fenster zeigt, prüft der Fenster-Selbsttest
-(`idecraft ui --selftest`, `scripts/ci-window.sh`); die Spalte nennt seine Schritte.
+(`ferris-idea ui --selftest`, `scripts/ci-window.sh`); die Spalte nennt seine Schritte.
 
 **Ergebnis:** 56 Zeilen, 55 mit Tests, 1 mit benanntem Grund ·
 135 Tests: 135 bestanden, 0 übersprungen (Werkzeug oder Datenbank fehlt), 0 fehlgeschlagen.

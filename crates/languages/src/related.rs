@@ -1,5 +1,5 @@
 //! Go to Test and Go to Related (`SPEC-0071` v10 behaviours 15 and 17): the test of a source file
-//! and the subject of a test by their file names, and the files IDECraft's own model relates to a
+//! and the subject of a test by their file names, and the files Ferris IDEA's own model relates to a
 //! file — an HTML file and the stylesheets it links; and the header of a C or C++ source file and
 //! the source of a header (`SPEC-0071` v12 behaviour 19). Nothing here reads a language server.
 
@@ -304,7 +304,7 @@ mod tests {
     /// relation for other files.
     #[test]
     fn related_files_of_html_and_stylesheets() {
-        let root = std::env::temp_dir().join(format!("idecraft-related-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("ferris-idea-related-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("css")).unwrap();
         let root = root.canonicalize().unwrap();

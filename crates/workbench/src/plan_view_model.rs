@@ -4,7 +4,7 @@
 //! Steps are numbered in tree order, parents before children, as the rows of the Tree view
 //! (`db_compare_model::plan_rows`).
 
-use idecraft_database::{Plan, PlanNode};
+use ferris_idea_database::{Plan, PlanNode};
 
 /// The views of the Plan tab, in the order ⌥R goes through them (v13 behaviour 19).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -261,7 +261,7 @@ pub enum DiagramZoom {
 /// Readable is that fit, but not below [`READABLE_ZOOM`]. Full is 100 %.
 pub fn diagram_zoom(metrics: &DiagramMetrics, area: (f32, f32), zoom: DiagramZoom) -> f32 {
     let fit =
-        || idecraft_database::er_layout::fit_zoom(metrics.width, metrics.height, area.0, area.1);
+        || ferris_idea_database::er_layout::fit_zoom(metrics.width, metrics.height, area.0, area.1);
     match zoom {
         DiagramZoom::Fit => fit(),
         DiagramZoom::Readable => fit().clamp(READABLE_ZOOM, 1.0),
@@ -444,10 +444,10 @@ mod tests {
               {"Node Type": "Seq Scan", "Relation Name": "item", "Alias": "i", "Startup Cost": 0.0,
                "Total Cost": 20.0, "Plan Rows": 5, "Actual Total Time": 0.5, "Actual Rows": 5,
                "Actual Loops": 2}]}]}}]"#;
-        let mut nodes = idecraft_database::parse_postgres(json).unwrap();
-        idecraft_database::fill_steps(&mut nodes);
+        let mut nodes = ferris_idea_database::parse_postgres(json).unwrap();
+        ferris_idea_database::fill_steps(&mut nodes);
         Plan {
-            hints: idecraft_database::hints(&nodes),
+            hints: ferris_idea_database::hints(&nodes),
             nodes,
             analyzed: true,
             rolled_back: true,
@@ -519,7 +519,7 @@ mod tests {
 
         // SQLite: no costs, every parent split equally.
         let r = |v: &[&str]| v.iter().map(|c| Some((*c).to_owned())).collect::<Vec<_>>();
-        let mut nodes = idecraft_database::parse_sqlite(&[
+        let mut nodes = ferris_idea_database::parse_sqlite(&[
             r(&["1", "0", "0", "SCAN o"]),
             r(&[
                 "2",
@@ -528,7 +528,7 @@ mod tests {
                 "SEARCH c USING INTEGER PRIMARY KEY (rowid=?)",
             ]),
         ]);
-        idecraft_database::fill_steps(&mut nodes);
+        ferris_idea_database::fill_steps(&mut nodes);
         let lite = Plan {
             hints: Vec::new(),
             nodes,

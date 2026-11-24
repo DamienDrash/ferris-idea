@@ -5,8 +5,8 @@
 
 use std::time::{Duration, Instant};
 
-use idecraft_uidriver::engine::{Command, Done, Engine, Keys, Op, Request};
-use idecraft_uidriver::{
+use ferris_idea_uidriver::engine::{Command, Done, Engine, Keys, Op, Request};
+use ferris_idea_uidriver::{
     Actor, Effect, Grants, KeyPress, Rect, Reserved, Role, Semantics, TextClass, Tree, TreeBuilder,
 };
 
@@ -36,7 +36,7 @@ pub fn commit_window() -> Vec<El> {
     vec![
         El(
             Semantics::new(Role::Window)
-                .name("IDECraft")
+                .name("Ferris IDEA")
                 .test_id("window")
                 .overlay(false),
             r(0., 0., 1280., 800.),
@@ -45,7 +45,7 @@ pub fn commit_window() -> Vec<El> {
             Semantics::new(Role::Button)
                 .name("Commit")
                 .test_id("commit-button")
-                .action(idecraft_uidriver::AxAction::Click)
+                .action(ferris_idea_uidriver::AxAction::Click)
                 .effects(&[Effect::VcsWrite]),
             r(100., 700., 80., 24.),
         ),
@@ -53,7 +53,7 @@ pub fn commit_window() -> Vec<El> {
             Semantics::new(Role::Button)
                 .name("Commit and Push")
                 .test_id("commit-push-button")
-                .action(idecraft_uidriver::AxAction::Click)
+                .action(ferris_idea_uidriver::AxAction::Click)
                 .effects(&[Effect::VcsWrite, Effect::Remote]),
             r(200., 700., 140., 24.),
         ),
@@ -86,7 +86,7 @@ pub fn commit_window() -> Vec<El> {
             Semantics::new(Role::Button)
                 .name("Trust Project…")
                 .test_id("trust-project")
-                .action(idecraft_uidriver::AxAction::Click)
+                .action(ferris_idea_uidriver::AxAction::Click)
                 .effects(&[Effect::Trust])
                 .reserved(Reserved::Trust),
             r(800., 200., 120., 24.),
@@ -95,7 +95,7 @@ pub fn commit_window() -> Vec<El> {
             Semantics::new(Role::Button)
                 .name("Mystery")
                 .test_id("mystery")
-                .action(idecraft_uidriver::AxAction::Click),
+                .action(ferris_idea_uidriver::AxAction::Click),
             r(800., 300., 120., 24.),
         ),
         El(
@@ -103,7 +103,7 @@ pub fn commit_window() -> Vec<El> {
                 .name("Disabled")
                 .test_id("disabled-button")
                 .enabled(false)
-                .action(idecraft_uidriver::AxAction::Click)
+                .action(ferris_idea_uidriver::AxAction::Click)
                 .effects(&[Effect::None]),
             r(800., 400., 120., 24.),
         ),

@@ -8,11 +8,11 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use ferris_idea_core::{RunConfig, RunField, RunTemplate};
 use gpui::{
     Context, Entity, EventEmitter, FocusHandle, KeyDownEvent, Subscription, Window, div,
     prelude::*, px,
 };
-use idecraft_core::{RunConfig, RunField, RunTemplate};
 
 use crate::editor_view::{EditorEvent, EditorView};
 use crate::icon_images::icon;
@@ -158,7 +158,7 @@ pub struct RunConfigDialog {
 impl EventEmitter<RunConfigDialogEvent> for RunConfigDialog {}
 
 fn run_file_text(root: &Path) -> String {
-    std::fs::read_to_string(root.join(idecraft_core::RUN_FILE)).unwrap_or_default()
+    std::fs::read_to_string(root.join(ferris_idea_core::RUN_FILE)).unwrap_or_default()
 }
 
 impl RunConfigDialog {
@@ -174,10 +174,10 @@ impl RunConfigDialog {
         cx: &mut Context<Self>,
     ) -> Self {
         let file_text = run_file_text(root);
-        let project = idecraft_core::entries_of(&file_text)
+        let project = ferris_idea_core::entries_of(&file_text)
             .map(|e| e.into_iter().map(|e| e.config).collect())
             .unwrap_or_default();
-        let templates = idecraft_core::parse_run_templates(&file_text);
+        let templates = ferris_idea_core::parse_run_templates(&file_text);
         let model = EditorModel::new(project, temporary, detected, select)
             .with_templates(templates.templates);
         let fields: Vec<Entity<EditorView>> =
@@ -272,14 +272,14 @@ impl RunConfigDialog {
             return;
         }
         self.file_text = text;
-        let Ok(entries) = idecraft_core::entries_of(&self.file_text) else {
+        let Ok(entries) = ferris_idea_core::entries_of(&self.file_text) else {
             return;
         };
         self.sync_form(cx);
         let edited = self.model.current().is_some_and(|e| e.changed());
         self.model
             .reload(entries.into_iter().map(|e| e.config).collect());
-        let templates = idecraft_core::parse_run_templates(&self.file_text);
+        let templates = ferris_idea_core::parse_run_templates(&self.file_text);
         self.template_file_problems = templates.problems;
         let template_edited = self
             .loaded_template
@@ -714,12 +714,12 @@ impl RunConfigDialog {
                 return false;
             }
         };
-        match idecraft_core::save_run_file(&self.root, &entries, Some(&templates)) {
+        match ferris_idea_core::save_run_file(&self.root, &entries, Some(&templates)) {
             Ok(_) => {
                 self.model.written();
                 self.file_text = run_file_text(&self.root);
                 self.template_file_problems =
-                    idecraft_core::parse_run_templates(&self.file_text).problems;
+                    ferris_idea_core::parse_run_templates(&self.file_text).problems;
                 self.problems.clear();
                 cx.emit(RunConfigDialogEvent::Temporary(self.model.temporary()));
                 cx.emit(RunConfigDialogEvent::Saved);
@@ -923,7 +923,7 @@ impl Render for RunConfigDialog {
                 .child(icon(key))
                 .tip_text(
                     id,
-                    idecraft_ui::tooltip::Tip {
+                    ferris_idea_ui::tooltip::Tip {
                         title: title.into(),
                         shortcut: String::new(),
                         details: Vec::new(),
@@ -990,7 +990,7 @@ impl Render for RunConfigDialog {
                         .child("Copy")
                         .tip_text(
                             "run-config-copy",
-                            idecraft_ui::tooltip::Tip {
+                            ferris_idea_ui::tooltip::Tip {
                                 title: keys("Copy ⌘D"),
                                 shortcut: String::new(),
                                 details: Vec::new(),
@@ -1162,7 +1162,7 @@ impl Render for RunConfigDialog {
         });
         let button = |id: &'static str, label: &'static str, primary: bool| {
             crate::metrics::button(id, label, primary)
-                .tip_text(id, idecraft_ui::tooltip::Tip::default())
+                .tip_text(id, ferris_idea_ui::tooltip::Tip::default())
         };
         let footer = div()
             .flex()
@@ -1834,7 +1834,7 @@ impl RunConfigDialog {
             )
             .child(div().whitespace_normal().text_color(c(p.ui_muted)).child(
                 "A new configuration of this type starts as a copy of this template. \
-                         Configurations that exist are not changed. Stored in .idecraft/run.toml.",
+                         Configurations that exist are not changed. Stored in .ferris-idea/run.toml.",
             ))
             .when_some(program, |d, program| {
                 d.child(
@@ -2142,7 +2142,7 @@ impl RunConfigDialog {
 /// A shortcut of this dialog written for the platform: ⌘ is Ctrl and ⌥ is Alt outside macOS
 /// (`SPEC-0028` v8 behaviour 13).
 fn keys(text: &str) -> String {
-    idecraft_ui::keymap::local_keys(text, cfg!(target_os = "macos"))
+    ferris_idea_ui::keymap::local_keys(text, cfg!(target_os = "macos"))
 }
 
 #[cfg(test)]

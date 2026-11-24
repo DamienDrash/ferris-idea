@@ -9,8 +9,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::time::{Duration, Instant};
 
-use idecraft_core::{RunEvent, RunHandle, RunOutcome, TestReport};
-use idecraft_session::{Connection, ErrorCode, RpcError};
+use ferris_idea_core::{RunEvent, RunHandle, RunOutcome, TestReport};
+use ferris_idea_session::{Connection, ErrorCode, RpcError};
 use serde_json::{Value, json};
 
 use crate::live::{ConnState, LiveProject};

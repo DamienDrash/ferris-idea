@@ -288,7 +288,7 @@ pub struct SavedGroup {
     pub tabs: SavedTabs,
 }
 
-/// The editor area as remembered per project in `.idecraft/editor-tabs.json`: layout, tabs per
+/// The editor area as remembered per project in `.ferris-idea/editor-tabs.json`: layout, tabs per
 /// group with pins and the active tab, and the focused group.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SavedEditors {
@@ -307,11 +307,11 @@ pub struct SavedEditors {
 
 /// The tool windows to show again from the saved ids: known ones once each, in order; unknown ids
 /// are left out (`SPEC-0061` v13 behaviour 59).
-pub fn restored_tool_windows(ids: &[String]) -> Vec<idecraft_ui::tool_windows::ToolWindow> {
+pub fn restored_tool_windows(ids: &[String]) -> Vec<ferris_idea_ui::tool_windows::ToolWindow> {
     let mut out = Vec::new();
     for w in ids
         .iter()
-        .filter_map(|id| idecraft_ui::tool_windows::ToolWindow::from_id(id))
+        .filter_map(|id| ferris_idea_ui::tool_windows::ToolWindow::from_id(id))
     {
         if !out.contains(&w) {
             out.push(w);
@@ -322,7 +322,7 @@ pub fn restored_tool_windows(ids: &[String]) -> Vec<idecraft_ui::tool_windows::T
 
 /// Where the editor area is remembered.
 pub fn saved_editors_file(root: &Path) -> PathBuf {
-    root.join(".idecraft").join("editor-tabs.json")
+    root.join(".ferris-idea").join("editor-tabs.json")
 }
 
 fn relative(root: &Path, p: &Path) -> PathBuf {
@@ -345,12 +345,12 @@ impl SavedEditors {
         let file = saved_editors_file(root);
         // The open tabs are state of one user: the generated ignore file lists them before
         // they are written (`SPEC-0069` behaviour 3a).
-        idecraft_core::local_state::refresh_local_state_ignore(root);
+        ferris_idea_core::local_state::refresh_local_state_ignore(root);
         if let Some(dir) = file.parent() {
             std::fs::create_dir_all(dir)?;
         }
         let text = serde_json::to_string_pretty(&rel).map_err(std::io::Error::other)?;
-        idecraft_core::write_atomic(&file, text)
+        ferris_idea_core::write_atomic(&file, text)
     }
 
     /// The remembered editor area of the project at `root`, paths made absolute; `None` when
@@ -437,7 +437,7 @@ mod tests {
         l.set_ratio(&[], 0.3);
         l.set_ratio(&[true], 0.99);
         assert_eq!(l.splits()[1].2, RATIOS.1);
-        let dir = std::env::temp_dir().join(format!("idecraft-layout-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-layout-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let tabs = |names: &[&str]| SavedTabs {
@@ -466,7 +466,7 @@ mod tests {
         };
         saved.save(&dir).unwrap();
         // SPEC-0069 AK-6 (v4): writing the tabs makes sure the ignore file lists them.
-        let ignore = std::fs::read_to_string(dir.join(".idecraft/.gitignore")).unwrap();
+        let ignore = std::fs::read_to_string(dir.join(".ferris-idea/.gitignore")).unwrap();
         assert!(ignore.lines().any(|l| l == "editor-tabs.json"), "{ignore}");
         let text = std::fs::read_to_string(saved_editors_file(&dir)).unwrap();
         assert!(
@@ -498,7 +498,7 @@ mod tests {
     /// left out; a file of an earlier version has none and leaves the start as it is.
     #[test]
     fn the_shown_tool_windows_come_back() {
-        use idecraft_ui::tool_windows::ToolWindow;
+        use ferris_idea_ui::tool_windows::ToolWindow;
         let ids: Vec<String> = ["terminal", "database", "no-such-window", "terminal"]
             .map(String::from)
             .to_vec();

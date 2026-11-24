@@ -9,7 +9,7 @@ fn project_settings_beat_the_defaults() {
     let p = Project::reference("python-basic");
     let out = p.cli(&["open", p.root.to_str().unwrap()]);
     assert!(String::from_utf8_lossy(&out.stdout).contains("editor.tab_size = 4"));
-    p.write(".idecraft/settings.toml", "[editor]\ntab_size = 2\n");
+    p.write(".ferris-idea/settings.toml", "[editor]\ntab_size = 2\n");
     let out = p.cli(&["open", p.root.to_str().unwrap()]);
     let text = String::from_utf8_lossy(&out.stdout);
     assert!(
@@ -21,7 +21,7 @@ fn project_settings_beat_the_defaults() {
 #[test]
 fn invalid_project_settings_are_an_error_naming_the_problem() {
     let p = Project::reference("python-basic");
-    p.write(".idecraft/settings.toml", "[editor\ntab_size = 2\n");
+    p.write(".ferris-idea/settings.toml", "[editor\ntab_size = 2\n");
     let out = p.cli(&["open", p.root.to_str().unwrap()]);
     assert!(!out.status.success());
     assert!(!String::from_utf8_lossy(&out.stderr).is_empty());
@@ -45,7 +45,7 @@ fn global_settings_live_in_the_users_folder_and_are_changed_there() {
     let after = ide.ok("ide_settings", json!({}));
     assert_eq!(after["settings"]["editor"]["font_size"], json!(17.0));
     // Never inside the project.
-    assert!(!p.path(".idecraft/settings.toml").exists());
+    assert!(!p.path(".ferris-idea/settings.toml").exists());
     // Out of range is clamped as the dialog does (8–40).
     let clamped = ide.ok(
         "set_ide_settings",

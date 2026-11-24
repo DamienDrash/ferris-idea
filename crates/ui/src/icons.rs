@@ -35,61 +35,61 @@ pub const ICONS: &[Icon] = &[
     icon!("nodes/dataSchema"),
     icon!("nodes/dataTables"),
     icon!("nodes/dataColumn"),
-    icon!("idecraft/dbKeyPrimary"),
-    icon!("idecraft/dbKeyForeign"),
-    icon!("idecraft/dbIndex"),
+    icon!("ferris-idea/dbKeyPrimary"),
+    icon!("ferris-idea/dbKeyForeign"),
+    icon!("ferris-idea/dbIndex"),
     // The Debug window's toolbar (SPEC-0194 v3 behaviour 10).
-    icon!("idecraft/debugPause"),
-    icon!("idecraft/debugRunToCursor"),
-    icon!("idecraft/debugRerun"),
-    icon!("idecraft/debugMuteBreakpoints"),
-    icon!("idecraft/debugViewBreakpoints"),
+    icon!("ferris-idea/debugPause"),
+    icon!("ferris-idea/debugRunToCursor"),
+    icon!("ferris-idea/debugRerun"),
+    icon!("ferris-idea/debugMuteBreakpoints"),
+    icon!("ferris-idea/debugViewBreakpoints"),
     // Own tool window icons (SPEC-0061 v7 behaviours 41–43).
-    icon!("idecraft/moreHorizontal"),
-    icon!("idecraft/structure"),
-    icon!("idecraft/spring"),
-    icon!("idecraft/chat"),
-    icon!("idecraft/profiler"),
-    icon!("idecraft/remote"),
+    icon!("ferris-idea/moreHorizontal"),
+    icon!("ferris-idea/structure"),
+    icon!("ferris-idea/spring"),
+    icon!("ferris-idea/chat"),
+    icon!("ferris-idea/profiler"),
+    icon!("ferris-idea/remote"),
     // Own Git icons: the branch popup's actions and tags (SPEC-0068 v5 behaviour 15) and the
     // Commit window's toolbar (SPEC-0063 v7 behaviour 19).
-    icon!("idecraft/vcsUpdate"),
-    icon!("idecraft/vcsCommit"),
-    icon!("idecraft/vcsPush"),
-    icon!("idecraft/tag"),
-    icon!("idecraft/rollback"),
-    icon!("idecraft/diff"),
-    icon!("idecraft/groupBy"),
-    icon!("idecraft/filter"),
-    icon!("idecraft/preview"),
-    icon!("idecraft/openInFind"),
-    icon!("idecraft/newLine"),
-    icon!("idecraft/pin"),
+    icon!("ferris-idea/vcsUpdate"),
+    icon!("ferris-idea/vcsCommit"),
+    icon!("ferris-idea/vcsPush"),
+    icon!("ferris-idea/tag"),
+    icon!("ferris-idea/rollback"),
+    icon!("ferris-idea/diff"),
+    icon!("ferris-idea/groupBy"),
+    icon!("ferris-idea/filter"),
+    icon!("ferris-idea/preview"),
+    icon!("ferris-idea/openInFind"),
+    icon!("ferris-idea/newLine"),
+    icon!("ferris-idea/pin"),
     // The mark of a file whose type is overridden (SPEC-0004 v6 behaviour 15).
-    icon!("idecraft/overrideMark"),
-    icon!("idecraft/history"),
-    icon!("idecraft/preserveCase"),
+    icon!("ferris-idea/overrideMark"),
+    icon!("ferris-idea/history"),
+    icon!("ferris-idea/preserveCase"),
     // Tag labels of the Git log (SPEC-0086 v7 behaviour 14).
-    icon!("idecraft/gitTag"),
+    icon!("ferris-idea/gitTag"),
     // Favourite branches: the star filled and as an outline (SPEC-0068 v8, SPEC-0086 v10).
-    icon!("idecraft/star"),
-    icon!("idecraft/starOutline"),
+    icon!("ferris-idea/star"),
+    icon!("ferris-idea/starOutline"),
     // The build tools window's toolbar, the folder roles of Maven and Gradle modules and the POM
     // file icon (SPEC-0100 v2, SPEC-0048 v3).
-    icon!("idecraft/execute"),
-    icon!("idecraft/offline"),
-    icon!("idecraft/skipTests"),
-    icon!("idecraft/sourceRoot"),
-    icon!("idecraft/testRoot"),
-    icon!("idecraft/resourcesRoot"),
-    icon!("idecraft/testResourcesRoot"),
-    icon!("idecraft/excludedRoot"),
-    icon!("idecraft/maven"),
+    icon!("ferris-idea/execute"),
+    icon!("ferris-idea/offline"),
+    icon!("ferris-idea/skipTests"),
+    icon!("ferris-idea/sourceRoot"),
+    icon!("ferris-idea/testRoot"),
+    icon!("ferris-idea/resourcesRoot"),
+    icon!("ferris-idea/testResourcesRoot"),
+    icon!("ferris-idea/excludedRoot"),
+    icon!("ferris-idea/maven"),
     // Sources, analyzer, diagram and unlink of the build tools window (SPEC-0100 v3).
-    icon!("idecraft/download"),
-    icon!("idecraft/dependencyAnalyzer"),
-    icon!("idecraft/diagram"),
-    icon!("idecraft/remove"),
+    icon!("ferris-idea/download"),
+    icon!("ferris-idea/dependencyAnalyzer"),
+    icon!("ferris-idea/diagram"),
+    icon!("ferris-idea/remove"),
     icon!("status/warning"),
     icon!("run/testPassed"),
     icon!("run/testFailed"),
@@ -148,23 +148,28 @@ pub const ICONS: &[Icon] = &[
     icon!("fileTypes/swiftLang"),
     icon!("fileTypes/docker"),
     icon!("fileTypes/gitignore"),
+    // Ignore files (SPEC-0004 v12 behaviour 15, own drawing).
+    icon!("ferris-idea/ignore"),
+    // A module file `.iml` (SPEC-0004 v13 behaviour 15; the package row of SPEC-0275 v25 uses
+    // `nodes/package`).
+    icon!("fileTypes/ideaModule"),
     icon!("fileTypes/vue"),
     icon!("fileTypes/graphql"),
     icon!("fileTypes/http"),
     icon!("fileTypes/jupyter"),
     icon!("fileTypes/terraform"),
     icon!("fileTypes/perl"),
-    icon!("idecraft/rust"),
-    icon!("idecraft/go"),
-    icon!("idecraft/ruby"),
-    icon!("idecraft/php"),
-    icon!("idecraft/svelte"),
-    icon!("idecraft/astro"),
+    icon!("ferris-idea/rust"),
+    icon!("ferris-idea/go"),
+    icon!("ferris-idea/ruby"),
+    icon!("ferris-idea/php"),
+    icon!("ferris-idea/svelte"),
+    icon!("ferris-idea/astro"),
     // Kinds of a Java or Kotlin file's primary declaration that have no bundled node icon
     // (SPEC-0131 v3 behaviour 7).
-    icon!("idecraft/record"),
-    icon!("idecraft/annotation"),
-    icon!("idecraft/object"),
+    icon!("ferris-idea/record"),
+    icon!("ferris-idea/annotation"),
+    icon!("ferris-idea/object"),
     icon!("codeInsight/intentionBulb"),
     icon!("codeInsight/quickfixBulb"),
     icon!("nodes/class"),
@@ -244,27 +249,46 @@ pub fn svg(key: &str, dark: bool) -> Option<&'static [u8]> {
         .map(|i| if dark { i.dark } else { i.light })
 }
 
+/// Ignore files, by their lower-case name (`SPEC-0004` v12 behaviour 15).
+pub const IGNORE_FILES: &[&str] = &[
+    ".gitignore",
+    ".dockerignore",
+    ".ignore",
+    ".npmignore",
+    ".prettierignore",
+    ".eslintignore",
+    ".stylelintignore",
+    ".helmignore",
+    ".gcloudignore",
+    ".vscodeignore",
+    ".hgignore",
+];
+
 /// Icon key for a file name, by extension or well-known name; `fileTypes/unknown` otherwise.
-/// Languages whose reference icons are not open (Rust, Go, Ruby, PHP) get IDECraft's own icons
+/// Languages whose reference icons are not open (Rust, Go, Ruby, PHP) get Ferris IDEA's own icons
 /// (`SPEC-0131` behaviour 4).
 pub fn file_icon(name: &str) -> &'static str {
     let lower = name.to_ascii_lowercase();
     match lower.as_str() {
         ".editorconfig" => return "fileTypes/editorConfig",
-        ".gitignore" | ".dockerignore" | ".ignore" => return "fileTypes/gitignore",
+        // Ignore files, Git's too, have an ignore icon of Ferris IDEA's own (SPEC-0004 v12
+        // behaviour 15, OBS-0090 L3).
+        n if IGNORE_FILES.contains(&n) => return "ferris-idea/ignore",
         "dockerfile" | "containerfile" => return "fileTypes/docker",
         "build.gradle" | "settings.gradle" | "build.gradle.kts" | "settings.gradle.kts" => {
             return "fileTypes/gradle";
         }
         // Maven's build file and the build tools' wrapper scripts (SPEC-0048 v3 behaviour 10).
-        "pom.xml" => return "idecraft/maven",
+        "pom.xml" => return "ferris-idea/maven",
         "gradlew" | "mvnw" => return "fileTypes/shell",
         _ => {}
     }
     let ext = lower.rsplit_once('.').map_or("", |(_, e)| e);
     match ext {
         "json" | "jsonc" | "json5" => "fileTypes/json",
-        "xml" | "xsd" | "xsl" | "iml" | "svg" | "plist" => "fileTypes/xml",
+        // A module file of the reference's project format (SPEC-0004 v13 behaviour 15).
+        "iml" => "fileTypes/ideaModule",
+        "xml" | "xsd" | "xsl" | "svg" | "plist" => "fileTypes/xml",
         "html" | "htm" | "xhtml" => "fileTypes/html",
         "css" | "scss" | "sass" | "less" => "fileTypes/css",
         "md" | "markdown" => "fileTypes/markdown",
@@ -292,8 +316,8 @@ pub fn file_icon(name: &str) -> &'static str {
         "vue" => "fileTypes/vue",
         // Web component and template languages (SPEC-0131 v2 behaviour 4): own icons where the
         // reference's are not open, HTML templates the HTML icon, MDX the Markdown icon.
-        "svelte" => "idecraft/svelte",
-        "astro" => "idecraft/astro",
+        "svelte" => "ferris-idea/svelte",
+        "astro" => "ferris-idea/astro",
         "hbs" | "handlebars" | "mustache" | "ejs" | "njk" | "twig" | "liquid" | "jinja"
         | "jinja2" | "j2" | "pug" | "jade" | "erb" => "fileTypes/html",
         "mdx" => "fileTypes/markdown",
@@ -302,10 +326,10 @@ pub fn file_icon(name: &str) -> &'static str {
         "ipynb" => "fileTypes/jupyter",
         "tf" | "tfvars" => "fileTypes/terraform",
         "pl" | "pm" => "fileTypes/perl",
-        "rs" => "idecraft/rust",
-        "go" => "idecraft/go",
-        "rb" | "rake" | "gemspec" => "idecraft/ruby",
-        "php" | "phtml" => "idecraft/php",
+        "rs" => "ferris-idea/rust",
+        "go" => "ferris-idea/go",
+        "rb" | "rake" | "gemspec" => "ferris-idea/ruby",
+        "php" | "phtml" => "ferris-idea/php",
         "txt" | "log" => "fileTypes/text",
         _ => "fileTypes/unknown",
     }
@@ -317,12 +341,13 @@ mod tests {
 
     #[test]
     fn every_icon_has_both_variants_and_files_map_to_bundled_icons() {
-        assert_eq!(ICONS.len(), 176);
+        assert_eq!(ICONS.len(), 178);
         // SPEC-0068 v8 AK-15: the favourite stars, light and dark.
         assert!(
-            svg("idecraft/star", true).is_some() && svg("idecraft/starOutline", false).is_some()
+            svg("ferris-idea/star", true).is_some()
+                && svg("ferris-idea/starOutline", false).is_some()
         );
-        assert!(svg("idecraft/gitTag", false).is_some());
+        assert!(svg("ferris-idea/gitTag", false).is_some());
         // SPEC-0061 v7 AK-26: every tool window's stripe icon is bundled.
         for w in crate::tool_windows::ToolWindow::ALL {
             assert!(svg(w.icon(), true).is_some(), "{}", w.icon());
@@ -343,15 +368,30 @@ mod tests {
             assert!(svg(file_icon(name), true).is_some(), "{name}");
         }
         assert_eq!(file_icon("README.MD"), "fileTypes/markdown");
-        assert_eq!(file_icon("main.rs"), "idecraft/rust");
+        assert_eq!(file_icon("main.rs"), "ferris-idea/rust");
         assert_eq!(file_icon("app.py"), "fileTypes/python");
         assert_eq!(file_icon("Dockerfile"), "fileTypes/docker");
-        assert_eq!(file_icon(".gitignore"), "fileTypes/gitignore");
+        // SPEC-0004 v12 AK-19 (OBS-0090 L3): ignore files have the own ignore icon.
+        for name in [
+            ".gitignore",
+            ".dockerignore",
+            ".ignore",
+            ".npmignore",
+            ".DockerIgnore",
+        ] {
+            assert_eq!(file_icon(name), "ferris-idea/ignore", "{name}");
+        }
+        assert!(
+            svg("ferris-idea/ignore", true).is_some() && svg("ferris-idea/ignore", false).is_some()
+        );
+        // SPEC-0004 v12 AK-19 (OBS-0093 T2): a module file has the module icon.
+        assert_eq!(file_icon("shop.iml"), "fileTypes/ideaModule");
+        assert_eq!(file_icon("pom.xml"), "ferris-idea/maven");
         assert_eq!(file_icon("notes.txt"), "fileTypes/text");
         assert_eq!(file_icon("noext"), "fileTypes/unknown");
         // SPEC-0131 v2 AK-1: web component and template files never show the unknown icon.
-        assert_eq!(file_icon("App.svelte"), "idecraft/svelte");
-        assert_eq!(file_icon("index.astro"), "idecraft/astro");
+        assert_eq!(file_icon("App.svelte"), "ferris-idea/svelte");
+        assert_eq!(file_icon("index.astro"), "ferris-idea/astro");
         assert_eq!(file_icon("App.vue"), "fileTypes/vue");
         for name in [
             "a.hbs", "a.ejs", "a.njk", "a.twig", "a.liquid", "a.pug", "a.j2", "a.mdx",
@@ -361,5 +401,25 @@ mod tests {
         }
         assert!(svg("nodes/folder", false).is_some());
         assert!(svg("missing", true).is_none());
+    }
+
+    /// SPEC-0004 v13 AK-22 (OBS-0093 T2): a `.iml` file has the open module-file icon, the
+    /// package row of the Project tree the open package icon (SPEC-0275 v25), both in light and
+    /// dark; other XML files keep the XML icon.
+    #[test]
+    fn module_files_have_the_open_module_icon() {
+        assert_eq!(file_icon("shop.iml"), "fileTypes/ideaModule");
+        assert_eq!(file_icon("APP.IML"), "fileTypes/ideaModule");
+        assert_eq!(file_icon("shop.xml"), "fileTypes/xml");
+        for key in ["fileTypes/ideaModule", "nodes/package", "nodes/module"] {
+            assert!(
+                svg(key, true).is_some() && svg(key, false).is_some(),
+                "{key}"
+            );
+        }
+        assert_ne!(
+            svg("fileTypes/ideaModule", false),
+            svg("fileTypes/xml", false)
+        );
     }
 }

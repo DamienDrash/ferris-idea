@@ -72,7 +72,7 @@ scripts that refers to the object, and name the places that could not be decided
     with the same facts (dialect, edits, ambiguous places) and the reason, and is not changed.
     Before v4 a rename with `apply` (SPEC-0128) wrote into such files, for example the migration
     scripts of an installed package. Folders the search never read (`node_modules`, `target`,
-    `__pycache__`, version control and IDECraft data) are still not read. [GEN]
+    `__pycache__`, version control and Ferris IDEA data) are still not read. [GEN]
     - **MCP:** `rename_sql_object` returns these files as `outside_project` (numbered `index`,
       `path`, `dialect`, `other_dialect`, `edits`, `ambiguous`, `why`, `reason`, `included`);
       with `apply`, `include_outside: [indices]` changes the given ones too. A file of another
@@ -173,4 +173,4 @@ statement and writing files: SPEC-0128.
   reference was not compared for this.
 - v5: a column that a `WITH` query or a subquery in `FROM` selects is aliased to its old name inside
   that query (behaviour 13); the reference was not compared for it, its connection was missing in
-  OBS-0068 (L3 was seen in IDECraft alone).
+  OBS-0068 (L3 was seen in Ferris IDEA alone).

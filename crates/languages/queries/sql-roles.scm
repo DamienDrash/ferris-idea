@@ -1,4 +1,4 @@
-; IDECraft's colour roles for SQL (SPEC-0027 v6). Placed before the grammar's own query: for the
+; Ferris IDEA's colour roles for SQL (SPEC-0027 v6). Placed before the grammar's own query: for the
 ; same node the earlier pattern wins. Data types, `NULL`, `DEFAULT`, `ASC` and `DESC` become
 ; keywords in `SyntaxDocument`; aliases where they are used get their role there too.
 

@@ -32,14 +32,14 @@ impl Global for OpenProjects {}
 pub fn recent_file(cx: &App) -> Option<PathBuf> {
     match cx.try_global::<RecentProjectsFile>() {
         Some(f) => Some(f.0.clone()),
-        None => idecraft_core::recent_projects_file(),
+        None => ferris_idea_core::recent_projects_file(),
     }
 }
 
 /// Recent projects, most recent first, without `except`.
 pub fn recent_projects(except: &Path, cx: &App) -> Vec<PathBuf> {
     recent_file(cx)
-        .map(|f| idecraft_core::load_recent_projects(&f))
+        .map(|f| ferris_idea_core::load_recent_projects(&f))
         .unwrap_or_default()
         .into_iter()
         .filter(|p| p != except)
@@ -50,12 +50,15 @@ pub fn recent_projects(except: &Path, cx: &App) -> Vec<PathBuf> {
 /// (behaviour 3).
 pub fn register_window(root: &Path, window: AnyWindowHandle, cx: &mut App) {
     if let Some(file) = recent_file(cx) {
-        let _ = idecraft_core::remember_project(&file, root);
+        let _ = ferris_idea_core::remember_project(&file, root);
     }
     cx.default_global::<OpenProjects>()
         .0
         .insert(root.to_path_buf(), window);
     note_opened(&mut cx.default_global::<OpenedOrder>().0, window);
+    // A project window opened: the Welcome window goes (`SPEC-0355` behaviour 4). Deferred: the
+    // caller may be updating the Welcome window itself.
+    cx.defer(crate::welcome_view::close);
     if let Some(hook) = cx.try_global::<OnProjectOpened>().map(|h| h.0.clone()) {
         hook(root, cx);
     }
@@ -120,8 +123,8 @@ pub struct OnProjectClosed(pub std::rc::Rc<ProjectHook>);
 
 impl Global for OnProjectClosed {}
 
-/// Called when Close Project closed the last project window: the app offers the folder chooser
-/// (`SPEC-0094` v3 behaviour 9).
+/// Called when Close Project closed the last project window: the app shows the Welcome window
+/// (`SPEC-0094` v10 behaviour 9, `SPEC-0355` behaviour 2).
 pub struct OnLastProjectClosed(pub std::rc::Rc<dyn Fn(&mut App)>);
 
 impl Global for OnLastProjectClosed {}
@@ -130,6 +133,16 @@ impl Global for OnLastProjectClosed {}
 /// the front of the recent projects, and [`OnProjectClosed`] is told (`SPEC-0094` v3
 /// behaviour 8). Returns the window it had.
 pub fn unregister_window(root: &Path, cx: &mut App) -> Option<AnyWindowHandle> {
+    forget_window(root, true, cx)
+}
+
+/// Like [`unregister_window`] for a project that was not opened (*Don't Open* of the trust
+/// question, `SPEC-0278` v4 behaviour 2): it does not move to the front of the recent projects.
+pub fn unregister_unopened_window(root: &Path, cx: &mut App) -> Option<AnyWindowHandle> {
+    forget_window(root, false, cx)
+}
+
+fn forget_window(root: &Path, remember: bool, cx: &mut App) -> Option<AnyWindowHandle> {
     let window = project_window(root, cx);
     if let Some(window) = window {
         cx.default_global::<OpenProjects>()
@@ -139,8 +152,8 @@ pub fn unregister_window(root: &Path, cx: &mut App) -> Option<AnyWindowHandle> {
             .0
             .retain(|w| *w != window);
     }
-    if let Some(file) = recent_file(cx) {
-        let _ = idecraft_core::remember_project(&file, root);
+    if remember && let Some(file) = recent_file(cx) {
+        let _ = ferris_idea_core::remember_project(&file, root);
     }
     if let Some(hook) = cx.try_global::<OnProjectClosed>().map(|h| h.0.clone()) {
         hook(root, cx);
@@ -202,8 +215,8 @@ pub fn window_options(title: &str, cx: &App) -> WindowOptions {
                 px(crate::traffic_lights::TRAFFIC_LIGHT_POSITION[1]),
             )),
         }),
-        // Linux desktops find the icon through `idecraft.desktop` (SPEC-0060 v6 behaviour 12).
-        app_id: Some(idecraft_ui::brand::APP_ID.to_owned()),
+        // Linux desktops find the icon through `ferris-idea.desktop` (SPEC-0060 v6 behaviour 12).
+        app_id: Some(ferris_idea_ui::brand::APP_ID.to_owned()),
         ..Default::default()
     }
 }
@@ -213,7 +226,7 @@ pub fn window_options(title: &str, cx: &App) -> WindowOptions {
 /// opens its project (`SPEC-0094` v7 behaviour 18) and itself in a focused editor tab, in the
 /// project's window when one is open (behaviour 19).
 pub fn open_project(path: &Path, cx: &mut App) -> Result<bool, String> {
-    let target = idecraft_core::project_root::open_target(path).map_err(|e| e.to_string())?;
+    let target = ferris_idea_core::project_root::open_target(path).map_err(|e| e.to_string())?;
     let (root, file) = (target.root, target.file);
     let open = cx
         .try_global::<OpenProjects>()
@@ -231,7 +244,7 @@ pub fn open_project(path: &Path, cx: &mut App) -> Result<bool, String> {
         }
         return Ok(false);
     }
-    let title = format!("IDECraft — {}", root.display());
+    let title = format!("Ferris IDEA — {}", root.display());
     let options = window_options(&title, cx);
     let shown = root.clone();
     let handle = cx

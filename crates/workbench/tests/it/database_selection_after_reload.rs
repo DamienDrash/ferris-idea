@@ -5,8 +5,8 @@
 
 #![cfg(target_os = "macos")]
 
+use ferris_idea_workbench::WorkbenchView;
 use gpui::{Entity, TestAppContext, VisualTestContext};
-use idecraft_workbench::WorkbenchView;
 
 fn sqlite(db: &std::path::Path, sql: &str) -> bool {
     std::process::Command::new("sqlite3")
@@ -19,9 +19,9 @@ fn sqlite(db: &std::path::Path, sql: &str) -> bool {
 /// A workspace with the SQLite connections `shop` (two tables) and `notes`. `None` without the
 /// `sqlite3` program.
 fn workspace() -> Option<std::path::PathBuf> {
-    let root = std::env::temp_dir().join(format!("idecraft-db-keep-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-db-keep-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir_all(root.join(".idecraft")).unwrap();
+    std::fs::create_dir_all(root.join(".ferris-idea")).unwrap();
     let (shop, notes) = (root.join("shop.db"), root.join("notes.db"));
     let made = sqlite(
         &shop,
@@ -32,7 +32,7 @@ fn workspace() -> Option<std::path::PathBuf> {
         return None;
     }
     std::fs::write(
-        root.join(".idecraft/connections.toml"),
+        root.join(".ferris-idea/connections.toml"),
         format!(
             "[[connection]]\nid = \"shop\"\nname = \"shop\"\ndialect = \"sqlite\"\npath = \"{}\"\n\n\
              [[connection]]\nid = \"notes\"\nname = \"notes\"\ndialect = \"sqlite\"\npath = \"{}\"\n",
@@ -46,10 +46,10 @@ fn workspace() -> Option<std::path::PathBuf> {
 
 /// Runs the background reads until `done` holds; panics after five seconds.
 fn wait(
-    view: &Entity<idecraft_workbench::DatabaseView>,
+    view: &Entity<ferris_idea_workbench::DatabaseView>,
     cx: &mut VisualTestContext,
     what: &str,
-    done: impl Fn(&idecraft_workbench::DatabaseView) -> bool,
+    done: impl Fn(&ferris_idea_workbench::DatabaseView) -> bool,
 ) {
     for _ in 0..200 {
         cx.run_until_parked();
@@ -76,12 +76,12 @@ fn a_row_chosen_after_a_reload_stays_chosen(cx: &mut TestAppContext) {
     let view = bench
         .read_with(cx, |b, _| b.database_view())
         .expect("the Database window is open");
-    let row = |v: &idecraft_workbench::DatabaseView, name: &str| {
+    let row = |v: &ferris_idea_workbench::DatabaseView, name: &str| {
         v.visible().iter().position(|(_, n, _)| n == name)
     };
     // A table of shop is selected: its row is back only once shop has been read again.
     view.update(cx, |v, cx| {
-        v.expand(idecraft_workbench::db_tree_model::Node::Conn(0), cx)
+        v.expand(ferris_idea_workbench::db_tree_model::Node::Conn(0), cx)
     });
     wait(&view, cx, "shop is read", |v| row(v, "tables").is_some());
     view.update(cx, |v, cx| v.expand_all_tables(cx));

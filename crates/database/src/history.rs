@@ -137,7 +137,7 @@ impl QueryHistory {
 /// under `sql-history/`, named after the connection and a hash of the workspace path.
 pub fn history_file(root: &Path, id: &str) -> Option<PathBuf> {
     use sha2::Digest;
-    let dir = idecraft_core::user_config_dir()?;
+    let dir = ferris_idea_core::user_config_dir()?;
     let digest = sha2::Sha256::digest(root.to_string_lossy().as_bytes());
     let hash: String = digest.iter().take(6).map(|b| format!("{b:02x}")).collect();
     let safe: String = id
@@ -180,7 +180,7 @@ mod tests {
     fn secrets_are_never_kept() {
         for sql in [
             "CREATE USER app IDENTIFIED BY 'x'",
-            "alter user 'idecraft'@'localhost' identified by 'x'",
+            "alter user 'ferris-idea'@'localhost' identified by 'x'",
             "ALTER ROLE app PASSWORD 'x'",
             "create role r login password 'x'",
             "SET PASSWORD FOR app = 'x'",
@@ -202,7 +202,7 @@ mod tests {
 
     #[test]
     fn saves_privately_and_loads() {
-        let dir = std::env::temp_dir().join(format!("idecraft-history-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-history-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let file = dir.join("sql-history").join("c.jsonl");
         let mut h = QueryHistory::default();

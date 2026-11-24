@@ -15,7 +15,7 @@ after a while — without stopping and restarting it under the profiler.
 
 ## Behaviour
 1. **Processes:** the list shows the user's own processes (`ps -U <uid>`) by PID and command line,
-   newest first, without IDECraft itself. Nothing of other users is listed. [STD]
+   newest first, without Ferris IDEA itself. Nothing of other users is listed. [STD]
 2. **Never the reference IDE:** a process whose command line belongs to a JetBrains IDE (contains
    `JetBrains`, `IntelliJ`, `idea.vmoptions` or `com.intellij`, or its program is `idea`,
    `idea.sh` or `idea64`) is listed as refused and cannot be attached to, from the window or MCP.
@@ -41,7 +41,7 @@ after a while — without stopping and restarting it under the profiler.
 7. **MCP:** `profile_processes` lists the user's processes by id and program name only, never their arguments, which may hold secrets (as `dap.processes`, SEC-10), with `refused` and its reason;
    `profile_attach` (`pid`, `seconds`, `kind` `cpu`/`memory`, `dry_run` default true: the tool
    and command) — a real recording needs the user-granted `run` right, is logged in
-   `.idecraft/agent-log.jsonl` and returns the profile as `profile_run` does. [ADR-0008, SPEC-0053]
+   `.ferris-idea/agent-log.jsonl` and returns the profile as `profile_run` does. [ADR-0008, SPEC-0053]
 
 ## Acceptance criteria
 - **AK-1** Reference IDE recognised from command lines (macOS app bundle, Linux `idea.sh`, JBR with

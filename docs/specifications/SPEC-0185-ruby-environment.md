@@ -84,5 +84,5 @@ Installing Rubies or gems, running `bundle install`, Ruby debugging and test run
 platforms, Rails-specific features, reading versions by starting Ruby.
 
 ## Known deviations from the reference
-The reference keeps a list of Ruby SDKs configured by the user; IDECraft derives the choice from the
+The reference keeps a list of Ruby SDKs configured by the user; Ferris IDEA derives the choice from the
 version managers and version files each time and reports why.

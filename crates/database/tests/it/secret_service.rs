@@ -2,7 +2,7 @@
 //! against a real Secret Service on a private session bus: a `dbus-daemon` and a
 //! `gnome-keyring-daemon` started by this test in a temporary folder, never the bus or keyring of
 //! the person running it. Skipped (and says so) where those programs are missing, except in CI
-//! (`IDECRAFT_REQUIRE_TOOLS`). The refusal without a Secret Service needs neither program.
+//! (`FERRIS_IDEA_REQUIRE_TOOLS`). The refusal without a Secret Service needs neither program.
 #![cfg(target_os = "linux")]
 
 use std::io::{BufRead, BufReader, Write};
@@ -11,13 +11,13 @@ use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
-use idecraft_database::{
+use ferris_idea_database::{
     KeychainStore, MemoryStore, Secret, SecretRef, SecretServiceStore, SecretStore,
     keychain_reachable,
 };
 
 /// Set by the parent to the private bus it started; the child refuses to run without it.
-const PRIVATE_BUS: &str = "IDECRAFT_TEST_PRIVATE_BUS";
+const PRIVATE_BUS: &str = "FERRIS_IDEA_TEST_PRIVATE_BUS";
 
 struct Daemons(Vec<Child>);
 
@@ -103,7 +103,7 @@ fn on_private_bus() -> bool {
 
 fn reference(account: &str) -> SecretRef {
     SecretRef {
-        service: "idecraft-selftest".into(),
+        service: "ferris-idea-selftest".into(),
         account: format!("{account}-{}", std::process::id()),
     }
 }
@@ -114,7 +114,7 @@ fn reference(account: &str) -> SecretRef {
 fn passwords_live_in_the_secret_service() {
     if !found("dbus-daemon") || !found("gnome-keyring-daemon") {
         assert!(
-            std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+            ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
             "dbus-daemon and gnome-keyring-daemon are required"
         );
         eprintln!("skipped: dbus-daemon or gnome-keyring-daemon is not installed");
@@ -149,7 +149,7 @@ fn passwords_live_in_the_secret_service() {
     let mut keyring = keyring.spawn().unwrap();
     {
         let mut stdin = keyring.stdin.take().unwrap();
-        stdin.write_all(b"idecraft-test-only").unwrap();
+        stdin.write_all(b"ferris-idea-test-only").unwrap();
     }
     daemons.0.push(keyring);
 
@@ -179,7 +179,7 @@ fn secret_service_child() {
     }
     assert!(keychain_reachable());
 
-    // Stored, replaced (one entry), read and removed through the store IDECraft uses.
+    // Stored, replaced (one entry), read and removed through the store Ferris IDEA uses.
     let store = KeychainStore;
     let r = reference("roundtrip");
     store.set(&r, &Secret::new("first")).unwrap();

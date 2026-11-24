@@ -282,7 +282,7 @@ pub fn go_launch(
 }
 
 /// Said in the debug console after attaching to a Delve server (`SPEC-0147` v3 behaviour 7).
-pub const SERVER_NOTE: &str = "[IDECraft] Stop disconnects from the Delve server. A server started without --accept-multiclient then ends, together with the program it started.\n";
+pub const SERVER_NOTE: &str = "[Ferris IDEA] Stop disconnects from the Delve server. A server started without --accept-multiclient then ends, together with the program it started.\n";
 
 /// Whether `host` names this machine's loopback.
 pub fn is_loopback(host: &str) -> bool {
@@ -313,7 +313,7 @@ pub fn link_mapping(folder: &Path) -> Vec<(PathBuf, PathBuf)> {
 /// path below it would not fit a socket address (104 bytes on macOS; `SPEC-0322` behaviour 2).
 #[cfg(unix)]
 fn socket_parent(temporary: PathBuf) -> PathBuf {
-    /// The longest `/idecraft-dlv-<pid>-<nanos>/dap.sock`, and the smaller limit.
+    /// The longest `/ferris-idea-dlv-<pid>-<nanos>/dap.sock`, and the smaller limit.
     const NAME: usize = 58;
     const LIMIT: usize = 104;
     if temporary.as_os_str().len() + NAME < LIMIT {
@@ -334,7 +334,7 @@ fn private_folder() -> Result<PathBuf, DapError> {
         .unwrap_or_default()
         + u128::from(NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
     let dir = socket_parent(std::env::temp_dir())
-        .join(format!("idecraft-dlv-{}-{nanos}", std::process::id()));
+        .join(format!("ferris-idea-dlv-{}-{nanos}", std::process::id()));
     std::fs::DirBuilder::new()
         .mode(0o700)
         .create(&dir)
@@ -344,7 +344,7 @@ fn private_folder() -> Result<PathBuf, DapError> {
 
 /// `dlv dap` serving one session (`SPEC-0039` v7 behaviour 11): on a Unix socket in a folder only
 /// this user can enter, elsewhere on a loopback port Delve picks itself. It ends with the value,
-/// together with the program it started, and never outlives IDECraft (`SPEC-0263` v2 behaviour 3).
+/// together with the program it started, and never outlives Ferris IDEA (`SPEC-0263` v2 behaviour 3).
 pub struct DelveServer {
     child: Child,
     guard: Option<crate::lifetime::ExitGuard>,
@@ -360,6 +360,13 @@ impl DelveServer {
         let (program, args) = command
             .split_first()
             .ok_or_else(|| DapError::Start("empty dlv command".into()))?;
+        // Without a Unix socket Delve would listen on a loopback port every local account can
+        // reach, so it is refused (`SPEC-0322` v6 behaviour 3).
+        if cfg!(not(unix)) {
+            return Err(DapError::Start(
+                "dlv is not supported on this platform yet: it cannot listen privately".into(),
+            ));
+        }
         #[cfg(unix)]
         let folder = Some(private_folder()?);
         #[cfg(not(unix))]
@@ -452,7 +459,7 @@ impl DelveServer {
 
 impl Drop for DelveServer {
     fn drop(&mut self) {
-        // IDECraft ends it now, so the guard stands down first.
+        // Ferris IDEA ends it now, so the guard stands down first.
         drop(self.guard.take());
         crate::lifetime::end_tree(&mut self.child, std::time::Duration::from_secs(3));
         if let Some(dir) = &self.folder {
@@ -631,7 +638,8 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn symbolic_links_map_by_their_prefix() {
-        let base = std::env::temp_dir().join(format!("idecraft-dlv-link-{}", std::process::id()));
+        let base =
+            std::env::temp_dir().join(format!("ferris-idea-dlv-link-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(base.join("real/proj/calc")).unwrap();
         std::os::unix::fs::symlink(base.join("real"), base.join("link")).unwrap();

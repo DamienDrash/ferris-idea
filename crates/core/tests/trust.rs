@@ -3,10 +3,10 @@
 
 use std::path::PathBuf;
 
-use idecraft_core::{RunEvent, parse_run_configs, run_config, start_run, trust};
+use ferris_idea_core::{RunEvent, parse_run_configs, run_config, start_run, trust};
 
 fn project(tag: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("idecraft-safe-{tag}-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-safe-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     dir.canonicalize().unwrap()
@@ -37,9 +37,9 @@ fn safe_mode_refuses_runs_and_dependency_resolution() {
     assert!(refused.starts_with("Safe mode:"));
     // Maven/Gradle dependency resolution (build-tool sync).
     std::fs::write(untrusted.join("pom.xml"), "<project/>").unwrap();
-    let model = idecraft_core::read_project(&untrusted, &[untrusted.join("pom.xml")]);
+    let model = ferris_idea_core::read_project(&untrusted, &[untrusted.join("pom.xml")]);
     let m = model.modules.first().expect("a Maven module");
-    let err = idecraft_core::jvmdeps::resolve(&untrusted, m).unwrap_err();
+    let err = ferris_idea_core::jvmdeps::resolve(&untrusted, m).unwrap_err();
     assert!(err.starts_with("Safe mode:"), "{err}");
     // A trusted project runs.
     let handle = start_run(&trusted, &configs, "touch").unwrap();
@@ -63,7 +63,7 @@ fn safe_mode_refuses_runs_and_dependency_resolution() {
 fn safe_mode_runs_no_task_and_opens_no_browser() {
     use std::sync::{Arc, Mutex};
     static OPENED: Mutex<Vec<String>> = Mutex::new(Vec::new());
-    idecraft_core::set_browser_opener(Some(Arc::new(|url: &str| {
+    ferris_idea_core::set_browser_opener(Some(Arc::new(|url: &str| {
         OPENED.lock().unwrap().push(url.to_owned());
         Ok(())
     })));
@@ -96,7 +96,7 @@ fn safe_mode_runs_no_task_and_opens_no_browser() {
     assert!(!untrusted.join("target").exists());
     // The opener itself refuses too, whoever calls it.
     let refused =
-        idecraft_core::open_browser(&untrusted, "http://localhost:1/safe-mode").unwrap_err();
+        ferris_idea_core::open_browser(&untrusted, "http://localhost:1/safe-mode").unwrap_err();
     assert!(refused.starts_with("Safe mode:"), "{refused}");
     assert!(OPENED.lock().unwrap().is_empty());
     // Trusted: the tool runs and the page is opened.

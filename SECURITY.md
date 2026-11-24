@@ -1,6 +1,6 @@
 # Security policy
 
-Ferris IDEA is in alpha and has had no independent security review. It runs programs, opens network
+Ferris IDEA is at the stable stage (since v1.0.0) and has had no independent security review. It runs programs, opens network
 connections to hosts you name and offers its operations to AI agents, so reports about its
 security are welcome and taken seriously.
 
@@ -16,7 +16,7 @@ Report privately. Do not open a public issue, pull request or discussion for a s
 
 Please include:
 
-- the version (`idecraft --version`) or the commit, and your operating system;
+- the version (`ferris-idea --version`) or the commit, and your operating system;
 - what an attacker needs (a file in a project, a host on the network, a granted right, a paired
   device) and what they gain;
 - steps to reproduce, with a minimal project or request where possible;
@@ -50,7 +50,7 @@ In scope, with the documents that state the intended behaviour:
   [SPEC-0053](docs/specifications/SPEC-0053-agent-permissions.md),
   [SPEC-0221](docs/specifications/SPEC-0221-mcp-http-transport.md),
   [SPEC-0278](docs/specifications/SPEC-0278-project-trust-and-safe-mode.md).
-- **Remote paths:** SSH options, the paired channel, the WebSocket endpoint, `idecraft serve`:
+- **Remote paths:** SSH options, the paired channel, the WebSocket endpoint, `ferris-idea serve`:
   [ADR-0025](docs/adr/0025-network-security-for-remote-connections.md).
 - **Plugins:** escaping the WebAssembly sandbox or its limits:
   [ADR-0016](docs/adr/0016-plugins-as-wasm.md).

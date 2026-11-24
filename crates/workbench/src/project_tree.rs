@@ -6,7 +6,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
-use idecraft_core::buildtools::{FolderInfo, FolderRole};
+use ferris_idea_core::buildtools::{FolderInfo, FolderRole};
 
 /// Names hidden like in the reference's default ignore list (behaviour 1).
 const IGNORED_NAMES: &[&str] = &[
@@ -44,6 +44,9 @@ pub enum NodeKind {
     Library,
     /// "Scratches and Consoles".
     Scratches,
+    /// "Resource Bundle '<base>'": the `.properties` files of one bundle (`SPEC-0212` v3
+    /// behaviour 7); its path is the bundle's base file.
+    Bundle,
 }
 
 impl NodeKind {
@@ -53,6 +56,7 @@ impl NodeKind {
             NodeKind::File => None,
             NodeKind::Libraries | NodeKind::Library => Some("nodes/library"),
             NodeKind::Scratches => Some("fileTypes/scratches"),
+            NodeKind::Bundle => Some("fileTypes/properties"),
         }
     }
 }
@@ -60,9 +64,9 @@ impl NodeKind {
 /// Where the extra top-level nodes look (`SPEC-0061` v4 behaviour 16).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExtraRoots {
-    /// The user's scratches folder (`scratches` in the IDECraft settings folder).
+    /// The user's scratches folder (`scratches` in the Ferris IDEA settings folder).
     pub scratches: Option<PathBuf>,
-    /// The project's database consoles (`.idecraft/consoles`).
+    /// The project's database consoles (`.ferris-idea/consoles`).
     pub consoles: PathBuf,
 }
 
@@ -70,8 +74,8 @@ impl ExtraRoots {
     /// The folders for the project at `root`.
     pub fn for_project(root: &Path) -> Self {
         Self {
-            scratches: idecraft_core::user_config_dir().map(|d| d.join("scratches")),
-            consoles: root.join(".idecraft/consoles"),
+            scratches: ferris_idea_core::user_config_dir().map(|d| d.join("scratches")),
+            consoles: root.join(".ferris-idea/consoles"),
         }
     }
 }
@@ -85,16 +89,16 @@ pub const SCRATCHES: &str = "Scratches and Consoles";
 /// the resolved libraries of Maven and Gradle modules and the JDK's folder (`SPEC-0048` v3
 /// behaviour 11).
 pub fn library_entries(root: &Path) -> Vec<String> {
-    let files = idecraft_core::Workspace::open(root)
+    let files = ferris_idea_core::Workspace::open(root)
         .ok()
         .and_then(|w| w.files().ok())
         .unwrap_or_default();
     let home = std::env::var_os("HOME").map(PathBuf::from);
-    idecraft_core::buildtools::library_entries(
+    ferris_idea_core::buildtools::library_entries(
         root,
-        &idecraft_core::read_project(root, &files),
+        &ferris_idea_core::read_project(root, &files),
         &|feature| {
-            idecraft_core::buildtools::jdk_home_for(root, feature)
+            ferris_idea_core::buildtools::jdk_home_for(root, feature)
                 .map(|h| crate::chrome::tilde(Path::new(&h), home.as_deref()))
         },
     )
@@ -105,9 +109,9 @@ pub fn library_entries(root: &Path) -> Vec<String> {
 pub fn folder_roles(root: &Path) -> HashMap<PathBuf, FolderInfo> {
     // The modules of the reference IDE's `.idea` first; a build file wins for its folders
     // (`SPEC-0049` v2 behaviour 10).
-    let mut roles: HashMap<PathBuf, FolderInfo> = idecraft_core::read_idea_project(root)
+    let mut roles: HashMap<PathBuf, FolderInfo> = ferris_idea_core::read_idea_project(root)
         .map(|p| {
-            idecraft_core::idea_folder_roles(root, &p)
+            ferris_idea_core::idea_folder_roles(root, &p)
                 .into_iter()
                 .collect()
         })
@@ -132,11 +136,11 @@ fn build_folder_roles(root: &Path) -> HashMap<PathBuf, FolderInfo> {
     if !jvm {
         return HashMap::new();
     }
-    let files = idecraft_core::Workspace::open(root)
+    let files = ferris_idea_core::Workspace::open(root)
         .ok()
         .and_then(|w| w.files().ok())
         .unwrap_or_default();
-    idecraft_core::buildtools::folder_roles(root, &idecraft_core::read_project(root, &files))
+    ferris_idea_core::buildtools::folder_roles(root, &ferris_idea_core::read_project(root, &files))
         .into_iter()
         .collect()
 }
@@ -356,6 +360,19 @@ impl ProjectTree {
         false
     }
 
+    /// Whether folder `id` is a package: a folder without a role of its own inside a source or
+    /// test folder of the project model. Its row shows the package icon (`SPEC-0275` v11
+    /// behaviour 30a, OBS-0093 T1).
+    pub fn is_package(&self, id: usize) -> bool {
+        let Some(n) = self.nodes.get(id) else {
+            return false;
+        };
+        n.dir
+            && n.kind == NodeKind::File
+            && !self.roles.contains_key(&n.path)
+            && n.parent.is_some_and(|p| self.holds_packages(p))
+    }
+
     /// The one sub-folder that folder `id` is shown in one row with: `id` is a package (a folder
     /// without a role inside a source or test folder) that holds nothing but that sub-folder.
     fn joined(&self, id: usize) -> Option<usize> {
@@ -469,7 +486,7 @@ impl ProjectTree {
         let mut roots: Vec<PathBuf> = self
             .roles
             .iter()
-            .filter(|(_, info)| idecraft_core::source_roots::is_source_role(info.role))
+            .filter(|(_, info)| ferris_idea_core::source_roots::is_source_role(info.role))
             .map(|(path, _)| path.clone())
             .collect();
         roots.sort();
@@ -482,7 +499,7 @@ impl ProjectTree {
     pub fn reload_roles(&mut self, root: &Path) {
         self.declared = folder_roles(root);
         if self.remote.is_none() {
-            self.derived = Some(idecraft_core::source_roots::derived(root));
+            self.derived = Some(ferris_idea_core::source_roots::derived(root));
         }
         self.merge_roles();
         self.settle_chains();
@@ -512,7 +529,7 @@ impl ProjectTree {
     }
 
     /// Takes the source and test folders derived from the files, as
-    /// `idecraft_core::source_roots::derived` read them (absolute paths), and says whether a row
+    /// `ferris_idea_core::source_roots::derived` read them (absolute paths), and says whether a row
     /// changed: packages below them join to rows, packages below a folder that is none any more
     /// stand alone again. Expanded folders and the selection stay.
     pub fn set_derived_roots(&mut self, derived: BTreeMap<PathBuf, FolderInfo>) -> bool {
@@ -533,6 +550,49 @@ impl ProjectTree {
     /// How often the tree was read again from disk: a file operation in the IDE, a sync, Reload.
     pub fn generation(&self) -> u64 {
         self.generation
+    }
+
+    /// The folders of this machine the tree shows expanded, every folder of a compacted row
+    /// included; none for a remote project (`SPEC-0026` v4 behaviour 6).
+    pub fn shown_folders(&self) -> Vec<PathBuf> {
+        if self.remote.is_some() {
+            return Vec::new();
+        }
+        let mut out: Vec<PathBuf> = self
+            .expanded
+            .iter()
+            .flat_map(|&id| self.folders(id))
+            .filter(|&id| self.nodes[id].kind == NodeKind::File)
+            .map(|id| self.nodes[id].path.clone())
+            .filter(|p| !p.as_os_str().is_empty())
+            .collect();
+        out.sort();
+        out.dedup();
+        out
+    }
+
+    /// A fingerprint of what `folders` hold: each entry's name and whether it is a folder, one
+    /// directory listing per folder and nothing below. Reads the disk; call it off the UI
+    /// thread (`SPEC-0026` v4 behaviour 6).
+    pub fn listing(folders: &[PathBuf]) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        for folder in folders {
+            folder.hash(&mut hasher);
+            let mut entries: Vec<(String, bool)> = std::fs::read_dir(folder)
+                .map(|list| {
+                    list.flatten()
+                        .map(|e| {
+                            let dir = e.file_type().is_ok_and(|t| t.is_dir());
+                            (e.file_name().to_string_lossy().into_owned(), dir)
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            entries.sort();
+            entries.hash(&mut hasher);
+        }
+        hasher.finish()
     }
 
     /// A tree rooted at `root` with the nodes "External Libraries" and "Scratches and Consoles"
@@ -645,10 +705,12 @@ impl ProjectTree {
             .expanded
             .iter()
             .map(|&id| self.nodes[id].kind)
-            .filter(|k| *k != NodeKind::File)
+            .filter(|k| !matches!(k, NodeKind::File | NodeKind::Bundle))
             .collect();
         open.sort_by_key(|p| p.components().count());
         let selected = self.nodes[self.selected].path.clone();
+        // A bundle and its base file share the path (SPEC-0212 v3 behaviour 7).
+        let selected_kind = self.nodes[self.selected].kind;
         let marked: Vec<PathBuf> = self.selected_paths();
         let anchor = self.nodes[self.anchor].path.clone();
         let mut tree = match (&self.remote, &self.extras) {
@@ -674,7 +736,11 @@ impl ProjectTree {
             }
         }
         let find = |tree: &Self, path: &Path| tree.nodes.iter().position(|n| n.path == path);
-        if let Some(id) = find(&tree, &selected) {
+        let same_kind = tree
+            .nodes
+            .iter()
+            .position(|n| n.path == selected && n.kind == selected_kind);
+        if let Some(id) = same_kind.or_else(|| find(&tree, &selected)) {
             tree.selected = id;
             tree.anchor = id;
         }
@@ -828,7 +894,8 @@ impl ProjectTree {
                 self.add_children(id, folders);
                 return;
             }
-            NodeKind::File | NodeKind::Library => {}
+            // Its files were added with it.
+            NodeKind::File | NodeKind::Library | NodeKind::Bundle => {}
         }
         if let Some(listing) = &self.remote {
             let dir = self.nodes[id].path.clone();
@@ -844,13 +911,11 @@ impl ProjectTree {
                 b.0.cmp(&a.0)
                     .then_with(|| a.1.to_lowercase().cmp(&b.1.to_lowercase()))
             });
-            self.add_children(
-                id,
-                entries
-                    .into_iter()
-                    .map(|(d, name)| (d, name.clone(), dir.join(&name), NodeKind::File))
-                    .collect(),
-            );
+            let entries = entries
+                .into_iter()
+                .map(|(d, name)| (d, name.clone(), dir.join(&name), NodeKind::File))
+                .collect();
+            self.add_grouped(id, entries);
             return;
         }
         let mut entries: Vec<(bool, String, PathBuf)> = std::fs::read_dir(&self.nodes[id].path)
@@ -866,13 +931,91 @@ impl ProjectTree {
             b.0.cmp(&a.0)
                 .then_with(|| a.1.to_lowercase().cmp(&b.1.to_lowercase()))
         });
-        self.add_children(
-            id,
-            entries
-                .into_iter()
-                .map(|(dir, name, path)| (dir, name, path, NodeKind::File))
-                .collect(),
-        );
+        let entries = entries
+            .into_iter()
+            .map(|(dir, name, path)| (dir, name, path, NodeKind::File))
+            .collect();
+        self.add_grouped(id, entries);
+    }
+
+    /// Adds the sorted `entries` of folder `id`, the files of each resource bundle — a
+    /// `<base>.properties` with at least one `<base>_<locale>.properties` — under one node
+    /// "Resource Bundle '<base>'" placed among the files by that name, its files below it, the
+    /// base file first (`SPEC-0212` v3 behaviour 7).
+    fn add_grouped(&mut self, id: usize, entries: Vec<(bool, String, PathBuf, NodeKind)>) {
+        use ferris_idea_languages::properties::bundle_name;
+        let named: Vec<Option<(String, String)>> = entries
+            .iter()
+            .map(|(dir, _, path, _)| (!dir).then(|| bundle_name(path)).flatten())
+            .collect();
+        let mut bundles: Vec<(String, Vec<usize>)> = Vec::new();
+        for (i, n) in named.iter().enumerate() {
+            let Some((base, locale)) = n else {
+                continue;
+            };
+            if !locale.is_empty() {
+                continue;
+            }
+            let mut members: Vec<usize> = named
+                .iter()
+                .enumerate()
+                .filter(|(_, m)| m.as_ref().is_some_and(|(b, l)| b == base && !l.is_empty()))
+                .map(|(j, _)| j)
+                .collect();
+            if members.is_empty() {
+                continue;
+            }
+            members.sort_by_key(|&j| entries[j].1.to_lowercase());
+            members.insert(0, i);
+            bundles.push((base.clone(), members));
+        }
+        if bundles.is_empty() {
+            self.add_children(id, entries);
+            return;
+        }
+        let grouped: HashSet<usize> = bundles.iter().flat_map(|(_, m)| m.clone()).collect();
+        let mut top: Vec<(bool, String, PathBuf, NodeKind)> = entries
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| !grouped.contains(i))
+            .map(|(_, e)| e.clone())
+            .collect();
+        for (base, members) in &bundles {
+            top.push((
+                true,
+                format!("Resource Bundle '{base}'"),
+                entries[members[0]].2.clone(),
+                NodeKind::Bundle,
+            ));
+        }
+        // Folders first, then the files and bundles by name.
+        let folder = |e: &(bool, String, PathBuf, NodeKind)| e.0 && e.3 == NodeKind::File;
+        top.sort_by(|a, b| {
+            folder(b)
+                .cmp(&folder(a))
+                .then_with(|| a.1.to_lowercase().cmp(&b.1.to_lowercase()))
+        });
+        self.add_children(id, top);
+        for child in self.nodes[id].children.clone().unwrap_or_default() {
+            if self.nodes[child].kind != NodeKind::Bundle {
+                continue;
+            }
+            let path = self.nodes[child].path.clone();
+            if let Some((_, members)) = bundles.iter().find(|(_, m)| entries[m[0]].2 == path) {
+                let files = members
+                    .iter()
+                    .map(|&j| {
+                        (
+                            false,
+                            entries[j].1.clone(),
+                            entries[j].2.clone(),
+                            NodeKind::File,
+                        )
+                    })
+                    .collect();
+                self.add_children(child, files);
+            }
+        }
     }
 
     fn add_children(&mut self, id: usize, entries: Vec<(bool, String, PathBuf, NodeKind)>) {
@@ -1078,7 +1221,10 @@ impl ProjectTree {
                 let id = id(i)?;
                 self.select_one(id);
                 let n = &self.nodes[id];
-                (!n.dir && n.kind == NodeKind::File).then(|| n.path.clone())
+                // A bundle node names its base file; the window opens its bundle editor
+                // (SPEC-0212 v3 behaviour 7).
+                ((!n.dir && n.kind == NodeKind::File) || n.kind == NodeKind::Bundle)
+                    .then(|| n.path.clone())
             }
         }
     }
@@ -1113,11 +1259,31 @@ impl ProjectTree {
         let mut id = 0;
         for part in rel.components() {
             self.expand(id);
-            id = self.nodes[id].children.as_ref().and_then(|c| {
-                c.iter()
-                    .copied()
-                    .find(|&k| self.nodes[k].path.file_name() == Some(part.as_os_str()))
-            })?;
+            let name = Some(part.as_os_str());
+            let children = self.nodes[id].children.clone().unwrap_or_default();
+            let direct = children.iter().copied().find(|&k| {
+                self.nodes[k].kind != NodeKind::Bundle && self.nodes[k].path.file_name() == name
+            });
+            id = match direct {
+                Some(k) => k,
+                // A file of a resource bundle lies under the bundle's node (SPEC-0212 v3).
+                None => {
+                    let in_bundle = |b: usize| {
+                        self.nodes[b].children.as_ref().and_then(|c| {
+                            c.iter()
+                                .copied()
+                                .find(|&m| self.nodes[m].path.file_name() == name)
+                        })
+                    };
+                    let (bundle, file) = children
+                        .iter()
+                        .copied()
+                        .filter(|&k| self.nodes[k].kind == NodeKind::Bundle)
+                        .find_map(|b| in_bundle(b).map(|f| (b, f)))?;
+                    self.expand(bundle);
+                    file
+                }
+            };
         }
         Some(id)
     }
@@ -1150,10 +1316,12 @@ impl ProjectTree {
                         (NodeKind::Libraries, _) => "libraries",
                         (NodeKind::Library, _) => "library",
                         (NodeKind::Scratches, _) => "scratches",
+                        (NodeKind::Bundle, _) => "bundle",
                     },
                     "selected": selection.contains(&r.id),
                 });
-                if file {
+                // A bundle names its base file (SPEC-0212 v3 behaviour 7).
+                if file || n.kind == NodeKind::Bundle {
                     row["path"] = shown(&n.path).into();
                 }
                 if n.dir {
@@ -1212,6 +1380,70 @@ impl ProjectTree {
             self.selected = parent;
         }
     }
+
+    // ---------------------------------------------------------------- following the disk
+
+    /// What the tree holds of each folder of this machine it has read (`SPEC-0059` v9.11
+    /// behaviour 31): the folder and its entries as (name, whether a folder), sorted, the files
+    /// of a resource bundle included under their own names. Collapsed folders that were read
+    /// count, since expanding them shows what was read; folders never read do not. Empty for a
+    /// remote project.
+    pub fn read_folders(&self) -> Vec<(PathBuf, Vec<(String, bool)>)> {
+        if self.remote.is_some() {
+            return Vec::new();
+        }
+        let entry = |n: &Node| {
+            n.path
+                .file_name()
+                .map(|f| (f.to_string_lossy().into_owned(), n.dir))
+        };
+        self.nodes
+            .iter()
+            .filter(|n| n.kind == NodeKind::File && n.dir && !n.path.as_os_str().is_empty())
+            .filter_map(|n| {
+                let children = n.children.as_ref()?;
+                let mut entries: Vec<(String, bool)> = children
+                    .iter()
+                    .flat_map(|&c| {
+                        let child = &self.nodes[c];
+                        match child.kind {
+                            // A bundle stands for its files (SPEC-0212 v3 behaviour 7).
+                            NodeKind::Bundle => child
+                                .children
+                                .iter()
+                                .flatten()
+                                .filter_map(|&m| entry(&self.nodes[m]))
+                                .collect::<Vec<_>>(),
+                            _ => entry(child).into_iter().collect(),
+                        }
+                    })
+                    .collect();
+                entries.sort();
+                Some((n.path.clone(), entries))
+            })
+            .collect()
+    }
+
+    /// Whether the disk differs from what the tree read (`SPEC-0059` v9.11 behaviour 31): a
+    /// folder of `read` ([`Self::read_folders`]) now lists other names, or an entry changed
+    /// between file and folder. One directory listing per folder, nothing below; reads the disk,
+    /// so it runs off the UI thread. A folder that is gone lists nothing.
+    pub fn disk_differs(read: &[(PathBuf, Vec<(String, bool)>)]) -> bool {
+        read.iter().any(|(folder, held)| {
+            let mut now: Vec<(String, bool)> = std::fs::read_dir(folder)
+                .into_iter()
+                .flatten()
+                .flatten()
+                .filter_map(|e| {
+                    let name = e.file_name().to_string_lossy().into_owned();
+                    // The same test as reading a folder (behaviour 1): a link to a folder is one.
+                    (!is_ignored(&name)).then(|| (name, e.path().is_dir()))
+                })
+                .collect();
+            now.sort();
+            now != *held
+        })
+    }
 }
 
 #[cfg(test)]
@@ -1248,10 +1480,37 @@ mod tests {
         assert!(tree.is_remote());
     }
 
+    /// SPEC-0026 AK-6 (v4): a new file in an expanded folder changes the listing, one in a
+    /// collapsed folder does not.
+    #[test]
+    fn the_listing_of_shown_folders_changes_with_the_disk() {
+        let root =
+            std::env::temp_dir().join(format!("ferris-idea-tree-listing-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("open")).unwrap();
+        std::fs::create_dir_all(root.join("closed")).unwrap();
+        let root = root.canonicalize().unwrap();
+        let mut tree = ProjectTree::new(&root);
+        let open = tree.rows().iter().find(|r| r.name == "open").unwrap().id;
+        tree.expand(open);
+        let folders = tree.shown_folders();
+        assert_eq!(folders, [root.clone(), root.join("open")]);
+        let before = ProjectTree::listing(&folders);
+        std::fs::write(root.join("closed/x.txt"), "").unwrap();
+        assert_eq!(
+            ProjectTree::listing(&folders),
+            before,
+            "a collapsed folder is not read"
+        );
+        std::fs::write(root.join("open/y.txt"), "").unwrap();
+        assert_ne!(ProjectTree::listing(&folders), before);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
     #[test]
     fn reloading_keeps_expanded_folders() {
         let root =
-            std::env::temp_dir().join(format!("idecraft-tree-reload-{}", std::process::id()));
+            std::env::temp_dir().join(format!("ferris-idea-tree-reload-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("a/b")).unwrap();
         std::fs::write(root.join("a/b/x.txt"), "").unwrap();
@@ -1305,7 +1564,8 @@ mod tests {
 
     /// A folder per test: tests run in parallel and must not share it.
     fn fixture(test: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("idecraft-tree-{test}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("ferris-idea-tree-{test}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         for d in ["src/inner", "Docs", ".git", "__pycache__"] {
             std::fs::create_dir_all(dir.join(d)).unwrap();
@@ -1461,7 +1721,7 @@ mod tests {
     /// A project with a Cargo build file and a scratches folder outside it (SPEC-0061 v4 AK-8).
     fn extras_fixture(test: &str) -> (PathBuf, ExtraRoots) {
         let base =
-            std::env::temp_dir().join(format!("idecraft-extras-{test}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("ferris-idea-extras-{test}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         let dir = base.join("proj");
         std::fs::create_dir_all(dir.join("src")).unwrap();
@@ -1476,7 +1736,7 @@ mod tests {
         std::fs::write(scratches.join("scratch.sql"), "select 1;\n").unwrap();
         let extras = ExtraRoots {
             scratches: Some(scratches),
-            consoles: dir.join(".idecraft/consoles"),
+            consoles: dir.join(".ferris-idea/consoles"),
         };
         (dir, extras)
     }
@@ -1574,7 +1834,7 @@ mod tests {
     fn several_selected_rows_survive_a_reload() {
         use crate::tree_nav::{ClickMode, SelectKey};
         let dir =
-            std::env::temp_dir().join(format!("idecraft-tree-several-{}", std::process::id()));
+            std::env::temp_dir().join(format!("ferris-idea-tree-several-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("src")).unwrap();
         for f in ["a.txt", "b.txt", "c.txt", "src/inner.rs"] {
@@ -1637,7 +1897,7 @@ mod compact_tests {
     /// the tests, resources and a folder outside the source folders with chains of their own.
     fn project(test: &str) -> PathBuf {
         let dir =
-            std::env::temp_dir().join(format!("idecraft-compact-{test}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("ferris-idea-compact-{test}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         for d in [
             "src/main/java/lab/shop/core/util",
@@ -1667,12 +1927,92 @@ mod compact_tests {
         dir.canonicalize().unwrap()
     }
 
+    /// SPEC-0212/AK-6 (v3): a bundle's files under one node among the files, the base first; a
+    /// file without a partner stays; revealing a locale's file selects it under the node; F4 on
+    /// the node names the base file; a reload keeps the node selected and expanded.
+    #[test]
+    fn resource_bundles_are_one_node() {
+        let dir =
+            std::env::temp_dir().join(format!("ferris-idea-bundle-tree-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("conf")).unwrap();
+        for f in [
+            "messages.properties",
+            "messages_fr.properties",
+            "messages_de.properties",
+            "single.properties",
+            "app.txt",
+            "zeta.txt",
+        ] {
+            std::fs::write(dir.join(f), "a=1\n").unwrap();
+        }
+        let dir = dir.canonicalize().unwrap();
+        let mut t = ProjectTree::new(&dir);
+        let names = |t: &ProjectTree| -> Vec<String> {
+            t.rows()
+                .into_iter()
+                .skip(1)
+                .map(|r| format!("{} {}", r.depth, r.name))
+                .collect()
+        };
+        assert_eq!(
+            names(&t),
+            [
+                "1 conf",
+                "1 app.txt",
+                "1 Resource Bundle 'messages'",
+                "1 single.properties",
+                "1 zeta.txt"
+            ]
+        );
+        let bundle = row(&t, "Resource Bundle 'messages'");
+        assert_eq!(bundle.kind, NodeKind::Bundle);
+        assert!(bundle.dir && !bundle.expanded);
+        assert!(t.is_fixed(bundle.id) && t.is_virtual(bundle.id));
+        assert_eq!(NodeKind::Bundle.icon(), Some("fileTypes/properties"));
+        t.expand(bundle.id);
+        assert_eq!(
+            names(&t)[2..6],
+            [
+                "1 Resource Bundle 'messages'",
+                "2 messages.properties",
+                "2 messages_de.properties",
+                "2 messages_fr.properties"
+            ]
+        );
+        t.collapse(bundle.id);
+        assert!(t.reveal(&dir.join("messages_de.properties")));
+        assert_eq!(t.selected_path(), dir.join("messages_de.properties"));
+        assert_eq!(t.kind(t.selected), NodeKind::File);
+        assert!(t.is_expanded(&dir.join("messages.properties")));
+        // F4 (Open) on the node names its base file.
+        let at = t.rows().iter().position(|r| r.id == bundle.id).unwrap();
+        assert_eq!(
+            t.apply(crate::tree_nav::TreeCommand::Open(at)),
+            Some(dir.join("messages.properties"))
+        );
+        assert_eq!(t.kind(t.selected), NodeKind::Bundle);
+        let state = t.state();
+        let node = state["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["kind"] == "bundle")
+            .cloned()
+            .unwrap();
+        assert_eq!(node["path"], "messages.properties");
+        let again = t.reloaded();
+        assert_eq!(again.kind(again.selected), NodeKind::Bundle);
+        assert!(again.is_expanded(&dir.join("messages.properties")));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     fn tree(dir: &Path) -> ProjectTree {
         ProjectTree::with_extras(
             dir,
             ExtraRoots {
                 scratches: None,
-                consoles: dir.join(".idecraft/consoles"),
+                consoles: dir.join(".ferris-idea/consoles"),
             },
         )
     }
@@ -1745,6 +2085,24 @@ mod compact_tests {
                 "1 pom.xml",
             ]
         );
+        // SPEC-0275 v11 AK-25c (OBS-0093 T1): packages in source and test folders, and only they.
+        for name in ["lab.shop.core", "util", "lab.shop", "app", "core"] {
+            assert!(t.is_package(row(&t, name).id), "{name}");
+        }
+        for name in [
+            "docs",
+            "a",
+            "b",
+            "src",
+            "main",
+            "java",
+            "resources",
+            "db",
+            "migration",
+        ] {
+            assert!(!t.is_package(row(&t, name).id), "{name}");
+        }
+        assert!(!t.is_package(row(&t, "Foo.java").id));
         // The row is the innermost folder's and knows every folder it stands for.
         let core = row(&t, "lab.shop.core");
         assert_eq!(t.path(core.id), dir.join("src/main/java/lab/shop/core"));
@@ -2085,7 +2443,7 @@ mod compact_tests {
     /// folder outside the sources.
     fn plain_project(test: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
-            "idecraft-derived-roots-{test}-{}",
+            "ferris-idea-derived-roots-{test}-{}",
             std::process::id()
         ));
         let _ = std::fs::remove_dir_all(&dir);
@@ -2212,7 +2570,7 @@ mod compact_tests {
     fn derived_folders_follow_the_files() {
         let dir = plain_project("refresh");
         let mut t = tree(&dir);
-        let derived = || idecraft_core::source_roots::derived(&dir);
+        let derived = || ferris_idea_core::source_roots::derived(&dir);
         assert!(t.set_derived_roots(derived()), "rows changed");
         assert!(!t.set_derived_roots(derived()), "the same folders again");
         t.select_one(0);
@@ -2274,7 +2632,7 @@ mod compact_tests {
                 .iter()
                 .any(|r| r.ends_with(" lab") && !r.contains("lab.gen"))
         );
-        assert!(idecraft_core::source_roots::derived(&dir).is_empty());
+        assert!(ferris_idea_core::source_roots::derived(&dir).is_empty());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -2284,7 +2642,7 @@ mod compact_tests {
     #[test]
     fn a_module_in_a_sub_folder_gets_its_roles() {
         let dir =
-            std::env::temp_dir().join(format!("idecraft-nested-module-{}", std::process::id()));
+            std::env::temp_dir().join(format!("ferris-idea-nested-module-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         for d in [".git", "app/src/test/java"] {
             std::fs::create_dir_all(dir.join(d)).unwrap();
@@ -2302,7 +2660,7 @@ mod compact_tests {
         t.select_one(0);
         t.expand_all();
         assert!(shown(&t).contains(&"5 lab".to_owned()), "{:?}", shown(&t));
-        assert!(t.set_derived_roots(idecraft_core::source_roots::derived(&dir)));
+        assert!(t.set_derived_roots(ferris_idea_core::source_roots::derived(&dir)));
         t.select_one(0);
         t.expand_all();
         let role = |t: &ProjectTree, path: &str| {
@@ -2392,5 +2750,67 @@ mod compact_tests {
         let lab = rows.iter().find(|r| r["name"] == "lab").unwrap();
         assert_eq!(lab["folders"], serde_json::json!(["src/main/java/lab"]));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// SPEC-0059 AK-20 (v9.11, behaviour 31): files and folders created, deleted or renamed by
+    /// another program in a folder the tree has read make the disk differ, also through a
+    /// symbolic link to the project folder; a folder never read, hidden names and a resource
+    /// bundle's grouping do not.
+    #[test]
+    fn the_disk_differs_from_the_read_folders() {
+        let base =
+            std::env::temp_dir().join(format!("ferris-idea-tree-disk-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let real = base.join("real");
+        std::fs::create_dir_all(real.join("open")).unwrap();
+        std::fs::create_dir_all(real.join("closed")).unwrap();
+        for f in ["open/a.txt", "m.properties", "m_de.properties"] {
+            std::fs::write(real.join(f), "").unwrap();
+        }
+        // The project opened through a link, as /tmp stands for /private/tmp on macOS.
+        let link = base.join("link");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        #[cfg(not(unix))]
+        let link = real.clone();
+        let mut tree = ProjectTree::new(&link);
+        let open = tree.rows().iter().find(|r| r.name == "open").unwrap().id;
+        tree.expand(open);
+        let read = tree.read_folders();
+        assert_eq!(
+            read.iter().map(|(p, _)| p.clone()).collect::<Vec<_>>(),
+            [link.clone(), link.join("open")]
+        );
+        assert!(
+            !ProjectTree::disk_differs(&read),
+            "nothing changed: {read:?}"
+        );
+        let differs = |tree: &ProjectTree| ProjectTree::disk_differs(&tree.read_folders());
+        // Not read, hidden: no difference.
+        std::fs::write(real.join("closed/x.txt"), "").unwrap();
+        std::fs::write(real.join("open/.DS_Store"), "").unwrap();
+        assert!(!differs(&tree));
+        // Created in the project folder, as `printf … > README.md` does (OBS-0096 FW1).
+        std::fs::write(real.join("README.md"), "# x\n").unwrap();
+        assert!(differs(&tree));
+        let mut tree = tree.reloaded();
+        assert!(!differs(&tree));
+        assert!(tree.rows().iter().any(|r| r.name == "README.md"));
+        // A new folder with a file in a subfolder, a rename, a deletion.
+        std::fs::create_dir_all(real.join("open/src/main")).unwrap();
+        assert!(differs(&tree));
+        tree = tree.reloaded();
+        std::fs::rename(real.join("open/a.txt"), real.join("open/b.txt")).unwrap();
+        assert!(differs(&tree));
+        tree = tree.reloaded();
+        std::fs::remove_file(real.join("README.md")).unwrap();
+        assert!(differs(&tree));
+        tree = tree.reloaded();
+        assert!(!differs(&tree));
+        // A file that became a folder of the same name.
+        std::fs::remove_file(real.join("open/b.txt")).unwrap();
+        std::fs::create_dir(real.join("open/b.txt")).unwrap();
+        assert!(differs(&tree));
+        let _ = std::fs::remove_dir_all(&base);
     }
 }

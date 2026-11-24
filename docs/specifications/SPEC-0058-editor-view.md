@@ -42,7 +42,7 @@ the editor commands of SPEC-0057.
 8. **Input methods:** the view tells the platform the selection, composed range and text in UTF-16 code
    units (without building the whole text), places the candidate window at the composed text, underlines
    composed text, and replaces it on commit. [GEN]
-9. Commands: `idecraft edit <file>` opens a file in the view; `idecraft spike-editor [file]` types 220
+9. Commands: `ferris-idea edit <file>` opens a file in the view; `ferris-idea spike-editor [file]` types 220
    keystrokes (text with umlauts, Backspace, Down, Enter) into line 50 000 of a 100 000-line file, one per
    frame, and reports the time from each keystroke to the painted frame. The MCP counterparts of the view
    are `editor_keystrokes` (SPEC-0057) and `highlight_file` (SPEC-0027). [ADR-0008]
@@ -72,7 +72,7 @@ the editor commands of SPEC-0057.
     d. In a remote project every modified document is saved on the host the way ⌘S saves one
        (SPEC-0317 v3 behaviour 10), each with its own conflict check and second save. [GEN]
     e. `SaveDocument` still saves only its own editor. An editor outside a project window
-       (`idecraft edit`, behaviour 9) saves its own file on `SaveAll`. [GEN]
+       (`ferris-idea edit`, behaviour 9) saves its own file on `SaveAll`. [GEN]
 13. **Focus Gutter (v5):** `EditorFocusGutter` (⌥⇧6 then F in the bundled keymaps) gives the keys
     to the gutter icons drawn in the visible part of the editor — run markers, breakpoints,
     folding arrows, bookmarks and the marks of declarations and beans (SPEC-0294 behaviour 4) —
@@ -89,11 +89,11 @@ the editor commands of SPEC-0057.
 ## Acceptance criteria
 - **AK-1** Tab expansion with mapping between columns and display bytes, gutter width, capture colours
   and scroll arithmetic (unit tests).
-- **AK-2** Keystrokes from toolkit key names with modifiers (unit test in `idecraft-ui`).
-- **AK-3** Buffer change log and UTF-16 mapping used by the view (unit test in `idecraft-editor`).
+- **AK-2** Keystrokes from toolkit key names with modifiers (unit test in `ferris-idea-ui`).
+- **AK-3** Buffer change log and UTF-16 mapping used by the view (unit test in `ferris-idea-editor`).
 - **AK-4** Measurement on 100 000 lines: keystroke to painted frame p95 below 16 ms on Apple M1 Max.
 - **AK-5** Mouse, input method and clipboard checked by hand in the window.
-- **AK-6** In a real window (`idecraft ui --selftest`): an unmodified editor reloads a change made by
+- **AK-6** In a real window (`ferris-idea ui --selftest`): an unmodified editor reloads a change made by
   another program; a modified one keeps its text and warns; saving then writes the editor's text and the
   local history holds the revisions.
 - **AK-7** (v4) Window test in the test harness (behaviour 12): two files changed in two tabs are

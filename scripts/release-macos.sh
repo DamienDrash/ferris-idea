@@ -1,6 +1,6 @@
 #!/bin/sh
-# Builds the signed, notarized and stapled macOS download of IDECraft (SPEC-0282 v3, behaviours
-# 9–15): release build, IDECraft.app signed with a Developer ID Application identity and the
+# Builds the signed, notarized and stapled macOS download of Ferris IDEA (SPEC-0282 v3, behaviours
+# 9–15): release build, FerrisIDEA.app signed with a Developer ID Application identity and the
 # hardened runtime (scripts/bundle-macos.sh), notarized and stapled; then a DMG with the app,
 # signed, notarized and stapled; then the checks Gatekeeper makes, and the DMG's SHA-256.
 #
@@ -13,12 +13,17 @@
 #   release-macos.sh --out DIR   where the DMG goes (default: <target>/release-macos)
 #
 # Read from the environment at run time, never stored or printed:
-#   IDECRAFT_SIGN_IDENTITY    name or SHA-1 of a "Developer ID Application" identity in the keychain
-#   IDECRAFT_NOTARY_PROFILE   a profile stored with `xcrun notarytool store-credentials`, or
-#   IDECRAFT_NOTARY_KEY, IDECRAFT_NOTARY_KEY_ID, IDECRAFT_NOTARY_ISSUER
+#   FERRIS_IDEA_SIGN_IDENTITY    name or SHA-1 of a "Developer ID Application" identity in the keychain
+#   FERRIS_IDEA_NOTARY_PROFILE   a profile stored with `xcrun notarytool store-credentials`, or
+#   FERRIS_IDEA_NOTARY_KEY, FERRIS_IDEA_NOTARY_KEY_ID, FERRIS_IDEA_NOTARY_ISSUER
 #                             an App Store Connect API key: path of the .p8 file (readable by its
 #                             owner only), key ID and issuer ID
 set -eu
+# Variables under the former name (IDECRAFT_*) still count while today's is not set. rebrand:keep
+for former in $(env | sed -n 's/^IDECRAFT_\([A-Za-z0-9_]*\)=.*/\1/p'); do # rebrand:keep
+  eval "[ -n \"\${FERRIS_IDEA_$former+x}\" ] || { FERRIS_IDEA_$former=\$IDECRAFT_$former; export FERRIS_IDEA_$former; }" # rebrand:keep
+done
+export FERRIS_IDEA_NO_TAKEOVER=1 # the programs this script starts never move the user's settings folder (SPEC-0356)
 cd "$(dirname "$0")/.."
 
 check_only=0
@@ -48,7 +53,7 @@ xcrun --find stapler >/dev/null 2>&1 || fail "xcrun stapler not found"
 [ -z "$(git status --porcelain --untracked-files=normal)" ] ||
   fail "uncommitted or untracked changes; commit or remove them first (git status)"
 commit=$(git rev-parse HEAD)
-version=$(cargo pkgid -p idecraft | sed 's/.*[#@]//')
+version=$(cargo pkgid -p ferris-idea | sed 's/.*[#@]//')
 case "$version" in [0-9]*.[0-9]*.[0-9]*) ;; *) fail "cannot read the version from Cargo: $version" ;; esac
 tag_note="tag v$version is on this commit"
 [ "$(git rev-parse -q --verify "refs/tags/v$version^{commit}" 2>/dev/null || true)" = "$commit" ] ||
@@ -56,8 +61,8 @@ tag_note="tag v$version is on this commit"
 
 # 2. A Developer ID Application identity (behaviour 10). Matched by SHA-1 or by its full quoted
 #    name in the keychain's list of valid signing identities; the kind is the part before ':'.
-identity="${IDECRAFT_SIGN_IDENTITY:-}"
-[ -n "$identity" ] || fail "IDECRAFT_SIGN_IDENTITY is not set (name or SHA-1 of a Developer ID Application identity)"
+identity="${FERRIS_IDEA_SIGN_IDENTITY:-}"
+[ -n "$identity" ] || fail "FERRIS_IDEA_SIGN_IDENTITY is not set (name or SHA-1 of a Developer ID Application identity)"
 kind=$(security find-identity -v -p codesigning | awk -v id="$identity" '
   $1 ~ /^[0-9]+\)$/ {
     name = $0; sub(/^[^"]*"/, "", name); sub(/"[^"]*$/, "", name)
@@ -65,27 +70,27 @@ kind=$(security find-identity -v -p codesigning | awk -v id="$identity" '
   }' | sort -u)
 case "$kind" in
   "Developer ID Application") ;;
-  "") fail "no valid signing identity in the keychain matches IDECRAFT_SIGN_IDENTITY" ;;
-  *) fail "IDECRAFT_SIGN_IDENTITY is a '$(printf '%s' "$kind" | head -n 1)' identity; a download needs 'Developer ID Application'" ;;
+  "") fail "no valid signing identity in the keychain matches FERRIS_IDEA_SIGN_IDENTITY" ;;
+  *) fail "FERRIS_IDEA_SIGN_IDENTITY is a '$(printf '%s' "$kind" | head -n 1)' identity; a download needs 'Developer ID Application'" ;;
 esac
 
 # 3. Notary credentials: a keychain profile or the API-key trio, not both (behaviour 11).
-profile="${IDECRAFT_NOTARY_PROFILE:-}"
-key="${IDECRAFT_NOTARY_KEY:-}"
-key_id="${IDECRAFT_NOTARY_KEY_ID:-}"
-issuer="${IDECRAFT_NOTARY_ISSUER:-}"
+profile="${FERRIS_IDEA_NOTARY_PROFILE:-}"
+key="${FERRIS_IDEA_NOTARY_KEY:-}"
+key_id="${FERRIS_IDEA_NOTARY_KEY_ID:-}"
+issuer="${FERRIS_IDEA_NOTARY_ISSUER:-}"
 if [ -n "$profile" ]; then
-  [ -z "$key$key_id$issuer" ] || fail "set either IDECRAFT_NOTARY_PROFILE or the IDECRAFT_NOTARY_KEY trio, not both"
+  [ -z "$key$key_id$issuer" ] || fail "set either FERRIS_IDEA_NOTARY_PROFILE or the FERRIS_IDEA_NOTARY_KEY trio, not both"
   notary_kind="keychain profile"
 elif [ -n "$key" ] || [ -n "$key_id" ] || [ -n "$issuer" ]; then
   [ -n "$key" ] && [ -n "$key_id" ] && [ -n "$issuer" ] ||
-    fail "IDECRAFT_NOTARY_KEY, IDECRAFT_NOTARY_KEY_ID and IDECRAFT_NOTARY_ISSUER are needed together"
-  [ -f "$key" ] || fail "IDECRAFT_NOTARY_KEY does not name a file"
+    fail "FERRIS_IDEA_NOTARY_KEY, FERRIS_IDEA_NOTARY_KEY_ID and FERRIS_IDEA_NOTARY_ISSUER are needed together"
+  [ -f "$key" ] || fail "FERRIS_IDEA_NOTARY_KEY does not name a file"
   mode=$(stat -f %Lp "$key")
   case "$mode" in ?00) ;; *) fail "the API key file is readable by others (mode $mode); chmod 600 it" ;; esac
   notary_kind="App Store Connect API key"
 else
-  fail "no notary credentials: set IDECRAFT_NOTARY_PROFILE, or IDECRAFT_NOTARY_KEY, IDECRAFT_NOTARY_KEY_ID and IDECRAFT_NOTARY_ISSUER"
+  fail "no notary credentials: set FERRIS_IDEA_NOTARY_PROFILE, or FERRIS_IDEA_NOTARY_KEY, FERRIS_IDEA_NOTARY_KEY_ID and FERRIS_IDEA_NOTARY_ISSUER"
 fi
 notarytool() { # notarytool <subcommand> [args …], with the credentials added
   sub="$1"; shift
@@ -97,7 +102,7 @@ notarytool() { # notarytool <subcommand> [args …], with the credentials added
 }
 
 printf 'commit %s, version %s (%s)\n' "$commit" "$version" "$tag_note"
-printf 'identity: %s (from IDECRAFT_SIGN_IDENTITY), notary: %s\n' "$kind" "$notary_kind"
+printf 'identity: %s (from FERRIS_IDEA_SIGN_IDENTITY), notary: %s\n' "$kind" "$notary_kind"
 if [ "$check_only" = 1 ]; then
   echo "preconditions met; --check builds, signs and sends nothing"
   exit 0
@@ -121,10 +126,10 @@ rm -rf "$work"
 mkdir -p "$work"
 
 # 4. Release build, bundle, sign (behaviour 10): scripts/bundle-macos.sh with the identity.
-step "build and sign IDECraft.app"
-IDECRAFT_SIGN_IDENTITY="$identity" scripts/bundle-macos.sh --out "$work"
-app="$work/IDECraft.app"
-case "$(lipo -archs "$app/Contents/MacOS/idecraft")" in
+step "build and sign FerrisIDEA.app"
+FERRIS_IDEA_SIGN_IDENTITY="$identity" scripts/bundle-macos.sh --out "$work"
+app="$work/FerrisIDEA.app"
+case "$(lipo -archs "$app/Contents/MacOS/ferris-idea")" in
   arm64) arch=arm64 ;;
   x86_64) arch=x86_64 ;;
   *x86_64*arm64* | *arm64*x86_64*) arch=universal ;;
@@ -132,18 +137,18 @@ case "$(lipo -archs "$app/Contents/MacOS/idecraft")" in
 esac
 
 # 5. Notarize and staple the app, so a copy outside the DMG opens offline too (behaviour 12).
-ditto -c -k --keepParent "$app" "$work/IDECraft.zip"
-notarize "$work/IDECraft.zip"
+ditto -c -k --keepParent "$app" "$work/FerrisIDEA.zip"
+notarize "$work/FerrisIDEA.zip"
 xcrun stapler staple -q "$app" || fail "stapling the app failed"
 
 # 6. The DMG: the stapled app and a link to /Applications, compressed, signed (behaviour 13).
 step "DMG"
-dmg="$out/IDECraft-$version-macos-$arch.dmg"
+dmg="$out/FerrisIDEA-$version-macos-$arch.dmg"
 stage="$work/dmg"
 mkdir -p "$stage"
-ditto "$app" "$stage/IDECraft.app"
+ditto "$app" "$stage/FerrisIDEA.app"
 ln -s /Applications "$stage/Applications"
-hdiutil create -quiet -volname "IDECraft $version" -srcfolder "$stage" -fs HFS+ -format UDZO -ov "$dmg" ||
+hdiutil create -quiet -volname "Ferris IDEA $version" -srcfolder "$stage" -fs HFS+ -format UDZO -ov "$dmg" ||
   fail "hdiutil create failed"
 codesign --force --timestamp --sign "$identity" "$dmg" 2>"$work/dmg-sign.log" || {
   sed -E 's/\([A-Z0-9]{10}\)/(<team>)/g; s/[0-9A-Fa-f]{40}/<hash>/g' "$work/dmg-sign.log" >&2
@@ -165,11 +170,11 @@ mnt="$work/mnt"
 mkdir -p "$mnt"
 hdiutil attach -quiet -nobrowse -readonly -noautoopen -mountpoint "$mnt" "$dmg" || fail "cannot mount the DMG"
 inside=0
-codesign --verify --deep --strict "$mnt/IDECraft.app" &&
-  spctl --assess --type execute "$mnt/IDECraft.app" &&
-  xcrun stapler validate -q "$mnt/IDECraft.app" &&
-  said=$("$mnt/IDECraft.app/Contents/MacOS/idecraft" --version) &&
-  [ "${said%% (*}" = "idecraft $version" ] && inside=1
+codesign --verify --deep --strict "$mnt/FerrisIDEA.app" &&
+  spctl --assess --type execute "$mnt/FerrisIDEA.app" &&
+  xcrun stapler validate -q "$mnt/FerrisIDEA.app" &&
+  said=$("$mnt/FerrisIDEA.app/Contents/MacOS/ferris-idea" --version) &&
+  [ "${said%% (*}" = "ferris-idea $version" ] && inside=1
 hdiutil detach -quiet "$mnt" || hdiutil detach -quiet -force "$mnt" || true
 [ "$inside" = 1 ] || fail "the app inside the DMG does not pass the checks or does not start"
 [ "$(git rev-parse HEAD)" = "$commit" ] || fail "HEAD moved during the build"
@@ -178,6 +183,6 @@ sum=$(shasum -a 256 "$dmg" | awk '{print $1}')
 printf '%s  %s\n' "$sum" "$(basename "$dmg")" >"$dmg.sha256"
 rm -rf "$work"
 step "done"
-printf 'IDECraft %s from commit %s (%s)\n' "$version" "$commit" "$tag_note"
+printf 'Ferris IDEA %s from commit %s (%s)\n' "$version" "$commit" "$tag_note"
 printf 'artifact: %s\nSHA-256:  %s\n' "$dmg" "$sum"
 echo "signed (Developer ID Application, hardened runtime), notarized and stapled; nothing uploaded"

@@ -52,13 +52,13 @@ blindly replacing a word that may mean something else there.
 7. **Only the project's own sources (v3, OBS-0034 L14):** a rename never searches for text
    occurrences outside the project's own sources and never changes a file there without being
    told to. Before v3 the search took every file of the workspace except a short list of folder
-   names (the list of Find in Files, SPEC-0029: `.git`, `.hg`, `.svn`, `.idecraft`, `target`,
+   names (the list of Find in Files, SPEC-0029: `.git`, `.hg`, `.svn`, `.ferris-idea`, `target`,
    `node_modules`, `__pycache__`); in a Python project with a `.venv` all 27 listed occurrences
    lay in installed packages and were preselected. [OBS, GEN]
    - **Not the project's own** is a file that lies outside the project folder, is reached through
      a symbolic link, or has a folder above it (below the project folder) that is one of:
      - version control data: `.git`, `.hg`, `.svn`, `.jj`, `CVS`;
-     - IDE data: `.idecraft`, `.idea`;
+     - IDE data: `.ferris-idea`, `.idea`;
      - a virtual environment or interpreter: `.venv`, `venv`, `site-packages`, `.tox`, `.nox`,
        `__pypackages__`, and any folder that holds a `pyvenv.cfg` or a `conda-meta` folder,
        whatever its name;
@@ -101,7 +101,7 @@ blindly replacing a word that may mean something else there.
    - **MCP:** `rename_symbol` returns them as `outside_project` (index, path, reason, edits,
      included) and leaves them out of `plan`; `include_outside` takes the indices to apply too.
      Without it nothing outside the project's own sources is written. [ADR-0008]
-   - **One rule for all:** the decision lives in one place (`idecraft_core::OwnSources`) so that
+   - **One rule for all:** the decision lives in one place (`ferris_idea_core::OwnSources`) so that
      other project-wide actions can use it. Find in Files and Replace in Files keep their
      behaviour in this version (SPEC-0029 is not changed here).
 
@@ -133,7 +133,7 @@ blindly replacing a word that may mean something else there.
      case of another letter only in one direction (`ſ`, `ı`) are folded with it. [GEN]
    - **Ignore rules as Git reads them there:** Git matches ignore rules without regard to case when
      `core.ignorecase` is set, which it sets itself when it creates or clones a repository on a
-     file system that ignores case. IDECraft asks the file system the same question once per
+     file system that ignores case. Ferris IDEA asks the file system the same question once per
      project folder: the folder is looked up under its own name with the case of every ASCII letter
      flipped, and if that is the same entry (same device and inode; on Windows the same resolved
      path), the file system ignores case. A name without such a letter passes the question to the

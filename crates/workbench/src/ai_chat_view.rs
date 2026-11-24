@@ -16,12 +16,12 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Instant;
 
+use ferris_idea_ai::context::SharedTab;
+use ferris_idea_ai::{Attachment, Message};
 use gpui::{
     AnyElement, App, ClipboardItem, Context, Div, Entity, EventEmitter, FocusHandle, FontWeight,
     KeyDownEvent, Stateful, WeakEntity, Window, div, prelude::*, px,
 };
-use idecraft_ai::context::SharedTab;
-use idecraft_ai::{Attachment, Message};
 
 use crate::ai_markdown::{self as md, Block, Run};
 use crate::editor_view::EditorView;
@@ -122,6 +122,14 @@ pub enum AiChatEvent {
     Attach(AttachKind),
     /// Open this address in the browser; the person confirmed it (behaviour 7).
     OpenLink(String),
+    /// Open this workspace file in the editor (`SPEC-0357` behaviour 11).
+    OpenFile(PathBuf),
+    /// Open Settings › Tools › AI Assistant on the Anthropic API template (`SPEC-0160` v2
+    /// behaviour 6).
+    UseAnthropicApi,
+    /// Open a terminal tab of the project running the user's own Claude Code (`SPEC-0160` v2
+    /// behaviour 7).
+    OpenClaudeCode,
 }
 
 /// A terminal tab shared with the chat (`SPEC-0313` behaviour 5).
@@ -200,6 +208,20 @@ pub struct AiChatView {
     code_scroll: HashMap<usize, (gpui::ScrollHandle, f32)>,
     /// The editors' colours of code blocks by language and text.
     colours: HashMap<(String, String), Rc<Colours>>,
+    /// The tab shown: the chat or the agents (`SPEC-0357` behaviour 1).
+    tab: AiTab,
+    /// The Agents tab, made on first use.
+    agents: Option<Entity<crate::AgentsView>>,
+    _agents_events: Option<gpui::Subscription>,
+}
+
+/// The tabs of the AI Chat tool window (`SPEC-0357` behaviour 1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AiTab {
+    /// The conversation with the assistant (`SPEC-0138`).
+    Chat,
+    /// The hosted agents (`SPEC-0357`).
+    Agents,
 }
 
 impl EventEmitter<AiChatEvent> for AiChatView {}
@@ -234,7 +256,49 @@ impl AiChatView {
             copied: None,
             code_scroll: HashMap::new(),
             colours: HashMap::new(),
+            tab: AiTab::Chat,
+            agents: None,
+            _agents_events: None,
         }
+    }
+
+    /// The tab shown.
+    pub fn tab(&self) -> AiTab {
+        self.tab
+    }
+
+    /// Shows `tab`; the Agents tab is made on first use (`SPEC-0357` behaviour 1).
+    pub fn show_tab(&mut self, tab: AiTab, cx: &mut Context<Self>) {
+        self.tab = tab;
+        if tab == AiTab::Agents {
+            let view = self.ensure_agents(cx);
+            view.update(cx, |v, _| v.reload());
+        }
+        cx.notify();
+    }
+
+    /// The Agents tab, made when missing.
+    pub fn ensure_agents(&mut self, cx: &mut Context<Self>) -> Entity<crate::AgentsView> {
+        if let Some(v) = &self.agents {
+            return v.clone();
+        }
+        let root = self.root.clone();
+        let view = cx.new(|cx| crate::AgentsView::new(root, cx));
+        self._agents_events = Some(cx.subscribe(
+            &view,
+            |_, _, event: &crate::agents_view::AgentsEvent, cx| match event {
+                crate::agents_view::AgentsEvent::OpenFile(path) => {
+                    cx.emit(AiChatEvent::OpenFile(path.clone()))
+                }
+            },
+        ));
+        self.agents = Some(view.clone());
+        view
+    }
+
+    /// The Agents tab, once made.
+    pub fn agents_view(&self) -> Option<Entity<crate::AgentsView>> {
+        self.agents.clone()
     }
 
     /// The focus handle around the whole view: the input, the messages and the buttons.
@@ -253,16 +317,16 @@ impl AiChatView {
     }
 
     fn budget(cx: &gpui::App) -> usize {
-        idecraft_ai::context::attachment_chars(
+        ferris_idea_ai::context::attachment_chars(
             crate::appearance::ide_settings(cx).ai.attachment_chars,
         )
     }
 
     /// Publishes the waiting chips and shared tabs for `ai_assistant` (`SPEC-0313` behaviour 9).
     fn publish(&self, cx: &gpui::App) {
-        idecraft_ai::live::Live::global().set_chat(
+        ferris_idea_ai::live::Live::global().set_chat(
             &self.root,
-            idecraft_ai::live::ChatState {
+            ferris_idea_ai::live::ChatState {
                 attachments: self.attachments.iter().map(Into::into).collect(),
                 shared: self.shared_names(cx),
             },
@@ -272,7 +336,7 @@ impl AiChatView {
     /// Adds a chip for the next question (`SPEC-0138` behaviour 3, `SPEC-0313` behaviour 1); a
     /// chip beyond the limits is refused with a note.
     pub fn attach(&mut self, attachment: Attachment, cx: &mut Context<Self>) {
-        match idecraft_ai::context::may_add(&self.attachments, &attachment, Self::budget(cx)) {
+        match ferris_idea_ai::context::may_add(&self.attachments, &attachment, Self::budget(cx)) {
             Ok(()) => {
                 self.attachments.push(attachment);
                 self.error = None;
@@ -414,7 +478,7 @@ impl AiChatView {
         self.messages
             .iter()
             .filter(|m| m.role == "assistant")
-            .flat_map(|m| idecraft_ai::context::command_blocks(&m.content))
+            .flat_map(|m| ferris_idea_ai::context::command_blocks(&m.content))
             .collect()
     }
 
@@ -479,8 +543,8 @@ impl AiChatView {
     /// The shared tabs' snapshots that changed since they last went (`SPEC-0313` behaviour 5).
     fn shared_snapshots(&mut self, cx: &mut Context<Self>) {
         let ai = crate::appearance::ide_settings(cx).ai;
-        let lines = idecraft_ai::context::terminal_lines(ai.terminal_lines);
-        let budget = idecraft_ai::context::attachment_chars(ai.attachment_chars);
+        let lines = ferris_idea_ai::context::terminal_lines(ai.terminal_lines);
+        let budget = ferris_idea_ai::context::attachment_chars(ai.attachment_chars);
         self.shared.retain(|s| s.view.upgrade().is_some());
         let mut new = Vec::new();
         for s in &mut self.shared {
@@ -488,7 +552,7 @@ impl AiChatView {
                 continue;
             };
             let Some(mut a) = view.read(cx).ai_attachment(
-                idecraft_ai::context::Source::TerminalCommand,
+                ferris_idea_ai::context::Source::TerminalCommand,
                 lines,
                 budget,
             ) else {
@@ -500,7 +564,7 @@ impl AiChatView {
             }
         }
         for a in new {
-            if idecraft_ai::context::may_add(&self.attachments, &a, budget).is_ok() {
+            if ferris_idea_ai::context::may_add(&self.attachments, &a, budget).is_ok() {
                 self.attachments.push(a);
             }
         }
@@ -521,7 +585,7 @@ impl AiChatView {
         if self.attachments.iter().any(|b| b.label == a.label) {
             return;
         }
-        if idecraft_ai::context::may_add(&self.attachments, &a, Self::budget(cx)).is_ok() {
+        if ferris_idea_ai::context::may_add(&self.attachments, &a, Self::budget(cx)).is_ok() {
             self.attachments.insert(0, a);
         }
     }
@@ -541,6 +605,19 @@ impl AiChatView {
             return;
         }
         let settings = crate::appearance::ide_settings(cx).ai;
+        // Claude's plan set to the Terminal without the Anthropic API template sends nothing, not
+        // even to the endpoint beside it; the question stays in the field (SPEC-0160 v2
+        // behaviour 6). A missing key is found by the request itself, which sends nothing either.
+        if settings.enabled
+            && ferris_idea_ai::claude_in_terminal(&settings)
+            && (ferris_idea_ai::provider_of(&settings.endpoint) != Some("Anthropic")
+                || settings.model.trim().is_empty())
+        {
+            self.error = Some(ferris_idea_ai::AiError::ClaudePlan.to_string());
+            self.info = None;
+            cx.notify();
+            return;
+        }
         // The offered file is read only for a question the person sends from the field; Explain
         // Code attaches its own.
         if question.is_none() && settings.enabled {
@@ -549,7 +626,7 @@ impl AiChatView {
         if settings.enabled {
             self.shared_snapshots(cx);
         }
-        let message = idecraft_ai::user_message_with(&text, &self.attachments);
+        let message = ferris_idea_ai::user_message_with(&text, &self.attachments);
         self.asked.insert(
             self.messages.len(),
             Asked {
@@ -580,10 +657,12 @@ impl AiChatView {
         let slot = result.clone();
         cx.background_executor()
             .spawn(async move {
-                let key =
-                    idecraft_ai::stored_key(&idecraft_database::SystemStore, &settings.endpoint);
+                let key = ferris_idea_ai::stored_key(
+                    &ferris_idea_database::SystemStore,
+                    &settings.endpoint,
+                );
                 let answer =
-                    idecraft_ai::chat_stream(&settings, key.as_deref(), &sent, &mut |piece| {
+                    ferris_idea_ai::chat_stream(&settings, key.as_deref(), &sent, &mut |piece| {
                         if let Ok(mut s) = pieces.lock() {
                             s.push_str(piece);
                         }
@@ -1069,7 +1148,7 @@ impl AiChatView {
                                 ))
                                 .tip_text(
                                     format!("ai-insert-tip-{k}"),
-                                    idecraft_ui::tooltip::Tip::plain(
+                                    ferris_idea_ui::tooltip::Tip::plain(
                                         "Types the command into the terminal; it runs only when you press Enter",
                                     ),
                                 )
@@ -1128,8 +1207,8 @@ impl AiChatView {
     fn preview_rows(&self, preview: &ApplyPreview, cx: &mut Context<Self>) -> AnyElement {
         let p = Palette::current();
         let after = preview.after();
-        let rows = idecraft_vcs::side_by_side(&preview.before, &after);
-        let unified = idecraft_vcs::unified_rows(&rows);
+        let rows = ferris_idea_vcs::side_by_side(&preview.before, &after);
+        let unified = ferris_idea_vcs::unified_rows(&rows);
         let changed: Vec<usize> = unified
             .iter()
             .enumerate()
@@ -1143,11 +1222,11 @@ impl AiChatView {
             .collect();
         let added = unified
             .iter()
-            .filter(|r| r.kind == Some(idecraft_vcs::LineChangeKind::Added))
+            .filter(|r| r.kind == Some(ferris_idea_vcs::LineChangeKind::Added))
             .count();
         let deleted = unified
             .iter()
-            .filter(|r| r.kind == Some(idecraft_vcs::LineChangeKind::Deleted))
+            .filter(|r| r.kind == Some(ferris_idea_vcs::LineChangeKind::Deleted))
             .count();
         let lh = crate::fonts::editor_line_height();
         let mut last = None;
@@ -1165,8 +1244,8 @@ impl AiChatView {
             last = Some(i);
             let r = &unified[i];
             let (sign, bg) = match r.kind {
-                Some(idecraft_vcs::LineChangeKind::Added) => ("+", Some(p.diff_inserted)),
-                Some(idecraft_vcs::LineChangeKind::Deleted) => ("−", Some(p.diff_deleted)),
+                Some(ferris_idea_vcs::LineChangeKind::Added) => ("+", Some(p.diff_inserted)),
+                Some(ferris_idea_vcs::LineChangeKind::Deleted) => ("−", Some(p.diff_deleted)),
                 Some(_) => ("~", Some(p.diff_modified)),
                 None => (" ", None),
             };
@@ -1272,7 +1351,7 @@ impl AiChatView {
         cx: &mut Context<Self>,
     ) -> Vec<AnyElement> {
         let p = Palette::current();
-        let commands = idecraft_ai::context::command_blocks(content);
+        let commands = ferris_idea_ai::context::command_blocks(content);
         let mut shell = 0usize;
         let mut out = Vec::new();
         for block in md::parse(content) {
@@ -1338,7 +1417,7 @@ impl AiChatView {
                     .semantics(Semantics::new(Role::Splitter).name("Rule"))
                     .into_any_element(),
                 Block::Code(language, code) => {
-                    let is_shell = idecraft_ai::context::SHELL_LANGUAGES
+                    let is_shell = ferris_idea_ai::context::SHELL_LANGUAGES
                         .contains(&language.as_str())
                         && !code.trim().is_empty();
                     let command = if is_shell {
@@ -1432,7 +1511,16 @@ impl AiChatView {
                 "Off".into(),
                 vec!["Switch it on in Settings › Tools › AI Assistant".into()],
             )
-        } else if let Some(cli) = idecraft_ai::subscription::Cli::from_id(&ai.subscription) {
+        } else if ferris_idea_ai::claude_in_terminal(&ai)
+            && ferris_idea_ai::provider_of(&ai.endpoint) != Some("Anthropic")
+        {
+            (
+                ferris_idea_ai::CLAUDE_TERMINAL_NAME.into(),
+                vec![ferris_idea_ai::subscription::CLAUDE_PLAN_MESSAGE.into()],
+            )
+        } else if let Some(cli) = ferris_idea_ai::subscription::Cli::from_id(&ai.subscription)
+            .filter(|_| !ferris_idea_ai::claude_in_terminal(&ai))
+        {
             let m = ai.model.trim();
             (
                 if m.is_empty() {
@@ -1458,36 +1546,100 @@ impl AiChatView {
             .map(crate::metrics::panel_header)
             .min_w_0()
             .child(crate::metrics::panel_title("AI Chat"))
-            .child(
-                div()
-                    .id("ai-model")
-                    .flex_1()
-                    .min_w_0()
-                    .truncate()
-                    .text_color(c(p.ui_muted))
-                    .relative()
-                    .semantics(
-                        Semantics::new(Role::Label)
-                            .name(model.clone())
-                            .description(details.join("\n"))
-                            .test_id("ai-model"),
-                    )
-                    .child(model.clone())
-                    .tip_text(
-                        "ai-model-tip",
-                        idecraft_ui::tooltip::Tip {
-                            title: model,
-                            shortcut: String::new(),
-                            details,
-                        },
-                    ),
-            )
-            .child(
-                small_button("ai-new", "New Chat")
-                    .relative()
-                    .semantics(button_semantics("New Chat", "ai-new".into(), Effect::None))
-                    .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| this.clear(cx))),
-            )
+            .child(self.tabs(cx))
+            .when(self.tab == AiTab::Chat, |d| {
+                d.child(
+                    div()
+                        .id("ai-model")
+                        .flex_1()
+                        .min_w_0()
+                        .truncate()
+                        .text_color(c(p.ui_muted))
+                        .relative()
+                        .semantics(
+                            Semantics::new(Role::Label)
+                                .name(model.clone())
+                                .description(details.join("\n"))
+                                .test_id("ai-model"),
+                        )
+                        .child(model.clone())
+                        .tip_text(
+                            "ai-model-tip",
+                            ferris_idea_ui::tooltip::Tip {
+                                title: model,
+                                shortcut: String::new(),
+                                details,
+                            },
+                        ),
+                )
+            })
+            .when(self.tab == AiTab::Chat, |d| {
+                d.child(
+                    small_button("ai-new", "New Chat")
+                        .relative()
+                        .semantics(button_semantics("New Chat", "ai-new".into(), Effect::None))
+                        .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| this.clear(cx))),
+                )
+            })
+            .when(self.tab == AiTab::Agents, |d| d.child(div().flex_1()))
+    }
+
+    /// The tabs Chat and Agents; the Agents tab counts the agents that need the person
+    /// (`SPEC-0357` behaviours 1, 10).
+    fn tabs(&self, cx: &mut Context<Self>) -> Div {
+        let p = Palette::current();
+        let needing = self.agents.as_ref().map_or(0, |a| a.read(cx).needing());
+        let agents = if needing > 0 {
+            format!("Agents ({needing})")
+        } else {
+            "Agents".to_owned()
+        };
+        let tab = |id: &'static str, label: String, which: AiTab, on: bool| {
+            div()
+                .id(id)
+                .flex_none()
+                .px(px(6.))
+                .h(px(20.))
+                .flex()
+                .items_center()
+                .rounded(px(4.))
+                .text_xs()
+                .cursor_pointer()
+                .when(on, |d| {
+                    d.bg(c(p.tree_selection_inactive)).text_color(c(p.ui_text))
+                })
+                .when(!on, |d| {
+                    d.text_color(c(p.ui_muted)).hover(|s| s.bg(c(p.tree_hover)))
+                })
+                .relative()
+                .semantics(
+                    Semantics::new(Role::Button)
+                        .name(label.clone())
+                        .test_id(id)
+                        .selected(on)
+                        .action(AxAction::Click)
+                        .effects(&[Effect::None]),
+                )
+                .child(label)
+                .on_click(
+                    cx.listener(move |this, _: &gpui::ClickEvent, _, cx| this.show_tab(which, cx)),
+                )
+        };
+        div()
+            .flex()
+            .gap_1()
+            .child(tab(
+                "ai-tab-chat",
+                "Chat".into(),
+                AiTab::Chat,
+                self.tab == AiTab::Chat,
+            ))
+            .child(tab(
+                "ai-tab-agents",
+                agents,
+                AiTab::Agents,
+                self.tab == AiTab::Agents,
+            ))
     }
 
     /// The chips row of the field: "+", the offered file and the waiting chips (`SPEC-0138` v4
@@ -1524,7 +1676,7 @@ impl AiChatView {
                     )
                     .tip_text(
                         "ai-add-tip",
-                        idecraft_ui::tooltip::Tip::plain("Attach context"),
+                        ferris_idea_ui::tooltip::Tip::plain("Attach context"),
                     )
                     .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
                         this.adding = !this.adding;
@@ -1562,7 +1714,7 @@ impl AiChatView {
                         )
                         .tip_text(
                             "ai-context-tip",
-                            idecraft_ui::tooltip::Tip::plain(if on {
+                            ferris_idea_ui::tooltip::Tip::plain(if on {
                                 "Goes with the next question; click to leave it out"
                             } else {
                                 "Not sent; click to send it with the next question"
@@ -1654,6 +1806,20 @@ impl AiChatView {
 
 impl Render for AiChatView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // The Agents tab (`SPEC-0357` behaviour 1).
+        if self.tab == AiTab::Agents {
+            let agents = self.ensure_agents(cx);
+            return div()
+                .id("ai-chat")
+                .track_focus(&self.focus)
+                .size_full()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .child(self.header(cx))
+                .child(div().flex_1().min_h_0().child(agents))
+                .into_any_element();
+        }
         let p = Palette::current();
         let ai = crate::appearance::ide_settings(cx).ai;
         // Sharing ends when the assistant is switched off (`SPEC-0313` behaviour 5).
@@ -1831,6 +1997,52 @@ impl Render for AiChatView {
                                 .semantics(Semantics::new(Role::Status).name(e.clone()).test_id("ai-error"))
                                 .child(e),
                         )
+                    })
+                    .when(self.error.as_deref() == Some(ferris_idea_ai::AiError::ClaudePlan.to_string().as_str()), |d| {
+                        // The two ways on with Claude's plan in the Terminal (SPEC-0160 v2
+                        // behaviour 6).
+                        d.child(
+                            div()
+                                .flex()
+                                .flex_wrap()
+                                .gap_1()
+                                .child(
+                                    small_button("ai-plan-api", "Use the Anthropic API…")
+                                        .relative()
+                                        .semantics(button_semantics(
+                                            "Use the Anthropic API…",
+                                            "ai-plan-api".into(),
+                                            Effect::None,
+                                        ))
+                                        .tip_text(
+                                            "ai-plan-api-tip",
+                                            ferris_idea_ui::tooltip::Tip::plain(
+                                                "Opens Settings › AI Assistant on the Anthropic API template; your API key goes to the keychain",
+                                            ),
+                                        )
+                                        .on_click(cx.listener(|_, _: &gpui::ClickEvent, _, cx| {
+                                            cx.emit(AiChatEvent::UseAnthropicApi)
+                                        })),
+                                )
+                                .child(
+                                    small_button("ai-plan-terminal", "Open Claude Code in the Terminal")
+                                        .relative()
+                                        .semantics(button_semantics(
+                                            "Open Claude Code in the Terminal",
+                                            "ai-plan-terminal".into(),
+                                            Effect::None,
+                                        ))
+                                        .tip_text(
+                                            "ai-plan-terminal-tip",
+                                            ferris_idea_ui::tooltip::Tip::plain(
+                                                "Runs your own Claude Code (claude) in a new terminal tab of the project; it uses your plan and signs in by itself",
+                                            ),
+                                        )
+                                        .on_click(cx.listener(|_, _: &gpui::ClickEvent, _, cx| {
+                                            cx.emit(AiChatEvent::OpenClaudeCode)
+                                        })),
+                                ),
+                        )
                     }),
             )
             .when_some(self.pending_link.clone(), |d, url| {
@@ -2007,5 +2219,6 @@ impl Render for AiChatView {
                         ),
                 ),
             )
+            .into_any_element()
     }
 }

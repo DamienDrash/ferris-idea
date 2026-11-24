@@ -1,7 +1,7 @@
 //! SPEC-0005 v3 AK-17: properties of the splitter over generated scripts, with a fixed
 //! pseudo-random walk (xorshift, no dependency) so every run checks the same scripts.
 
-use idecraft_database::{Dialect, split_statements};
+use ferris_idea_database::{Dialect, split_statements};
 
 /// A small generator without a dependency, the same on every run.
 struct Rng(u64);

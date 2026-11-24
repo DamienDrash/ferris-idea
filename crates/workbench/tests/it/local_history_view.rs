@@ -5,17 +5,18 @@
 
 #![cfg(target_os = "macos")]
 
+use ferris_idea_workbench::{HistoryView, WorkbenchView, semantics};
 use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext, point, px};
-use idecraft_workbench::{HistoryView, WorkbenchView, semantics};
 
 fn workspace() -> std::path::PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-local-history-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-local-history-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src")).unwrap();
     // The workbench compares paths below its canonical root (`/private/var/…` on macOS).
     let root = root.canonicalize().unwrap();
     // Three saved states, an hour apart; the last is the current text.
-    let mut history = idecraft_core::LocalHistory::open(&root).unwrap();
+    let mut history = ferris_idea_core::LocalHistory::open(&root).unwrap();
     let file = root.join("src/Inventory.java");
     let states = [
         "int a;\nint q;\nint b;\n",

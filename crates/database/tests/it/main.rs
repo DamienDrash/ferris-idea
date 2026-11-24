@@ -1,4 +1,4 @@
-//! The integration tests of `idecraft-database` as one test program (ADR-0030 item 7): one
+//! The integration tests of `ferris-idea-database` as one test program (ADR-0030 item 7): one
 //! program to build and link instead of one per file. Each former file is a module here.
 
 mod common;
@@ -9,6 +9,7 @@ mod catalog;
 mod connection_form;
 mod connectors;
 mod ddl;
+mod dialect_numbers_live;
 mod dialect_steps_live;
 mod duckdb;
 mod edit;
@@ -31,5 +32,6 @@ mod sqlite;
 mod sqlite_catalogue;
 mod sqlserver;
 mod table_editor;
+mod tds_handshake;
 mod tls;
 mod tunnel;

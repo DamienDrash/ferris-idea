@@ -56,7 +56,7 @@ Edit in several places at once, predictably, with one undo step per action.
    its start), else at the end. When "add next occurrence" or "select all occurrences" selects the
    word at an empty caret, the caret keeps its place in the word: a caret at the word's start stays
    at the start, a caret at its end stays at the end. [OBS] A caret inside the word goes to the
-   word's end, because a caret in IDECraft always stands at one end of its selection (IDECraft's
+   word's end, because a caret in Ferris IDEA always stands at one end of its selection (Ferris IDEA's
    choice; not observed in the reference). Until v2 every caret stood at the end. [GEN]
 4b. **v4 – Whole words:** when "add next occurrence" selected the word at an empty caret, the
    occurrences it adds afterwards are whole words only (not preceded or followed by a letter, a
@@ -155,7 +155,7 @@ Edit in several places at once, predictably, with one undo step per action.
   and ⌃G in `x xz x` give two carets; ⇧⌘8, ⇧→, ⇧↓ ⇧↓, ⌘C, ⇧⌘8, ⌘→, ⌘V give the indented block and
   ⌘Z takes it back.
 
-- **AK-13 (v5, behaviour 9)** Unit tests `caret_gesture::tests` in `idecraft-workbench`: ⌥ down,
+- **AK-13 (v5, behaviour 9)** Unit tests `caret_gesture::tests` in `ferris-idea-workbench`: ⌥ down,
   up, down within 300 ms arms the gesture and keeps it while held; a slow step, another modifier,
   another key and the release disarm it; a single press does not arm it.
 - **AK-14 (v5, behaviour 10)** Unit test `completion_model::tests::a_suggestion_goes_in_at_every_caret`:
@@ -177,9 +177,9 @@ Default key bindings come with the keymap port (M3.9); behaviour to be compared 
 (v3) A caret inside a word goes to the word's end when the word is selected (behaviour 4a); the
 reference's behaviour in that case was not observed.
 (v4) The reference keeps whole-word matching also through Find Next and Find Previous between the
-occurrence commands; IDECraft ends it with any other command, Find included (behaviour 4b).
+occurrence commands; Ferris IDEA ends it with any other command, Find included (behaviour 4b).
 Behaviour 6a follows the reference's way for languages without a formatter; in source files
-IDECraft keeps its own re-indentation (SPEC-0057 v3 behaviour 19), and Markdown, which the
+Ferris IDEA keeps its own re-indentation (SPEC-0057 v3 behaviour 19), and Markdown, which the
 reference formats, keeps its pasted text as it is.
 (v5) Behaviours 9 and 10 were not compared side by side; the timing of behaviour 9 follows the open
 sources, and how the reference places a template's tab stops at several carets was not observed.

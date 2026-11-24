@@ -4,8 +4,8 @@
 
 #![cfg(target_os = "macos")]
 
+use ferris_idea_workbench::{MenuPlace, WorkbenchView};
 use gpui::{Entity, TestAppContext, VisualTestContext, point, px};
-use idecraft_workbench::{MenuPlace, WorkbenchView};
 
 const QUERY: &str = "select c.name, o.id from customers c join orders o on o.customer_id = c.id;\n";
 
@@ -20,9 +20,9 @@ fn sqlite(db: &std::path::Path, sql: &str) -> bool {
 /// Two SQLite connections: `shop` with `customers` and `orders`, `copy` with `customers` and a
 /// table `extra` that `shop` lacks. `None` without the `sqlite3` program.
 fn workspace(tag: &str) -> Option<std::path::PathBuf> {
-    let root = std::env::temp_dir().join(format!("idecraft-dbecp-{tag}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-dbecp-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir_all(root.join(".idecraft")).unwrap();
+    std::fs::create_dir_all(root.join(".ferris-idea")).unwrap();
     let (shop, copy) = (root.join("shop.db"), root.join("copy.db"));
     let made = sqlite(
         &shop,
@@ -38,7 +38,7 @@ fn workspace(tag: &str) -> Option<std::path::PathBuf> {
         return None;
     }
     std::fs::write(
-        root.join(".idecraft/connections.toml"),
+        root.join(".ferris-idea/connections.toml"),
         format!(
             "[[connection]]\nid = \"shop\"\nname = \"shop\"\ndialect = \"sqlite\"\npath = \"{}\"\n\n\
              [[connection]]\nid = \"copy\"\nname = \"copy\"\ndialect = \"sqlite\"\npath = \"{}\"\n",
@@ -329,7 +329,9 @@ fn a_cancelled_comparison_shows_nothing(cx: &mut TestAppContext) {
         "{output:?}"
     );
     assert!(
-        !root.join(".idecraft/migrations/copy-to-shop.sql").exists(),
+        !root
+            .join(".ferris-idea/migrations/copy-to-shop.sql")
+            .exists(),
         "a cancelled comparison writes no script"
     );
     let _ = std::fs::remove_dir_all(&root);

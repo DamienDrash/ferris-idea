@@ -1,3 +1,4 @@
+// Modified by Ferris IDEA: draws a frame into an offscreen texture and reads it back (see ../../../FERRIS_IDEA.md).
 use super::metal_atlas::MetalAtlas;
 use crate::{
     AtlasTextureId, Background, Bounds, ContentMask, DevicePixels, MonochromeSprite, PaintSurface,
@@ -370,8 +371,12 @@ impl MetalRenderer {
         loop {
             let mut instance_buffer = self.instance_buffer_pool.lock().acquire(&self.device);
 
-            let command_buffer =
-                self.draw_primitives(scene, &mut instance_buffer, drawable, viewport_size);
+            let command_buffer = self.draw_primitives(
+                scene,
+                &mut instance_buffer,
+                drawable.texture(),
+                viewport_size,
+            );
 
             match command_buffer {
                 Ok(command_buffer) => {
@@ -416,11 +421,85 @@ impl MetalRenderer {
         }
     }
 
+    /// Ferris IDEA change (FERRIS_IDEA.md, change 8): draws `scene` once more into an offscreen texture
+    /// of the drawable's size and reads it back, so the window's own frame can be captured while
+    /// the window is covered or in the background, without the screen-recording permission.
+    /// Returns the image as RGBA rows in device pixels.
+    pub fn capture(&mut self, scene: &Scene) -> Option<image::RgbaImage> {
+        let drawable_size = self.layer.drawable_size();
+        let (width, height) = (
+            drawable_size.width.ceil() as u64,
+            drawable_size.height.ceil() as u64,
+        );
+        if width == 0 || height == 0 {
+            return None;
+        }
+        let viewport_size: Size<DevicePixels> = size(
+            (width as i32).into(),
+            (height as i32).into(),
+        );
+        let descriptor = metal::TextureDescriptor::new();
+        descriptor.set_texture_type(metal::MTLTextureType::D2);
+        descriptor.set_width(width);
+        descriptor.set_height(height);
+        descriptor.set_pixel_format(MTLPixelFormat::BGRA8Unorm);
+        descriptor.set_storage_mode(metal::MTLStorageMode::Managed);
+        descriptor.set_usage(
+            metal::MTLTextureUsage::RenderTarget | metal::MTLTextureUsage::ShaderRead,
+        );
+        let texture = self.device.new_texture(&descriptor);
+        loop {
+            let mut instance_buffer = self.instance_buffer_pool.lock().acquire(&self.device);
+            match self.draw_primitives(scene, &mut instance_buffer, &texture, viewport_size) {
+                Ok(command_buffer) => {
+                    let blit = command_buffer.new_blit_command_encoder();
+                    blit.synchronize_resource(&texture);
+                    blit.end_encoding();
+                    command_buffer.commit();
+                    command_buffer.wait_until_completed();
+                    self.instance_buffer_pool.lock().release(instance_buffer);
+                    break;
+                }
+                Err(err) => {
+                    let mut pool = self.instance_buffer_pool.lock();
+                    let buffer_size = pool.buffer_size;
+                    if buffer_size >= 256 * 1024 * 1024 {
+                        log::error!("capture: {err}");
+                        return None;
+                    }
+                    pool.reset(buffer_size * 2);
+                }
+            }
+        }
+        let stride = width * 4;
+        let mut bytes = vec![0u8; (stride * height) as usize];
+        texture.get_bytes(
+            bytes.as_mut_ptr().cast(),
+            stride,
+            metal::MTLRegion {
+                origin: metal::MTLOrigin { x: 0, y: 0, z: 0 },
+                size: metal::MTLSize {
+                    width,
+                    height,
+                    depth: 1,
+                },
+            },
+            0,
+        );
+        // BGRA to RGBA.
+        for px in bytes.chunks_exact_mut(4) {
+            px.swap(0, 2);
+        }
+        image::RgbaImage::from_raw(width as u32, height as u32, bytes)
+    }
+
     fn draw_primitives(
         &mut self,
         scene: &Scene,
         instance_buffer: &mut InstanceBuffer,
-        drawable: &metal::MetalDrawableRef,
+        // Ferris IDEA change: the target texture instead of the drawable, so `capture` can draw the
+        // same scene into a texture of its own (see FERRIS_IDEA.md, change 8).
+        target: &metal::TextureRef,
         viewport_size: Size<DevicePixels>,
     ) -> Result<metal::CommandBuffer> {
         let command_queue = self.command_queue.clone();
@@ -430,7 +509,7 @@ impl MetalRenderer {
 
         let mut command_encoder = new_command_encoder(
             command_buffer,
-            drawable,
+            target,
             viewport_size,
             |color_attachment| {
                 color_attachment.set_load_action(metal::MTLLoadAction::Clear);
@@ -467,7 +546,7 @@ impl MetalRenderer {
 
                     command_encoder = new_command_encoder(
                         command_buffer,
-                        drawable,
+                        target,
                         viewport_size,
                         |color_attachment| {
                             color_attachment.set_load_action(metal::MTLLoadAction::Load);
@@ -1158,7 +1237,7 @@ impl MetalRenderer {
 
 fn new_command_encoder<'a>(
     command_buffer: &'a metal::CommandBufferRef,
-    drawable: &'a metal::MetalDrawableRef,
+    target: &'a metal::TextureRef,
     viewport_size: Size<DevicePixels>,
     configure_color_attachment: impl Fn(&RenderPassColorAttachmentDescriptorRef),
 ) -> &'a metal::RenderCommandEncoderRef {
@@ -1167,7 +1246,7 @@ fn new_command_encoder<'a>(
         .color_attachments()
         .object_at(0)
         .unwrap();
-    color_attachment.set_texture(Some(drawable.texture()));
+    color_attachment.set_texture(Some(target));
     color_attachment.set_store_action(metal::MTLStoreAction::Store);
     configure_color_attachment(color_attachment);
 

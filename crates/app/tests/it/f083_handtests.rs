@@ -1,18 +1,18 @@
-//! Re-checks without a screen of the F-083 hand tests that need IDECraft's backend on a host
+//! Re-checks without a screen of the F-083 hand tests that need Ferris IDEA's backend on a host
 //! (`SPEC-0158`): hand tests 84 and 184 in a window of the test harness with real keys and real
-//! mouse clicks, and hand test 84's agent step through the `idecraft` program over MCP. The host
-//! is the system `sshd` started as the current user (`idecraft_remote::testing::TestHost`) with a
+//! mouse clicks, and hand test 84's agent step through the `ferris-idea` program over MCP. The host
+//! is the system `sshd` started as the current user (`ferris_idea_remote::testing::TestHost`) with a
 //! home folder of the test's own, so the backend uploaded there, its settings and its caches
-//! never touch the user's home folder; the backend is this build's `idecraft`. The Linux part of
-//! hand test 84 uses the Docker Engine's Lima VM (`IDECRAFT_TEST_DOCKER_SSH`, set by the
-//! internal test environment) as a Linux host without IDECraft.
+//! never touch the user's home folder; the backend is this build's `ferris-idea`. The Linux part of
+//! hand test 84 uses the Docker Engine's Lima VM (`FERRIS_IDEA_TEST_DOCKER_SSH`, set by the
+//! internal test environment) as a Linux host without Ferris IDEA.
 //!
 //! Choosing the test host is a call (it is in no `~/.ssh/config`), as in the other F-083 window
 //! tests (`crates/workbench/tests/it/f083_handtests.rs`). Every step on the host waits for the
 //! window's own answer — the result or the error it shows — after the host has let a first
 //! session in, not for a fixed time, so a machine under load only waits longer. What needs eyes
 //! stays in the hand tests: how the window draws the rows, the terminal and the status bar, a
-//! real keyboard, a second Mac and a Linux machine with IDECraft installed, and the comparison
+//! real keyboard, a second Mac and a Linux machine with Ferris IDEA installed, and the comparison
 //! with the reference's remote development.
 //!
 //! `SPEC-0158` v4 AK-6 (hand tests 84 and 184).
@@ -24,10 +24,10 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
+use ferris_idea_remote::testing::TestHost;
+use ferris_idea_workbench::WorkbenchView;
+use ferris_idea_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
 use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext, point, px};
-use idecraft_remote::testing::TestHost;
-use idecraft_workbench::WorkbenchView;
-use idecraft_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
 use serde_json::{Value, json};
 
 type Bench = Entity<WorkbenchView>;
@@ -50,7 +50,7 @@ struct Host {
     bin: PathBuf,
     /// This test's turn among the tests of this program that start a backend on a test host
     /// (dropped last, after the server and the folders).
-    _turn: idecraft_remote::testing::HostTurn,
+    _turn: ferris_idea_remote::testing::HostTurn,
 }
 
 impl Drop for Host {
@@ -62,8 +62,9 @@ impl Drop for Host {
 /// A ready test host whose sessions have `HOME` and a `PATH` folder of the test's own; `None`
 /// without `sshd` or `ssh-keygen`.
 fn host(tag: &str) -> Option<Host> {
-    let turn = idecraft_remote::testing::one_host_at_a_time();
-    let base = std::env::temp_dir().join(format!("idecraft-f083-app-{tag}-{}", std::process::id()));
+    let turn = ferris_idea_remote::testing::one_host_at_a_time();
+    let base =
+        std::env::temp_dir().join(format!("ferris-idea-f083-app-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
     std::fs::create_dir_all(base.join("home/bin")).unwrap();
     let base = base.canonicalize().unwrap();
@@ -74,7 +75,7 @@ fn host(tag: &str) -> Option<Host> {
         &base.join("ssh"),
         &[("HOME", &home.display().to_string()), ("PATH", &path)],
     )?;
-    // The ready signal: a whole session through IDECraft's own `ssh` succeeded.
+    // The ready signal: a whole session through Ferris IDEA's own `ssh` succeeded.
     if let Err(e) = host.wait_ready(HANG) {
         panic!("the test host started but never let a session in: {e}");
     }
@@ -95,7 +96,7 @@ fn write(path: &Path, text: &str) {
 /// A local workspace for the window (its own settings beside it).
 fn workspace(base: &Path) -> PathBuf {
     let root = base.join("local");
-    std::fs::create_dir_all(root.join(".idecraft")).unwrap();
+    std::fs::create_dir_all(root.join(".ferris-idea")).unwrap();
     root
 }
 
@@ -106,11 +107,11 @@ const STRETCH: u32 = 4;
 fn window(root: &Path, cx: &mut TestAppContext) -> (Bench, &'static mut VisualTestContext) {
     // Nothing of the user's SSH setup: the host list reads an empty config of the test's own,
     // every `ssh` carries a `-F` of its own, and a read of `~/.ssh/config` fails the test.
-    idecraft_remote::testing::isolate_ssh();
-    idecraft_remote::testing::stretch_limits(STRETCH);
-    idecraft_workbench::hit_targets::enable();
-    idecraft_workbench::semantics::set_consumer(
-        idecraft_workbench::semantics::Consumer::SelfTest,
+    ferris_idea_remote::testing::isolate_ssh();
+    ferris_idea_remote::testing::stretch_limits(STRETCH);
+    ferris_idea_workbench::hit_targets::enable();
+    ferris_idea_workbench::semantics::set_consumer(
+        ferris_idea_workbench::semantics::Consumer::SelfTest,
         true,
     );
     cx.executor().allow_parking();
@@ -119,7 +120,7 @@ fn window(root: &Path, cx: &mut TestAppContext) -> (Bench, &'static mut VisualTe
     cx.update(|cx| {
         cx.set_global(IdeSettingsFile(settings.join("settings.toml")));
         cx.set_global(ThemeFile(settings.join("theme")));
-        cx.set_global(CurrentIdeSettings(idecraft_core::IdeSettings::default()));
+        cx.set_global(CurrentIdeSettings(ferris_idea_core::IdeSettings::default()));
     });
     let at = root.to_path_buf();
     let window = cx.add_window(move |_, cx| WorkbenchView::new(&at, cx));
@@ -127,10 +128,10 @@ fn window(root: &Path, cx: &mut TestAppContext) -> (Bench, &'static mut VisualTe
     let cx = VisualTestContext::from_window(window.into(), cx).into_mut();
     cx.simulate_resize(gpui::size(px(1372.), px(860.)));
     cx.run_until_parked();
-    // The backend is this build's `idecraft`, not the test binary the window runs in.
-    let empty = idecraft_remote::testing::empty_ssh_config(&settings);
+    // The backend is this build's `ferris-idea`, not the test binary the window runs in.
+    let empty = ferris_idea_remote::testing::empty_ssh_config(&settings);
     bench.update(cx, |b, _| {
-        b.set_remote_backend_binary(PathBuf::from(env!("CARGO_BIN_EXE_idecraft")));
+        b.set_remote_backend_binary(PathBuf::from(env!("CARGO_BIN_EXE_ferris-idea")));
         b.set_remote_ssh(empty);
     });
     (bench, cx)
@@ -183,7 +184,10 @@ fn rows_for_message(place: Option<&str>, texts: &[String]) -> String {
     if place.is_some_and(|p| inside(Path::new(p))) {
         return format!("{texts:#?}");
     }
-    let own: Vec<&String> = texts.iter().filter(|t| t.contains("idecraft-")).collect();
+    let own: Vec<&String> = texts
+        .iter()
+        .filter(|t| t.contains("ferris-idea-"))
+        .collect();
     format!("{} rows, the test host's: {own:?}", texts.len())
 }
 
@@ -299,8 +303,8 @@ fn select(bench: &Bench, cx: &mut VisualTestContext, part: &str) {
 
 /// Where the control `name` was last drawn: the visible bounds of the element with that test id in
 /// the window's semantic tree (`SPEC-0319` behaviour 42).
-fn drawn(cx: &mut VisualTestContext, name: &str) -> Option<idecraft_workbench::semantics::Rect> {
-    use idecraft_workbench::semantics;
+fn drawn(cx: &mut VisualTestContext, name: &str) -> Option<ferris_idea_workbench::semantics::Rect> {
+    use ferris_idea_workbench::semantics;
     cx.update(|window, _| {
         semantics::tree(semantics::window_id(window))?
             .iter()
@@ -355,7 +359,7 @@ fn double_click(cx: &mut VisualTestContext, name: &str) {
 fn connect(
     bench: &Bench,
     cx: &mut VisualTestContext,
-    target: idecraft_remote::SshTarget,
+    target: ferris_idea_remote::SshTarget,
     home: Option<&Path>,
 ) {
     bench.update_in(cx, |b, window, cx| {
@@ -385,9 +389,9 @@ fn start_backend(bench: &Bench, cx: &mut VisualTestContext, folder: &Path) -> St
     until(bench, cx, "the backend runs for the folder", |cx| {
         let running = bench.read_with(cx, |b, cx| {
             b.remote_view().is_some_and(|v| {
-                v.read(cx)
-                    .backend()
-                    .is_some_and(|(name, f)| Path::new(f) == folder && name.starts_with("idecraft"))
+                v.read(cx).backend().is_some_and(|(name, f)| {
+                    Path::new(f) == folder && name.starts_with("ferris-idea")
+                })
             })
         });
         note = status(bench, cx);
@@ -407,16 +411,16 @@ fn runs(program: &Path) -> bool {
         .any(|l| l.starts_with(&program.display().to_string()))
 }
 
-/// The backends this build uploaded below `home` (`~/.cache/idecraft/bin`).
+/// The backends this build uploaded below `home` (`~/.cache/ferris-idea/bin`).
 fn uploaded(home: &Path) -> Vec<PathBuf> {
-    std::fs::read_dir(home.join(idecraft_remote::BACKEND_DIR))
+    std::fs::read_dir(home.join(ferris_idea_remote::BACKEND_DIR))
         .map(|d| {
             d.flatten()
                 .map(|e| e.path())
                 .filter(|p| {
                     p.file_name()
                         .and_then(|n| n.to_str())
-                        .is_some_and(|n| n.starts_with(&format!("idecraft-{VERSION}-")))
+                        .is_some_and(|n| n.starts_with(&format!("ferris-idea-{VERSION}-")))
                 })
                 .collect()
         })
@@ -440,8 +444,8 @@ fn wait_for(what: &str, mut done: impl FnMut() -> bool) {
 /// of this Mac's platform (as a second Mac): the project folder typed into the field and Enter,
 /// Start Backend clicked uploads this build and the status bar says so; `?needle` and Enter list
 /// the hits with file and line; ↓ and Enter open the second hit at its line, a double click the
-/// first; leaving the host stops the backend. Then an IDECraft installed on the host's `PATH` is
-/// found instead of uploading, and on a Linux host without IDECraft (the Docker VM, when its
+/// first; leaving the host stops the backend. Then a Ferris IDEA installed on the host's `PATH` is
+/// found instead of uploading, and on a Linux host without Ferris IDEA (the Docker VM, when its
 /// variables are set) the window says what to install.
 #[gpui::test]
 fn hand_test_84_backend_on_a_host_with_keys(cx: &mut TestAppContext) {
@@ -466,8 +470,9 @@ fn hand_test_84_backend_on_a_host_with_keys(cx: &mut TestAppContext) {
     go_to(&bench, cx, &project);
     let note = start_backend(&bench, cx, &project);
     assert!(
-        note.starts_with(&format!("Backend idecraft {VERSION} (uploaded) runs in "))
-            && note.contains(&project.display().to_string())
+        note.starts_with(&format!(
+            "Backend ferris-idea {VERSION} (uploaded) runs in "
+        )) && note.contains(&project.display().to_string())
             && note.ends_with(" tools"),
         "the status bar names the upload: {note:?}"
     );
@@ -475,7 +480,7 @@ fn hand_test_84_backend_on_a_host_with_keys(cx: &mut TestAppContext) {
     assert_eq!(
         copies.len(),
         1,
-        "one upload in ~/.cache/idecraft/bin: {copies:?}"
+        "one upload in ~/.cache/ferris-idea/bin: {copies:?}"
     );
     assert!(runs(&copies[0]), "the uploaded backend runs on the host");
 
@@ -522,17 +527,18 @@ fn hand_test_84_backend_on_a_host_with_keys(cx: &mut TestAppContext) {
     });
     wait_for("the backend on the host ends", || !runs(&copies[0]));
 
-    // A host with IDECraft installed: this build on the host's PATH is found, nothing uploaded.
+    // A host with Ferris IDEA installed: this build on the host's PATH is found, nothing uploaded.
     for c in &copies {
         std::fs::remove_file(c).unwrap();
     }
-    std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_idecraft"), h.bin.join("idecraft")).unwrap();
+    std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_ferris-idea"), h.bin.join("ferris-idea"))
+        .unwrap();
     connect(&bench, cx, h.host.target.clone(), Some(&h.home));
     go_to(&bench, cx, &project);
     let note = start_backend(&bench, cx, &project);
     assert!(
         note.starts_with(&format!(
-            "Backend idecraft {VERSION} (found on the host) runs in "
+            "Backend ferris-idea {VERSION} (found on the host) runs in "
         )),
         "the status bar says the backend was there: {note:?}"
     );
@@ -554,12 +560,12 @@ fn hand_test_84_backend_on_a_host_with_keys(cx: &mut TestAppContext) {
         place(&bench, cx).is_none()
     });
 
-    // A Linux host without IDECraft: the window says what to install there.
-    match std::env::var("IDECRAFT_TEST_DOCKER_SSH") {
+    // A Linux host without Ferris IDEA: the window says what to install there.
+    match ferris_idea_core::product_var("FERRIS_IDEA_TEST_DOCKER_SSH") {
         Ok(words) => {
             let mut words: Vec<String> = words.split_whitespace().map(str::to_owned).collect();
             let destination = words.pop().unwrap();
-            let target = idecraft_remote::SshTarget {
+            let target = ferris_idea_remote::SshTarget {
                 host: destination,
                 port: None,
                 extra: words,
@@ -571,10 +577,10 @@ fn hand_test_84_backend_on_a_host_with_keys(cx: &mut TestAppContext) {
             assert!(
                 refused.contains(": the host runs Linux ")
                     && refused.contains(&format!(
-                        "this IDECraft is built for {}",
-                        idecraft_remote::local_platform()
+                        "this Ferris IDEA is built for {}",
+                        ferris_idea_remote::local_platform()
                     ))
-                    && refused.contains(&format!("install IDECraft {VERSION} there")),
+                    && refused.contains(&format!("install Ferris IDEA {VERSION} there")),
                 "the window says what to install: {refused}"
             );
             assert!(
@@ -582,11 +588,11 @@ fn hand_test_84_backend_on_a_host_with_keys(cx: &mut TestAppContext) {
                 "no backend runs"
             );
         }
-        Err(_) => eprintln!("84, Linux host skipped: IDECRAFT_TEST_DOCKER_SSH is not set"),
+        Err(_) => eprintln!("84, Linux host skipped: FERRIS_IDEA_TEST_DOCKER_SSH is not set"),
     }
 }
 
-/// The MCP server `idecraft mcp <root>` over standard input/output, as an agent runs it, with
+/// The MCP server `ferris-idea mcp <root>` over standard input/output, as an agent runs it, with
 /// the settings folder `config` and `ssh` reaching the test host.
 struct Agent {
     child: std::process::Child,
@@ -602,12 +608,12 @@ impl Agent {
             ssh_dir.display(),
             std::env::var("PATH").unwrap_or_default()
         );
-        let mut child = Command::new(env!("CARGO_BIN_EXE_idecraft"))
+        let mut child = Command::new(env!("CARGO_BIN_EXE_ferris-idea"))
             .arg("mcp")
             .arg(root)
-            .env("IDECRAFT_CONFIG_DIR", config)
+            .env("FERRIS_IDEA_CONFIG_DIR", config)
             .env("PATH", path)
-            .env_remove("IDECRAFT_TRUST_PROJECTS")
+            .env_remove("FERRIS_IDEA_TRUST_PROJECTS")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
@@ -677,7 +683,7 @@ impl Drop for Agent {
     }
 }
 
-/// Hand test 84, agent step (`SPEC-0158` behaviour 6): an agent of `idecraft mcp` starts the
+/// Hand test 84, agent step (`SPEC-0158` behaviour 6): an agent of `ferris-idea mcp` starts the
 /// backend on the host with `remote_backend_start` — the plan first, then with the user-granted
 /// `ssh` and `run` rights — calls `inspect_code` there with `remote_backend_call`, which finds the
 /// host file's bare `except`, and stops it with `remote_backend_stop`; the start and the call are
@@ -705,7 +711,7 @@ fn hand_test_84_an_agent_inspects_the_host_project() {
     )
     .unwrap();
     // The agent's `ssh` reaches the test host with the test's client config, as an entry in
-    // `~/.ssh/config` would; everything else is the system `ssh` IDECraft starts.
+    // `~/.ssh/config` would; everything else is the system `ssh` Ferris IDEA starts.
     let ssh_dir = h.base.join("ssh-client");
     std::fs::create_dir_all(&ssh_dir).unwrap();
     let real = std::env::split_paths(&std::env::var_os("PATH").unwrap())
@@ -730,7 +736,7 @@ fn hand_test_84_an_agent_inspects_the_host_project() {
     assert_eq!(plan["dry_run"], json!(true), "{plan}");
     assert_eq!(
         plan["local_platform"],
-        json!(idecraft_remote::local_platform())
+        json!(ferris_idea_remote::local_platform())
     );
     assert!(
         plan["would"].as_str().is_some_and(|w| w.contains("upload")),
@@ -742,7 +748,7 @@ fn hand_test_84_an_agent_inspects_the_host_project() {
     start["dry_run"] = json!(false);
     let started = agent.call("remote_backend_start", start).unwrap();
     assert_eq!(started["installed"], json!("uploaded"), "{started}");
-    assert_eq!(started["server"], json!(format!("idecraft {VERSION}")));
+    assert_eq!(started["server"], json!(format!("ferris-idea {VERSION}")));
     assert!(
         started["tools"]
             .as_array()
@@ -768,7 +774,8 @@ fn hand_test_84_an_agent_inspects_the_host_project() {
     let after = agent.call("remote_backend_call", call).unwrap_err();
     assert!(after.contains("no backend for this host"), "{after}");
 
-    let log = std::fs::read_to_string(root.join(".idecraft/agent-log.jsonl")).unwrap_or_default();
+    let log =
+        std::fs::read_to_string(root.join(".ferris-idea/agent-log.jsonl")).unwrap_or_default();
     let lines: Vec<Value> = log
         .lines()
         .filter_map(|l| serde_json::from_str(l).ok())
@@ -795,7 +802,7 @@ const CALC: &str = "/* Totals for hand test 184. */\n\nint compute_total(int n) 
 const RUN: &str = "[[run]]\nname = \"prepare\"\ncommand = [\"sh\", \"-c\", \"echo prepared-$MODE > prepared.txt\"]\nenv = { MODE = \"ht184\" }\n\n[[run]]\nname = \"app\"\ncommand = [\"sh\", \"-c\", \"cat prepared.txt; echo app-ran-in-$(basename $PWD)\"]\nbefore = [\"prepare\"]\n";
 
 /// Hand test 184 (`SPEC-0158` v2 behaviours 7–9) with keys: Start Backend on a host with a
-/// project and `.idecraft/run.toml`; `@compute` and Enter list the symbol with kind and line, and
+/// project and `.ferris-idea/run.toml`; `@compute` and Enter list the symbol with kind and line, and
 /// Enter opens it there; the status bar reports the host-side check by its language server
 /// (`clangd`, when the host has one) or why none ran; `!` and Enter list the problems, Enter
 /// opens one; `>` and Enter list the run configurations, ↓ and Enter run one with its
@@ -809,7 +816,7 @@ fn hand_test_184_symbols_problems_and_runs_on_the_host_with_keys(cx: &mut TestAp
     };
     let project = h.home.join("proj184");
     write(&project.join("src/calc.c"), CALC);
-    write(&project.join(".idecraft/run.toml"), RUN);
+    write(&project.join(".ferris-idea/run.toml"), RUN);
     let root = workspace(&h.base);
     let (bench, cx) = window(&root, cx);
     connect(&bench, cx, h.host.target.clone(), Some(&h.home));

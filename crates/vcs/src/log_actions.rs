@@ -454,7 +454,7 @@ impl Repo {
             }
             let stash = stash.trim();
             if !stash.is_empty() {
-                let message = format!("IDECraft: before hard reset to {}", &id[..7]);
+                let message = format!("Ferris IDEA: before hard reset to {}", &id[..7]);
                 let (ok, _, err) = self.plain_git(&["stash", "store", "-m", &message, stash])?;
                 if !ok {
                     return Err(GitError::Git(err.trim().to_owned()));

@@ -1,5 +1,5 @@
 //! Editing run configurations (`SPEC-0327`): the shell-quoted command line, the problems of a
-//! configuration by field, templates, the writer of `.idecraft/run.toml` that keeps comments and
+//! configuration by field, templates, the writer of `.ferris-idea/run.toml` that keeps comments and
 //! keys it does not know, the operations agents use, temporary configurations, and why a
 //! configuration cannot start (`SPEC-0087` v6 behaviours 13 and 14, IMP-0394, IMP-0395).
 
@@ -322,6 +322,7 @@ impl RunTemplate {
             allow_multiple: false,
             before_launch: Vec::new(),
             verbatim: false,
+            http: None,
         }
     }
 }
@@ -500,7 +501,7 @@ pub fn parse_run_templates(text: &str) -> RunTemplates {
     out
 }
 
-/// The templates of `.idecraft/run.toml` of `root`; a missing file has none.
+/// The templates of `.ferris-idea/run.toml` of `root`; a missing file has none.
 pub fn load_run_templates(root: &Path) -> RunTemplates {
     match std::fs::read_to_string(root.join(RUN_FILE)) {
         Ok(text) => parse_run_templates(&text),
@@ -950,7 +951,7 @@ pub fn rewrite_run_file(
     Ok(out)
 }
 
-/// Writes `entries` to `.idecraft/run.toml` of `root` (behaviour 5): nothing is written when they
+/// Writes `entries` to `.ferris-idea/run.toml` of `root` (behaviour 5): nothing is written when they
 /// have problems or the file cannot be read; a write keeps the file's comments and unknown keys and
 /// records the old and the new content in the Local History. Returns whether the file changed.
 pub fn save_run_entries(root: &Path, entries: &[RunEntry]) -> Result<bool, Vec<String>> {
@@ -1300,19 +1301,20 @@ mod tests {
             allow_multiple: false,
             before_launch: Vec::new(),
             verbatim: false,
+            http: None,
         }
     }
 
     fn temp_root(tag: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
-            "idecraft-run-edit-{tag}-{}-{}",
+            "ferris-idea-run-edit-{tag}-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_nanos())
                 .unwrap_or(0)
         ));
-        std::fs::create_dir_all(dir.join(".idecraft")).unwrap();
+        std::fs::create_dir_all(dir.join(".ferris-idea")).unwrap();
         dir
     }
 
@@ -1385,7 +1387,7 @@ mod tests {
         assert_eq!(kept, ["Python file", "pytest"]);
     }
 
-    const FIXTURE: &str = r#"[idecraft]
+    const FIXTURE: &str = r#"[ferris-idea]
 format = 1
 kind = "run-configurations"
 
@@ -1441,7 +1443,7 @@ before = ["server"]
         let out = rewrite_run_toml(FIXTURE, &added).unwrap();
         assert!(out.starts_with(FIXTURE.trim_end()));
         assert_eq!(crate::run::parse_run_configs(&out).configs[2], c);
-        // Keys the format of a newer IDECraft might add at the top stay.
+        // Keys the format of a newer Ferris IDEA might add at the top stay.
         let with_unknown = FIXTURE.replace(
             "kind = \"run-configurations\"\n",
             "kind = \"run-configurations\"\nnote = \"kept\"\n",
@@ -1498,7 +1500,7 @@ before = ["server"]
             .unwrap()
         );
         let text = std::fs::read_to_string(root.join(RUN_FILE)).unwrap();
-        assert!(text.starts_with("[idecraft]"));
+        assert!(text.starts_with("[ferris-idea]"));
         assert_eq!(crate::run::parse_run_configs(&text).configs, [c]);
         let _ = std::fs::remove_dir_all(&root);
     }
@@ -1578,10 +1580,10 @@ before = ["server"]
     #[test]
     fn a_start_that_cannot_happen_names_the_reason() {
         let root = temp_root("blocker");
-        let missing = config("ghost", &["idecraft-no-such-program-xyz", "a"]);
+        let missing = config("ghost", &["ferris-idea-no-such-program-xyz", "a"]);
         assert_eq!(
             start_blocker(&root, &missing, &[]).as_deref(),
-            Some("program not found: idecraft-no-such-program-xyz")
+            Some("program not found: ferris-idea-no-such-program-xyz")
         );
         let rel = config("local", &["./bin/tool"]);
         assert_eq!(

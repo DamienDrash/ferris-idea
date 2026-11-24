@@ -1,5 +1,5 @@
-// Modified by IDECraft: the fallback prompt answers the keyboard, keeps the focus and the pointer,
-// and tells what it painted (see ../../IDECRAFT.md).
+// Modified by Ferris IDEA: the fallback prompt answers the keyboard, keeps the focus and the pointer,
+// and tells what it painted (see ../../FERRIS_IDEA.md).
 use std::{cell::RefCell, ops::Deref, rc::Rc};
 
 use futures::channel::oneshot;
@@ -50,7 +50,7 @@ impl PromptHandle {
                 sender.send(e.0).ok();
                 window_handle
                     .update(cx, |_, window, _cx| {
-                        // IDECraft change: the focus goes where a view asked for it while the
+                        // Ferris IDEA change: the focus goes where a view asked for it while the
                         // prompt was shown, else back to where it was before.
                         let asked = match window.prompt.take() {
                             Some(prompt) if prompt.focus == own_focus => prompt.focus_after,
@@ -74,7 +74,7 @@ impl PromptHandle {
         })
         .detach();
 
-        // IDECraft change: the prompt takes the focus, even from a prompt it replaces.
+        // Ferris IDEA change: the prompt takes the focus, even from a prompt it replaces.
         window.focus_ignoring_prompt(&focus);
 
         RenderablePromptHandle {
@@ -88,10 +88,10 @@ impl PromptHandle {
 /// A prompt handle capable of being rendered in a window.
 pub struct RenderablePromptHandle {
     pub(crate) view: Box<dyn PromptViewHandle>,
-    /// IDECraft change: the prompt's own focus handle. While the prompt is shown the keyboard
+    /// Ferris IDEA change: the prompt's own focus handle. While the prompt is shown the keyboard
     /// focus stays inside it (`Window::focus`).
     pub(crate) focus: FocusHandle,
-    /// IDECraft change: what a view asked for while the prompt was shown — `Some(Some(handle))`
+    /// Ferris IDEA change: what a view asked for while the prompt was shown — `Some(Some(handle))`
     /// to focus `handle`, `Some(None)` to blur — applied once the prompt is answered.
     pub(crate) focus_after: Option<Option<FocusHandle>>,
 }
@@ -120,7 +120,7 @@ pub fn fallback_prompt_renderer(
     handle.with_view(renderer, window, cx)
 }
 
-/// IDECraft change: where the fallback prompt was painted last, for its accessibility nodes.
+/// Ferris IDEA change: where the fallback prompt was painted last, for its accessibility nodes.
 #[derive(Default)]
 struct Painted {
     question: Option<Bounds<Pixels>>,
@@ -129,7 +129,7 @@ struct Painted {
 
 /// The default GPUI fallback for rendering prompts, when the platform doesn't support it.
 ///
-/// IDECraft change (see ../../IDECRAFT.md; IDECraft's SPEC-0281 v4 behaviour 9): it answers the
+/// Ferris IDEA change (see ../../FERRIS_IDEA.md; Ferris IDEA's SPEC-0281 v4 behaviour 9): it answers the
 /// keyboard like a macOS alert with keyboard navigation on. Return gives the default (the first
 /// answer), Escape the first cancel answer (nothing without one), Space the focused answer. The
 /// focus starts on [`crate::prompt_focused_answer`] — the named safe answer, else the cancel
@@ -145,49 +145,49 @@ pub struct FallbackPromptRenderer {
     detail: Option<String>,
     actions: Vec<PromptButton>,
     focus: FocusHandle,
-    /// IDECraft change: the answer that holds the keyboard focus.
+    /// Ferris IDEA change: the answer that holds the keyboard focus.
     focused: Option<usize>,
-    /// IDECraft change: the bounds of the question and its answers as last painted.
+    /// Ferris IDEA change: the bounds of the question and its answers as last painted.
     painted: Rc<RefCell<Painted>>,
 }
 
 impl FallbackPromptRenderer {
-    /// IDECraft change: the prompt's message.
+    /// Ferris IDEA change: the prompt's message.
     pub fn message(&self) -> &str {
         &self.message
     }
 
-    /// IDECraft change: the text below the message.
+    /// Ferris IDEA change: the text below the message.
     pub fn detail(&self) -> Option<&str> {
         self.detail.as_deref()
     }
 
-    /// IDECraft change: the answers, in the order given and drawn (top to bottom).
+    /// Ferris IDEA change: the answers, in the order given and drawn (top to bottom).
     pub fn answers(&self) -> &[PromptButton] {
         &self.actions
     }
 
-    /// IDECraft change: the answer that holds the keyboard focus, the one Space gives.
+    /// Ferris IDEA change: the answer that holds the keyboard focus, the one Space gives.
     pub fn focused_answer(&self) -> Option<usize> {
         self.focused
     }
 
-    /// IDECraft change: the answer Return gives, the first.
+    /// Ferris IDEA change: the answer Return gives, the first.
     pub fn default_answer(&self) -> Option<usize> {
         (!self.actions.is_empty()).then_some(0)
     }
 
-    /// IDECraft change: the answer Escape gives, the first cancel answer.
+    /// Ferris IDEA change: the answer Escape gives, the first cancel answer.
     pub fn cancel_answer(&self) -> Option<usize> {
         self.actions.iter().position(PromptButton::is_cancel)
     }
 
-    /// IDECraft change: the bounds of the question's box as last painted, in window coordinates.
+    /// Ferris IDEA change: the bounds of the question's box as last painted, in window coordinates.
     pub fn question_bounds(&self) -> Option<Bounds<Pixels>> {
         self.painted.borrow().question
     }
 
-    /// IDECraft change: the bounds of answer `ix` as last painted, in window coordinates.
+    /// Ferris IDEA change: the bounds of answer `ix` as last painted, in window coordinates.
     pub fn answer_bounds(&self, ix: usize) -> Option<Bounds<Pixels>> {
         self.painted.borrow().answers.get(ix).copied().flatten()
     }

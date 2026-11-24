@@ -5,7 +5,7 @@
   against the last commit; F-074), STD (Git repository format read with `gix`, MIT/Apache; line diff with
   `similar`, Apache-2.0, Myers algorithm), ADR-0005/ARCHITECTURE (`gix` for Git); v3: STD (a working
   tree is marked by its `.git` folder or file), OBS-0071 (O3: the reference lists the repositories of
-  a project with branch and counts; IDECraft had no such list and `git_status` no summary), GEN (an
+  a project with branch and counts; Ferris IDEA had no such list and `git_status` no summary), GEN (an
   agent asks "where is the repository and is it clean" before it asks for paths); decision of the
   coordinator 2026-11-16 under the general authority: additive only, existing answers keep their
   shape, a new read-only tool without a right
@@ -21,7 +21,7 @@ calling the `git` program.
 2. Status: per path (relative to the repository root, `/`-separated, sorted) the staged change (HEAD →
    index: added, deleted, modified, renamed) and the unstaged change (index → working tree: modified,
    deleted, type change, conflict; untracked files as added). Ignored files are not listed, and neither are untracked files
-   below `.idecraft/history/` in any folder: the IDE's local history is its own state and is never
+   below `.ferris-idea/history/` in any folder: the IDE's local history is its own state and is never
    offered for committing, also in a repository without an ignore rule for it. [STD, GEN]
 3. History: commits reachable from HEAD, newest first, up to a limit: full and short id, summary line,
    author name and e-mail, commit time (seconds since the epoch). An unborn HEAD gives an empty history.

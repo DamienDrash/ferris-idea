@@ -456,7 +456,7 @@ impl FindUsagesView {
     /// A toolbar button with its declared tooltip (`SPEC-0294` behaviour 9).
     fn tool(
         &self,
-        control: &'static idecraft_ui::tooltip::Control,
+        control: &'static ferris_idea_ui::tooltip::Control,
         glyph: Option<&'static str>,
         icon_key: Option<&'static str>,
         on: bool,
@@ -787,22 +787,22 @@ impl FindUsagesView {
                             // Each grouping level has its icon (SPEC-0293 v3 behaviour 14).
                             Node::Bucket(_) => match row.level {
                                 Some(Level::File) => {
-                                    icon(idecraft_ui::icons::file_icon(&row.label))
+                                    icon(ferris_idea_ui::icons::file_icon(&row.label))
                                 }
                                 Some(Level::Module) => {
-                                    icon(idecraft_ui::icons::symbol_icon("module"))
+                                    icon(ferris_idea_ui::icons::symbol_icon("module"))
                                 }
                                 Some(Level::Package | Level::Dir) => {
-                                    icon(idecraft_ui::icons::symbol_icon("package"))
+                                    icon(ferris_idea_ui::icons::symbol_icon("package"))
                                 }
                                 Some(Level::ModuleGroup) => {
-                                    icon(idecraft_ui::icons::symbol_icon("module"))
+                                    icon(ferris_idea_ui::icons::symbol_icon("module"))
                                 }
                                 Some(Level::Class) => {
-                                    icon(idecraft_ui::icons::symbol_icon("class"))
+                                    icon(ferris_idea_ui::icons::symbol_icon("class"))
                                 }
                                 Some(Level::Method) => {
-                                    icon(idecraft_ui::icons::symbol_icon("method"))
+                                    icon(ferris_idea_ui::icons::symbol_icon("method"))
                                 }
                                 _ => div().w(px(16.)).flex_none().into_any_element(),
                             },

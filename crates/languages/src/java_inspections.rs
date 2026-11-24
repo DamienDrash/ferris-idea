@@ -274,6 +274,7 @@ fn ignored_result(statement: Node, text: &str, out: &mut Vec<Finding>) {
         Fix {
             learn: None,
             keep: None,
+            bundle_key: None,
             action: None,
             title: format!("Assign the result to '{var}'"),
             edits: vec![crate::jvm::TextEdit {
@@ -465,6 +466,7 @@ fn delete(title: &str, range: std::ops::Range<usize>) -> Option<Fix> {
     Some(Fix {
         learn: None,
         keep: None,
+        bundle_key: None,
         action: None,
         title: title.to_owned(),
         edits: vec![TextEdit {
@@ -478,6 +480,7 @@ fn replace(title: String, n: Node, with: String) -> Option<Fix> {
     Some(Fix {
         learn: None,
         keep: None,
+        bundle_key: None,
         action: None,
         title,
         edits: vec![TextEdit {
@@ -1028,6 +1031,7 @@ fn field_may_be_final(
             Some(Fix {
                 learn: None,
                 keep: None,
+                bundle_key: None,
                 action: None,
                 title: "Add 'final' modifier".into(),
                 edits: vec![TextEdit {

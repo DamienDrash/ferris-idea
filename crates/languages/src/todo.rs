@@ -5,7 +5,7 @@
 //! What a comment is comes from the file's grammar ([`crate::syntax::comment_ranges_of`]); a
 //! plain-text file is searched as a whole, a file without a grammar is not searched. The rules
 //! follow the open platform's pattern search (see `docs/legal/PROVENANCE.md`); the code is
-//! IDECraft's own.
+//! Ferris IDEA's own.
 
 use std::collections::{BTreeMap, HashMap};
 use std::ops::Range;
@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::SystemTime;
 
-use idecraft_core::{SearchScope, Workspace, search_candidates};
+use ferris_idea_core::{SearchScope, Workspace, search_candidates};
 use serde::Serialize;
 
 use crate::syntax::{MAX_SYNTAX_BYTES, comment_ranges_of};
@@ -443,7 +443,7 @@ pub fn scan_project(
                 Some(c) => c.found.clone(),
                 None => {
                     scan.searched += 1;
-                    let found = match idecraft_core::searchable_text(workspace, relative) {
+                    let found = match ferris_idea_core::searchable_text(workspace, relative) {
                         Some(text) => search(relative, &text),
                         None => Found::NotRead,
                     };
@@ -503,7 +503,7 @@ mod tests {
     impl Dir {
         fn new(tag: &str) -> Self {
             let root =
-                std::env::temp_dir().join(format!("idecraft-todo-{tag}-{}", std::process::id()));
+                std::env::temp_dir().join(format!("ferris-idea-todo-{tag}-{}", std::process::id()));
             let _ = std::fs::remove_dir_all(&root);
             std::fs::create_dir_all(&root).unwrap();
             Self(root.canonicalize().unwrap())

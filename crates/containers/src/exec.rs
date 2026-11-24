@@ -1,5 +1,5 @@
-//! The bridge between a terminal and an interactive exec (`SPEC-0240` behaviour 2): the IDECraft
-//! binary runs it in a terminal tab as `idecraft container-exec <engine> <container>`.
+//! The bridge between a terminal and an interactive exec (`SPEC-0240` behaviour 2): the Ferris IDEA
+//! binary runs it in a terminal tab as `ferris-idea container-exec <engine> <container>`.
 
 use std::io::{Read, Write};
 use std::time::Duration;
@@ -119,7 +119,7 @@ fn terminal_size() -> Option<(u16, u16)> {
 }
 
 /// Runs an interactive shell in `container` on this process's terminal and returns the exit code
-/// to end with (`idecraft container-exec`).
+/// to end with (`ferris-idea container-exec`).
 #[cfg(unix)]
 pub fn run_in_terminal(host: &DockerHost, container: &str) -> i32 {
     let raw = RawMode::enable();

@@ -1,6 +1,6 @@
-//! The paired channel of IDECraft (`SPEC-0321`, `ADR-0025` §1b, §1c): the hybrid Noise handshake,
+//! The paired channel of Ferris IDEA (`SPEC-0321`, `ADR-0025` §1b, §1c): the hybrid Noise handshake,
 //! the encrypted channel, the key store, pairing with a short code and six digits, and the
-//! listener of `idecraft serve --pair`. A window reaches a host without SSH through this crate.
+//! listener of `ferris-idea serve --pair`. A window reaches a host without SSH through this crate.
 
 pub mod audit;
 pub mod channel;
@@ -20,5 +20,5 @@ pub use keys::{Device, EXIT_REFUSED, KeyError, PairedHost, Side, Store};
 pub use listener::{Console, ListenError, ListenOptions, Running, Timing, listen};
 pub use noise::{Identity, fingerprint};
 
-/// The default port of `idecraft serve --pair`.
+/// The default port of `ferris-idea serve --pair`.
 pub const DEFAULT_PORT: u16 = 47100;

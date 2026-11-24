@@ -5,7 +5,7 @@
 //! The rules that keep this safe (behaviours 40 and 41): a step is carried out only while every
 //! item of it is still what the operation left (same entries, same bytes), nothing existing is
 //! ever overwritten, and an item that leaves the project — a deleted one, a created one whose
-//! creation is undone — is moved into the undo store `.idecraft/history/undo/` inside the
+//! creation is undone — is moved into the undo store `.ferris-idea/history/undo/` inside the
 //! workspace and comes back only from there, only to the path it left. The store's folders must be
 //! real folders inside the workspace; links are never followed. An item larger than
 //! [`MAX_KEPT_BYTES`] is not kept.
@@ -23,7 +23,7 @@ use crate::file_ops::{
 };
 
 /// The undo store of a workspace, relative to its folder (behaviour 41).
-pub const UNDO_DIR: &str = ".idecraft/history/undo";
+pub const UNDO_DIR: &str = ".ferris-idea/history/undo";
 
 /// The largest item (sum of its files) the store keeps (behaviour 41).
 pub const MAX_KEPT_BYTES: u64 = 64 * 1024 * 1024;
@@ -803,7 +803,10 @@ impl FileUndo {
         Ok(())
     }
 
-    fn turn(&mut self, redo: bool) -> Result<Outcome, UndoError> {
+    /// Checks the next undo (or redo) step as [`Self::undo`] does before it touches anything,
+    /// without touching anything (`SPEC-0275` v22 behaviour 38: a step that would be refused is
+    /// not offered).
+    pub fn check_next(&self, redo: bool) -> Result<(), UndoError> {
         let done = !redo;
         let step = if redo {
             self.redo.last()
@@ -819,6 +822,12 @@ impl FileUndo {
                 self.check(part, done)?;
             }
         }
+        Ok(())
+    }
+
+    fn turn(&mut self, redo: bool) -> Result<Outcome, UndoError> {
+        let done = !redo;
+        self.check_next(redo)?;
         let mut step = if redo {
             self.redo.pop()
         } else {
@@ -1036,8 +1045,10 @@ mod tests {
     use super::*;
 
     fn fixture(name: &str) -> PathBuf {
-        let dir =
-            std::env::temp_dir().join(format!("idecraft-file-undo-{name}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "ferris-idea-file-undo-{name}-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("src")).unwrap();
         std::fs::create_dir_all(dir.join("lib")).unwrap();
@@ -1046,7 +1057,7 @@ mod tests {
         dir.canonicalize().unwrap()
     }
 
-    /// Every file of the workspace outside `.idecraft`, with its bytes, and every folder.
+    /// Every file of the workspace outside `.ferris-idea`, with its bytes, and every folder.
     fn disk(root: &Path) -> Vec<(String, Option<Vec<u8>>)> {
         let mut out = Vec::new();
         let mut stack = vec![root.to_path_buf()];
@@ -1054,7 +1065,7 @@ mod tests {
             for entry in std::fs::read_dir(&dir).unwrap().flatten() {
                 let path = entry.path();
                 let rel = relative(root, &path).unwrap();
-                if rel == ".idecraft" {
+                if rel == ".ferris-idea" {
                     continue;
                 }
                 if path.is_dir() {
@@ -1401,6 +1412,38 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
     }
 
+    /// SPEC-0275 AK-45 (v22): the next step is checked without touching the disk or the history;
+    /// a move is refused while something new stands at the old place.
+    #[test]
+    fn the_next_step_is_checked_without_touching_it() {
+        let root = fixture("check-next");
+        let mut history = FileUndo::new(&root);
+        assert_eq!(history.check_next(false), Err(UndoError::Nothing));
+        std::fs::create_dir(root.join("docs")).unwrap();
+        history
+            .transfer(
+                &root.join("a.txt"),
+                &root.join("docs"),
+                None,
+                Transfer::Move,
+                |_| {},
+            )
+            .unwrap();
+        assert_eq!(history.check_next(false), Ok(()));
+        std::fs::write(root.join("a.txt"), "new").unwrap();
+        assert_eq!(
+            history.check_next(false),
+            Err(UndoError::Occupied("a.txt".into()))
+        );
+        assert!(root.join("docs/a.txt").is_file(), "nothing moved");
+        assert_eq!(history.steps().0.len(), 1, "the step stays");
+        std::fs::remove_file(root.join("a.txt")).unwrap();
+        history.undo().unwrap();
+        assert!(root.join("a.txt").is_file());
+        assert_eq!(history.check_next(true), Ok(()));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
     /// SPEC-0275 v16 AK-35: a kept copy that was changed or removed is not restored.
     #[test]
     fn a_changed_store_refuses_undo() {
@@ -1482,8 +1525,8 @@ mod tests {
         let outside = root.with_extension("elsewhere");
         let _ = std::fs::remove_dir_all(&outside);
         std::fs::create_dir_all(&outside).unwrap();
-        std::fs::create_dir_all(root.join(".idecraft")).unwrap();
-        std::os::unix::fs::symlink(&outside, root.join(".idecraft/history")).unwrap();
+        std::fs::create_dir_all(root.join(".ferris-idea")).unwrap();
+        std::os::unix::fs::symlink(&outside, root.join(".ferris-idea/history")).unwrap();
         let mut history = FileUndo::new(&root);
         let deleted = history.delete(&root.join("a.txt")).unwrap();
         assert_eq!(deleted.not_kept, Some(NotKept::NoStore));

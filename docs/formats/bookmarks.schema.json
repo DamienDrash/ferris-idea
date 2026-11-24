@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Project file (SPEC-0303). TOML; files without [idecraft] are format 0 and still read.",
+  "description": "Project file (SPEC-0303). TOML; files without [ferris-idea] are format 0 and still read.",
   "properties": {
     "bookmark": {
       "description": "Line bookmarks, newest first.",
@@ -34,7 +34,7 @@
       },
       "type": "array"
     },
-    "idecraft": {
+    "ferris-idea": {
       "additionalProperties": false,
       "properties": {
         "author": {
@@ -64,7 +64,7 @@
           "type": "string"
         },
         "min_version": {
-          "description": "Oldest IDECraft version the author expects.",
+          "description": "Oldest Ferris IDEA version the author expects.",
           "type": "string"
         },
         "name": {
@@ -80,8 +80,8 @@
     }
   },
   "required": [
-    "idecraft"
+    "ferris-idea"
   ],
-  "title": "IDECraft bookmarks (kind `bookmarks`, format 1)",
+  "title": "Ferris IDEA bookmarks (kind `bookmarks`, format 1)",
   "type": "object"
 }

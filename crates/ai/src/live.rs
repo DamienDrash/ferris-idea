@@ -96,7 +96,7 @@ struct State {
     runs: HashMap<PathBuf, Vec<RunTab>>,
     chats: HashMap<PathBuf, ChatState>,
     /// The temporary run configurations of each workspace (`SPEC-0327` behaviour 9).
-    temporary: HashMap<PathBuf, Vec<idecraft_core::RunConfig>>,
+    temporary: HashMap<PathBuf, Vec<ferris_idea_core::RunConfig>>,
 }
 
 /// Runs and chats by workspace. One per process.
@@ -134,12 +134,12 @@ impl Live {
 
     /// The temporary run configurations of the workspace at `root` are now `configs`, for MCP
     /// `run_configuration_edit` with `save_temporary` (`SPEC-0327` behaviour 10).
-    pub fn set_temporary_runs(&self, root: &Path, configs: Vec<idecraft_core::RunConfig>) {
+    pub fn set_temporary_runs(&self, root: &Path, configs: Vec<ferris_idea_core::RunConfig>) {
         self.state().temporary.insert(key(root), configs);
     }
 
     /// The temporary run configurations of the workspace at `root`.
-    pub fn temporary_runs(&self, root: &Path) -> Vec<idecraft_core::RunConfig> {
+    pub fn temporary_runs(&self, root: &Path) -> Vec<ferris_idea_core::RunConfig> {
         self.state()
             .temporary
             .get(&key(root))

@@ -25,7 +25,7 @@ Find anything in the workspace or the IDE by typing a few characters of its name
    `Goto Declaration`), matched on the id, with their shortcut in the platform's display. Actions
    whose menu title differs carry that title and its group (`QuickChangeScheme` → `Quick Switch
    Scheme…`, `ChangeLaf` → `Theme…`, `CommentByLineComment` → `Comment with Line Comment`, `About`
-   → `About IDECraft`); tool window actions (`Activate…ToolWindow`, `….ToolWindow`) are titled
+   → `About Ferris IDEA`); tool window actions (`Activate…ToolWindow`, `….ToolWindow`) are titled
    with the window's name (`npm`, `Containers`) in the group `Tool Windows`. (v3) Any other action
    that has a place in the menu bar (SPEC-0124) is titled with its menu label and grouped under its
    menu or submenu (`SplitVertically` → "Split Right", View); the id still matches. [GEN]
@@ -87,7 +87,7 @@ Search Everywhere matches as follows.
    and does not track.
    - **On purpose:** "Include non-project items" in the window (SPEC-0067 v6 behaviour 13), MCP
      `include_non_project: true`, host `include_non_project: true` list every file but version
-     control data and `.idecraft`.
+     control data and `.ferris-idea`.
    - **Always:** files open in an editor and recently opened files (SPEC-0069) that exist are
      listed whatever they are, so a file once opened from `.venv` is found again.
    - **Said in one line:** what was left out, `2 folders and 1 file not listed (libraries and

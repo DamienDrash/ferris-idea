@@ -1,7 +1,7 @@
 //! Rows of the local history view (`SPEC-0085`), free of the UI toolkit.
 
-use idecraft_core::Revision;
-use idecraft_core::RevisionKind;
+use ferris_idea_core::Revision;
+use ferris_idea_core::RevisionKind;
 
 /// How long ago `time` was, seen at `now` (both in milliseconds since the epoch).
 pub fn age(now: u64, time: u64) -> String {
@@ -62,7 +62,7 @@ pub fn matching(contents: &[Option<String>], text: &str) -> Vec<usize> {
 
 /// A unified patch of `path` from `before` to `current` (behaviour 11); empty without differences.
 pub fn patch(path: &str, before: &str, current: &str) -> String {
-    let hunks = idecraft_vcs::unified_hunks(before, current);
+    let hunks = ferris_idea_vcs::unified_hunks(before, current);
     if hunks.is_empty() {
         return String::new();
     }
@@ -225,8 +225,9 @@ mod tests {
     /// refactoring's name, and a file changed only in its editor gets its saved state labelled.
     #[test]
     fn refactorings_show_in_a_files_history() {
-        use idecraft_languages::undo_group::{record_history, record_history_before};
-        let root = std::env::temp_dir().join(format!("idecraft-hist-label-{}", std::process::id()));
+        use ferris_idea_languages::undo_group::{record_history, record_history_before};
+        let root =
+            std::env::temp_dir().join(format!("ferris-idea-hist-label-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("src")).unwrap();
         let root = root.canonicalize().unwrap();
@@ -238,7 +239,7 @@ mod tests {
         record_history_before(&root, &[main.as_path()], name);
         std::fs::write(&geld, "fn aufrunden() {}\n").unwrap();
         record_history(&root, &[geld.as_path()], Some(name));
-        let history = idecraft_core::LocalHistory::open(&root).unwrap();
+        let history = ferris_idea_core::LocalHistory::open(&root).unwrap();
         let what = |rel: &str| -> Vec<String> {
             shown(history.revisions(rel))
                 .iter()

@@ -6,7 +6,7 @@
 //! tracemalloc, macOS `leaks` and `sample`, and the system `sshd` started as the current user.
 //! Nothing is a stand-in for the program it tests; the sources the window talks to are set with
 //! the window's test calls instead of the user's settings, and choosing a run configuration or an
-//! SSH host from the user's lists is a call too. Hand tests 84 and 184 need the `idecraft` program
+//! SSH host from the user's lists is a call too. Hand tests 84 and 184 need the `ferris-idea` program
 //! as the host's backend and live with its tests (`crates/app/tests/it/f083_handtests.rs`).
 //!
 //! What needs eyes stays in the hand tests: how the rows and the flame graph are drawn, a real
@@ -26,16 +26,16 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
+use ferris_idea_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
+use ferris_idea_workbench::{ProfilerTab, WorkbenchView};
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
-use idecraft_workbench::{ProfilerTab, WorkbenchView};
 
-type Bench = Entity<WorkbenchView>;
+pub(super) type Bench = Entity<WorkbenchView>;
 
-fn workspace(tag: &str) -> PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-f083-{tag}-{}", std::process::id()));
+pub(super) fn workspace(tag: &str) -> PathBuf {
+    let root = std::env::temp_dir().join(format!("ferris-idea-f083-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir_all(root.join(".idecraft")).unwrap();
+    std::fs::create_dir_all(root.join(".ferris-idea")).unwrap();
     root.canonicalize().unwrap()
 }
 
@@ -43,17 +43,20 @@ fn workspace(tag: &str) -> PathBuf {
 /// behaviour 2): several builds in parallel slow the test `sshd` far beyond a normal machine.
 const HOST_STRETCH: u32 = 4;
 
-fn window(root: &Path, cx: &mut TestAppContext) -> (Bench, &'static mut VisualTestContext) {
+pub(super) fn window(
+    root: &Path,
+    cx: &mut TestAppContext,
+) -> (Bench, &'static mut VisualTestContext) {
     // Nothing of the user's SSH setup: the host list and every `ssh` use a config of the test's
     // own, and a read of `~/.ssh/config` fails the test (`isolate_ssh`).
-    idecraft_remote::testing::isolate_ssh();
-    idecraft_remote::testing::stretch_limits(HOST_STRETCH);
+    ferris_idea_remote::testing::isolate_ssh();
+    ferris_idea_remote::testing::stretch_limits(HOST_STRETCH);
     let settings = root.join(".test-settings");
     std::fs::create_dir_all(&settings).unwrap();
     cx.update(|cx| {
         cx.set_global(IdeSettingsFile(settings.join("settings.toml")));
         cx.set_global(ThemeFile(settings.join("theme")));
-        cx.set_global(CurrentIdeSettings(idecraft_core::IdeSettings::default()));
+        cx.set_global(CurrentIdeSettings(ferris_idea_core::IdeSettings::default()));
     });
     let at = root.to_path_buf();
     let window = cx.add_window(move |_, cx| WorkbenchView::new(&at, cx));
@@ -61,7 +64,7 @@ fn window(root: &Path, cx: &mut TestAppContext) -> (Bench, &'static mut VisualTe
     let cx = VisualTestContext::from_window(window.into(), cx).into_mut();
     cx.simulate_resize(gpui::size(px(1372.), px(860.)));
     cx.run_until_parked();
-    let empty = idecraft_remote::testing::empty_ssh_config(&settings);
+    let empty = ferris_idea_remote::testing::empty_ssh_config(&settings);
     bench.update(cx, |b, _| b.set_remote_ssh(empty));
     (bench, cx)
 }
@@ -106,12 +109,12 @@ fn until_shown(
     panic!("timed out: {what}\n{state}");
 }
 
-fn keys(cx: &mut VisualTestContext, keystrokes: &str) {
+pub(super) fn keys(cx: &mut VisualTestContext, keystrokes: &str) {
     cx.simulate_keystrokes(keystrokes);
     cx.run_until_parked();
 }
 
-fn status(bench: &Bench, cx: &mut VisualTestContext) -> String {
+pub(super) fn status(bench: &Bench, cx: &mut VisualTestContext) -> String {
     bench
         .read_with(cx, |b, cx| b.status_message(cx))
         .unwrap_or_default()
@@ -187,7 +190,7 @@ fn go(bench: &Bench, cx: &mut VisualTestContext, part: &str) {
     panic!("the selection does not reach {part:?}");
 }
 
-fn kubectl_with(config: &str, dir: &Path) -> Option<idecraft_containers::Kubectl> {
+fn kubectl_with(config: &str, dir: &Path) -> Option<ferris_idea_containers::Kubectl> {
     let real = on_path("kubectl")?;
     let path = dir.join("kubectl");
     std::fs::write(
@@ -200,10 +203,10 @@ fn kubectl_with(config: &str, dir: &Path) -> Option<idecraft_containers::Kubectl
     .ok()?;
     use std::os::unix::fs::PermissionsExt;
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).ok()?;
-    Some(idecraft_containers::Kubectl { program: path })
+    Some(ferris_idea_containers::Kubectl { program: path })
 }
 
-fn kube(k: &idecraft_containers::Kubectl, args: &[&str], input: Option<&str>) -> String {
+fn kube(k: &ferris_idea_containers::Kubectl, args: &[&str], input: Option<&str>) -> String {
     let mut child = Command::new(&k.program)
         .args(args)
         .stdin(Stdio::piped())
@@ -229,20 +232,20 @@ fn kube(k: &idecraft_containers::Kubectl, args: &[&str], input: Option<&str>) ->
 #[gpui::test]
 fn hand_tests_46_and_170_to_173_containers_with_a_real_engine_and_cluster(cx: &mut TestAppContext) {
     let (Ok(address), Ok(config)) = (
-        std::env::var("IDECRAFT_TEST_DOCKER"),
-        std::env::var("IDECRAFT_TEST_KUBECONFIG"),
+        ferris_idea_core::product_var("FERRIS_IDEA_TEST_DOCKER"),
+        ferris_idea_core::product_var("FERRIS_IDEA_TEST_KUBECONFIG"),
     ) else {
-        eprintln!("skipped: IDECRAFT_TEST_DOCKER and IDECRAFT_TEST_KUBECONFIG are not set");
+        eprintln!("skipped: FERRIS_IDEA_TEST_DOCKER and FERRIS_IDEA_TEST_KUBECONFIG are not set");
         return;
     };
-    let Some(host) =
-        idecraft_containers::DockerHost::parse(&address, Vec::new()).filter(|h| h.info().is_ok())
+    let Some(host) = ferris_idea_containers::DockerHost::parse(&address, Vec::new())
+        .filter(|h| h.info().is_ok())
     else {
         eprintln!("skipped: {address} does not answer");
         return;
     };
     let Some(cli) =
-        idecraft_containers::compose::ComposeCli::find(std::env::var_os("PATH").as_deref())
+        ferris_idea_containers::compose::ComposeCli::find(std::env::var_os("PATH").as_deref())
     else {
         eprintln!("skipped: no Compose CLI");
         return;
@@ -265,13 +268,16 @@ fn hand_tests_46_and_170_to_173_containers_with_a_real_engine_and_cluster(cx: &m
     assert!(applied.contains("ht-web"), "{applied}");
 
     let (bench, cx) = window(&root, cx);
-    let mut engines = vec![idecraft_containers::Engine::from_host("lima", host.clone())];
-    if let Ok(words) = std::env::var("IDECRAFT_TEST_DOCKER_SSH") {
+    let mut engines = vec![ferris_idea_containers::Engine::from_host(
+        "lima",
+        host.clone(),
+    )];
+    if let Ok(words) = ferris_idea_core::product_var("FERRIS_IDEA_TEST_DOCKER_SSH") {
         let mut words: Vec<String> = words.split_whitespace().map(str::to_owned).collect();
         let destination = words.pop().unwrap();
-        engines.push(idecraft_containers::Engine::from_host(
+        engines.push(ferris_idea_containers::Engine::from_host(
             "lima-ssh",
-            idecraft_containers::DockerHost::Ssh {
+            ferris_idea_containers::DockerHost::Ssh {
                 destination,
                 port: None,
                 extra: words,
@@ -330,8 +336,11 @@ fn hand_tests_46_and_170_to_173_containers_with_a_real_engine_and_cluster(cx: &m
         60,
         "the containers are listed as running",
         |cx| {
-            let done = has_row(&bench, cx, |l| l.starts_with("  ● htcompose-web-1"))
-                && has_row(&bench, cx, |l| l.starts_with("  ● htcompose-db-1"));
+            let done = has_row(&bench, cx, |l| {
+                l.trim_start().starts_with("● htcompose-web-1")
+            }) && has_row(&bench, cx, |l| {
+                l.trim_start().starts_with("● htcompose-db-1")
+            });
             if !done {
                 keys(cx, "f5");
                 std::thread::sleep(Duration::from_millis(300));
@@ -364,12 +373,16 @@ fn hand_tests_46_and_170_to_173_containers_with_a_real_engine_and_cluster(cx: &m
     // 46: x stops, s starts, Enter shows the logs.
     keys(cx, "x");
     until(cx, 60, "x stops the container", |cx| {
-        has_row(&bench, cx, |l| l.starts_with("  ○ htcompose-web-1"))
+        has_row(&bench, cx, |l| {
+            l.trim_start().starts_with("○ htcompose-web-1")
+        })
     });
     go(&bench, cx, "htcompose-web-1");
     keys(cx, "s");
     until(cx, 60, "s starts it again", |cx| {
-        has_row(&bench, cx, |l| l.starts_with("  ● htcompose-web-1"))
+        has_row(&bench, cx, |l| {
+            l.trim_start().starts_with("● htcompose-web-1")
+        })
     });
     go(&bench, cx, "htcompose-web-1");
     keys(cx, "enter");
@@ -436,7 +449,7 @@ fn hand_tests_46_and_170_to_173_containers_with_a_real_engine_and_cluster(cx: &m
     );
 
     // 170: `e` on the pod opens a shell through kubectl; what is typed runs in the pod. (A
-    // container's shell is bridged by the `idecraft` program itself, which this test binary is
+    // container's shell is bridged by the `ferris-idea` program itself, which this test binary is
     // not; that bridge is tested live in `crates/containers/tests/live.rs`.)
     go(&bench, cx, &format!("Pod {pod_name}"));
     keys(cx, "e");
@@ -546,7 +559,11 @@ fn hand_tests_46_and_170_to_173_containers_with_a_real_engine_and_cluster(cx: &m
             cx,
             60,
             "the engine over SSH lists the same containers",
-            |cx| has_row(&bench, cx, |l| l.starts_with("  ● htcompose-web-1")),
+            |cx| {
+                has_row(&bench, cx, |l| {
+                    l.trim_start().starts_with("● htcompose-web-1")
+                })
+            },
         );
         go(&bench, cx, "Docker ");
         keys(cx, "e");
@@ -554,14 +571,16 @@ fn hand_tests_46_and_170_to_173_containers_with_a_real_engine_and_cluster(cx: &m
             status(&bench, cx).starts_with("Docker engine: lima (")
         });
     } else {
-        eprintln!("173 skipped: IDECRAFT_TEST_DOCKER_SSH is not set");
+        eprintln!("173 skipped: FERRIS_IDEA_TEST_DOCKER_SSH is not set");
     }
 
     // 46: Delete asks, the second Delete removes; 172: d takes the project down.
     go(&bench, cx, "htcompose-db-1");
     keys(cx, "x");
     until(cx, 60, "the db container stops", |cx| {
-        has_row(&bench, cx, |l| l.starts_with("  ○ htcompose-db-1"))
+        has_row(&bench, cx, |l| {
+            l.trim_start().starts_with("○ htcompose-db-1")
+        })
     });
     go(&bench, cx, "htcompose-db-1");
     keys(cx, "e");
@@ -597,7 +616,7 @@ fn hand_tests_46_and_170_to_173_containers_with_a_real_engine_and_cluster(cx: &m
         &["delete", "-f", "-", "--ignore-not-found"],
         Some(MANIFEST),
     );
-    idecraft_containers::ports::PortForwards::global().stop_all();
+    ferris_idea_containers::ports::PortForwards::global().stop_all();
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -631,7 +650,7 @@ fn focus_profiler(bench: &Bench, cx: &mut VisualTestContext) {
 fn run_toml(root: &Path, name: &str, command: &[&str]) {
     let words: Vec<String> = command.iter().map(|w| format!("{w:?}")).collect();
     std::fs::write(
-        root.join(".idecraft/run.toml"),
+        root.join(".ferris-idea/run.toml"),
         format!(
             "[[run]]\nname = \"{name}\"\ncommand = [{}]\n",
             words.join(", ")
@@ -640,7 +659,11 @@ fn run_toml(root: &Path, name: &str, command: &[&str]) {
     .unwrap();
 }
 
-const RECHEN: &str = "package demo;\n\npublic class Rechen {\n    static long teuer(long n) {\n        long s = 0;\n        for (long i = 0; i < n; i++) s += i % 7;\n        return s;\n    }\n    public static void main(String[] a) {\n        long t = 0;\n        for (int k = 0; k < 1500; k++) t += teuer(1_000_000);\n        System.out.println(t);\n    }\n}\n";
+/// `teuer` (line 6) runs for at least four seconds of wall time, not only a fixed amount of work:
+/// under heavy load (load average ~190) the JDK's start-up for a single source file (javac, class
+/// loading) once drew more samples than `teuer`, and `ImageStringsReader` came out first. With a
+/// floor in time `teuer` keeps its lead however slow the start-up is.
+const RECHEN: &str = "package demo;\n\npublic class Rechen {\n    static long teuer(long n) {\n        long s = 0;\n        for (long i = 0; i < n; i++) s += i % 7;\n        return s;\n    }\n    public static void main(String[] a) {\n        long t = 0, start = System.nanoTime();\n        for (int k = 0; k < 1500 || System.nanoTime() - start < 4_000_000_000L; k++) t += teuer(1_000_000);\n        System.out.println(t);\n    }\n}\n";
 
 const MEM_PY: &str = "keep = []\n\n\ndef fuelle(n):\n    return [str(i) * 20 for i in range(n)]\n\n\nfor _ in range(4):\n    keep.append(fuelle(20000))\n";
 
@@ -660,7 +683,7 @@ fn hand_tests_62_and_180_profiles_with_keys(cx: &mut TestAppContext) {
     std::fs::write(root.join("src/main/java/demo/Rechen.java"), RECHEN).unwrap();
     std::fs::write(root.join("mem.py"), MEM_PY).unwrap();
     std::fs::write(root.join("leak.c"), LEAK_C).unwrap();
-    idecraft_core::trust::trust_for_process(&root);
+    ferris_idea_core::trust::trust_for_process(&root);
     let (bench, cx) = window(&root, cx);
 
     if on_path("java").is_some() {
@@ -680,7 +703,7 @@ fn hand_tests_62_and_180_profiles_with_keys(cx: &mut TestAppContext) {
                     b.everywhere().is_some_and(|v| {
                         matches!(
                             v.read(cx).results().selected_row(),
-                            Some(idecraft_workbench::everywhere_model::Row::Action(a))
+                            Some(ferris_idea_workbench::everywhere_model::Row::Action(a))
                                 if a.id == "Profiler.ProfileSelected"
                         )
                     })
@@ -710,13 +733,12 @@ fn hand_tests_62_and_180_profiles_with_keys(cx: &mut TestAppContext) {
         );
         focus_profiler(&bench, cx);
         keys(cx, "2");
-        let first = profiler_texts(&bench, cx)
-            .first()
-            .cloned()
-            .unwrap_or_default();
+        let rows = profiler_texts(&bench, cx);
+        let first = rows.first().cloned().unwrap_or_default();
         assert!(
             first.starts_with("Rechen.teuer") && first.contains("Rechen.java:6"),
-            "{first}"
+            "{first} (hot spots: {:?})",
+            &rows[..rows.len().min(5)]
         );
         // D37: the time of the share fits the run — it is that share of the run's wall time named
         // in the summary (before, JFR's samples read as "95 ms" for 71 % of 7.7 s). Measured
@@ -838,6 +860,177 @@ fn hand_tests_62_and_180_profiles_with_keys(cx: &mut TestAppContext) {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// Clicks the control with test id `name`, found in the semantic tree (`SPEC-0319` behaviour 44)
+/// or among the marked controls, with a real mouse press.
+fn click_control(name: &str, cx: &mut VisualTestContext) {
+    // Twice: gutter boxes are placed in one frame and drawn as controls in the next.
+    cx.update(|window, cx| window.draw(cx).clear());
+    cx.update(|window, cx| window.draw(cx).clear());
+    let from_tree = cx.update(|window, _| {
+        let tree = ferris_idea_workbench::semantics::tree(
+            ferris_idea_workbench::semantics::window_id(window),
+        )?;
+        tree.iter()
+            .filter(|n| n.test_id() == Some(name))
+            .find_map(|n| n.visible_bounds.filter(|r| r.w > 0. && r.h > 0.))
+            .map(|r| (r.x, r.y, r.w, r.h))
+    });
+    let (x, y, w, h) = from_tree
+        .or_else(|| ferris_idea_workbench::hit_targets::get(name).map(|r| (r.x, r.y, r.w, r.h)))
+        .unwrap_or_else(|| panic!("{name} is drawn"));
+    let at = gpui::point(px(x + w / 2.), px(y + h / 2.));
+    cx.simulate_mouse_down(at, gpui::MouseButton::Left, gpui::Modifiers::none());
+    cx.simulate_mouse_up(at, gpui::MouseButton::Left, gpui::Modifiers::none());
+    cx.run_until_parked();
+}
+
+/// The function of a call tree row, without indent and open mark.
+fn name_of(row: &str) -> &str {
+    row.trim_start().trim_start_matches(['▾', '▸']).trim_start()
+}
+
+/// The costs the active editor shows, by 0-based line.
+fn shown_costs(bench: &Bench, cx: &mut VisualTestContext) -> Vec<(usize, String)> {
+    let editor = bench.read_with(cx, |b, _| b.active_editor_entity());
+    editor
+        .map(|e| e.update(cx, |e, _| e.profile_costs_shown()))
+        .unwrap_or_default()
+}
+
+/// `SPEC-0120` v5 AK-9 (OBS-0113 gaps P1 and P3): after a Java file is profiled with JFR its
+/// editor shows the costs at the hot loop (line 6) and at the line that calls it (line 11); a
+/// click on the loop's cost selects `Rechen.teuer` in the Call Tree; the JDK's frames in Hot Spots
+/// are dimmed and `P` leaves only the project's functions, a choice kept in
+/// `.ferris-idea/profiles/view.json`; typing in the file hides the costs and undo brings them back;
+/// Close in the window removes them. Skipped without `java`.
+#[gpui::test]
+fn profile_costs_in_the_gutter_and_project_code(cx: &mut TestAppContext) {
+    cx.executor().allow_parking();
+    if on_path("java").is_none() {
+        eprintln!("skipped: java is missing");
+        return;
+    }
+    ferris_idea_workbench::hit_targets::enable();
+    ferris_idea_workbench::semantics::set_consumer(
+        ferris_idea_workbench::semantics::Consumer::SelfTest,
+        true,
+    );
+    let root = workspace("lines");
+    std::fs::create_dir_all(root.join("src/main/java/demo")).unwrap();
+    std::fs::write(root.join("src/main/java/demo/Rechen.java"), RECHEN).unwrap();
+    ferris_idea_core::trust::trust_for_process(&root);
+    let (bench, cx) = window(&root, cx);
+    run_toml(&root, "rechen", &["java", "src/main/java/demo/Rechen.java"]);
+    bench.update(cx, |b, cx| b.select_run_configuration("rechen", cx));
+    bench.update_in(cx, |b, window, cx| {
+        b.menu_action("Profiler.ProfileSelected", window, cx)
+    });
+    until(cx, 240, "the Java file is recorded with JFR", |cx| {
+        profiled(&bench, cx, "rechen · JFR · ")
+    });
+    // Hot Spots, Enter: the hottest method's file opens.
+    focus_profiler(&bench, cx);
+    keys(cx, "2");
+    let rows = profiler_texts(&bench, cx);
+    let teuer = rows
+        .iter()
+        .position(|r| r.starts_with("Rechen.teuer"))
+        .unwrap_or_else(|| panic!("Rechen.teuer in {rows:?}"));
+    let outside = bench.read_with(cx, |b, cx| {
+        b.profiler_view()
+            .map(|v| v.read(cx).outside_rows())
+            .unwrap_or_default()
+    });
+    assert_eq!(outside.len(), rows.len());
+    for (row, away) in rows.iter().zip(&outside) {
+        assert_eq!(
+            *away,
+            !row.starts_with("Rechen."),
+            "only the project's methods are drawn plainly: {row}"
+        );
+    }
+    for _ in 0..teuer {
+        keys(cx, "down");
+    }
+    keys(cx, "enter");
+    until(cx, 20, "Enter opens Rechen.java", |cx| {
+        bench.read_with(cx, |b, _| {
+            b.active_file().is_some_and(|p| p.ends_with("Rechen.java"))
+        })
+    });
+    until(cx, 30, "the costs stand next to lines 6 and 11", |cx| {
+        let shown = shown_costs(&bench, cx);
+        shown.iter().any(|(l, _)| *l == 5) && shown.iter().any(|(l, _)| *l == 10)
+    });
+    let shown = shown_costs(&bench, cx);
+    let label = &shown.iter().find(|(l, _)| *l == 5).unwrap().1;
+    assert!(
+        label.ends_with(" s") || label.ends_with(" ms"),
+        "a time: {label} ({shown:?})"
+    );
+
+    // A click on the loop's cost selects its method in the Call Tree.
+    bench.update_in(cx, |b, window, cx| b.focus_editor(window, cx));
+    click_control(&ferris_idea_workbench::profile_cost_id(5), cx);
+    let (tab, row) = bench.read_with(cx, |b, cx| {
+        let v = b
+            .profiler_view()
+            .expect("the click shows the Profiler window");
+        let v = v.read(cx);
+        (
+            v.tab(),
+            v.texts().get(v.selected()).cloned().unwrap_or_default(),
+        )
+    });
+    assert_eq!(tab, ProfilerTab::CallTree);
+    assert!(name_of(&row).starts_with("Rechen.teuer"), "{row}");
+    assert!(row.contains("Rechen.java:6"), "{row}");
+
+    // P: only the project's functions, kept for the project.
+    focus_profiler(&bench, cx);
+    keys(cx, "2");
+    keys(cx, "p");
+    let rows = profiler_texts(&bench, cx);
+    assert!(
+        !rows.is_empty() && rows.iter().all(|r| r.starts_with("Rechen.")),
+        "{rows:?}"
+    );
+    let kept =
+        std::fs::read_to_string(root.join(".ferris-idea/profiles/view.json")).unwrap_or_default();
+    assert!(kept.contains("\"only_project_code\": true"), "{kept}");
+    keys(cx, "1");
+    let tree = profiler_texts(&bench, cx);
+    assert!(
+        tree.iter().any(|r| name_of(r).starts_with("Rechen.teuer"))
+            && tree.iter().all(|r| {
+                let name = name_of(r);
+                name.starts_with("Rechen.") || name.starts_with("Thread ")
+            }),
+        "the folded call tree: {tree:?}"
+    );
+    keys(cx, "p");
+
+    // Typing hides the costs, undo shows them again.
+    bench.update_in(cx, |b, window, cx| b.focus_editor(window, cx));
+    cx.simulate_input("x");
+    until(cx, 10, "an edit hides the costs", |cx| {
+        shown_costs(&bench, cx).is_empty()
+    });
+    keys(cx, "cmd-z");
+    until(cx, 10, "undo shows the costs again", |cx| {
+        !shown_costs(&bench, cx).is_empty()
+    });
+
+    // Close in the window removes them.
+    focus_profiler(&bench, cx);
+    keys(cx, "backspace");
+    until(cx, 10, "Close removes the costs", |cx| {
+        shown_costs(&bench, cx).is_empty()
+            && bench.read_with(cx, |b, _| b.profile_lines().is_empty())
+    });
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 const BUSY: &str = "package demo;\n\npublic class Busy {\n    static long inner(long n) {\n        long s = 0;\n        for (long i = 0; i < n; i++) s += i % 7;\n        return s;\n    }\n    public static void main(String[] args) {\n        long t = 0;\n        for (int k = 0; k < 1500; k++) t += inner(1_000_000);\n        System.out.println(\"done \" + t);\n    }\n}\n";
 
 /// Whether the Gradle distribution the wrapper in `root` names is unpacked in the Gradle cache,
@@ -907,7 +1100,7 @@ fn hand_test_182_gradle_run_profiles_the_application(cx: &mut TestAppContext) {
         return;
     }
     cx.executor().allow_parking();
-    idecraft_core::trust::trust_for_process(&root);
+    ferris_idea_core::trust::trust_for_process(&root);
     let (bench, cx) = window(&root, cx);
     run_toml(&root, "app", &["./gradlew", "run"]);
     bench.update(cx, |b, cx| b.select_run_configuration("app", cx));
@@ -920,7 +1113,7 @@ fn hand_test_182_gradle_run_profiles_the_application(cx: &mut TestAppContext) {
             b.everywhere().is_some_and(|v| {
                 matches!(
                     v.read(cx).results().selected_row(),
-                    Some(idecraft_workbench::everywhere_model::Row::Action(a))
+                    Some(ferris_idea_workbench::everywhere_model::Row::Action(a))
                         if a.id == "Profiler.ProfileSelected"
                 )
             })
@@ -959,7 +1152,7 @@ fn hand_test_182_gradle_run_profiles_the_application(cx: &mut TestAppContext) {
     // The run is kept with its output (SPEC-0120 behaviour 6): the application's line, none of
     // the recorder's.
     let kept: serde_json::Value = serde_json::from_str(
-        &std::fs::read_to_string(root.join(".idecraft/profiles/last.json")).unwrap(),
+        &std::fs::read_to_string(root.join(".ferris-idea/profiles/last.json")).unwrap(),
     )
     .unwrap();
     let output = kept["output"].as_str().unwrap_or_default();
@@ -1116,7 +1309,7 @@ fn hand_test_181_attach_to_a_running_process_with_keys(cx: &mut TestAppContext) 
 
 // ---------------------------------------------------------------------------- hand test 183
 
-fn remote_texts(bench: &Bench, cx: &mut VisualTestContext) -> Vec<String> {
+pub(super) fn remote_texts(bench: &Bench, cx: &mut VisualTestContext) -> Vec<String> {
     bench.read_with(cx, |b, cx| {
         b.remote_view()
             .map(|v| v.read(cx).texts())
@@ -1131,14 +1324,14 @@ fn remote_texts(bench: &Bench, cx: &mut VisualTestContext) -> Vec<String> {
 const HOST_HANG: Duration = Duration::from_secs(300);
 
 /// A local `sshd` as the test host, ready: it has completed a whole SSH session through
-/// IDECraft's own `ssh`, so the steps that follow do not race the server's start under load. Its
+/// Ferris IDEA's own `ssh`, so the steps that follow do not race the server's start under load. Its
 /// sessions have a home folder of the test's own (`dir/home`), so the window never lists the
 /// user's home folder.
-fn ready_host(dir: &Path) -> Option<idecraft_remote::testing::TestHost> {
+pub(super) fn ready_host(dir: &Path) -> Option<ferris_idea_remote::testing::TestHost> {
     let home = dir.join("home");
     std::fs::create_dir_all(&home).unwrap();
     let home = home.canonicalize().unwrap();
-    let host = idecraft_remote::testing::TestHost::start_with_env(
+    let host = ferris_idea_remote::testing::TestHost::start_with_env(
         &dir.join("ssh"),
         &[("HOME", &home.display().to_string())],
     )?;
@@ -1162,7 +1355,10 @@ fn rows_for_message(place: Option<&str>, texts: &[String]) -> String {
     if place.is_some_and(|p| inside(Path::new(p))) {
         return format!("{texts:?}");
     }
-    let own: Vec<&String> = texts.iter().filter(|t| t.contains("idecraft-")).collect();
+    let own: Vec<&String> = texts
+        .iter()
+        .filter(|t| t.contains("ferris-idea-"))
+        .collect();
     format!("{} rows, the test host's: {own:?}", texts.len())
 }
 
@@ -1190,7 +1386,7 @@ fn remote_state(bench: &Bench, cx: &mut VisualTestContext) -> String {
 /// Waits until `done` holds after a step on the test host: on the window's own answer, not a
 /// fixed time. An error the window shows ends the wait at once with that error; a step that
 /// neither finishes nor fails within [`HOST_HANG`] is a hang.
-fn until_host(
+pub(super) fn until_host(
     bench: &Bench,
     cx: &mut VisualTestContext,
     what: &str,
@@ -1220,7 +1416,7 @@ fn until_host(
 }
 
 /// Moves the Remote Host window's selection with ↑/↓ to the row `name`, focus on the list.
-fn go_remote(bench: &Bench, cx: &mut VisualTestContext, name: &str) {
+pub(super) fn go_remote(bench: &Bench, cx: &mut VisualTestContext, name: &str) {
     let view = bench
         .read_with(cx, |b, _| b.remote_view())
         .expect("the Remote Host window is shown");
@@ -1263,8 +1459,8 @@ fn go_remote(bench: &Bench, cx: &mut VisualTestContext, name: &str) {
 #[gpui::test]
 fn hand_test_183_files_on_the_host_with_keys(cx: &mut TestAppContext) {
     // One test at a time works on a test host (see the helper).
-    let _turn = idecraft_remote::testing::one_host_at_a_time();
-    let base = std::env::temp_dir().join(format!("idecraft-f083-ssh-{}", std::process::id()));
+    let _turn = ferris_idea_remote::testing::one_host_at_a_time();
+    let base = std::env::temp_dir().join(format!("ferris-idea-f083-ssh-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
     std::fs::create_dir_all(&base).unwrap();
     let Some(host) = ready_host(&base) else {
@@ -1365,7 +1561,7 @@ fn hand_test_183_files_on_the_host_with_keys(cx: &mut TestAppContext) {
                 b.remote_view().is_some_and(|v| {
                     matches!(
                         v.read(cx).pending(),
-                        Some(idecraft_workbench::RemotePending::Delete(p, 1))
+                        Some(ferris_idea_workbench::RemotePending::Delete(p, 1))
                             if p.ends_with("/ordner")
                     )
                 })
@@ -1413,7 +1609,7 @@ fn remote_host_list_never_reads_the_users_ssh_config(cx: &mut TestAppContext) {
     cx.run_until_parked();
     let config = bench.read_with(cx, |b, _| b.remote_ssh_config());
     assert!(
-        config.starts_with(&root) && idecraft_remote::testing::is_test_config(&config),
+        config.starts_with(&root) && ferris_idea_remote::testing::is_test_config(&config),
         "the host list reads the test's own config"
     );
     let texts = remote_texts(&bench, cx);
@@ -1422,10 +1618,10 @@ fn remote_host_list_never_reads_the_users_ssh_config(cx: &mut TestAppContext) {
         "an empty config lists no host: {} rows",
         texts.len()
     );
-    assert!(idecraft_remote::testing::ssh_isolated());
+    assert!(ferris_idea_remote::testing::ssh_isolated());
     let home = std::env::var_os("HOME").map(PathBuf::from).unwrap();
-    if !idecraft_remote::testing::is_test_config(&home.join(".ssh/config")) {
-        let read = std::panic::catch_unwind(|| idecraft_remote::host_list(&[]));
+    if !ferris_idea_remote::testing::is_test_config(&home.join(".ssh/config")) {
+        let read = std::panic::catch_unwind(|| ferris_idea_remote::host_list(&[]));
         assert!(
             read.is_err(),
             "a host list from the user's ~/.ssh/config fails in a test"

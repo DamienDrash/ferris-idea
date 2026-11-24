@@ -7,16 +7,16 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use ferris_idea_ui::keymap::Keystroke;
+use ferris_idea_ui::theme::Rgba;
+use ferris_idea_ui::tool_windows::{
+    HideAll, Layout as ToolLayout, Placement, Rect, Side, ToolWindow, ViewMode,
+};
+use ferris_idea_vcs::Repo;
 use gpui::{
     ClickEvent, Context, Entity, FocusHandle, Hsla, KeyDownEvent, UniformListScrollHandle, Window,
     div, prelude::*, px, rgb, rgba, uniform_list,
 };
-use idecraft_ui::keymap::Keystroke;
-use idecraft_ui::theme::Rgba;
-use idecraft_ui::tool_windows::{
-    HideAll, Layout as ToolLayout, Placement, Rect, Side, ToolWindow, ViewMode,
-};
-use idecraft_vcs::Repo;
 
 use crate::chrome;
 use crate::commit_model::file_status_keys;
@@ -78,6 +78,9 @@ mod occurrences;
 #[path = "workbench_bookmarks.rs"]
 mod bookmarks;
 
+#[path = "workbench_profile_lines.rs"]
+mod profile_lines;
+
 #[path = "workbench_todo.rs"]
 mod todo;
 
@@ -92,8 +95,12 @@ mod import;
 
 #[path = "workbench_agent_edits.rs"]
 mod agent_edits;
+#[path = "workbench_claude_link.rs"]
+mod claude_link;
 #[path = "workbench_close_projects.rs"]
 mod close_projects;
+#[path = "workbench_context_actions.rs"]
+mod context_actions;
 #[path = "workbench_file_properties.rs"]
 mod file_properties;
 #[path = "workbench_file_types.rs"]
@@ -117,7 +124,7 @@ mod keymap_tenth_impl;
 #[path = "workbench_layouts.rs"]
 mod layouts;
 #[path = "workbench_project_popup.rs"]
-mod project_popup;
+pub(crate) mod project_popup;
 #[path = "workbench_run_debug_actions.rs"]
 mod run_debug_action_impl;
 #[path = "workbench_vcs.rs"]
@@ -131,12 +138,28 @@ mod workbench_ts;
 mod build_actions;
 #[path = "workbench_tree.rs"]
 mod project_tree_view;
+#[path = "workbench_remote_conflict.rs"]
+mod remote_conflict_view;
 #[path = "workbench_remote_git.rs"]
 mod remote_git;
 #[path = "workbench_remote_host.rs"]
 mod remote_host;
 #[path = "workbench_remote_project.rs"]
 mod remote_project;
+#[path = "workbench_room.rs"]
+mod room;
+#[path = "workbench_room_comments.rs"]
+mod room_comments;
+#[path = "workbench_room_history.rs"]
+mod room_history;
+#[path = "workbench_room_join.rs"]
+mod room_join;
+#[path = "workbench_room_share.rs"]
+mod room_share;
+#[path = "workbench_spelling_watch.rs"]
+mod spelling_watch;
+#[path = "workbench_tree_watch.rs"]
+mod tree_watch;
 pub(crate) use remote_host::HostCall;
 
 #[path = "workbench_ddl.rs"]
@@ -145,17 +168,21 @@ mod ddl_actions;
 mod python_actions;
 pub use import::{queue_opened, take_opened};
 use popups::Popup;
-pub use remote_project::{RemoteStateDir, open_live_window};
+pub use remote_project::{
+    RemoteStateDir, STOPPED, open_already, open_live_window, recent_file, start_remote_open,
+    state_dir,
+};
+pub use room_join::{HostKeySource, JoinOpen, JoinOpener, link_label};
 
 /// Height of the main toolbar, which also holds the macOS window buttons.
 /// Height of the main toolbar: 40, 32 in compact mode (`SPEC-0165`).
-/// Title and text of About IDECraft (D62): product, version, platform.
+/// Title and text of About Ferris IDEA (D62): product, version, platform.
 pub fn about_text() -> (String, String) {
     (
-        "IDECraft".to_owned(),
+        "Ferris IDEA".to_owned(),
         format!(
             "Version {}\n{} on {}",
-            idecraft_core::release::version_label(),
+            ferris_idea_core::release::version_label(),
             std::env::consts::ARCH,
             std::env::consts::OS
         ),
@@ -196,20 +223,22 @@ fn rgb_color(value: u32) -> Hsla {
 
 /// The configurations of `run.toml` followed by those detected from the build files of the
 /// workspace, and the names of the detected ones (SPEC-0087 v2 behaviour 7).
-fn all_run_configs(root: &Path) -> (idecraft_core::RunConfigs, Vec<String>) {
-    let mut configs = idecraft_core::load_run_configs(root);
-    let detected = idecraft_core::Workspace::open(root)
+fn all_run_configs(root: &Path) -> (ferris_idea_core::RunConfigs, Vec<String>) {
+    let mut configs = ferris_idea_core::load_run_configs(root);
+    let detected = ferris_idea_core::Workspace::open(root)
         .ok()
         .and_then(|w| w.files().ok())
         .map(|files| {
-            let model = idecraft_core::read_project(root, &files);
+            let model = ferris_idea_core::read_project(root, &files);
             // The reference IDE's configurations come before the detected ones (SPEC-0049 v3
             // behaviour 13); both are listed, not written into run.toml.
-            let mut added =
-                idecraft_core::add_detected(&mut configs, idecraft_core::idea_run_configs(root));
-            added.extend(idecraft_core::add_detected(
+            let mut added = ferris_idea_core::add_detected(
                 &mut configs,
-                idecraft_core::suggest_run_configs(&model),
+                ferris_idea_core::idea_run_configs(root),
+            );
+            added.extend(ferris_idea_core::add_detected(
+                &mut configs,
+                ferris_idea_core::suggest_run_configs(&model),
             ));
             added
         })
@@ -235,7 +264,7 @@ fn byte_of(text: &str, chars: usize) -> usize {
 fn apply_byte_edits(
     editor: &Entity<EditorView>,
     text: &str,
-    edits: &[idecraft_languages::jvm::TextEdit],
+    edits: &[ferris_idea_languages::jvm::TextEdit],
     keep_caret: bool,
     cx: &mut Context<WorkbenchView>,
 ) {
@@ -263,11 +292,14 @@ fn apply_byte_edits(
 /// A file opened from a remote host: where it lives there and the stamp last read or written.
 #[derive(Debug, Clone)]
 struct RemoteOpened {
-    remote: idecraft_remote::Remote,
+    remote: ferris_idea_remote::Remote,
     path: String,
     stamp: String,
-    /// The host's copy changed: the next save overwrites it.
-    overwrite: bool,
+    /// The content read or uploaded last: the base of a merge (`SPEC-0121` v7 behaviour 4a).
+    base: Vec<u8>,
+    /// The host's version a save found instead of the base: its content (`None` when the host
+    /// deleted the file) and stamp (`absent` then). A save never overwrites it on its own.
+    host: Option<(Option<Vec<u8>>, String)>,
 }
 
 pub(crate) fn c(color: Rgba) -> Hsla {
@@ -278,8 +310,8 @@ pub(crate) fn c(color: Rgba) -> Hsla {
 /// where the completed identifier starts (SPEC-0072).
 struct Completion {
     path: PathBuf,
-    items: Vec<idecraft_languages::insight::CompletionItem>,
-    shown: Vec<idecraft_languages::insight::CompletionItem>,
+    items: Vec<ferris_idea_languages::insight::CompletionItem>,
+    shown: Vec<ferris_idea_languages::insight::CompletionItem>,
     selected: usize,
     start: usize,
     /// The identifier typed so far, highlighted in the labels (SPEC-0072 v5 behaviour 11).
@@ -317,14 +349,10 @@ struct SnippetSession {
     visited: Vec<Vec<std::ops::Range<usize>>>,
 }
 
-/// The key of a completion item for its documentation (behaviour 13).
-fn completion_key(item: &idecraft_languages::insight::CompletionItem) -> String {
-    format!(
-        "{}\u{1f}{}\u{1f}{}",
-        item.label,
-        item.label_detail.as_deref().unwrap_or_default(),
-        item.detail.as_deref().unwrap_or_default()
-    )
+/// The key of a completion item for its documentation (behaviour 13; v20: stays the same when
+/// its details are resolved).
+fn completion_key(item: &ferris_idea_languages::insight::CompletionItem) -> String {
+    completion_model::doc_key(item)
 }
 
 /// How many bottom windows outside the tool-window layout [`WorkbenchView::hide_bottom_windows`]
@@ -346,7 +374,7 @@ pub struct PluginPanel {
     /// "Plugin: Title".
     pub title: String,
     /// Its rows, or the plugin's error.
-    pub rows: Result<Vec<idecraft_plugins::PanelRow>, String>,
+    pub rows: Result<Vec<ferris_idea_plugins::PanelRow>, String>,
 }
 
 /// A plugin's status bar widget: its text and its tooltip (`SPEC-0210` behaviour 4).
@@ -392,18 +420,23 @@ enum DrawnFor {
     /// Taking the next file operation of the project tree back (`false`) or making it again
     /// (`SPEC-0275` v16 behaviour 38): Undo or Redo, Cancel.
     FileUndo(bool),
+    /// ⌘Z/⇧⌘Z in the Project tree on a refactoring group that moved files: group, redo.
+    GroupUndo(usize, bool),
+    /// A file opened from an SSH host changed there since it was read (`SPEC-0121` v7 behaviour
+    /// 4a): the local copy and the answer of each button.
+    RemoteConflict(PathBuf, Vec<crate::remote_conflict::ConflictAnswer>),
     /// Changing this file's encoding (`SPEC-0336` behaviour 12): what each answer does.
     Encoding(
         PathBuf,
-        idecraft_core::file_properties::Charset,
+        ferris_idea_core::file_properties::Charset,
         Vec<crate::file_properties_model::EncodingAnswer>,
     ),
     /// Reloading this file in another encoding with unsaved changes (`SPEC-0336` behaviour 13):
     /// Reload and Discard Changes, Cancel.
-    EncodingReload(PathBuf, idecraft_core::file_properties::Charset),
+    EncodingReload(PathBuf, ferris_idea_core::file_properties::Charset),
     /// Converting this file to an encoding that loses characters (`SPEC-0336` behaviour 14):
     /// Convert Anyway, Cancel.
-    EncodingLossy(PathBuf, idecraft_core::file_properties::Charset),
+    EncodingLossy(PathBuf, ferris_idea_core::file_properties::Charset),
 }
 
 /// How a run configuration is started in the Run tool window (`SPEC-0047` v3 behaviour 10).
@@ -430,12 +463,29 @@ enum ParamsAsk {
     Refresh,
 }
 
+/// Height of one signature row of parameter info.
+const PARAMS_ROW: f32 = 22.;
+
+/// The size parameter info takes with all its signatures (`SPEC-0080` v5 behaviour 9): the
+/// longest label in editor characters plus padding and border, and one row per signature.
+fn params_size(help: &ferris_idea_languages::insight::SignatureHelp) -> (f32, f32) {
+    let chars = help
+        .signatures
+        .iter()
+        .map(|s| s.label.chars().count())
+        .max()
+        .unwrap_or(0);
+    let width = chars as f32 * crate::fonts::editor_advance() + 2. * 8. + 2.;
+    let height = help.signatures.len() as f32 * PARAMS_ROW + 2. * 4. + 2.;
+    (width, height)
+}
+
 /// Parameter info above the caret (SPEC-0080).
 struct ParamInfo {
     path: PathBuf,
     /// Where the popup is anchored: the caret when it was opened.
     offset: usize,
-    help: idecraft_languages::insight::SignatureHelp,
+    help: ferris_idea_languages::insight::SignatureHelp,
     /// Caret and text revision the shown answer belongs to.
     asked: (usize, u64),
     /// A request is running.
@@ -461,7 +511,7 @@ struct DocPopup {
 /// What the problem popup offers besides the messages (`SPEC-0078` v2).
 #[derive(Clone)]
 struct ProblemPopup {
-    /// Title of IDECraft's first quick fix for the problems there.
+    /// Title of Ferris IDEA's first quick fix for the problems there.
     fix: Option<String>,
     /// The inspection whose description a second ⌘F1 adds.
     inspection: Option<&'static str>,
@@ -477,7 +527,7 @@ struct ProblemPopup {
 #[derive(Clone)]
 struct IntentionsAt {
     path: PathBuf,
-    range: idecraft_languages::insight::Range,
+    range: ferris_idea_languages::insight::Range,
     offset: usize,
 }
 
@@ -504,7 +554,7 @@ struct TerminalTab {
 /// A shell of a terminal tab and the subscriptions to its events and focus.
 struct TerminalPane {
     view: Entity<TerminalView>,
-    /// Cell of the tab the shell sits in (`idecraft_terminal::cell_runs`).
+    /// Cell of the tab the shell sits in (`ferris_idea_terminal::cell_runs`).
     group: usize,
     _events: [gpui::Subscription; 2],
 }
@@ -533,10 +583,10 @@ pub struct WorkbenchView {
     /// `MaximizeEditorInSplit` is on, and whether it hid the tool windows.
     editor_maximized: bool,
     maximize_hid_tools: bool,
-    /// The editor area was read back from `.idecraft/editor-tabs.json` (or there was nothing).
+    /// The editor area was read back from `.ferris-idea/editor-tabs.json` (or there was nothing).
     editors_restored: bool,
     /// The tab settings last applied (sorting switched on sorts at once).
-    tab_settings_seen: idecraft_core::EditorTabSettings,
+    tab_settings_seen: ferris_idea_core::EditorTabSettings,
     /// The next opened file becomes the preview tab (SPEC-0059 v9 behaviour 17).
     open_as_preview: bool,
     /// The editor area is saved when the IDE quits and when the window goes.
@@ -561,7 +611,7 @@ pub struct WorkbenchView {
     float_kinds: Vec<(ToolWindow, ViewMode)>,
     float_opening: Vec<ToolWindow>,
     /// Dock Unpinned windows that had the focus (SPEC-0061 v7 behaviour 39, IMP-0314).
-    auto_hide: idecraft_ui::tool_windows::AutoHide,
+    auto_hide: ferris_idea_ui::tool_windows::AutoHide,
     /// The tool windows shown at the last frame, so that a window that appeared replaces the one
     /// of its placement whichever way it was shown (SPEC-0061 v10 behaviour 49).
     last_shown: Vec<ToolWindow>,
@@ -576,7 +626,7 @@ pub struct WorkbenchView {
     show_structure_tool: bool,
     _structure_tool_events: Option<gpui::Subscription>,
     /// The project's bookmarks with the state of their file (SPEC-0331 behaviours 10, 13).
-    bookmark_store: idecraft_core::bookmarks::Store,
+    bookmark_store: ferris_idea_core::bookmarks::Store,
     /// The open bookmark popup: mnemonic chooser, list or description field.
     bookmarks_popup: Option<Entity<crate::BookmarksPopup>>,
     _bookmarks_popup_events: Option<gpui::Subscription>,
@@ -612,12 +662,12 @@ pub struct WorkbenchView {
     /// The name field of New and Rename (SPEC-0275 behaviours 3 and 5).
     name_prompt: Option<menus::NamePrompt>,
     /// The confirmation of Delete (SPEC-0275 behaviour 6).
-    delete_confirm: Option<Vec<idecraft_core::file_ops::DeletePlan>>,
+    delete_confirm: Option<Vec<ferris_idea_core::file_ops::DeletePlan>>,
     /// The Delete confirmation is a native alert, not drawn (SPEC-0281 behaviour 6).
     delete_in_alert: bool,
     /// The file operations of the project tree that can be undone and redone (SPEC-0275 v16
     /// behaviour 37).
-    file_undo: idecraft_core::file_undo::FileUndo,
+    file_undo: ferris_idea_core::file_undo::FileUndo,
     /// The titles of Edit › Undo and Redo this window last gave the menu bar (SPEC-0275 v16
     /// behaviour 42).
     undo_titles_shown: Option<crate::menu_bar::UndoTitles>,
@@ -637,7 +687,7 @@ pub struct WorkbenchView {
     root: PathBuf,
     branch: Option<String>,
     /// Ahead/behind and the waiting operation for the branch widget (SPEC-0068 v3 behaviour 10).
-    branch_state: idecraft_vcs::BranchState,
+    branch_state: ferris_idea_vcs::BranchState,
     /// An operation stopped on conflicts: the merge view opens at the next frame (SPEC-0101 v3
     /// behaviour 7).
     open_conflicts_next: bool,
@@ -711,16 +761,16 @@ pub struct WorkbenchView {
     /// The Git log tool window (SPEC-0086).
     git_log: Option<Entity<GitLogView>>,
     /// Run configurations, the selected one, the Run tool window and the chooser (SPEC-0087).
-    run_configs: idecraft_core::RunConfigs,
+    run_configs: ferris_idea_core::RunConfigs,
     /// The Database tool window on the right (SPEC-0089).
     database: Option<Entity<DatabaseView>>,
     show_database: bool,
     /// Installed plugins, read when Search Everywhere opens, and their folder (SPEC-0104).
-    plugins: Vec<idecraft_plugins::Plugin>,
+    plugins: Vec<ferris_idea_plugins::Plugin>,
     /// Plugins' inspection findings per file with the text they were made for (`SPEC-0166`).
     /// The last ESLint findings per file with the text they are about (SPEC-0123 v2).
-    eslint_findings: HashMap<PathBuf, (String, Vec<idecraft_languages::js_tools::LintProblem>)>,
-    plugin_findings: HashMap<PathBuf, (String, Vec<(String, idecraft_plugins::PluginFinding)>)>,
+    eslint_findings: HashMap<PathBuf, (String, Vec<ferris_idea_languages::js_tools::LintProblem>)>,
+    plugin_findings: HashMap<PathBuf, (String, Vec<(String, ferris_idea_plugins::PluginFinding)>)>,
     /// The plugins' status bar widgets for a file: text and tooltip each (`SPEC-0210` behaviour 4).
     plugin_status: Option<(PathBuf, Vec<StatusWidget>)>,
     plugin_status_request: u64,
@@ -750,7 +800,7 @@ pub struct WorkbenchView {
     ai_chat: Option<Entity<crate::AiChatView>>,
     show_ai_chat: bool,
     _ai_chat_events: Option<gpui::Subscription>,
-    spring_model: Option<idecraft_languages::spring::SpringModel>,
+    spring_model: Option<ferris_idea_languages::spring::SpringModel>,
     /// Whether the editors show resolved configuration values (the setting, SPEC-0115 v5
     /// behaviour 13).
     config_values_on: bool,
@@ -766,7 +816,7 @@ pub struct WorkbenchView {
     python: Option<Entity<crate::PythonView>>,
     show_python: bool,
     _python_events: Option<gpui::Subscription>,
-    python_env: Option<idecraft_core::PythonEnvironments>,
+    python_env: Option<ferris_idea_core::PythonEnvironments>,
     /// Whether the workspace looks like a Python project (status bar widget).
     python_project: bool,
     python_running: bool,
@@ -793,7 +843,7 @@ pub struct WorkbenchView {
     /// ESLint runs per file: a newer edit makes older runs' results stale (SPEC-0123).
     lint_generation: HashMap<PathBuf, u64>,
     /// Run markers of open Java and Kotlin files (SPEC-0122) and the Run/Debug or Generate popup.
-    run_marker_info: HashMap<PathBuf, Vec<idecraft_languages::jvm::RunMarker>>,
+    run_marker_info: HashMap<PathBuf, Vec<ferris_idea_languages::jvm::RunMarker>>,
     jvm_popup: Option<Entity<crate::ChoiceView>>,
     _jvm_popup_events: Option<gpui::Subscription>,
     /// Where the popup stands: at the top of the editor, at the navigation path at the bottom
@@ -802,22 +852,22 @@ pub struct WorkbenchView {
     /// Closes a choice popup when the focus leaves it (`SPEC-0275` v4 behaviour 28).
     _popup_focus: Option<gpui::Subscription>,
     /// Languages whose missing server the status bar has named (`SPEC-0042` v7 behaviour 15).
-    server_hints: std::collections::HashSet<idecraft_languages::LanguageId>,
+    server_hints: std::collections::HashSet<ferris_idea_languages::LanguageId>,
     /// Remote Host tool window (SPEC-0121), the connected host and the files opened from it.
     remote_view: Option<Entity<crate::RemoteView>>,
     show_remote: bool,
     _remote_events: Option<gpui::Subscription>,
-    remote: Option<idecraft_remote::Remote>,
+    remote: Option<ferris_idea_remote::Remote>,
     remote_dir: Option<String>,
-    /// IDECraft's backend on the connected host and its folder (SPEC-0158).
+    /// Ferris IDEA's backend on the connected host and its folder (SPEC-0158).
     remote_backend: Option<(
         String,
-        std::sync::Arc<std::sync::Mutex<idecraft_remote::Backend>>,
+        std::sync::Arc<std::sync::Mutex<ferris_idea_remote::Backend>>,
     )>,
     /// Folder below the host's home that backends are uploaded to (SPEC-0158; tests use another).
     remote_backend_dir: String,
-    /// The IDECraft program uploaded as the backend; this program when unset (tests running in a
-    /// test binary name the `idecraft` program instead).
+    /// The Ferris IDEA program uploaded as the backend; this program when unset (tests running in a
+    /// test binary name the `ferris-idea` program instead).
     remote_backend_binary: Option<PathBuf>,
     /// A host file to put the caret in once it is open: host path and 0-based line.
     remote_open_line: Option<(String, usize)>,
@@ -831,6 +881,8 @@ pub struct WorkbenchView {
     remote_project: Option<remote_project::RemoteWindow>,
     /// A remote project being opened from Remote Development; set to stop it (behaviour 3).
     remote_opening: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+    /// The open Join Project by Link dialog (`SPEC-0323` v7 behaviour 48).
+    room_join: Option<room_join::JoinDialog>,
     /// Profiler tool window (SPEC-0120).
     profiler: Option<Entity<crate::ProfilerView>>,
     show_profiler: bool,
@@ -838,23 +890,38 @@ pub struct WorkbenchView {
     attach_seconds: Option<u64>,
     profiling: bool,
     _profiler_events: Option<gpui::Subscription>,
+    /// The costs per line of the profile shown, by file (`SPEC-0120` v5 behaviour 10), and the
+    /// count of their refreshes, so that a late one does not win.
+    profile_lines: HashMap<PathBuf, std::sync::Arc<crate::profile_lines_model::FileCosts>>,
+    profile_lines_refresh: u64,
     /// Containers tool window (SPEC-0119) and what it reads from.
     containers: Option<Entity<crate::ContainersView>>,
     show_containers: bool,
     _containers_events: Option<gpui::Subscription>,
-    docker_host: Option<idecraft_containers::DockerHost>,
-    kubectl: Option<idecraft_containers::Kubectl>,
-    kube_contexts: Vec<idecraft_containers::KubeContext>,
+    /// The engine's event stream while the Containers window is shown (SPEC-0119 v5 behaviour 9):
+    /// the address it follows and the watcher.
+    docker_watch: Option<(String, ferris_idea_containers::events::EventWatch)>,
+    /// The followed logs (behaviour 10): its stop flag and a number that grows with each follow,
+    /// so output of an earlier one is dropped.
+    log_follow: Option<ferris_idea_containers::StopFlag>,
+    log_follow_gen: u64,
+    /// What the watcher and the followed logs send to the window.
+    container_feed: Option<async_channel::Sender<ContainerFeed>>,
+    /// A Docker reading after events is due.
+    docker_refresh_due: bool,
+    docker_host: Option<ferris_idea_containers::DockerHost>,
+    kubectl: Option<ferris_idea_containers::Kubectl>,
+    kube_contexts: Vec<ferris_idea_containers::KubeContext>,
     kube_namespaces: Vec<String>,
     kube_context: Option<String>,
     kube_namespace: Option<String>,
     /// Docker engines to choose from instead of the machine's (tests) and the chosen one's name
     /// (SPEC-0243).
-    docker_engines: Option<Vec<idecraft_containers::Engine>>,
+    docker_engines: Option<Vec<ferris_idea_containers::Engine>>,
     docker_engine: Option<String>,
     /// Compose folder and CLI instead of the project's and the one on `PATH` (tests, SPEC-0242).
     compose_dir: Option<PathBuf>,
-    compose_cli: Option<idecraft_containers::compose::ComposeCli>,
+    compose_cli: Option<ferris_idea_containers::compose::ComposeCli>,
     /// Addresses the Containers window opened; not opened in a browser for test sources.
     opened_urls: Vec<String>,
     /// The HTTP client environment chosen in the Services window, per request file (`SPEC-0102`
@@ -876,7 +943,7 @@ pub struct WorkbenchView {
     show_services: bool,
     _services_events: Option<gpui::Subscription>,
     /// Tables of each connection by profile id, read once for SQL completion.
-    sql_schemas: HashMap<String, Vec<idecraft_database::Table>>,
+    sql_schemas: HashMap<String, Vec<ferris_idea_database::Table>>,
     /// Refreshes of each connection's schema: a read from before one is not kept (`SPEC-0192` v3
     /// behaviour 11).
     sql_schema_generations: crate::sql_editor_model::SchemaGenerations,
@@ -885,7 +952,7 @@ pub struct WorkbenchView {
     run_detected: Vec<String>,
     /// Configurations made by `RunClass` for the file in the editor, kept for the session
     /// (`SPEC-0097` behaviour 4).
-    run_temporary: Vec<idecraft_core::RunConfig>,
+    run_temporary: Vec<ferris_idea_core::RunConfig>,
     /// Commands suggested by plugins, listed after the others (`SPEC-0276` behaviour 4).
     run_plugin: Vec<crate::plugin_run_model::PluginRunEntry>,
     /// The user's "always allow" file for those commands (`SPEC-0276` behaviour 7).
@@ -952,6 +1019,9 @@ pub struct WorkbenchView {
     /// The open scope dialog of Inspect Code: its choices and the chosen one (v3 behaviour 7).
     inspect_dialog: Option<(Vec<crate::problems_model::InspectScope>, usize)>,
     inspect_dialog_focus: FocusHandle,
+    /// The scope dialog serves Update Copyright instead of Inspect Code (`SPEC-0155` v5
+    /// behaviour 11).
+    copyright_dialog: bool,
     /// The inspection a "Run inspection on…" run is limited to (SPEC-0098 v4 behaviour 10).
     inspect_only: Option<&'static str>,
     /// The File tab's editor preview is on (SPEC-0092 v4 behaviour 9).
@@ -1038,7 +1108,7 @@ pub struct WorkbenchView {
     /// (`SPEC-0093` v7 behaviour 10).
     console_auto: std::collections::HashSet<PathBuf>,
     /// Query history per connection id, loaded on first use (`SPEC-0093` v3 behaviour 13).
-    sql_history: HashMap<String, idecraft_database::QueryHistory>,
+    sql_history: HashMap<String, ferris_idea_database::QueryHistory>,
     /// The open history popup: connection id, search text, selected row.
     history_popup: Option<crate::console_session::HistoryPopup>,
     /// The cancel handle of the console run in progress (`SPEC-0093` v3 behaviour 12).
@@ -1049,7 +1119,7 @@ pub struct WorkbenchView {
         Option<(
             PathBuf,
             std::time::Instant,
-            Option<idecraft_database::ConnectionProfile>,
+            Option<ferris_idea_database::ConnectionProfile>,
         )>,
     >,
     /// The migration script of the last schema comparison (SPEC-0110 behaviour 5).
@@ -1087,11 +1157,11 @@ pub struct WorkbenchView {
     /// keeps and offers the way back (`SPEC-0164` v5 behaviour 16).
     db_undo_steps: HashMap<(PathBuf, u64), crate::db_rename_dialog::DbUndo>,
     /// Where else the last rename looked (SPEC-0148 behaviour 1).
-    rename_options: idecraft_languages::rename_text::TextOptions,
+    rename_options: ferris_idea_languages::rename_text::TextOptions,
     /// The preview of occurrences in comments, strings and text files (SPEC-0148 behaviour 3).
     rename_preview: Option<Entity<crate::RenamePreview>>,
     /// Refactorings across files, undone and redone as a whole (`SPEC-0193`).
-    undo_groups: idecraft_languages::undo_group::UndoGroups,
+    undo_groups: ferris_idea_languages::undo_group::UndoGroups,
     _rename_preview_events: Option<gpui::Subscription>,
     /// The import preview of an exchange file (SPEC-0303 behaviour 11).
     import_preview: Option<Entity<crate::ImportPreview>>,
@@ -1108,22 +1178,24 @@ pub struct WorkbenchView {
     /// The context-actions popup and where it was asked for (SPEC-0076).
     intentions: Option<(Entity<IntentionsView>, IntentionsAt)>,
     _intentions_events: Option<gpui::Subscription>,
-    /// IDECraft's own quick fixes offered in the open ⌥↩ list, with the text they were made for
+    /// Ferris IDEA's own quick fixes offered in the open ⌥↩ list, with the text they were made for
     /// (SPEC-0125 behaviour 3).
-    own_fixes: Vec<idecraft_languages::inspections::Fix>,
+    own_fixes: Vec<ferris_idea_languages::inspections::Fix>,
     /// The expressions a refactoring shortcut offers in the popup (SPEC-0095 v2 behaviour 6).
     refactor_targets: Vec<crate::intentions_model::TargetChoice>,
-    /// IDECraft's own entries of the open Refactor This list (SPEC-0095 v5 behaviour 4a).
-    refactor_own: Vec<idecraft_languages::actions::OwnRefactoring>,
+    /// Ferris IDEA's own entries of the open Refactor This list (SPEC-0095 v5 behaviour 4a).
+    refactor_own: Vec<ferris_idea_languages::actions::OwnRefactoring>,
     /// Install entries of the open ⌥↩ list on an unresolved Python import (SPEC-0117 v4
     /// behaviour 8).
-    install_fixes: Vec<idecraft_core::InstallFix>,
+    install_fixes: Vec<ferris_idea_core::InstallFix>,
     own_fixes_text: String,
     /// Rows of the ⌥↩ list that stand for an own finding: row title, inspection id, byte offset
     /// of the finding (`SPEC-0125` v2 behaviour 8).
     own_targets: Vec<(String, &'static str, usize)>,
     /// Submenus for the next ⌥↩ list.
     intention_options: Vec<crate::intentions_view::RowOptions>,
+    /// The run rows of the context actions at a ▶ marker (`SPEC-0076` v11 behaviour 14).
+    context_run: Vec<ferris_idea_languages::context_actions::RunEntry>,
     /// Counts ⌥↩ requests; a late answer to an older one is dropped.
     intentions_request: u64,
     /// The File Structure popup (SPEC-0079).
@@ -1179,6 +1251,10 @@ pub struct WorkbenchView {
     file_type_icons: std::cell::RefCell<crate::file_type_icons::FileTypeIcons>,
     usages_running: std::collections::HashSet<PathBuf>,
     usages_again: std::collections::HashSet<PathBuf>,
+    /// The last usage counts of each file with their text (`SPEC-0292` v8 behaviour 13).
+    usage_cache: crate::usage_counts_model::UsageCache,
+    /// Failed usage-count questions in a row per file (`SPEC-0292` v8 behaviour 14).
+    usage_retries: HashMap<PathBuf, u32>,
     usages_on: bool,
     /// Whether the usages at the caret were highlighted by themselves at the last check
     /// (`SPEC-0295` behaviour 12).
@@ -1197,7 +1273,7 @@ pub struct WorkbenchView {
     pool_seen: u64,
     /// Diagnostics received but not shown yet, because the editor had moved on from the text the
     /// server had.
-    pool_pending: HashMap<PathBuf, Vec<idecraft_languages::lsp::Diagnostic>>,
+    pool_pending: HashMap<PathBuf, Vec<ferris_idea_languages::lsp::Diagnostic>>,
     /// The files with errors at the last check, to redraw when they change (SPEC-0059 v4).
     problem_marks_shown: crate::problem_marks::ProblemFiles,
     /// Recently opened files and the Go to Line / Recent Files popup (SPEC-0069).
@@ -1217,10 +1293,15 @@ pub struct WorkbenchView {
 impl WorkbenchView {
     /// A workbench on `root`.
     pub fn new(root: &Path, cx: &mut Context<Self>) -> Self {
+        // The project folder of the product's former name moves once, before anything reads or
+        // writes the project's IDE state (`SPEC-0356` behaviour 2).
+        ferris_idea_core::takeover::take_over_project_folder(root);
         // Quitting finds every workbench, also one wrapped in another root view (SPEC-0261 v3).
         crate::project_windows::register_workbench(cx.weak_entity(), cx);
+        // Its terminals may start the Claude Code link from the first frame on (SPEC-0358).
+        ferris_idea_claude_link::add_project(root);
         // Detection follows the project's file types from now on (SPEC-0004 v5 behaviour 12).
-        idecraft_languages::file_types::register(root);
+        ferris_idea_languages::file_types::register(root);
         // A Python project shows its interpreter in the status bar from the start (SPEC-0117).
         let python_markers = [
             "pyproject.toml",
@@ -1239,7 +1320,7 @@ impl WorkbenchView {
         // File status colours, read in the background now and every 2 seconds (SPEC-0059 behaviour 7).
         let repo_root = root.to_path_buf();
         cx.spawn(async move |this, cx| {
-            let mut disk_watch = idecraft_languages::watched_files::DiskWatch::default();
+            let mut disk_watch = ferris_idea_languages::watched_files::DiskWatch::default();
             // The source folders derived from the files (SPEC-0048 v6 behaviour 14) are read
             // again when the last look at the disk gave a reason, and when the tree was read
             // again.
@@ -1268,7 +1349,8 @@ impl WorkbenchView {
                         // (SPEC-0042 v11 behaviour 20); nothing is read without a server.
                         let on_disk = watch.round(&root);
                         // Only the project's own sources, within the bounds of the rule.
-                        let derived = derive.then(|| idecraft_core::source_roots::derived(&root));
+                        let derived =
+                            derive.then(|| ferris_idea_core::source_roots::derived(&root));
                         let repo = Repo::discover(&root).ok();
                         let keys = repo
                             .as_ref()
@@ -1294,6 +1376,8 @@ impl WorkbenchView {
                 disk_watch = watch;
                 sources_changed = on_disk;
                 let alive = this.update(cx, |this, cx| {
+                    // Files created, deleted or renamed outside reach the tree through its own
+                    // watcher (`workbench_tree_watch`, SPEC-0059 v9.11 behaviour 31).
                     if let Some(derived) = derived
                         && this.tree.set_derived_roots(derived)
                     {
@@ -1375,6 +1459,12 @@ impl WorkbenchView {
             }
         })
         .detach();
+        // Files created, deleted or renamed outside show in the Project tree within a second
+        // (SPEC-0059 v9.11 behaviour 31, OBS-0096 FW1).
+        Self::watch_tree_folders(cx);
+        // Open editors follow a change of the spelling dictionaries, also one made over MCP
+        // (SPEC-0159 v5 behaviour 3, OBS-0115 S1).
+        Self::watch_spelling(cx);
         // Bookmarks another writer changed on disk show within a second (SPEC-0331 behaviour 13).
         cx.spawn(async move |this, cx| {
             loop {
@@ -1391,7 +1481,7 @@ impl WorkbenchView {
         .detach();
         // With the language server pool, edited text reaches the server and its diagnostics come
         // back while typing, checked every 300 ms (SPEC-0090 behaviour 4).
-        if idecraft_languages::pool::enabled() {
+        if ferris_idea_languages::pool::enabled() {
             cx.spawn(async move |this, cx| {
                 loop {
                     cx.background_executor()
@@ -1448,7 +1538,7 @@ impl WorkbenchView {
                 cx.on_release(|this, _| this.save_editors()),
             ],
             tool_layout: ToolLayout::load(root),
-            window_layouts_file: idecraft_ui::window_layouts::layouts_file(),
+            window_layouts_file: ferris_idea_ui::window_layouts::layouts_file(),
             stripe_menu: None,
             header_menu: None,
             header_submenu: None,
@@ -1464,7 +1554,7 @@ impl WorkbenchView {
             structure_tool_for: None,
             show_structure_tool: false,
             _structure_tool_events: None,
-            bookmark_store: idecraft_core::bookmarks::Store::open(root),
+            bookmark_store: ferris_idea_core::bookmarks::Store::open(root),
             bookmarks_popup: None,
             _bookmarks_popup_events: None,
             bookmark_popup_line: None,
@@ -1484,7 +1574,7 @@ impl WorkbenchView {
             name_prompt: None,
             delete_confirm: None,
             delete_in_alert: false,
-            file_undo: idecraft_core::file_undo::FileUndo::new(root),
+            file_undo: ferris_idea_core::file_undo::FileUndo::new(root),
             undo_titles_shown: None,
             closed_histories: Default::default(),
             drawn_question: None,
@@ -1496,7 +1586,7 @@ impl WorkbenchView {
             tree_scroll: UniformListScrollHandle::new(),
             // The first window says so when the login shell gave no environment (SPEC-0328
             // behaviour 9).
-            status: idecraft_core::shell_env::take_window_note(),
+            status: ferris_idea_core::shell_env::take_window_note(),
             root: root.to_path_buf(),
             branch: chrome::current_branch(root),
             branch_state: Repo::discover(root)
@@ -1505,7 +1595,7 @@ impl WorkbenchView {
             open_conflicts_next: false,
             close_merge_next: false,
             was_active: false,
-            safe_mode: !idecraft_core::trust::allows_project_code(root),
+            safe_mode: !ferris_idea_core::trust::allows_project_code(root),
             terminals: Vec::new(),
             terminal_tab: 0,
             terminal_rename: None,
@@ -1553,7 +1643,7 @@ impl WorkbenchView {
             run_detected,
             run_temporary: Vec::new(),
             run_plugin: Vec::new(),
-            plugin_run_file: idecraft_plugins::run_permissions_file(),
+            plugin_run_file: ferris_idea_plugins::run_permissions_file(),
             plugin_run_dialog: None,
             _plugin_run_dialog_events: None,
             plugin_network_dialog: None,
@@ -1564,8 +1654,8 @@ impl WorkbenchView {
             database: None,
             show_database: false,
             // Loaded at once: file types and completion work from the first file (SPEC-0210).
-            plugins: idecraft_plugins::plugins_dir()
-                .map(|d| idecraft_plugins::load_dir(&d).0)
+            plugins: ferris_idea_plugins::plugins_dir()
+                .map(|d| ferris_idea_plugins::load_dir(&d).0)
                 .unwrap_or_default(),
             plugin_status: None,
             plugin_status_request: 0,
@@ -1576,7 +1666,7 @@ impl WorkbenchView {
             eslint_findings: HashMap::new(),
             plugin_findings: HashMap::new(),
             plugin_inspect_request: 0,
-            plugins_dir: idecraft_plugins::plugins_dir(),
+            plugins_dir: ferris_idea_plugins::plugins_dir(),
             pending_plugin_open: None,
             inline_request: 0,
             inline_alternatives: None,
@@ -1627,10 +1717,11 @@ impl WorkbenchView {
             remote_dir: None,
             remote_backend: None,
             remote_problems: None,
-            remote_backend_dir: idecraft_remote::BACKEND_DIR.to_owned(),
+            remote_backend_dir: ferris_idea_remote::BACKEND_DIR.to_owned(),
             remote_backend_binary: None,
             remote_open_line: None,
             remote_home: None,
+            room_join: None,
             remote_extra: Vec::new(),
             remote_files: HashMap::new(),
             remote_project: None,
@@ -1640,9 +1731,16 @@ impl WorkbenchView {
             attach_seconds: None,
             profiling: false,
             _profiler_events: None,
+            profile_lines: HashMap::new(),
+            profile_lines_refresh: 0,
             containers: None,
             show_containers: false,
             _containers_events: None,
+            docker_watch: None,
+            log_follow: None,
+            log_follow_gen: 0,
+            container_feed: None,
+            docker_refresh_due: false,
             docker_host: None,
             kubectl: None,
             kube_contexts: Vec::new(),
@@ -1683,6 +1781,7 @@ impl WorkbenchView {
             inspect_scope: crate::problems_model::InspectScope::Project,
             inspect_dialog: None,
             inspect_dialog_focus: cx.focus_handle(),
+            copyright_dialog: false,
             inspect_only: None,
             problems_preview: false,
             indicator_hover: (false, false),
@@ -1753,7 +1852,7 @@ impl WorkbenchView {
             goto_at: None,
             refactoring_steps: HashMap::new(),
             db_undo_steps: HashMap::new(),
-            rename_options: idecraft_languages::rename_text::TextOptions {
+            rename_options: ferris_idea_languages::rename_text::TextOptions {
                 comments_and_strings: true,
                 text_files: false,
             },
@@ -1784,6 +1883,7 @@ impl WorkbenchView {
             own_fixes_text: String::new(),
             own_targets: Vec::new(),
             intention_options: Vec::new(),
+            context_run: Vec::new(),
             intentions_request: 0,
             completion: None,
             snippet: None,
@@ -1806,6 +1906,8 @@ impl WorkbenchView {
             file_type_icons: Default::default(),
             usages_running: Default::default(),
             usages_again: Default::default(),
+            usage_cache: Default::default(),
+            usage_retries: Default::default(),
             usages_on: true,
             occurrences_on: true,
             occurrence_status: None,
@@ -2103,8 +2205,8 @@ impl WorkbenchView {
         let focused = was && self.tool_window_focused(w, window, cx);
         // A shown window without the focus gets it; only a focused one hides (hand test 7 of
         // round 4: ⌘6 left the keys in the editor).
-        if idecraft_ui::tool_windows::Activation::of(was, focused)
-            == idecraft_ui::tool_windows::Activation::Focus
+        if ferris_idea_ui::tool_windows::Activation::of(was, focused)
+            == ferris_idea_ui::tool_windows::Activation::Focus
             && let Some(focus) = self.tool_window_focus(w, cx)
         {
             // The popups of the editor do not take the keys meant for the window.
@@ -2463,7 +2565,7 @@ impl WorkbenchView {
                 _ => true,
             })
             .collect();
-        idecraft_ui::tool_windows::more_tool_windows(&openable)
+        ferris_idea_ui::tool_windows::more_tool_windows(&openable)
     }
 
     /// The tool windows shown in a separate window of their own (SPEC-0061 v7 behaviour 39).
@@ -2632,7 +2734,7 @@ impl WorkbenchView {
                 (main.w * 0.6).max(480.0),
                 self.tool_layout
                     .size(w)
-                    .unwrap_or(idecraft_ui::tool_windows::DEFAULT_WEIGHT * main.h - gap),
+                    .unwrap_or(ferris_idea_ui::tool_windows::DEFAULT_WEIGHT * main.h - gap),
             ),
             _ => (
                 self.tool_layout
@@ -2646,7 +2748,7 @@ impl WorkbenchView {
             .iter()
             .map(|d| crate::floating::rect(d.bounds()))
             .collect();
-        let frame = idecraft_ui::tool_windows::float_bounds(
+        let frame = ferris_idea_ui::tool_windows::float_bounds(
             self.tool_layout.bounds(w),
             &displays,
             main,
@@ -2667,7 +2769,7 @@ impl WorkbenchView {
             } else {
                 gpui::WindowKind::Normal
             },
-            app_id: Some(idecraft_ui::brand::APP_ID.to_owned()),
+            app_id: Some(ferris_idea_ui::brand::APP_ID.to_owned()),
             ..Default::default()
         };
         // GPUI draws a new window at once, and its view reads this workbench: open it outside
@@ -2732,7 +2834,7 @@ impl WorkbenchView {
             cx.notify();
             return;
         };
-        if idecraft_languages::LanguageId::detect(&here.path).is_none() {
+        if ferris_idea_languages::LanguageId::detect(&here.path).is_none() {
             self.structure_tool = None;
             cx.notify();
             return;
@@ -2747,7 +2849,7 @@ impl WorkbenchView {
                         .enable_all()
                         .build()
                         .map_err(|e| e.to_string())?;
-                    rt.block_on(idecraft_languages::insight::symbols_in(
+                    rt.block_on(ferris_idea_languages::insight::symbols_in(
                         &root,
                         &file,
                         Some(&text),
@@ -3005,7 +3107,7 @@ impl WorkbenchView {
         let view = view.unwrap_or_else(|| cx.new(|cx| TerminalView::new(root, cx)));
         let name = name.unwrap_or_else(|| match self.remote_project() {
             Some((host, _)) => remote_host::host_tab_name(&host, &self.terminal_tabs()),
-            None => idecraft_terminal::next_tab_name(&self.terminal_tabs()),
+            None => ferris_idea_terminal::next_tab_name(&self.terminal_tabs()),
         });
         let pane = self.terminal_pane(view, window, cx);
         self.terminals.push(TerminalTab {
@@ -3111,8 +3213,12 @@ impl WorkbenchView {
             tab.side_by_side = side_by_side;
         }
         let groups: Vec<usize> = tab.panes.iter().map(|p| p.group).collect();
-        let (at, group) =
-            idecraft_terminal::split_position(&groups, tab.active, tab.side_by_side, side_by_side);
+        let (at, group) = ferris_idea_terminal::split_position(
+            &groups,
+            tab.active,
+            tab.side_by_side,
+            side_by_side,
+        );
         pane.group = group;
         tab.active = at;
         tab.panes.insert(at, pane);
@@ -3256,8 +3362,8 @@ impl WorkbenchView {
 
     /// The tabs as saved: names, splits and per shell its folder and last lines; SSH terminals are
     /// left out (SPEC-0205 behaviour 6).
-    pub fn saved_terminals(&self, cx: &gpui::App) -> idecraft_terminal::SavedTerminals {
-        idecraft_terminal::SavedTerminals {
+    pub fn saved_terminals(&self, cx: &gpui::App) -> ferris_idea_terminal::SavedTerminals {
+        ferris_idea_terminal::SavedTerminals {
             tabs: self
                 .terminals
                 .iter()
@@ -3267,15 +3373,15 @@ impl WorkbenchView {
                         .iter()
                         .map(|p| (p.view.read(cx), p.group))
                         .filter(|(v, _)| v.is_local())
-                        .map(|(v, group)| idecraft_terminal::SavedShell {
+                        .map(|(v, group)| ferris_idea_terminal::SavedShell {
                             group: Some(group),
-                            ..idecraft_terminal::SavedShell::new(
+                            ..ferris_idea_terminal::SavedShell::new(
                                 v.current_dir(),
-                                v.history_lines(idecraft_terminal::SAVED_LINES),
+                                v.history_lines(ferris_idea_terminal::SAVED_LINES),
                             )
                         })
                         .collect();
-                    (!shells.is_empty()).then(|| idecraft_terminal::SavedTab {
+                    (!shells.is_empty()).then(|| ferris_idea_terminal::SavedTab {
                         name: t.name.clone(),
                         side_by_side: t.side_by_side,
                         shells,
@@ -3285,7 +3391,7 @@ impl WorkbenchView {
         }
     }
 
-    /// Writes the tabs to `.idecraft/terminal-sessions.json`; before the saved ones came back
+    /// Writes the tabs to `.ferris-idea/terminal-sessions.json`; before the saved ones came back
     /// they stay untouched.
     fn save_terminals(&self, cx: &gpui::App) {
         self.sync_terminal_labels(cx);
@@ -3295,7 +3401,7 @@ impl WorkbenchView {
             // The shells' last lines are state of one user and may hold secrets: the generated
             // ignore file lists them before they are written (`SPEC-0069` behaviour 3a).
             if !saved.tabs.is_empty() {
-                idecraft_core::local_state::refresh_local_state_ignore(&self.root);
+                ferris_idea_core::local_state::refresh_local_state_ignore(&self.root);
             }
             let _ = saved.save(&self.root);
         }
@@ -3318,7 +3424,7 @@ impl WorkbenchView {
             return false;
         }
         self.terminals_restored = true;
-        let saved = idecraft_terminal::SavedTerminals::load(&self.root);
+        let saved = ferris_idea_terminal::SavedTerminals::load(&self.root);
         for tab in saved.tabs.into_iter().filter(|t| !t.shells.is_empty()) {
             let panes = tab
                 .shells
@@ -3372,7 +3478,7 @@ impl WorkbenchView {
                             this.show_diff(&path, window, cx);
                         }
                         CommitEvent::OpenFile(path) => {
-                            let file = idecraft_vcs::Repo::discover(&this.root)
+                            let file = ferris_idea_vcs::Repo::discover(&this.root)
                                 .ok()
                                 .and_then(|r| r.workdir().map(|w| w.join(path)));
                             if let Some(file) = file {
@@ -3458,7 +3564,7 @@ impl WorkbenchView {
                 .filter_map(|(p, _)| self.remote_rel(p))
                 .collect();
         }
-        let Some(workdir) = idecraft_vcs::Repo::discover(&self.root)
+        let Some(workdir) = ferris_idea_vcs::Repo::discover(&self.root)
             .ok()
             .and_then(|r| r.workdir().map(Path::to_path_buf))
         else {
@@ -3480,7 +3586,7 @@ impl WorkbenchView {
     /// over the editor area; the working copy is the open editor's text when the file is open
     /// (SPEC-0084 behaviour 2).
     pub fn show_diff(&mut self, path: &str, window: &mut Window, cx: &mut Context<Self>) {
-        let repo = match idecraft_vcs::Repo::discover(&self.root) {
+        let repo = match ferris_idea_vcs::Repo::discover(&self.root) {
             Ok(r) => r,
             Err(e) => {
                 self.status = Some(e.to_string());
@@ -3508,7 +3614,7 @@ impl WorkbenchView {
         let new: String = open
             .or_else(|| std::fs::read_to_string(&file).ok())
             .unwrap_or_default();
-        let rows = idecraft_vcs::side_by_side(&old, &new);
+        let rows = ferris_idea_vcs::side_by_side(&old, &new);
         let unified = self.diff_unified;
         let view = cx.new(|cx| {
             DiffView::new(path.to_owned(), rows, cx)
@@ -3569,7 +3675,7 @@ impl WorkbenchView {
         cx.notify();
     }
 
-    /// Reads `.idecraft/run.toml` again; the selection stays if the configuration still exists,
+    /// Reads `.ferris-idea/run.toml` again; the selection stays if the configuration still exists,
     /// else the first one is selected (SPEC-0087 behaviour 1).
     fn reload_run_configs(&mut self) {
         // A remote project's configurations are the host's (SPEC-0318 v2 detail 3).
@@ -3594,7 +3700,7 @@ impl WorkbenchView {
                 .ok()
                 .map(|r| r.to_string_lossy().replace('\\', "/"))
         });
-        let types = idecraft_plugins::run_types(
+        let types = ferris_idea_plugins::run_types(
             &self.plugins,
             self.plugins_dir.as_deref(),
             &self.root,
@@ -3603,7 +3709,7 @@ impl WorkbenchView {
         let allowances = self
             .plugin_run_file
             .as_deref()
-            .map(|f| idecraft_plugins::load_allowances(f, &self.root))
+            .map(|f| ferris_idea_plugins::load_allowances(f, &self.root))
             .unwrap_or_default();
         self.run_plugin.clear();
         for (t, entry) in types
@@ -3642,7 +3748,7 @@ impl WorkbenchView {
         if self.run_configs.configs.is_empty() {
             return Some(format!(
                 "No run configurations: add [[run]] entries to {}",
-                idecraft_core::RUN_FILE
+                ferris_idea_core::RUN_FILE
             ));
         }
         None
@@ -3709,7 +3815,7 @@ impl WorkbenchView {
                         .iter()
                         .find(|c| &c.name == name)
                         .cloned();
-                    match config.map(|c| idecraft_core::rerun_failed(&c, report)) {
+                    match config.map(|c| ferris_idea_core::rerun_failed(&c, report)) {
                         Some(Ok(again)) => this.run_temporary_config(again, window, cx),
                         Some(Err(why)) => {
                             this.status = Some(crate::run_model::cannot_start(name, &why));
@@ -3783,7 +3889,7 @@ impl WorkbenchView {
         } else {
             self.run_configs.problems.clone()
         };
-        idecraft_core::start_blocker(&self.root, c, &problems)
+        ferris_idea_core::start_blocker(&self.root, c, &problems)
     }
 
     /// Why each configuration cannot start, for the warning signs of the list (v6 behaviour 14).
@@ -3842,10 +3948,10 @@ impl WorkbenchView {
                 .configs
                 .iter()
                 .find(|c| c.name == name)
-                .map(|c| idecraft_core::second_start(c, running));
+                .map(|c| ferris_idea_core::second_start(c, running));
             match rule {
-                Some(idecraft_core::SecondStart::Ask) => {
-                    let (message, detail, answers) = idecraft_core::second_start_question(name);
+                Some(ferris_idea_core::SecondStart::Ask) => {
+                    let (message, detail, answers) = ferris_idea_core::second_start_question(name);
                     self.drawn_question = Some((
                         crate::dialogs::DrawnQuestion {
                             message,
@@ -3860,7 +3966,7 @@ impl WorkbenchView {
                     cx.notify();
                     return;
                 }
-                Some(idecraft_core::SecondStart::NewInstance) => how = RunStart::NewInstance,
+                Some(ferris_idea_core::SecondStart::NewInstance) => how = RunStart::NewInstance,
                 _ => {}
             }
         }
@@ -3875,7 +3981,7 @@ impl WorkbenchView {
         }
         if self.remote_project.is_some() {
             self.remote_start_run(
-                idecraft_remote::RunTarget::Name(name.to_owned()),
+                ferris_idea_remote::RunTarget::Name(name.to_owned()),
                 window,
                 cx,
             );
@@ -3957,7 +4063,7 @@ impl WorkbenchView {
             ConfirmChoice::RunOnce => self.start_run_named(&entry.config_name, window, cx),
             ConfirmChoice::AlwaysAllow => {
                 let stored = match self.plugin_run_file.as_deref() {
-                    Some(file) => idecraft_plugins::allow(file, &self.root, &entry.allowance),
+                    Some(file) => ferris_idea_plugins::allow(file, &self.root, &entry.allowance),
                     None => Err("no settings folder".into()),
                 };
                 if let Some(e) = self
@@ -3989,9 +4095,13 @@ impl WorkbenchView {
         };
         let a = &entry.allowance;
         let result = match self.plugin_run_file.as_deref() {
-            Some(file) => {
-                idecraft_plugins::revoke(file, &self.root, &a.plugin, Some(&a.kind), Some(&a.name))
-            }
+            Some(file) => ferris_idea_plugins::revoke(
+                file,
+                &self.root,
+                &a.plugin,
+                Some(&a.kind),
+                Some(&a.name),
+            ),
             None => Ok(0),
         };
         self.status = Some(match result {
@@ -4023,33 +4133,33 @@ impl WorkbenchView {
         let text = editor.read(cx).state.buffer.text();
         // Inside a test method only that method runs (SPEC-0122 behaviour 1).
         if !debug
-            && let Some(lang) = idecraft_languages::jvm::Jvm::of(&rel)
+            && let Some(lang) = ferris_idea_languages::jvm::Jvm::of(&rel)
             && let Some((line, _)) = self.caret_position(cx)
             && let Some(marker) =
-                idecraft_languages::jvm::test_method_at(lang, &text, line.saturating_sub(1))
+                ferris_idea_languages::jvm::test_method_at(lang, &text, line.saturating_sub(1))
             && let Some(method) = marker.method.as_deref()
             && let Some(config) =
-                idecraft_core::test_method_config(&self.project_model(), &rel, &text, method)
+                ferris_idea_core::test_method_config(&self.project_model(), &rel, &text, method)
         {
             self.run_temporary_config(config, window, cx);
             return true;
         }
-        let model = idecraft_core::Workspace::open(&self.root)
+        let model = ferris_idea_core::Workspace::open(&self.root)
             .ok()
             .and_then(|w| w.files().ok())
-            .map(|files| idecraft_core::read_project(&self.root, &files))
+            .map(|files| ferris_idea_core::read_project(&self.root, &files))
             .unwrap_or_default();
         // Inside a test or suite of Vitest or Jest only that one runs (SPEC-0045 v4 behaviour 12).
         if !debug
             && let Some((line, _)) = self.caret_position(cx)
             && let Some(marker) =
-                idecraft_languages::js_tests::marker_at(&rel, &text, line.saturating_sub(1))
-            && let Some(config) = idecraft_core::js_test_config(
+                ferris_idea_languages::js_tests::marker_at(&rel, &text, line.saturating_sub(1))
+            && let Some(config) = ferris_idea_core::js_test_config(
                 &model,
                 &rel,
                 &text,
                 &marker.class,
-                marker.kind == idecraft_languages::jvm::MarkerKind::TestClass,
+                marker.kind == ferris_idea_languages::jvm::MarkerKind::TestClass,
             )
         {
             self.run_temporary_config(config, window, cx);
@@ -4060,8 +4170,8 @@ impl WorkbenchView {
         if !debug
             && let Some((line, _)) = self.caret_position(cx)
             && let Some(marker) =
-                idecraft_languages::test_markers::marker_at(&rel, &text, line.saturating_sub(1))
-            && let Some(config) = idecraft_core::single_test_config(
+                ferris_idea_languages::test_markers::marker_at(&rel, &text, line.saturating_sub(1))
+            && let Some(config) = ferris_idea_core::single_test_config(
                 &model,
                 &rel,
                 &text,
@@ -4073,8 +4183,8 @@ impl WorkbenchView {
             return true;
         }
         // An HTML page opens in the browser; Debug opens it in Chrome (SPEC-0133 behaviour 3).
-        let page =
-            (rel.ends_with(".html") || rel.ends_with(".htm")).then(|| idecraft_core::RunConfig {
+        let page = (rel.ends_with(".html") || rel.ends_with(".htm")).then(|| {
+            ferris_idea_core::RunConfig {
                 name: path
                     .file_name()
                     .map(|n| n.to_string_lossy().into_owned())
@@ -4085,7 +4195,7 @@ impl WorkbenchView {
                     .map(|p| p.to_string_lossy().into_owned())
                     .filter(|p| !p.is_empty()),
                 env: Default::default(),
-                kind: idecraft_core::RunKind::Run,
+                kind: ferris_idea_core::RunKind::Run,
                 report: None,
                 report_file: None,
                 before: Vec::new(),
@@ -4095,8 +4205,11 @@ impl WorkbenchView {
                 allow_multiple: false,
                 before_launch: Vec::new(),
                 verbatim: false,
-            });
-        let Some(config) = page.or_else(|| idecraft_core::context_config(&model, &rel, &text))
+                http: None,
+            }
+        });
+        let Some(config) =
+            page.or_else(|| ferris_idea_core::context_config_in(&self.root, &model, &rel, &text))
         else {
             self.status = Some("Nothing to run in this file".into());
             cx.notify();
@@ -4143,7 +4256,7 @@ impl WorkbenchView {
         let text = editor.read(cx).state.buffer.text();
         let runnable = rel.ends_with(".html")
             || rel.ends_with(".htm")
-            || idecraft_core::context_config(&model, &rel, &text).is_some();
+            || ferris_idea_core::context_config_in(&self.root, &model, &rel, &text).is_some();
         *cache = Some(RunFile {
             path,
             revision,
@@ -4266,11 +4379,12 @@ impl WorkbenchView {
         cx.notify();
     }
 
-    /// Runs IDECraft's inspections over every project file in the background and lists the results
+    /// Runs Ferris IDEA's inspections over every project file in the background and lists the results
     /// in the Problems tool window's Inspection tab (`InspectCode`, SPEC-0098 behaviour 4).
     pub fn inspect_code(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         // First the scope dialog (SPEC-0098 v3 behaviour 7), for every inspection.
         self.inspect_only = None;
+        self.copyright_dialog = false;
         let choices = crate::problems_model::InspectScope::choices(self.active_path().as_deref());
         self.inspect_dialog = Some((choices, 0));
         window.focus(&self.inspect_dialog_focus);
@@ -4324,6 +4438,11 @@ impl WorkbenchView {
             .get(at)
             .cloned()
             .unwrap_or(crate::problems_model::InspectScope::Project);
+        if std::mem::take(&mut self.copyright_dialog) {
+            self.update_copyright_in(&scope, cx);
+            self.focus_active(window, cx);
+            return;
+        }
         self.run_inspection(scope, window, cx);
     }
 
@@ -4389,34 +4508,37 @@ impl WorkbenchView {
                         .text_color(c(p.ui_text))
                         .child(div().font_weight(gpui::FontWeight::SEMIBOLD).pb_1().child(
                             match self.inspect_only {
+                                _ if self.copyright_dialog => "Update Copyright: scope".to_owned(),
                                 Some(id) => format!(
                                     "Run '{}' on: scope",
-                                    idecraft_languages::inspections::name_of(id)
+                                    ferris_idea_languages::inspections::name_of(id)
                                 ),
                                 None => "Inspect Code: scope".to_owned(),
                             },
                         ))
                         .children(rows)
-                        .child(
-                            div()
-                                .pt_2()
-                                .flex()
-                                .gap_2()
-                                .items_center()
-                                .child(div().text_color(c(p.ui_muted)).child("Profile:"))
-                                .child("Project Default")
-                                .child(
-                                    div()
-                                        .id("inspect-dialog-profile")
-                                        .text_color(c(p.link))
-                                        .cursor_pointer()
-                                        .child("Configure…")
-                                        .on_click(cx.listener(|this, _, window, cx| {
-                                            this.inspect_dialog = None;
-                                            this.open_inspection_settings(None, window, cx);
-                                        })),
-                                ),
-                        )
+                        .when(!self.copyright_dialog, |d| {
+                            d.child(
+                                div()
+                                    .pt_2()
+                                    .flex()
+                                    .gap_2()
+                                    .items_center()
+                                    .child(div().text_color(c(p.ui_muted)).child("Profile:"))
+                                    .child("Project Default")
+                                    .child(
+                                        div()
+                                            .id("inspect-dialog-profile")
+                                            .text_color(c(p.link))
+                                            .cursor_pointer()
+                                            .child("Configure…")
+                                            .on_click(cx.listener(|this, _, window, cx| {
+                                                this.inspect_dialog = None;
+                                                this.open_inspection_settings(None, window, cx);
+                                            })),
+                                    ),
+                            )
+                        })
                         .child(
                             div()
                                 .pt_2()
@@ -4430,11 +4552,22 @@ impl WorkbenchView {
                                         cx.notify();
                                     }),
                                 ))
-                                .child(button("inspect-dialog-analyze", "Analyze", true).on_click(
-                                    cx.listener(|this, _, window, cx| {
-                                        this.confirm_inspect_dialog(window, cx)
-                                    }),
-                                )),
+                                .child(
+                                    button(
+                                        "inspect-dialog-analyze",
+                                        if self.copyright_dialog {
+                                            "Run"
+                                        } else {
+                                            "Analyze"
+                                        },
+                                        true,
+                                    )
+                                    .on_click(cx.listener(
+                                        |this, _, window, cx| {
+                                            this.confirm_inspect_dialog(window, cx)
+                                        },
+                                    )),
+                                ),
                         ),
                 ),
         )
@@ -4465,11 +4598,14 @@ impl WorkbenchView {
         let task = cx.background_executor().spawn(async move {
             // The whole project: its own sources. The current file or its folder: whatever it is,
             // because it was named (SPEC-0098 v8 behaviour 16).
-            let chosen = idecraft_languages::inspections::inspection_files(&root, scope.place());
+            let chosen = ferris_idea_languages::inspections::inspection_files(&root, scope.place());
             let note = chosen.not_inspected;
             // One inspection only after "Run inspection on…" (SPEC-0098 v4 behaviour 10).
-            let placed =
-                idecraft_languages::inspections::inspect_project_only(&root, &chosen.files, only);
+            let placed = ferris_idea_languages::inspections::inspect_project_only(
+                &root,
+                &chosen.files,
+                only,
+            );
             // Inspections with a fix get the Fix all button (SPEC-0098 v3 behaviour 8).
             let fixable: std::collections::BTreeSet<&'static str> = placed
                 .iter()
@@ -4484,14 +4620,14 @@ impl WorkbenchView {
                     column: f.column,
                     offset: f.offset,
                     severity: match f.level {
-                        idecraft_languages::inspections::Level::Error => {
+                        ferris_idea_languages::inspections::Level::Error => {
                             crate::diagnostics_model::Severity::Error
                         }
-                        idecraft_languages::inspections::Level::Warning => {
+                        ferris_idea_languages::inspections::Level::Warning => {
                             crate::diagnostics_model::Severity::Warning
                         }
-                        idecraft_languages::inspections::Level::Weak
-                        | idecraft_languages::inspections::Level::Info => {
+                        ferris_idea_languages::inspections::Level::Weak
+                        | ferris_idea_languages::inspections::Level::Info => {
                             crate::diagnostics_model::Severity::Weak
                         }
                     },
@@ -4600,7 +4736,7 @@ impl WorkbenchView {
         &mut self,
         path: &Path,
         text: &str,
-        edits: &[idecraft_languages::jvm::TextEdit],
+        edits: &[ferris_idea_languages::jvm::TextEdit],
         cx: &mut Context<Self>,
     ) -> bool {
         if edits.is_empty() {
@@ -4643,15 +4779,15 @@ impl WorkbenchView {
         };
         let at = byte_of(&text, self.char_offset_of(&text, found));
         let edits = if suppress {
-            idecraft_languages::inspections::suppress(
+            ferris_idea_languages::inspections::suppress(
                 &text,
                 at,
                 id,
-                idecraft_languages::inspections::SuppressScope::Statement,
+                ferris_idea_languages::inspections::SuppressScope::Statement,
             )
             .unwrap_or_default()
         } else {
-            idecraft_languages::inspections::findings_at(&found.path, &text, at)
+            ferris_idea_languages::inspections::findings_at(&found.path, &text, at)
                 .into_iter()
                 .filter(|f| f.id == id)
                 .find_map(|f| f.fix)
@@ -4686,7 +4822,7 @@ impl WorkbenchView {
             let Some(text) = self.file_text(&path, cx) else {
                 continue;
             };
-            let edits = idecraft_languages::inspections::fix_all(&path, &text, id);
+            let edits = ferris_idea_languages::inspections::fix_all(&path, &text, id);
             if self.apply_text_edits(&path, &text, &edits, cx) {
                 fixed += 1;
                 self.inspection
@@ -4884,8 +5020,18 @@ impl WorkbenchView {
         // The scopes as content tabs of the shared header (SPEC-0061 v6 behaviour 23).
         let tab = |id: &'static str, label: String, scope: Scope, cx: &mut Context<Self>| {
             let on = self.problems_scope == scope;
+            // Declared for the UI driver: switching the tab shows other problems, nothing else
+            // (SPEC-0319 v7 behaviour 56).
+            let node = crate::semantics::Semantics::new(crate::semantics::Role::Tab)
+                .name(label.clone())
+                .selected(on)
+                .test_id(id)
+                .action(crate::semantics::AxAction::Click)
+                .effects(&[crate::semantics::Effect::None]);
             crate::metrics::header_tab(id, on, focused)
+                .relative()
                 .child(label)
+                .semantics(node)
                 .on_click(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
                     this.set_problems_scope(scope, cx)
                 }))
@@ -4927,7 +5073,23 @@ impl WorkbenchView {
                 .when(on, |d| d.bg(c(p.tree_selection)))
                 .hover(|s| s.bg(c(p.tree_hover)))
                 .text_color(c(p.ui_muted))
+                .relative()
                 .child(glyph)
+                .semantics(
+                    crate::semantics::Semantics::new(crate::semantics::Role::Button)
+                        .name(match id {
+                            "problems-group" => "Group by Inspection",
+                            "problems-sort-name" => "Sort by Name",
+                            "problems-show-warnings" => "Show Warnings",
+                            "problems-show-weak" => "Show Weak Warnings",
+                            "problems-preview" => "Open Editor Preview",
+                            _ => "Show Quick Fixes",
+                        })
+                        .checked(on)
+                        .test_id(id)
+                        .action(crate::semantics::AxAction::Click)
+                        .effects(&[crate::semantics::Effect::None]),
+                )
                 .on_click(cx.listener(move |this, _: &gpui::ClickEvent, window, cx| {
                     let mut o = this.problems_options;
                     match id {
@@ -5020,9 +5182,19 @@ impl WorkbenchView {
                                 d.child(
                                     div()
                                         .id("problems-run-inspect")
+                                        .relative()
                                         .text_color(c(p.link))
                                         .cursor_pointer()
                                         .child("Inspect Code…")
+                                        .semantics(
+                                            crate::semantics::Semantics::new(
+                                                crate::semantics::Role::Link,
+                                            )
+                                            .name("Inspect Code…")
+                                            .test_id("problems-run-inspect")
+                                            .action(crate::semantics::AxAction::Click)
+                                            .effects(&[crate::semantics::Effect::None]),
+                                        )
                                         .on_click(cx.listener(|this, _, window, cx| {
                                             this.inspect_code(window, cx)
                                         })),
@@ -5048,7 +5220,7 @@ impl WorkbenchView {
                                 .map(|d| d.display().to_string())
                                 .unwrap_or_default();
                             base(("problem", i))
-                                .child(icon(idecraft_ui::icons::file_icon(&name)))
+                                .child(icon(ferris_idea_ui::icons::file_icon(&name)))
                                 .child(div().flex_none().child(name))
                                 .child(div().flex_none().text_color(c(p.ui_dim)).child(dir))
                                 .child(div().text_color(c(p.ui_muted)).child(
@@ -5066,6 +5238,15 @@ impl WorkbenchView {
                             .child(div().text_color(c(p.ui_dim)).child(format!("{count}")))
                             .into_any_element(),
                         Row::Problem(q) => base(("problem", i))
+                            .relative()
+                            .semantics(
+                                crate::semantics::Semantics::new(crate::semantics::Role::ListItem)
+                                    .name(format!("{} :{}", q.message, q.line + 1))
+                                    .selected(on)
+                                    .test_id(format!("problem-{i}"))
+                                    .action(crate::semantics::AxAction::Click)
+                                    .effects(&[crate::semantics::Effect::None]),
+                            )
                             .pl(px(28.))
                             .when(on, |d| d.bg(c(p.tree_selection)))
                             .when(!on, |d| d.hover(|s| s.bg(c(p.tree_hover))))
@@ -5129,6 +5310,14 @@ impl WorkbenchView {
                 let attach = (crate::appearance::ide_settings(cx).ai.enabled && !list.is_empty())
                     .then(|| {
                         crate::metrics::button("problems-ai-attach", "Attach to Chat", false)
+                            .relative()
+                            .semantics(
+                                crate::semantics::Semantics::new(crate::semantics::Role::Button)
+                                    .name("Attach to Chat")
+                                    .test_id("problems-ai-attach")
+                                    .action(crate::semantics::AxAction::Click)
+                                    .effects(&[crate::semantics::Effect::None]),
+                            )
                             .tip(declared!(PROBLEMS_TOOLBAR, "problems-ai-attach"))
                             .on_click(cx.listener(|this, _: &gpui::ClickEvent, window, cx| {
                                 this.ai_attach_problems(window, cx)
@@ -5307,7 +5496,7 @@ impl WorkbenchView {
                 } else {
                     e.state
                         .buffer
-                        .position_to_offset(idecraft_editor::Position::new(line, 0))
+                        .position_to_offset(ferris_idea_editor::Position::new(line, 0))
                         .unwrap_or(q.offset)
                 };
                 e.select_range(at..at, cx);
@@ -5391,7 +5580,7 @@ impl WorkbenchView {
                             .map(|n| n.to_string_lossy().into_owned())
                             .unwrap_or_default();
                         base.child(chevron(open, key, cx))
-                            .child(icon(idecraft_ui::icons::file_icon(&name)))
+                            .child(icon(ferris_idea_ui::icons::file_icon(&name)))
                             .child(name)
                             .child(div().text_color(c(p.ui_dim)).child(format!("{count}")))
                     }
@@ -5445,7 +5634,7 @@ impl WorkbenchView {
                     })
                     .children(
                         crate::doc_model::description_blocks(
-                            idecraft_languages::inspections::description(id).unwrap_or_default(),
+                            ferris_idea_languages::inspections::description(id).unwrap_or_default(),
                         )
                         .into_iter()
                         .map(|b| match b {
@@ -5467,7 +5656,7 @@ impl WorkbenchView {
                 let text = self.file_text(&q.path, cx).unwrap_or_default();
                 let fix = q.inspection.and_then(|id| {
                     let at = byte_of(&text, self.char_offset_of(&text, &q));
-                    idecraft_languages::inspections::findings_at(&q.path, &text, at)
+                    ferris_idea_languages::inspections::findings_at(&q.path, &text, at)
                         .into_iter()
                         .filter(|f| f.id == id)
                         .find_map(|f| f.fix)
@@ -5614,7 +5803,7 @@ impl WorkbenchView {
         if self.remote_project.is_some() {
             match self.run_selected.clone() {
                 Some(name) => {
-                    self.remote_debug(idecraft_remote::RunTarget::Name(name), window, cx);
+                    self.remote_debug(ferris_idea_remote::RunTarget::Name(name), window, cx);
                 }
                 None => {
                     self.remote_run_context(true, window, cx);
@@ -5650,7 +5839,7 @@ impl WorkbenchView {
         let cwd = match config.cwd.as_deref().filter(|_| config.verbatim) {
             // A plugin's suggestion: only a folder of the project that no symbolic link leads to
             // (SPEC-0276 v3 behaviour 3).
-            Some(d) => match idecraft_core::folder_below(&self.root, Path::new(d)) {
+            Some(d) => match ferris_idea_core::folder_below(&self.root, Path::new(d)) {
                 Ok(folder) => folder,
                 Err(why) => {
                     self.status = Some(format!("{}: the folder `{d}` {why}", config.name));
@@ -5663,9 +5852,9 @@ impl WorkbenchView {
         // A configuration with a page is debugged in Chrome (SPEC-0133 behaviour 2).
         let planned = match &config.url {
             Some(url) => {
-                if idecraft_debugger::chrome().is_none() {
+                if ferris_idea_debugger::chrome().is_none() {
                     self.status = Some(
-                        "Cannot debug in a browser: Chrome or Chromium is not installed (or set IDECRAFT_CHROME)".into(),
+                        "Cannot debug in a browser: Chrome or Chromium is not installed (or set FERRIS_IDEA_CHROME)".into(),
                     );
                     cx.notify();
                     return;
@@ -5702,6 +5891,12 @@ impl WorkbenchView {
         // For Kotlin the plan's arguments are the build command (SPEC-0132 behaviour 2).
         let (args, prepare) = if kind == crate::debug_model::Kind::Kotlin {
             (Vec::new(), args.join(" "))
+        } else if let Some(run) =
+            ferris_idea_languages::debug_plan::cargo_run(&config.command, &cwd)
+        {
+            // `cargo run` builds first, then its program runs under lldb-dap (SPEC-0097 v3
+            // behaviour 9).
+            (args, run.build)
         } else {
             (args, String::new())
         };
@@ -5719,7 +5914,7 @@ impl WorkbenchView {
             attach: None,
             // One profile per project, outside it (SPEC-0133 v3 behaviour 2).
             browser: (kind == crate::debug_model::Kind::Browser)
-                .then(|| idecraft_debugger::BrowserProfile::for_project(&self.root))
+                .then(|| ferris_idea_debugger::BrowserProfile::for_project(&self.root))
                 .flatten(),
             remote: None,
         };
@@ -5733,7 +5928,7 @@ impl WorkbenchView {
     /// (`SPEC-0194` v3 behaviour 8).
     pub(super) fn all_source_breakpoints(
         &self,
-    ) -> std::collections::BTreeMap<PathBuf, Vec<idecraft_debugger::SourceBreakpoint>> {
+    ) -> std::collections::BTreeMap<PathBuf, Vec<ferris_idea_debugger::SourceBreakpoint>> {
         let all = self
             .breakpoints
             .iter()
@@ -5748,10 +5943,10 @@ impl WorkbenchView {
     }
 
     /// The exception and method breakpoints a session gets; none while muted.
-    pub(super) fn special_breakpoints(&self) -> idecraft_debugger::SpecialBreakpoints {
+    pub(super) fn special_breakpoints(&self) -> ferris_idea_debugger::SpecialBreakpoints {
         crate::debug_model::unless_muted(
             self.breakpoints_muted,
-            idecraft_debugger::saved::load_special_breakpoints(&self.root),
+            ferris_idea_debugger::saved::load_special_breakpoints(&self.root),
         )
     }
 
@@ -5814,7 +6009,7 @@ impl WorkbenchView {
             self.remote_open_attach(window, cx);
             return;
         }
-        let processes = idecraft_debugger::processes();
+        let processes = ferris_idea_debugger::processes();
         let view = cx.new(|cx| crate::AttachView::new(processes, cx));
         self.show_attach_dialog(view, window, cx);
     }
@@ -5865,18 +6060,18 @@ impl WorkbenchView {
     /// session in the Debug window as `label` (`SPEC-0147` behaviour 3).
     pub fn attach(
         &mut self,
-        runtime: idecraft_debugger::Runtime,
-        target: idecraft_debugger::Target,
+        runtime: ferris_idea_debugger::Runtime,
+        target: ferris_idea_debugger::Target,
         label: &str,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         if self.remote_project.is_some() {
             let attach = match &target {
-                idecraft_debugger::Target::Pid(pid) => {
+                ferris_idea_debugger::Target::Pid(pid) => {
                     serde_json::json!({ "kind": "pid", "pid": pid })
                 }
-                idecraft_debugger::Target::Address { host, port } => {
+                ferris_idea_debugger::Target::Address { host, port } => {
                     serde_json::json!({ "kind": "address", "host": host, "port": port })
                 }
             };
@@ -5888,8 +6083,8 @@ impl WorkbenchView {
         // installed here.
         let listening = matches!(
             runtime,
-            idecraft_debugger::Runtime::Python | idecraft_debugger::Runtime::Go
-        ) && matches!(target, idecraft_debugger::Target::Address { .. });
+            ferris_idea_debugger::Runtime::Python | ferris_idea_debugger::Runtime::Go
+        ) && matches!(target, ferris_idea_debugger::Target::Address { .. });
         let adapter = if listening {
             Ok(Vec::new())
         } else {
@@ -6002,14 +6197,14 @@ impl WorkbenchView {
                 // A field watchpoint from the variables' menu (SPEC-0146 v3).
                 DebugViewEvent::AddFieldWatch(id) => {
                     let mut special =
-                        idecraft_debugger::saved::load_special_breakpoints(&this.root);
+                        ferris_idea_debugger::saved::load_special_breakpoints(&this.root);
                     if !special.fields.iter().any(|f| f.field == *id) {
-                        special.fields.push(idecraft_debugger::FieldWatchpoint {
+                        special.fields.push(ferris_idea_debugger::FieldWatchpoint {
                             field: id.clone(),
                             ..Default::default()
                         });
                     }
-                    idecraft_debugger::saved::save_special_breakpoints(&this.root, &special);
+                    ferris_idea_debugger::saved::save_special_breakpoints(&this.root, &special);
                     let sent = this.special_breakpoints();
                     this.debug_command(crate::debug_model::Command::Special(sent), cx);
                     this.status = Some(format!("Field watchpoint on {id}"));
@@ -6152,7 +6347,7 @@ impl WorkbenchView {
             && path.extension().is_some_and(|e| e == "java")
             && !editor.read(cx).breakpoints().contains(&line)
         {
-            let mut special = idecraft_debugger::saved::load_special_breakpoints(&self.root);
+            let mut special = ferris_idea_debugger::saved::load_special_breakpoints(&self.root);
             if let Some(i) = special.method_at(&path, line) {
                 special.functions.remove(i);
                 self.special_changed(&special, cx);
@@ -6160,15 +6355,15 @@ impl WorkbenchView {
             }
             let text = editor.read(cx).state.buffer.text();
             if let Some(name) =
-                idecraft_languages::java_structure::method_named_on_line(&text, line)
+                ferris_idea_languages::java_structure::method_named_on_line(&text, line)
             {
                 special
                     .functions
-                    .push(idecraft_debugger::FunctionBreakpoint {
+                    .push(ferris_idea_debugger::FunctionBreakpoint {
                         name,
                         file: Some(path),
                         line: Some(line),
-                        ..idecraft_debugger::FunctionBreakpoint::default()
+                        ..ferris_idea_debugger::FunctionBreakpoint::default()
                     });
                 self.special_changed(&special, cx);
                 return;
@@ -6181,10 +6376,10 @@ impl WorkbenchView {
     /// shows the method breakpoints in the gutters (`SPEC-0146`).
     fn special_changed(
         &mut self,
-        special: &idecraft_debugger::SpecialBreakpoints,
+        special: &ferris_idea_debugger::SpecialBreakpoints,
         cx: &mut Context<Self>,
     ) {
-        idecraft_debugger::saved::save_special_breakpoints(&self.root, special);
+        ferris_idea_debugger::saved::save_special_breakpoints(&self.root, special);
         let sent = self.special_breakpoints();
         self.debug_command(crate::debug_model::Command::Special(sent), cx);
         self.show_method_marks(special, cx);
@@ -6192,7 +6387,7 @@ impl WorkbenchView {
 
     /// The method breakpoints of `path`: header line (0-based) and whether each is on.
     fn method_marks(
-        special: &idecraft_debugger::SpecialBreakpoints,
+        special: &ferris_idea_debugger::SpecialBreakpoints,
         path: &Path,
     ) -> BTreeMap<usize, bool> {
         special
@@ -6206,7 +6401,7 @@ impl WorkbenchView {
     /// Shows the method breakpoints in every open editor (`SPEC-0146` v6 behaviour 12).
     fn show_method_marks(
         &mut self,
-        special: &idecraft_debugger::SpecialBreakpoints,
+        special: &ferris_idea_debugger::SpecialBreakpoints,
         cx: &mut Context<Self>,
     ) {
         for (path, e) in &self.editors {
@@ -6326,7 +6521,7 @@ impl WorkbenchView {
             Some((here.path, line))
         });
         let list = self.breakpoint_list();
-        let special = idecraft_debugger::saved::load_special_breakpoints(&self.root);
+        let special = ferris_idea_debugger::saved::load_special_breakpoints(&self.root);
         let view =
             cx.new(|cx| crate::breakpoint_dialog::BreakpointDialog::new(list, special, at, cx));
         self._breakpoint_dialog_events = Some(cx.subscribe_in(
@@ -6351,7 +6546,7 @@ impl WorkbenchView {
                                 let at = e
                                     .state
                                     .buffer
-                                    .position_to_offset(idecraft_editor::Position::new(line, 0));
+                                    .position_to_offset(ferris_idea_editor::Position::new(line, 0));
                                 if let Ok(at) = at {
                                     e.select_range(at..at, cx);
                                 }
@@ -6401,7 +6596,7 @@ impl WorkbenchView {
                     .unwrap_or_default();
                 return Some(Target::Line(path.clone(), *line, props));
             }
-            let special = idecraft_debugger::saved::load_special_breakpoints(&self.root);
+            let special = ferris_idea_debugger::saved::load_special_breakpoints(&self.root);
             let i = special.method_at(path, *line)?;
             Some(Target::Method(i, special.functions[i].clone()))
         });
@@ -6421,7 +6616,7 @@ impl WorkbenchView {
                     }
                     E::SetMethod(i, f) => {
                         let mut special =
-                            idecraft_debugger::saved::load_special_breakpoints(&this.root);
+                            ferris_idea_debugger::saved::load_special_breakpoints(&this.root);
                         if let Some(old) = special.functions.get_mut(*i) {
                             *old = f.clone();
                             this.special_changed(&special, cx);
@@ -6457,7 +6652,7 @@ impl WorkbenchView {
         let offset = e
             .state
             .buffer
-            .position_to_offset(idecraft_editor::Position::new(line, 0))
+            .position_to_offset(ferris_idea_editor::Position::new(line, 0))
             .ok()?;
         let below = e.point_below(offset)?;
         Some(gpui::point(e.painted_bounds().origin.x, below.y))
@@ -6476,12 +6671,12 @@ impl WorkbenchView {
         let target_profile = target.profile.clone();
         let sequence = matches!(
             target.what,
-            idecraft_database::Refactoring::RenameSequence(_)
+            ferris_idea_database::Refactoring::RenameSequence(_)
         );
-        let own = idecraft_core::OwnSources::new(&self.root);
+        let own = ferris_idea_core::OwnSources::new(&self.root);
         // The connection each file is bound to (`SPEC-0164` v4 behaviour 15).
-        let profiles = idecraft_database::load_profiles(&self.root).unwrap_or_default();
-        let files = idecraft_core::Workspace::open(&self.root)
+        let profiles = ferris_idea_database::load_profiles(&self.root).unwrap_or_default();
+        let files = ferris_idea_core::Workspace::open(&self.root)
             .and_then(|w| w.files())
             .unwrap_or_default()
             .into_iter()
@@ -6492,7 +6687,7 @@ impl WorkbenchView {
                     Some(e) => e.read(cx).state.buffer.text(),
                     None => std::fs::read_to_string(&path).ok()?,
                 };
-                let bound = idecraft_database::bound_connection(&self.root, &path, &profiles)
+                let bound = ferris_idea_database::bound_connection(&self.root, &path, &profiles)
                     .and_then(|id| {
                         let p = profiles.iter().find(|p| p.id == id)?;
                         Some((id, p.name.clone(), p.dialect))
@@ -6531,18 +6726,18 @@ impl WorkbenchView {
         // background; SQLite has none. For a sequence also the schema it lives in, so its name in
         // `nextval('…')` can change (SPEC-0164 v5 behaviour 8).
         let profile = target_profile;
-        if profile.dialect != idecraft_database::Dialect::Sqlite {
+        if profile.dialect != ferris_idea_database::Dialect::Sqlite {
             let task = cx.background_executor().spawn(async move {
                 let mut p = profile;
                 p.read_only = true;
                 connect(&p).map(|(rt, session)| {
                     let home = sequence
                         .then(|| {
-                            rt.block_on(idecraft_database::current_schema(&session))
+                            rt.block_on(ferris_idea_database::current_schema(&session))
                                 .ok()
                         })
                         .flatten();
-                    let constraints = rt.block_on(idecraft_database::constraint_names(&session));
+                    let constraints = rt.block_on(ferris_idea_database::constraint_names(&session));
                     (constraints.ok(), home)
                 })
             });
@@ -6565,7 +6760,7 @@ impl WorkbenchView {
     /// Opens the data editor of `table` in the Services tool window (`SPEC-0190` behaviour 2).
     pub fn open_table_data(
         &mut self,
-        profile: idecraft_database::ConnectionProfile,
+        profile: ferris_idea_database::ConnectionProfile,
         table: &str,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -6591,8 +6786,8 @@ impl WorkbenchView {
         &self,
         path: &Path,
         cx: &gpui::App,
-    ) -> Option<idecraft_languages::properties::Bundle> {
-        idecraft_languages::properties::Bundle::read(path, |p| self.text_of(p, cx))
+    ) -> Option<ferris_idea_languages::properties::Bundle> {
+        ferris_idea_languages::properties::Bundle::read(path, |p| self.text_of(p, cx))
     }
 
     /// Writes `text` into `path`: into its open editor as one undo step (only the changed part),
@@ -6626,16 +6821,55 @@ impl WorkbenchView {
         }
     }
 
+    /// Opens `path`, a file the Project tree opened: in an editor, or — for a resource bundle's
+    /// node — its bundle editor (`SPEC-0212` v3 behaviour 7). True when an editor opened.
+    fn open_tree_path(&mut self, path: &Path, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        if self.tree.kind(self.tree.selected) == crate::project_tree::NodeKind::Bundle {
+            self.open_bundle_editor_for(path, window, cx);
+            return false;
+        }
+        self.open_as_jump(path, window, cx);
+        true
+    }
+
+    /// Opens `path` from the Project tree or Recent Files as a jump: the caret's place in another
+    /// active file is recorded for Back and Forward (`SPEC-0071` v13 behaviour 4a).
+    fn open_as_jump(&mut self, path: &Path, window: &mut Window, cx: &mut Context<Self>) {
+        if crate::nav_model::opening_is_a_jump(self.active_path().as_deref(), path) {
+            self.remember_place(cx);
+        }
+        self.open(path, window, cx);
+    }
+
     /// Opens the resource bundle editor for the active `.properties` file (`SPEC-0212`
-    /// behaviour 1).
+    /// behaviour 1), or for the bundle node selected in the focused Project tree (v3 behaviour 7).
     pub fn open_bundle_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
-        use crate::bundle_editor::{BundleEditor, BundleEditorEvent};
-        let Some(path) = self.active_path() else {
+        let node = self.tree.selected;
+        let from_tree = self.tree_focus.is_focused(window)
+            && self.tree.kind(node) == crate::project_tree::NodeKind::Bundle;
+        let path = if from_tree {
+            Some(self.tree.path(node).to_path_buf())
+        } else {
+            self.active_path()
+        };
+        let Some(path) = path else {
             self.status = Some("Open a .properties file of a resource bundle first".into());
             cx.notify();
             return true;
         };
-        let Some(bundle) = self.read_bundle(&path, cx) else {
+        self.open_bundle_editor_for(&path, window, cx)
+    }
+
+    /// Opens the resource bundle editor for the bundle of the `.properties` file `path`
+    /// (`SPEC-0212` behaviour 1).
+    pub fn open_bundle_editor_for(
+        &mut self,
+        path: &Path,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        use crate::bundle_editor::{BundleEditor, BundleEditorEvent};
+        let Some(bundle) = self.read_bundle(path, cx) else {
             self.status = Some("Not a .properties file of a resource bundle".into());
             cx.notify();
             return true;
@@ -6645,7 +6879,7 @@ impl WorkbenchView {
             &view,
             window,
             move |this, view, event: &BundleEditorEvent, window, cx| {
-                use idecraft_languages::properties::{remove_property, set_property};
+                use ferris_idea_languages::properties::{remove_property, set_property};
                 let files = view.read(cx).bundle().files.clone();
                 let writes: Vec<(PathBuf, String)> = match event {
                     BundleEditorEvent::Close => {
@@ -6768,12 +7002,12 @@ impl WorkbenchView {
     /// then handed to `then` (`None` when it cannot be read).
     fn with_sql_schema(
         &mut self,
-        profile: idecraft_database::ConnectionProfile,
+        profile: ferris_idea_database::ConnectionProfile,
         window: &mut Window,
         cx: &mut Context<Self>,
         then: impl FnOnce(
             &mut Self,
-            Option<Vec<idecraft_database::Table>>,
+            Option<Vec<ferris_idea_database::Table>>,
             &mut Window,
             &mut Context<Self>,
         ) + 'static,
@@ -6839,7 +7073,7 @@ impl WorkbenchView {
                     cx.notify();
                     return;
                 };
-                match idecraft_database::object_at(&text, dialect, &tables, offset) {
+                match ferris_idea_database::object_at(&text, dialect, &tables, offset) {
                     Ok(object) => {
                         if change_type && object.column.is_none() {
                             this.status =
@@ -6853,9 +7087,9 @@ impl WorkbenchView {
                             table: object.table,
                             column: object.column,
                             what: if change_type {
-                                idecraft_database::Refactoring::ChangeType
+                                ferris_idea_database::Refactoring::ChangeType
                             } else {
-                                idecraft_database::Refactoring::Rename
+                                ferris_idea_database::Refactoring::Rename
                             },
                             constraints: Vec::new(),
                             home_schema: None,
@@ -6866,7 +7100,7 @@ impl WorkbenchView {
                     // An index or a routine (SPEC-0164 behaviour 5).
                     Err(reason) => match (
                         change_type,
-                        idecraft_database::named_object_at(&text, dialect, &tables, offset),
+                        ferris_idea_database::named_object_at(&text, dialect, &tables, offset),
                     ) {
                         (false, Some((what, table))) => {
                             let target = crate::database_view::RenameTarget {
@@ -6891,7 +7125,7 @@ impl WorkbenchView {
         );
     }
 
-    /// IDECraft's own context actions of a `.sql` editor: "Expand column list" on a `*` of a select
+    /// Ferris IDEA's own context actions of a `.sql` editor: "Expand column list" on a `*` of a select
     /// list (`SPEC-0152` behaviour 4). `None` while the schema is being read; the actions are shown
     /// again then.
     fn sql_own_fixes(
@@ -6900,21 +7134,22 @@ impl WorkbenchView {
         offset: usize,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Option<Vec<idecraft_languages::inspections::Fix>> {
+    ) -> Option<Vec<ferris_idea_languages::inspections::Fix>> {
         // Inline of a WITH query needs no connection (SPEC-0152 v2 behaviour 6).
         let dialect = self
             .console_connection(cx)
-            .map_or(idecraft_database::Dialect::PostgreSql, |p| p.dialect);
-        let inline: Option<idecraft_languages::inspections::Fix> =
+            .map_or(ferris_idea_database::Dialect::PostgreSql, |p| p.dialect);
+        let inline: Option<ferris_idea_languages::inspections::Fix> =
             crate::sql_editor_model::inline_fix(text, dialect, offset).map(|(title, edits)| {
-                idecraft_languages::inspections::Fix {
+                ferris_idea_languages::inspections::Fix {
                     learn: None,
                     keep: None,
+                    bundle_key: None,
                     action: None,
                     title,
                     edits: edits
                         .into_iter()
-                        .map(|(range, text)| idecraft_languages::jvm::TextEdit { range, text })
+                        .map(|(range, text)| ferris_idea_languages::jvm::TextEdit { range, text })
                         .collect(),
                 }
             });
@@ -6930,29 +7165,31 @@ impl WorkbenchView {
             return None;
         };
         // "Replace with" the closest names first (SPEC-0015 v2 behaviour 9, IMP-0060).
-        let mut fixes: Vec<_> = idecraft_database::inspect(text, profile.dialect, tables)
+        let mut fixes: Vec<_> = ferris_idea_database::inspect(text, profile.dialect, tables)
             .into_iter()
             .filter(|p| p.start <= offset && offset <= p.end)
             .flat_map(|p| p.fixes)
-            .map(|f| idecraft_languages::inspections::Fix {
+            .map(|f| ferris_idea_languages::inspections::Fix {
                 learn: None,
                 keep: None,
+                bundle_key: None,
                 action: None,
                 title: f.label,
-                edits: vec![idecraft_languages::jvm::TextEdit {
+                edits: vec![ferris_idea_languages::jvm::TextEdit {
                     range: f.start..f.end,
                     text: f.replacement,
                 }],
             })
             .collect();
         let fix =
-            idecraft_database::expand_wildcard(text, profile.dialect, tables, offset).map(|e| {
-                idecraft_languages::inspections::Fix {
+            ferris_idea_database::expand_wildcard(text, profile.dialect, tables, offset).map(|e| {
+                ferris_idea_languages::inspections::Fix {
                     learn: None,
                     keep: None,
+                    bundle_key: None,
                     action: None,
                     title: "Expand column list".into(),
-                    edits: vec![idecraft_languages::jvm::TextEdit {
+                    edits: vec![ferris_idea_languages::jvm::TextEdit {
                         range: e.start..e.end,
                         text: e.replacement,
                     }],
@@ -6974,13 +7211,13 @@ impl WorkbenchView {
             .sql_file_connection(path)
             .or_else(|| self.console_connection(cx))
             .map(|p| p.dialect)
-            .or_else(|| idecraft_database::file_dialect(path))
-            .unwrap_or(idecraft_database::Dialect::PostgreSql);
-        match idecraft_database::inline_cte(&text, dialect, byte_of(&text, caret)) {
+            .or_else(|| ferris_idea_database::file_dialect(path))
+            .unwrap_or(ferris_idea_database::Dialect::PostgreSql);
+        match ferris_idea_database::inline_cte(&text, dialect, byte_of(&text, caret)) {
             Ok(Some((name, edits))) => {
                 let edits: Vec<_> = edits
                     .into_iter()
-                    .map(|e| idecraft_languages::jvm::TextEdit {
+                    .map(|e| ferris_idea_languages::jvm::TextEdit {
                         range: e.start..e.end,
                         text: e.replacement,
                     })
@@ -7019,9 +7256,9 @@ impl WorkbenchView {
         cx.spawn_in(window, async move |this, cx| {
             let ran = cx
                 .background_spawn(async move {
-                    let credentials = idecraft_database::resolve_credentials(
+                    let credentials = ferris_idea_database::resolve_credentials(
                         &profile,
-                        &idecraft_database::SystemStore,
+                        &ferris_idea_database::SystemStore,
                     )
                     .map_err(|e| e.to_string())?;
                     let rt = tokio::runtime::Builder::new_current_thread()
@@ -7029,14 +7266,14 @@ impl WorkbenchView {
                         .build()
                         .map_err(|e| e.to_string())?;
                     rt.block_on(async {
-                        let session = idecraft_database::Session::connect(&profile, &credentials)
+                        let session = ferris_idea_database::Session::connect(&profile, &credentials)
                             .await
                             .map_err(|e| e.to_string())?;
                         // SPEC-0164 v3 behaviour 11: one transaction where the database rolls DDL
                         // back; elsewhere a refused derived statement is reported and the main
                         // rename stays (SPEC-0128 v2 behaviour 5). D32: a refusal, or a run in
                         // which nothing ran, is no change.
-                        let run = idecraft_database::run_refactoring(&session, &ddl, &derived).await;
+                        let run = ferris_idea_database::run_refactoring(&session, &ddl, &derived).await;
                         if let Some((statement, e)) = run.failed {
                             return Err(if run.transaction && statement != ddl {
                                 format!("{e} (in `{statement}`; the whole refactoring was rolled back)")
@@ -7073,7 +7310,7 @@ impl WorkbenchView {
                     db.update(cx, |d, cx| d.refresh_connection(&target.profile.id, cx));
                 }
                 let old = target.current();
-                let mut msg = if target.what == idecraft_database::Refactoring::ChangeType {
+                let mut msg = if target.what == ferris_idea_database::Refactoring::ChangeType {
                     format!(
                         "{}.{} is now {new}",
                         target.table,
@@ -7130,16 +7367,16 @@ impl WorkbenchView {
     ) -> (usize, Vec<String>) {
         let mut changed = 0;
         let mut skipped = Vec::new();
-        let mut history = idecraft_core::LocalHistory::open(&self.root).ok();
+        let mut history = ferris_idea_core::LocalHistory::open(&self.root).ok();
         for f in preview
             .files
             .iter()
             .filter(|f| f.included && !f.edits.is_empty())
         {
-            let edits: Vec<idecraft_languages::jvm::TextEdit> = f
+            let edits: Vec<ferris_idea_languages::jvm::TextEdit> = f
                 .edits
                 .iter()
-                .map(|e| idecraft_languages::jvm::TextEdit {
+                .map(|e| ferris_idea_languages::jvm::TextEdit {
                     range: e.start..e.end,
                     text: e.replacement.clone(),
                 })
@@ -7438,7 +7675,7 @@ impl WorkbenchView {
     /// behaviour 4, SPEC-0100 behaviour 2).
     fn run_temporary_config(
         &mut self,
-        config: idecraft_core::RunConfig,
+        config: ferris_idea_core::RunConfig,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -7451,13 +7688,13 @@ impl WorkbenchView {
 
     /// Keeps `config` as the newest temporary configuration; at most five are kept
     /// (`SPEC-0327` behaviour 9). Agents see them for `save_temporary`.
-    fn push_temporary(&mut self, config: idecraft_core::RunConfig) {
-        idecraft_core::push_temporary(&mut self.run_temporary, config);
+    fn push_temporary(&mut self, config: ferris_idea_core::RunConfig) {
+        ferris_idea_core::push_temporary(&mut self.run_temporary, config);
         self.publish_temporary();
     }
 
     fn publish_temporary(&self) {
-        idecraft_ai::live::Live::global()
+        ferris_idea_ai::live::Live::global()
             .set_temporary_runs(&self.root, self.run_temporary.clone());
     }
 
@@ -7476,13 +7713,13 @@ impl WorkbenchView {
         // A remote project's configurations live on its host (SPEC-0318).
         let read_only = if self.remote_project.is_some() {
             Some("The configurations of a remote project are kept on its host; they are shown read-only here.".to_owned())
-        } else if !idecraft_core::trust::allows_project_code(&self.root) {
+        } else if !ferris_idea_core::trust::allows_project_code(&self.root) {
             Some("Safe mode: this project is not trusted, so its configurations are read-only and nothing starts (Trust Project… in the banner).".to_owned())
         } else {
             None
         };
         let (all, detected_names) = all_run_configs(&self.root);
-        let detected: Vec<idecraft_core::RunConfig> = all
+        let detected: Vec<ferris_idea_core::RunConfig> = all
             .configs
             .into_iter()
             .filter(|c| detected_names.contains(&c.name))
@@ -7515,7 +7752,7 @@ impl WorkbenchView {
                         this.drawn_question = Some((
                             crate::dialogs::DrawnQuestion {
                                 message: "Discard the changes to the run configurations?".into(),
-                                detail: "Nothing is written to .idecraft/run.toml.".into(),
+                                detail: "Nothing is written to .ferris-idea/run.toml.".into(),
                                 buttons: vec!["Discard".into(), "Cancel".into()],
                                 default: 1,
                                 cancel: Some(1),
@@ -7525,7 +7762,7 @@ impl WorkbenchView {
                     }
                     E::Saved => {
                         this.reload_run_configs();
-                        this.status = Some(format!("Saved {}", idecraft_core::RUN_FILE));
+                        this.status = Some(format!("Saved {}", ferris_idea_core::RUN_FILE));
                     }
                     E::Temporary(list) => {
                         this.run_temporary = list.clone();
@@ -7601,8 +7838,8 @@ impl WorkbenchView {
             self.status = Some(format!("Deleted the temporary configuration {name}"));
         } else {
             self.status = Some(
-                match self.edit_run_toml(idecraft_core::RunEditOp::Remove(name.to_owned())) {
-                    Ok(_) => format!("Deleted {name} from {}", idecraft_core::RUN_FILE),
+                match self.edit_run_toml(ferris_idea_core::RunEditOp::Remove(name.to_owned())) {
+                    Ok(_) => format!("Deleted {name} from {}", ferris_idea_core::RUN_FILE),
                     Err(e) => format!("Could not delete {name}: {e}"),
                 },
             );
@@ -7611,13 +7848,13 @@ impl WorkbenchView {
     }
 
     /// Applies `op` to `run.toml` with the editor's writer (`SPEC-0327` behaviour 5).
-    fn edit_run_toml(&self, op: idecraft_core::RunEditOp) -> Result<String, String> {
-        idecraft_core::trust::require_trusted(&self.root)?;
+    fn edit_run_toml(&self, op: ferris_idea_core::RunEditOp) -> Result<String, String> {
+        ferris_idea_core::trust::require_trusted(&self.root)?;
         let text =
-            std::fs::read_to_string(self.root.join(idecraft_core::RUN_FILE)).unwrap_or_default();
-        let mut entries = idecraft_core::entries_of(&text)?;
-        let made = idecraft_core::apply_op(&mut entries, op)?;
-        idecraft_core::save_run_entries(&self.root, &entries).map_err(|p| p.join("; "))?;
+            std::fs::read_to_string(self.root.join(ferris_idea_core::RUN_FILE)).unwrap_or_default();
+        let mut entries = ferris_idea_core::entries_of(&text)?;
+        let made = ferris_idea_core::apply_op(&mut entries, op)?;
+        ferris_idea_core::save_run_entries(&self.root, &entries).map_err(|p| p.join("; "))?;
         Ok(made)
     }
 
@@ -7627,14 +7864,14 @@ impl WorkbenchView {
         let Some(config) = self.run_temporary.iter().find(|c| c.name == name).cloned() else {
             return;
         };
-        match self.edit_run_toml(idecraft_core::RunEditOp::SaveTemporary(config)) {
+        match self.edit_run_toml(ferris_idea_core::RunEditOp::SaveTemporary(config)) {
             Ok(saved) => {
                 self.run_temporary.retain(|c| c.name != name);
                 self.publish_temporary();
                 self.reload_run_configs();
                 self.run_selected = Some(saved.clone());
                 self.run_current_file = false;
-                self.status = Some(format!("Saved {saved} to {}", idecraft_core::RUN_FILE));
+                self.status = Some(format!("Saved {saved} to {}", ferris_idea_core::RUN_FILE));
             }
             Err(e) => self.status = Some(format!("Could not save {name}: {e}")),
         }
@@ -7652,8 +7889,8 @@ impl WorkbenchView {
             return;
         };
         self.status = Some(
-            match self.edit_run_toml(idecraft_core::RunEditOp::SaveTemporary(config)) {
-                Ok(saved) => format!("Copied {saved} to {}", idecraft_core::RUN_FILE),
+            match self.edit_run_toml(ferris_idea_core::RunEditOp::SaveTemporary(config)) {
+                Ok(saved) => format!("Copied {saved} to {}", ferris_idea_core::RUN_FILE),
                 Err(e) => format!("Could not copy {name}: {e}"),
             },
         );
@@ -7715,7 +7952,7 @@ impl WorkbenchView {
                                     let at = e
                                         .state
                                         .buffer
-                                        .position_to_offset(idecraft_editor::Position::new(
+                                        .position_to_offset(ferris_idea_editor::Position::new(
                                             *line, 0,
                                         ))
                                         .unwrap_or(0);
@@ -7750,8 +7987,10 @@ impl WorkbenchView {
         self.reference_index_running = true;
         let root = self.root.clone();
         let task = cx.background_executor().spawn(async move {
-            let files = idecraft_languages::reference_index::project_files(&root);
-            idecraft_languages::reference_index::with_project_index(&root, &files, |_, s| s.clone())
+            let files = ferris_idea_languages::reference_index::project_files(&root);
+            ferris_idea_languages::reference_index::with_project_index(&root, &files, |_, s| {
+                s.clone()
+            })
         });
         cx.spawn(async move |this, cx| {
             let _stats = task.await;
@@ -7793,7 +8032,7 @@ impl WorkbenchView {
         self.config_values_on = values;
         let task = cx.background_executor().spawn(async move {
             // Only the project's own sources (SPEC-0115 v2 behaviour 8).
-            let model = idecraft_languages::spring::project_model(&root);
+            let model = ferris_idea_languages::spring::project_model(&root);
             let problems = model.problems();
             let per_file: Vec<(FileFindings, FrameworkDecorations)> = open
                 .into_iter()
@@ -7806,8 +8045,8 @@ impl WorkbenchView {
                             // A recommendation of the framework's documentation is a weak
                             // warning (SPEC-0115 v4 behaviour 11).
                             let severity = match p.severity {
-                                idecraft_languages::inspections::Level::Weak
-                                | idecraft_languages::inspections::Level::Info => {
+                                ferris_idea_languages::inspections::Level::Weak
+                                | ferris_idea_languages::inspections::Level::Info => {
                                     crate::diagnostics_model::Severity::Weak
                                 }
                                 _ => crate::diagnostics_model::Severity::Warning,
@@ -7896,7 +8135,7 @@ impl WorkbenchView {
 
     /// The selection of the active editor as an attachment for the AI Assistant: the selected
     /// text, else the whole file, labelled with the workspace path and lines (`SPEC-0138`).
-    fn ai_attachment(&self, cx: &gpui::App) -> Option<idecraft_ai::Attachment> {
+    fn ai_attachment(&self, cx: &gpui::App) -> Option<ferris_idea_ai::Attachment> {
         self.ai_attachment_of(None, cx)
     }
 
@@ -7928,7 +8167,7 @@ impl WorkbenchView {
         &self,
         whole: Option<bool>,
         cx: &gpui::App,
-    ) -> Option<idecraft_ai::Attachment> {
+    ) -> Option<ferris_idea_ai::Attachment> {
         let path = self.active_file()?;
         let editor = self.active_editor()?;
         let e = editor.read(cx);
@@ -7953,13 +8192,13 @@ impl WorkbenchView {
         };
         let rel = path.strip_prefix(&self.root).unwrap_or(&path);
         // Code is masked like every attachment (`SPEC-0313` behaviour 6).
-        let budget = idecraft_ai::context::attachment_chars(
+        let budget = ferris_idea_ai::context::attachment_chars(
             crate::appearance::ide_settings(cx).ai.attachment_chars,
         );
-        Some(idecraft_ai::context::attachment(
-            idecraft_ai::context::Source::Code,
+        Some(ferris_idea_ai::context::attachment(
+            ferris_idea_ai::context::Source::Code,
             format!("{}:{first}-{last}", rel.display()),
-            &idecraft_languages::LanguageId::detect(&path)
+            &ferris_idea_languages::LanguageId::detect(&path)
                 .map(|l| l.lsp_id().to_owned())
                 .unwrap_or_default(),
             &code,
@@ -8002,7 +8241,7 @@ impl WorkbenchView {
         if let Some(view) = &self.ai_chat {
             view.update(cx, |v, cx| {
                 v.attach(attachment, cx);
-                v.ask(Some(idecraft_ai::EXPLAIN), cx);
+                v.ask(Some(ferris_idea_ai::EXPLAIN), cx);
             });
         }
     }
@@ -8023,14 +8262,14 @@ impl WorkbenchView {
         self.python_running = true;
         let root = self.root.clone();
         let task = cx.background_executor().spawn(async move {
-            let files = idecraft_core::Workspace::open(&root)
+            let files = ferris_idea_core::Workspace::open(&root)
                 .and_then(|w| w.files())
                 .unwrap_or_default();
-            let model = idecraft_core::read_project(&root, &files);
+            let model = ferris_idea_core::read_project(&root, &files);
             let module = model
                 .modules
                 .iter()
-                .find(|m| m.kind == idecraft_core::ModuleKind::Python && m.dir == ".");
+                .find(|m| m.kind == ferris_idea_core::ModuleKind::Python && m.dir == ".");
             let requires = module
                 .and_then(|m| m.toolchain.as_deref())
                 .map(|t| t.strip_prefix("python ").unwrap_or(t).to_owned());
@@ -8039,9 +8278,10 @@ impl WorkbenchView {
                 || files
                     .iter()
                     .any(|f| f.extension().is_some_and(|e| e == "py"));
-            let search = idecraft_core::PythonSearch::for_workspace(&root);
-            let env = idecraft_core::python_environments(&search, requires.as_deref(), &declared);
-            let label = idecraft_core::interpreter_label(&env, &root);
+            let search = ferris_idea_core::PythonSearch::for_workspace(&root);
+            let env =
+                ferris_idea_core::python_environments(&search, requires.as_deref(), &declared);
+            let label = ferris_idea_core::interpreter_label(&env, &root);
             (env, label, is_python)
         });
         cx.spawn(async move |this, cx| {
@@ -8078,7 +8318,7 @@ impl WorkbenchView {
         self.python_server_pushes += 1;
         let root = self.root.clone();
         cx.background_executor()
-            .spawn(async move { idecraft_languages::python_server::interpreter_changed(&root) })
+            .spawn(async move { ferris_idea_languages::python_server::interpreter_changed(&root) })
             .detach();
     }
 
@@ -8103,7 +8343,7 @@ impl WorkbenchView {
 
     fn package_index(&self) -> Option<(String, PathBuf)> {
         self.package_index.clone().or_else(|| {
-            idecraft_core::names_cache_file().map(|c| (idecraft_core::PYPI.to_owned(), c))
+            ferris_idea_core::names_cache_file().map(|c| (ferris_idea_core::PYPI.to_owned(), c))
         })
     }
 
@@ -8116,7 +8356,7 @@ impl WorkbenchView {
         };
         let known = self.python_index_names.clone();
         if known.is_none()
-            && !idecraft_core::names_cache_fresh(&cache)
+            && !ferris_idea_core::names_cache_fresh(&cache)
             && let Some(view) = &self.python
         {
             view.update(cx, |v, cx| {
@@ -8129,13 +8369,14 @@ impl WorkbenchView {
         let task = cx.background_executor().spawn(async move {
             let names = match known {
                 Some(n) => n,
-                None => std::sync::Arc::new(idecraft_core::names(
-                    &idecraft_core::http_fetch,
+                None => std::sync::Arc::new(ferris_idea_core::names(
+                    &ferris_idea_core::http_fetch,
                     &index,
                     &cache,
                 )?),
             };
-            let found = idecraft_core::search_names(&names, &query, idecraft_core::SEARCH_LIMIT);
+            let found =
+                ferris_idea_core::search_names(&names, &query, ferris_idea_core::SEARCH_LIMIT);
             Ok::<_, String>((names, query, found))
         });
         cx.spawn(async move |this, cx| {
@@ -8164,7 +8405,7 @@ impl WorkbenchView {
             return;
         };
         let task = cx.background_executor().spawn(async move {
-            let info = idecraft_core::package_info(&idecraft_core::http_fetch, &index, &name);
+            let info = ferris_idea_core::package_info(&ferris_idea_core::http_fetch, &index, &name);
             (name, info)
         });
         cx.spawn(async move |this, cx| {
@@ -8193,12 +8434,12 @@ impl WorkbenchView {
     /// Uses this Docker daemon and `kubectl` instead of the ones found on the machine (tests).
     pub fn set_container_sources(
         &mut self,
-        docker: Option<idecraft_containers::DockerHost>,
-        kubectl: Option<idecraft_containers::Kubectl>,
+        docker: Option<ferris_idea_containers::DockerHost>,
+        kubectl: Option<ferris_idea_containers::Kubectl>,
     ) {
         self.docker_host = docker.clone();
         self.docker_engines =
-            docker.map(|h| vec![idecraft_containers::Engine::from_host("test", h)]);
+            docker.map(|h| vec![ferris_idea_containers::Engine::from_host("test", h)]);
         self.docker_engine = None;
         self.kubectl = kubectl;
         self.kube_contexts.clear();
@@ -8207,7 +8448,7 @@ impl WorkbenchView {
     }
 
     /// Uses these Docker engines instead of the machine's (tests, SPEC-0243).
-    pub fn set_container_engines(&mut self, engines: Vec<idecraft_containers::Engine>) {
+    pub fn set_container_engines(&mut self, engines: Vec<ferris_idea_containers::Engine>) {
         self.docker_host = engines.iter().find_map(|e| e.host.clone());
         self.docker_engines = Some(engines);
         self.docker_engine = None;
@@ -8217,7 +8458,7 @@ impl WorkbenchView {
     pub fn set_compose_sources(
         &mut self,
         dir: Option<PathBuf>,
-        cli: Option<idecraft_containers::compose::ComposeCli>,
+        cli: Option<ferris_idea_containers::compose::ComposeCli>,
     ) {
         self.compose_dir = dir;
         self.compose_cli = cli;
@@ -8228,15 +8469,15 @@ impl WorkbenchView {
         &self.opened_urls
     }
 
-    fn engine_list(&self) -> Vec<idecraft_containers::Engine> {
+    fn engine_list(&self) -> Vec<ferris_idea_containers::Engine> {
         self.docker_engines
             .clone()
-            .unwrap_or_else(idecraft_containers::engines_here)
+            .unwrap_or_else(ferris_idea_containers::engines_here)
     }
 
-    fn docker_source(&self) -> Option<idecraft_containers::DockerHost> {
+    fn docker_source(&self) -> Option<ferris_idea_containers::DockerHost> {
         let list = self.engine_list();
-        idecraft_containers::choose(&list, self.docker_engine.as_deref())
+        ferris_idea_containers::choose(&list, self.docker_engine.as_deref())
             .and_then(|e| e.host.clone())
             .or_else(|| self.docker_host.clone())
     }
@@ -8247,21 +8488,21 @@ impl WorkbenchView {
             .unwrap_or_else(|| self.root.clone())
     }
 
-    fn compose_cli_source(&self) -> Option<idecraft_containers::compose::ComposeCli> {
+    fn compose_cli_source(&self) -> Option<ferris_idea_containers::compose::ComposeCli> {
         self.compose_cli.clone().or_else(|| {
-            idecraft_containers::compose::ComposeCli::find(std::env::var_os("PATH").as_deref())
+            ferris_idea_containers::compose::ComposeCli::find(std::env::var_os("PATH").as_deref())
         })
     }
 
-    fn kubectl_source(&self) -> Option<idecraft_containers::Kubectl> {
+    fn kubectl_source(&self) -> Option<ferris_idea_containers::Kubectl> {
         self.kubectl
             .clone()
-            .or_else(|| idecraft_containers::Kubectl::find(std::env::var_os("PATH").as_deref()))
+            .or_else(|| ferris_idea_containers::Kubectl::find(std::env::var_os("PATH").as_deref()))
     }
 
     /// Uses the next usable Docker engine (SPEC-0243 behaviour 2).
     fn next_docker_engine(&mut self, cx: &mut Context<Self>) {
-        let list: Vec<idecraft_containers::Engine> = self
+        let list: Vec<ferris_idea_containers::Engine> = self
             .engine_list()
             .into_iter()
             .filter(|e| e.host.is_some())
@@ -8272,7 +8513,7 @@ impl WorkbenchView {
             return;
         }
         let all = self.engine_list();
-        let current = idecraft_containers::choose(&all, self.docker_engine.as_deref())
+        let current = ferris_idea_containers::choose(&all, self.docker_engine.as_deref())
             .map(|e| e.name.clone());
         let at = list
             .iter()
@@ -8313,7 +8554,7 @@ impl WorkbenchView {
                     host.to_string(),
                     name.clone(),
                 ];
-                if let idecraft_containers::DockerHost::Ssh { extra, .. } = &host {
+                if let ferris_idea_containers::DockerHost::Ssh { extra, .. } = &host {
                     command.extend(extra.iter().cloned());
                 }
                 (format!("Exec: {name}"), command)
@@ -8324,13 +8565,13 @@ impl WorkbenchView {
                     cx.notify();
                     return;
                 };
-                let args = idecraft_containers::exec_object(kind, name).and_then(|object| {
+                let args = ferris_idea_containers::exec_object(kind, name).and_then(|object| {
                     k.exec_args(
                         self.kube_context.as_deref().unwrap_or_default(),
                         self.kube_namespace.as_deref().unwrap_or("default"),
                         &object,
                         None,
-                        &idecraft_containers::exec::shell_command(),
+                        &ferris_idea_containers::exec::shell_command(),
                         true,
                     )
                 });
@@ -8389,7 +8630,7 @@ impl WorkbenchView {
         );
         self.status = Some(format!("Forwarding {kind} {name} port {port}…"));
         let task = cx.background_executor().spawn(async move {
-            idecraft_containers::ports::PortForwards::global()
+            ferris_idea_containers::ports::PortForwards::global()
                 .start(&k, &ctx, &ns, &kind, &name, port, None)
                 .map_err(|e| e.to_string())
         });
@@ -8410,11 +8651,11 @@ impl WorkbenchView {
     /// Compose up or down for the project or one service, in the background (SPEC-0242).
     fn compose_act(
         &mut self,
-        action: idecraft_containers::compose::ComposeAction,
+        action: ferris_idea_containers::compose::ComposeAction,
         service: Option<String>,
         cx: &mut Context<Self>,
     ) {
-        let Some(project) = idecraft_containers::compose::detect(&self.compose_source()) else {
+        let Some(project) = ferris_idea_containers::compose::detect(&self.compose_source()) else {
             return;
         };
         let Some(cli) = self.compose_cli_source() else {
@@ -8433,8 +8674,8 @@ impl WorkbenchView {
         let what = format!(
             "{} {}",
             match action {
-                idecraft_containers::compose::ComposeAction::Up => "Compose up",
-                idecraft_containers::compose::ComposeAction::Down => "Compose down",
+                ferris_idea_containers::compose::ComposeAction::Up => "Compose up",
+                ferris_idea_containers::compose::ComposeAction::Down => "Compose down",
             },
             service.as_deref().unwrap_or(&project.name)
         );
@@ -8446,7 +8687,10 @@ impl WorkbenchView {
             let result = task.await;
             let _ = this.update(cx, |this, cx| {
                 this.status = Some(match result {
-                    Ok(out) => format!("{what}: {}", idecraft_containers::compose::last_line(&out)),
+                    Ok(out) => format!(
+                        "{what}: {}",
+                        ferris_idea_containers::compose::last_line(&out)
+                    ),
                     Err(e) => format!("{what} failed: {e}"),
                 });
                 this.refresh_containers(cx);
@@ -8459,14 +8703,14 @@ impl WorkbenchView {
     /// Shows the logs of a Compose service's containers (SPEC-0242 behaviour 4).
     fn compose_logs(&mut self, service: String, cx: &mut Context<Self>) {
         let (Some(project), Some(host)) = (
-            idecraft_containers::compose::detect(&self.compose_source()),
+            ferris_idea_containers::compose::detect(&self.compose_source()),
             self.docker_source(),
         ) else {
             return;
         };
         let task = cx.background_executor().spawn(async move {
             let containers = host.containers().map_err(|e| e.to_string())?;
-            let states = idecraft_containers::compose::service_states(&project, &containers);
+            let states = ferris_idea_containers::compose::service_states(&project, &containers);
             let state = states
                 .iter()
                 .find(|s| s.service == service)
@@ -8474,7 +8718,7 @@ impl WorkbenchView {
             if state.containers.is_empty() {
                 return Err(format!("{service} has no containers: u starts it"));
             }
-            idecraft_containers::compose::service_logs(&host, state, 200)
+            ferris_idea_containers::compose::service_logs(&host, state, 200)
                 .map(|t| (service, t))
                 .map_err(|e| e.to_string())
         });
@@ -8501,6 +8745,7 @@ impl WorkbenchView {
     pub fn toggle_containers(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.show_containers {
             self.show_containers = false;
+            self.stop_container_streams();
             self.focus_active(window, cx);
             cx.notify();
             return;
@@ -8515,6 +8760,7 @@ impl WorkbenchView {
                     |this, _, event: &crate::ContainersEvent, window, cx| match event {
                         crate::ContainersEvent::Hide => {
                             this.show_containers = false;
+                            this.stop_container_streams();
                             this.focus_active(window, cx);
                             cx.notify();
                         }
@@ -8532,7 +8778,7 @@ impl WorkbenchView {
                             this.container_forward(kind.clone(), name.clone(), *port, cx)
                         }
                         crate::ContainersEvent::StopForward(id) => {
-                            idecraft_containers::ports::PortForwards::global().stop(*id);
+                            ferris_idea_containers::ports::PortForwards::global().stop(*id);
                             this.status = Some("Port forward stopped".into());
                             this.refresh_containers(cx);
                         }
@@ -8542,8 +8788,34 @@ impl WorkbenchView {
                         crate::ContainersEvent::ServiceLogs(service) => {
                             this.compose_logs(service.clone(), cx)
                         }
+                        crate::ContainersEvent::Details(name) => {
+                            this.container_details(name.clone(), cx)
+                        }
+                        crate::ContainersEvent::Pull(reference) => {
+                            this.pull_image(reference.clone(), cx)
+                        }
+                        crate::ContainersEvent::RemoveImage(name) => {
+                            this.remove_image(name.clone(), cx)
+                        }
+                        crate::ContainersEvent::ImageDetails(name) => {
+                            this.image_details(name.clone(), cx)
+                        }
                     },
                 ));
+                // The watcher's and the followed logs' messages, in order (behaviours 9, 10).
+                let (tx, rx) = async_channel::unbounded::<ContainerFeed>();
+                self.container_feed = Some(tx);
+                cx.spawn(async move |this, cx| {
+                    while let Ok(m) = rx.recv().await {
+                        if this
+                            .update(cx, |this, cx| this.container_feed(m, cx))
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                })
+                .detach();
                 self.containers = Some(view.clone());
                 view
             }
@@ -8562,9 +8834,10 @@ impl WorkbenchView {
     /// Reads Docker and the chosen Kubernetes context and namespace in the background
     /// (behaviours 1, 4, 5).
     pub fn refresh_containers(&mut self, cx: &mut Context<Self>) {
+        self.watch_docker_events();
         let docker = self.docker_source();
         let list = self.engine_list();
-        let used = idecraft_containers::choose(&list, self.docker_engine.as_deref())
+        let used = ferris_idea_containers::choose(&list, self.docker_engine.as_deref())
             .map(|e| e.name.clone());
         let engines: Vec<crate::containers_view::EngineRow> = list
             .into_iter()
@@ -8573,7 +8846,7 @@ impl WorkbenchView {
                 (e.name, e.address, e.note, used)
             })
             .collect();
-        let compose = idecraft_containers::compose::detect(&self.compose_source());
+        let compose = ferris_idea_containers::compose::detect(&self.compose_source());
         let kubectl = self.kubectl_source();
         let (context, namespace) = (self.kube_context.clone(), self.kube_namespace.clone());
         let known = self.kube_contexts.clone();
@@ -8594,17 +8867,17 @@ impl WorkbenchView {
                         .and_then(|c| contexts.iter().find(|x| x.name == c).cloned())
                         .or_else(|| contexts.iter().find(|x| x.current).cloned())
                         .or_else(|| contexts.first().cloned())
-                        .ok_or_else(|| idecraft_containers::KubeError::Failed("no contexts in the kubeconfig".into()))?;
+                        .ok_or_else(|| ferris_idea_containers::KubeError::Failed("no contexts in the kubeconfig".into()))?;
                     let ns = namespace.unwrap_or_else(|| chosen.namespace.clone());
                     let resources = k.resources(&chosen.name, &ns);
                     let namespaces = k.namespaces(&chosen.name).unwrap_or_default();
-                    Ok::<_, idecraft_containers::KubeError>((contexts, chosen.name, ns, namespaces, resources))
+                    Ok::<_, ferris_idea_containers::KubeError>((contexts, chosen.name, ns, namespaces, resources))
                 })()
                 .map_err(|e| e.to_string()),
             };
             let compose = match (&docker, compose) {
                 (Ok((_, _, containers, _)), Some(p)) => {
-                    let states = idecraft_containers::compose::service_states(&p, containers);
+                    let states = ferris_idea_containers::compose::service_states(&p, containers);
                     Some((p, states))
                 }
                 _ => None,
@@ -8613,7 +8886,7 @@ impl WorkbenchView {
         });
         cx.spawn(async move |this, cx| {
             let (docker, kube, compose) = task.await;
-            let forwards = idecraft_containers::ports::PortForwards::global().list();
+            let forwards = ferris_idea_containers::ports::PortForwards::global().list();
             let _ = this.update(cx, |this, cx| {
                 let kube_view = match kube {
                     Ok((contexts, ctx, ns, namespaces, resources)) => {
@@ -8637,6 +8910,349 @@ impl WorkbenchView {
                     });
                 }
                 cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Stops the event stream and the followed logs (the window is hidden).
+    fn stop_container_streams(&mut self) {
+        self.docker_watch = None;
+        self.stop_log_follow();
+    }
+
+    fn stop_log_follow(&mut self) {
+        if let Some(stop) = self.log_follow.take() {
+            stop.stop();
+        }
+    }
+
+    /// Follows the event stream of the engine in use while the window is shown (behaviour 9).
+    fn watch_docker_events(&mut self) {
+        let (Some(host), Some(tx)) = (self.docker_source(), self.container_feed.clone()) else {
+            self.docker_watch = None;
+            return;
+        };
+        let address = host.to_string();
+        if self
+            .docker_watch
+            .as_ref()
+            .is_some_and(|(a, _)| *a == address)
+        {
+            return;
+        }
+        let watch = ferris_idea_containers::events::EventWatch::start(host, move |e| {
+            let _ = tx.send_blocking(ContainerFeed::Watch(e));
+        });
+        self.docker_watch = Some((address, watch));
+    }
+
+    /// Follows the output of container `name` in the pane (behaviour 10); `since` continues
+    /// after a restart in the pane already shown.
+    fn follow_container_logs(&mut self, name: String, since: Option<i64>, cx: &mut Context<Self>) {
+        self.stop_log_follow();
+        let (Some(host), Some(tx)) = (self.docker_source(), self.container_feed.clone()) else {
+            self.status = Some("no Docker daemon".into());
+            cx.notify();
+            return;
+        };
+        let stop = ferris_idea_containers::StopFlag::new();
+        self.log_follow = Some(stop.clone());
+        self.log_follow_gen += 1;
+        let generation = self.log_follow_gen;
+        let fresh = since.is_none();
+        std::thread::Builder::new()
+            .name("docker-logs".into())
+            .spawn(move || {
+                if fresh {
+                    let starts = match host.start_times(&name) {
+                        Ok(s) => s,
+                        Err(e) => {
+                            let _ = tx
+                                .send_blocking(ContainerFeed::LogFailed(generation, e.to_string()));
+                            return;
+                        }
+                    };
+                    let _ =
+                        tx.send_blocking(ContainerFeed::LogStart(generation, name.clone(), starts));
+                }
+                let query = ferris_idea_containers::logs::LogQuery {
+                    tail: if fresh {
+                        Some(ferris_idea_containers::logs::KEEP_LINES)
+                    } else {
+                        None
+                    },
+                    since,
+                    timestamps: true,
+                };
+                let result = host.follow_logs(&name, &query, &stop, |text| {
+                    let _ = tx.send_blocking(ContainerFeed::Log(
+                        generation,
+                        name.clone(),
+                        text.to_owned(),
+                    ));
+                });
+                if !stop.is_stopped() {
+                    let _ = match result {
+                        Ok(()) => tx.send_blocking(ContainerFeed::LogEnded(generation, name)),
+                        Err(e) => {
+                            tx.send_blocking(ContainerFeed::LogFailed(generation, e.to_string()))
+                        }
+                    };
+                }
+            })
+            .ok();
+    }
+
+    /// Shows the details of container `name` in the pane (behaviour 11).
+    fn container_details(&mut self, name: String, cx: &mut Context<Self>) {
+        self.stop_log_follow();
+        let Some(host) = self.docker_source() else {
+            return;
+        };
+        let task = cx.background_executor().spawn(async move {
+            let d = host.container_details(&name).map_err(|e| e.to_string());
+            (name, d)
+        });
+        cx.spawn(async move |this, cx| {
+            let (name, details) = task.await;
+            let _ = this.update(cx, |this, cx| {
+                if let Some(view) = &this.containers {
+                    view.update(cx, |v, cx| v.show_details(&name, details, cx));
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// Pulls an image with its progress in the pane (SPEC-0119 v6 behaviour 13).
+    fn pull_image(&mut self, reference: String, cx: &mut Context<Self>) {
+        let (Some(host), Some(tx), Some(view)) = (
+            self.docker_source(),
+            self.container_feed.clone(),
+            self.containers.clone(),
+        ) else {
+            return;
+        };
+        self.stop_log_follow();
+        let title = format!("Pull: {reference}");
+        let warning =
+            ferris_idea_containers::images::ImageRef::parse(&reference).and_then(|r| r.warning());
+        view.update(cx, |v, cx| {
+            v.show_logs(
+                title.clone(),
+                warning
+                    .map(|w| format!("Warning: {w}\n"))
+                    .unwrap_or_default(),
+                cx,
+            )
+        });
+        self.status = Some(format!("Pulling {reference}…"));
+        cx.notify();
+        std::thread::Builder::new()
+            .name("docker-pull".into())
+            .spawn(move || {
+                let stop = ferris_idea_containers::StopFlag::new();
+                let result = host.pull(&reference, &stop, |line| {
+                    // Layer states without the moving progress bars.
+                    if !line.contains(": Downloading") && !line.contains(": Extracting") {
+                        let _ = tx
+                            .send_blocking(ContainerFeed::Pull(title.clone(), format!("{line}\n")));
+                    }
+                });
+                let _ = tx.send_blocking(ContainerFeed::PullDone(
+                    title,
+                    reference,
+                    result.map_err(|e| e.to_string()),
+                ));
+            })
+            .ok();
+    }
+
+    /// Removes an image, refused while a container uses it (behaviour 13).
+    fn remove_image(&mut self, name: String, cx: &mut Context<Self>) {
+        let Some(host) = self.docker_source() else {
+            return;
+        };
+        let task = cx.background_executor().spawn(async move {
+            host.remove_image(&name)
+                .map(|_| format!("Image {name} removed"))
+                .map_err(|e| match e {
+                    ferris_idea_containers::DockerError::Http(_, m) => m,
+                    e => e.to_string(),
+                })
+        });
+        cx.spawn(async move |this, cx| {
+            let result = task.await;
+            let _ = this.update(cx, |this, cx| {
+                this.status = Some(match result {
+                    Ok(m) => m,
+                    Err(e) => format!("Not removed: {e}"),
+                });
+                this.refresh_docker(cx);
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Shows an image's details in the pane (behaviour 13).
+    fn image_details(&mut self, name: String, cx: &mut Context<Self>) {
+        self.stop_log_follow();
+        let Some(host) = self.docker_source() else {
+            return;
+        };
+        let task = cx.background_executor().spawn(async move {
+            let d = host.image_details(&name).map_err(|e| e.to_string());
+            (name, d)
+        });
+        cx.spawn(async move |this, cx| {
+            let (name, details) = task.await;
+            let _ = this.update(cx, |this, cx| {
+                if let Some(view) = &this.containers {
+                    view.update(cx, |v, cx| v.show_image(&name, details, cx));
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// A message of the watcher or the followed logs.
+    fn container_feed(&mut self, m: ContainerFeed, cx: &mut Context<Self>) {
+        let Some(view) = self.containers.clone() else {
+            return;
+        };
+        use ferris_idea_containers::events::WatchEvent;
+        match m {
+            ContainerFeed::Watch(WatchEvent::Connected) => {
+                // Whatever happened while the stream was gone is read anew.
+                let was_lost = view.read(cx).has_events_note();
+                view.update(cx, |v, cx| v.set_events_note(None, cx));
+                if was_lost {
+                    self.refresh_docker(cx);
+                }
+            }
+            ContainerFeed::Watch(WatchEvent::Lost { reason, retry_in }) => {
+                let first = !view.read(cx).has_events_note();
+                let note = format!(
+                    "Live updates paused: {reason}; connecting again in {:.1} s",
+                    retry_in.as_secs_f32()
+                );
+                view.update(cx, |v, cx| v.set_events_note(Some(note), cx));
+                if first {
+                    self.refresh_docker(cx);
+                }
+            }
+            ContainerFeed::Watch(WatchEvent::Event(e)) => {
+                if e.kind == "container"
+                    && e.action == "start"
+                    && let Some((name, last)) = view.read(cx).followed()
+                    && e.name.as_deref() == Some(name.as_str())
+                {
+                    view.update(cx, |v, cx| v.log_new_run(&name, e.time, cx));
+                    let since = last.map_or(0, |t| (t / 1_000_000_000) as i64);
+                    self.follow_container_logs(name, Some(since), cx);
+                }
+                if e.changes_lists() && !self.docker_refresh_due {
+                    // Events come in bursts (create, start, …): one reading shortly after.
+                    self.docker_refresh_due = true;
+                    cx.spawn(async move |this, cx| {
+                        cx.background_executor()
+                            .timer(std::time::Duration::from_millis(120))
+                            .await;
+                        let _ = this.update(cx, |this, cx| {
+                            this.docker_refresh_due = false;
+                            this.refresh_docker(cx);
+                        });
+                    })
+                    .detach();
+                }
+            }
+            ContainerFeed::LogStart(g, name, starts) if g == self.log_follow_gen => {
+                view.update(cx, |v, cx| {
+                    v.start_log_follow(format!("Logs: {name}"), name.clone(), starts, cx)
+                });
+            }
+            ContainerFeed::Log(g, name, text) if g == self.log_follow_gen => {
+                view.update(cx, |v, cx| {
+                    v.log_live(&name, true, cx);
+                    v.append_logs(&name, &text, cx);
+                });
+            }
+            ContainerFeed::LogEnded(g, name) if g == self.log_follow_gen => {
+                view.update(cx, |v, cx| v.log_live(&name, false, cx));
+            }
+            ContainerFeed::LogFailed(g, e) if g == self.log_follow_gen => {
+                self.status = Some(e);
+                cx.notify();
+            }
+            ContainerFeed::Pull(title, line) => {
+                view.update(cx, |v, cx| v.append_titled(&title, &line, cx));
+            }
+            ContainerFeed::PullDone(title, reference, result) => {
+                let (line, status) = match result {
+                    Ok(done) => (
+                        format!(
+                            "Pulled {}{}\n",
+                            done.reference,
+                            done.digest
+                                .as_ref()
+                                .map(|d| format!(" ({d})"))
+                                .unwrap_or_default()
+                        ),
+                        format!(
+                            "Pulled {}{}",
+                            done.reference,
+                            done.digest.map(|d| format!(" {d}")).unwrap_or_default()
+                        ),
+                    ),
+                    Err(e) => (
+                        format!("Failed: {e}\n"),
+                        format!("Pull of {reference} failed: {e}"),
+                    ),
+                };
+                view.update(cx, |v, cx| v.append_titled(&title, &line, cx));
+                self.status = Some(status);
+                self.refresh_docker(cx);
+                cx.notify();
+            }
+            _ => {}
+        }
+    }
+
+    /// Reads Docker again without Kubernetes (after events, behaviour 9); the selection stays on
+    /// its row.
+    fn refresh_docker(&mut self, cx: &mut Context<Self>) {
+        let Some(host) = self.docker_source() else {
+            return;
+        };
+        let compose = ferris_idea_containers::compose::detect(&self.compose_source());
+        let task = cx.background_executor().spawn(async move {
+            let docker = host
+                .info()
+                .and_then(|info| Ok((info, host.containers()?, host.images()?)))
+                .map(|(info, c, i)| (host.to_string(), info, c, i))
+                .map_err(|e| e.to_string());
+            let compose = match (&docker, compose) {
+                (Ok((_, _, containers, _)), Some(p)) => {
+                    let states = ferris_idea_containers::compose::service_states(&p, containers);
+                    Some((p, states))
+                }
+                _ => None,
+            };
+            (docker, compose)
+        });
+        cx.spawn(async move |this, cx| {
+            let (docker, compose) = task.await;
+            let _ = this.update(cx, |this, cx| {
+                if let Some(view) = &this.containers {
+                    view.update(cx, |v, cx| {
+                        if docker.is_ok() {
+                            v.show_compose(compose, cx);
+                        }
+                        v.show_docker(docker, cx);
+                    });
+                }
             });
         })
         .detach();
@@ -8679,6 +9295,11 @@ impl WorkbenchView {
 
     /// Shows the last 200 lines of a container's or workload's output (behaviours 3, 5).
     pub fn container_logs(&mut self, target: crate::ContainerTarget, cx: &mut Context<Self>) {
+        if let crate::ContainerTarget::Docker(name) = &target {
+            self.follow_container_logs(name.clone(), None, cx);
+            return;
+        }
+        self.stop_log_follow();
         let docker = self.docker_source();
         let kubectl = self.kubectl_source();
         let (ctx, ns) = (self.kube_context.clone(), self.kube_namespace.clone());
@@ -8734,7 +9355,7 @@ impl WorkbenchView {
     pub fn container_act(
         &mut self,
         target: crate::ContainerTarget,
-        action: idecraft_containers::ContainerAction,
+        action: ferris_idea_containers::ContainerAction,
         cx: &mut Context<Self>,
     ) {
         let docker = self.docker_source();
@@ -8784,7 +9405,7 @@ impl WorkbenchView {
         if self.safe_mode || self.remote_project.is_some() {
             return;
         }
-        let Some(tool) = idecraft_languages::js_tools::find_eslint(&self.root, path) else {
+        let Some(tool) = ferris_idea_languages::js_tools::find_eslint(&self.root, path) else {
             return;
         };
         let Some(editor) = self.editors.get(path).cloned() else {
@@ -8810,7 +9431,7 @@ impl WorkbenchView {
             let checked = text.clone();
             let result = cx
                 .background_spawn(async move {
-                    idecraft_languages::js_tools::eslint_check(&tool, &file, &checked)
+                    ferris_idea_languages::js_tools::eslint_check(&tool, &file, &checked)
                 })
                 .await;
             let _ = this.update(cx, |this, cx| {
@@ -8823,10 +9444,10 @@ impl WorkbenchView {
                             .iter()
                             .map(|p| {
                                 let severity = match p.severity {
-                                    idecraft_languages::js_tools::LintSeverity::Error => {
+                                    ferris_idea_languages::js_tools::LintSeverity::Error => {
                                         crate::diagnostics_model::Severity::Error
                                     }
-                                    idecraft_languages::js_tools::LintSeverity::Warning => {
+                                    ferris_idea_languages::js_tools::LintSeverity::Warning => {
                                         crate::diagnostics_model::Severity::Warning
                                     }
                                 };
@@ -8857,7 +9478,7 @@ impl WorkbenchView {
     /// background and applies the result as one undo step if the text did not change meanwhile
     /// (`Javascript.Linters.EsLint.Fix`, `ReformatWithPrettierAction`; SPEC-0123 behaviours 3–4).
     pub fn js_tool_action(&mut self, fix: bool, cx: &mut Context<Self>) {
-        use idecraft_languages::js_tools;
+        use ferris_idea_languages::js_tools;
         let (Some(path), Some(editor)) = (self.active_path(), self.active_editor()) else {
             return;
         };
@@ -8923,25 +9544,27 @@ impl WorkbenchView {
         .detach();
     }
 
-    fn project_model(&self) -> idecraft_core::ProjectModel {
-        idecraft_core::Workspace::open(&self.root)
+    fn project_model(&self) -> ferris_idea_core::ProjectModel {
+        ferris_idea_core::Workspace::open(&self.root)
             .ok()
             .and_then(|w| w.files().ok())
-            .map(|files| idecraft_core::read_project(&self.root, &files))
+            .map(|files| ferris_idea_core::read_project(&self.root, &files))
             .unwrap_or_default()
     }
 
     /// Reads the ▶ markers of an open Java or Kotlin file (SPEC-0122 behaviour 1) or of the
     /// scripts of a `package.json` (SPEC-0168 behaviour 4) in the background.
     fn refresh_run_markers(&mut self, path: &Path, cx: &mut Context<Self>) {
-        let lang = idecraft_languages::jvm::Jvm::of(&path.to_string_lossy());
+        let lang = ferris_idea_languages::jvm::Jvm::of(&path.to_string_lossy());
         // Tests of Vitest and Jest (SPEC-0045 v4 behaviour 12); a remote project's host decides.
-        let js_tests = idecraft_core::is_js_test_file(&path.to_string_lossy())
+        let js_tests = ferris_idea_core::is_js_test_file(&path.to_string_lossy())
             && (self.remote_project.is_some()
-                || idecraft_languages::js_tests::has_test_runner(&self.root, path));
-        // Tests of pytest, Go and Rust (SPEC-0045 v5 behaviour 13).
-        let other_tests =
-            idecraft_languages::test_markers::test_file(&path.to_string_lossy()).is_some();
+                || ferris_idea_languages::js_tests::has_test_runner(&self.root, path));
+        // Tests of pytest, Go and Rust (SPEC-0045 v5 behaviour 13) and the `main` of a Go program
+        // or a Rust binary (SPEC-0097 v3 behaviour 8).
+        let other_tests = ferris_idea_languages::test_markers::test_file(&path.to_string_lossy())
+            .is_some()
+            || ferris_idea_languages::main_markers::applies(&path.to_string_lossy());
         // Requests of a request file (SPEC-0096 v4 behaviour 6).
         let requests = crate::http_model::is_request_file(path);
         if lang.is_none() && !is_package_json(path) && !js_tests && !other_tests && !requests {
@@ -8954,23 +9577,23 @@ impl WorkbenchView {
         let rel = path.to_string_lossy().into_owned();
         let task = cx.background_executor().spawn(async move {
             match lang {
-                Some(lang) => idecraft_languages::jvm::run_markers(lang, &text),
-                None if js_tests => idecraft_languages::js_tests::markers(&rel, &text),
-                None if other_tests => idecraft_languages::test_markers::markers(&rel, &text),
+                Some(lang) => ferris_idea_languages::jvm::run_markers(lang, &text),
+                None if js_tests => ferris_idea_languages::js_tests::markers(&rel, &text),
+                None if other_tests => ferris_idea_languages::main_markers::with_tests(&rel, &text),
                 None if requests => crate::http_model::run_lines(&text)
                     .into_iter()
-                    .map(|line| idecraft_languages::jvm::RunMarker {
+                    .map(|line| ferris_idea_languages::jvm::RunMarker {
                         line,
-                        kind: idecraft_languages::jvm::MarkerKind::Main,
+                        kind: ferris_idea_languages::jvm::MarkerKind::Main,
                         class: "request".to_owned(),
                         method: None,
                     })
                     .collect(),
-                None => idecraft_core::package_scripts(&text)
+                None => ferris_idea_core::package_scripts(&text)
                     .into_iter()
-                    .map(|s| idecraft_languages::jvm::RunMarker {
+                    .map(|s| ferris_idea_languages::jvm::RunMarker {
                         line: s.line,
-                        kind: idecraft_languages::jvm::MarkerKind::Main,
+                        kind: ferris_idea_languages::jvm::MarkerKind::Main,
                         class: s.name,
                         method: None,
                     })
@@ -8992,7 +9615,7 @@ impl WorkbenchView {
     }
 
     /// The ▶ markers of an open file (for tests).
-    pub fn run_markers_of(&self, path: &Path) -> Vec<idecraft_languages::jvm::RunMarker> {
+    pub fn run_markers_of(&self, path: &Path) -> Vec<ferris_idea_languages::jvm::RunMarker> {
         self.run_marker_info.get(path).cloned().unwrap_or_default()
     }
 
@@ -9165,7 +9788,7 @@ impl WorkbenchView {
     /// Paste from History (`SPEC-0057` v3 behaviour 20): the copied texts, newest first; the chosen
     /// one goes on the clipboard and is pasted into the active editor.
     fn show_paste_history(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        use idecraft_editor::paste_history::{PasteHistory, row};
+        use ferris_idea_editor::paste_history::{PasteHistory, row};
         let entries = PasteHistory::global().list();
         if entries.is_empty() {
             self.status = Some("Nothing has been copied yet".into());
@@ -9203,7 +9826,7 @@ impl WorkbenchView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        use idecraft_languages::jvm::MarkerKind;
+        use ferris_idea_languages::jvm::MarkerKind;
         let Some(marker) = self
             .run_marker_info
             .get(path)
@@ -9241,16 +9864,21 @@ impl WorkbenchView {
                     .parent()
                     .map(|p| p.to_string_lossy().into_owned())
                     .unwrap_or_default();
-                Some(idecraft_core::package_script_config(
+                Some(ferris_idea_core::package_script_config(
                     dir,
                     &rel_dir,
                     &text,
                     &marker.class,
                 ))
             }
+            // The `main` of a Go program or a Rust binary runs the file (SPEC-0097 v3 behaviour
+            // 8).
+            (MarkerKind::Main, _) if ferris_idea_languages::main_markers::applies(&rel) => {
+                ferris_idea_core::context_config_in(&self.root, &model, &rel, &text)
+            }
             // One test of pytest, Go or Rust (SPEC-0045 v5 behaviour 13).
-            _ if idecraft_languages::test_markers::test_file(&rel).is_some() => {
-                idecraft_core::single_test_config(
+            _ if ferris_idea_languages::test_markers::test_file(&rel).is_some() => {
+                ferris_idea_core::single_test_config(
                     &model,
                     &rel,
                     &text,
@@ -9259,30 +9887,35 @@ impl WorkbenchView {
                 )
             }
             (MarkerKind::TestMethod, Some(m)) => {
-                idecraft_core::test_method_config(&model, &rel, &text, m)
+                ferris_idea_core::test_method_config(&model, &rel, &text, m)
             }
             // A test or suite of Vitest or Jest alone (SPEC-0045 v4 behaviour 12).
-            (kind, None) if idecraft_core::is_js_test_file(&rel) => idecraft_core::js_test_config(
-                &model,
-                &rel,
-                &text,
-                &marker.class,
-                *kind == MarkerKind::TestClass,
-            ),
-            _ => idecraft_core::context_config(&model, &rel, &text),
+            (kind, None) if ferris_idea_core::is_js_test_file(&rel) => {
+                ferris_idea_core::js_test_config(
+                    &model,
+                    &rel,
+                    &text,
+                    &marker.class,
+                    *kind == MarkerKind::TestClass,
+                )
+            }
+            _ => ferris_idea_core::context_config_in(&self.root, &model, &rel, &text),
         };
         let Some(config) = config else {
-            self.status = Some(
+            self.status = Some(if marker.kind == MarkerKind::Main {
+                // A Rust file outside a Cargo package (SPEC-0097 v3 behaviour 8).
+                "Nothing to run in this file".into()
+            } else {
                 "These tests run through Maven or Gradle: open the project with its build file"
-                    .into(),
-            );
+                    .into()
+            });
             cx.notify();
             return;
         };
         let mut items = vec![format!("Run '{}'", config.name)];
         // A Jest test or suite can be debugged too (SPEC-0045 v6 behaviour 12).
         if marker.kind == MarkerKind::Main
-            || idecraft_languages::debug_plan::is_npx_jest(&config.command)
+            || ferris_idea_languages::debug_plan::is_npx_jest(&config.command)
         {
             items.push(format!("Debug '{}'", config.name));
         }
@@ -9311,7 +9944,7 @@ impl WorkbenchView {
         match action {
             "OptimizeImports" => self.optimize_imports(cx),
             // An unused declaration of the project's index (SPEC-0098 v12 behaviour 26).
-            idecraft_languages::reference_index::SAFE_DELETE => self.safe_delete(window, cx),
+            ferris_idea_languages::reference_index::SAFE_DELETE => self.safe_delete(window, cx),
             _ => {}
         }
     }
@@ -9324,18 +9957,18 @@ impl WorkbenchView {
             return;
         };
         // Python: ruff, else the language server's unused imports (SPEC-0329 behaviour 7).
-        if idecraft_languages::LanguageId::detect(&path)
-            == Some(idecraft_languages::LanguageId::Python)
+        if ferris_idea_languages::LanguageId::detect(&path)
+            == Some(ferris_idea_languages::LanguageId::Python)
         {
             self.python_optimize_imports(cx);
             return;
         }
         // JavaScript, TypeScript, Vue, Svelte: the language server (SPEC-0123 v4 behaviour 6).
-        if idecraft_languages::js_imports::applies(&path) {
+        if ferris_idea_languages::js_imports::applies(&path) {
             self.js_optimize_imports(cx);
             return;
         }
-        let Some(lang) = idecraft_languages::jvm::Jvm::of(&path.to_string_lossy()) else {
+        let Some(lang) = ferris_idea_languages::jvm::Jvm::of(&path.to_string_lossy()) else {
             self.status = Some(
                 "Optimize Imports works in Java, Kotlin, Python, JavaScript, TypeScript, Vue and Svelte files"
                     .into(),
@@ -9345,11 +9978,11 @@ impl WorkbenchView {
         };
         let text = editor.read(cx).state.buffer.text();
         self.status = Some(
-            match idecraft_languages::jvm::optimize_imports(lang, &text) {
+            match ferris_idea_languages::jvm::optimize_imports(lang, &text) {
                 Err(e) => e,
                 Ok(None) => "Imports are already optimized".into(),
                 Ok(Some(plan)) => {
-                    let edit = idecraft_languages::jvm::TextEdit {
+                    let edit = ferris_idea_languages::jvm::TextEdit {
                         range: plan.range.clone(),
                         text: plan.replacement.clone(),
                     };
@@ -9367,16 +10000,16 @@ impl WorkbenchView {
 
     /// The Generate menu of a Java class (`Generate`, behaviour 3).
     pub fn generate_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        use idecraft_languages::jvm::GenerateKind;
+        use ferris_idea_languages::jvm::GenerateKind;
         let (Some(path), Some(editor)) = (self.active_path(), self.active_editor()) else {
             return;
         };
-        let lang = idecraft_languages::jvm::Jvm::of(&path.to_string_lossy());
+        let lang = ferris_idea_languages::jvm::Jvm::of(&path.to_string_lossy());
         let text = editor.read(cx).state.buffer.text();
         let caret = editor.read(cx).state.carets.primary().head;
         let at = byte_of(&text, caret);
         // Kotlin has its own Generate menu (SPEC-0132 behaviour 1).
-        if lang == Some(idecraft_languages::jvm::Jvm::Kotlin) {
+        if lang == Some(ferris_idea_languages::jvm::Jvm::Kotlin) {
             let rows = java_actions::kotlin_generate_rows();
             let items = rows.iter().map(|(label, _)| label.clone()).collect();
             self.show_caret_list(
@@ -9397,26 +10030,40 @@ impl WorkbenchView {
             return;
         }
         // The refusals pass with the caret (SPEC-0122 v5 behaviour 3c).
-        if lang != Some(idecraft_languages::jvm::Jvm::Java) {
+        if lang != Some(ferris_idea_languages::jvm::Jvm::Java) {
             self.hint_status("Generate works in Java and Kotlin classes".into(), cx);
             return;
         }
         let Some((class, _)) =
-            idecraft_languages::jvm::generate_fields(&text, at, GenerateKind::Getters)
+            ferris_idea_languages::jvm::generate_fields(&text, at, GenerateKind::Getters)
         else {
             self.hint_status("Put the caret inside a class to generate code".into(), cx);
             return;
         };
-        // Only what can be generated here (SPEC-0122 v3 behaviour 3a, OBS-0027).
-        let kinds = idecraft_languages::jvm::applicable_kinds(&text, at);
-        let items = kinds.iter().map(|k| k.label().to_owned()).collect();
+        // Only what can be generated here (SPEC-0122 v3 behaviour 3a, OBS-0027), then the
+        // choosers, Test… and Copyright (v10 behaviour 3d, OBS-0119 K2).
+        let kinds = ferris_idea_languages::jvm::applicable_kinds(&text, at);
+        let facts = java_actions::GenerateFacts {
+            supertypes: java_actions::class_has_supertypes(&text, &class),
+            fields: ferris_idea_languages::jvm::generate_fields(&text, at, GenerateKind::Getters)
+                .is_some_and(|(_, f)| !f.is_empty()),
+            is_test: ferris_idea_languages::related::test_name(&path).is_some_and(|n| n.is_test),
+            copyright: ferris_idea_languages::copyright::load_profile(&self.root).is_some(),
+        };
+        let rows = java_actions::java_generate_rows(&kinds, facts);
+        let items = rows.iter().map(|(label, _)| label.clone()).collect();
         self.show_caret_list(
             format!("Generate in {class}"),
             items,
             window,
             cx,
-            move |this, i, window, cx| {
-                this.generate_choose(kinds[i], window, cx);
+            move |this, i, window, cx| match rows[i].1 {
+                java_actions::JavaGenerate::Kind(kind) => this.generate_choose(kind, window, cx),
+                java_actions::JavaGenerate::Override => this.override_methods(false, window, cx),
+                java_actions::JavaGenerate::Implement => this.override_methods(true, window, cx),
+                java_actions::JavaGenerate::Delegate => this.delegate_methods(window, cx),
+                java_actions::JavaGenerate::Test => this.generate_test(window, cx),
+                java_actions::JavaGenerate::Copyright => this.update_copyright(cx),
             },
         );
     }
@@ -9424,7 +10071,7 @@ impl WorkbenchView {
     /// Generates `kind` in the class at the caret as one undo step (behaviour 3).
     pub fn generate(
         &mut self,
-        kind: idecraft_languages::jvm::GenerateKind,
+        kind: ferris_idea_languages::jvm::GenerateKind,
         cx: &mut Context<Self>,
     ) {
         let Some(editor) = self.active_editor() else {
@@ -9433,13 +10080,13 @@ impl WorkbenchView {
         let text = editor.read(cx).state.buffer.text();
         let caret = editor.read(cx).state.carets.primary().head;
         let kotlin = self.active_path().is_some_and(|p| {
-            idecraft_languages::jvm::Jvm::of(&p.to_string_lossy())
-                == Some(idecraft_languages::jvm::Jvm::Kotlin)
+            ferris_idea_languages::jvm::Jvm::of(&p.to_string_lossy())
+                == Some(ferris_idea_languages::jvm::Jvm::Kotlin)
         });
         let planned = if kotlin {
-            idecraft_languages::jvm::generate_kotlin(&text, byte_of(&text, caret), kind)
+            ferris_idea_languages::jvm::generate_kotlin(&text, byte_of(&text, caret), kind)
         } else {
-            idecraft_languages::jvm::generate(&text, byte_of(&text, caret), kind)
+            ferris_idea_languages::jvm::generate(&text, byte_of(&text, caret), kind)
         };
         match planned {
             Ok(edits) => {
@@ -9474,6 +10121,12 @@ impl WorkbenchView {
                     this.remote_connect(target, cx);
                 }
                 crate::RemoteEvent::Browse(path) => this.remote_browse(path.clone(), cx),
+                crate::RemoteEvent::Expand(path) => {
+                    if let (Some(remote), Some(v)) = (this.remote.clone(), this.remote_view.clone())
+                    {
+                        crate::remote_view::expand(remote, v, path.clone(), cx);
+                    }
+                }
                 crate::RemoteEvent::Open(path) => this.remote_open(path.clone(), window, cx),
                 crate::RemoteEvent::Refresh => match this.remote_dir.clone() {
                     Some(dir) => this.remote_browse(dir, cx),
@@ -9526,6 +10179,9 @@ impl WorkbenchView {
                     this.remote_open_project(host.clone(), folder.clone(), cx)
                 }
                 crate::RemoteEvent::CancelOpen => this.remote_cancel_open(cx),
+                // Ferris IDEA's own hosts (SPEC-0121 v5 behaviour 1b).
+                crate::RemoteEvent::AddHost(host) => this.remote_add_host(host.clone(), cx),
+                crate::RemoteEvent::RemoveHost(alias) => this.remote_remove_host(alias.clone(), cx),
                 crate::RemoteEvent::Hosts => {
                     this.remote = None;
                     this.remote_dir = None;
@@ -9540,7 +10196,57 @@ impl WorkbenchView {
         ));
         self.remote_view = Some(view.clone());
         self.load_remote_hosts(cx);
+        self.watch_remote_hosts(cx);
         view
+    }
+
+    /// The files the host list comes from (`SPEC-0121` v7 behaviour 5a): the SSH configuration
+    /// and, without a `-F` file of the caller's own, Ferris IDEA's own host list
+    /// (`<settings folder>/ssh/config`).
+    fn remote_host_files(&self) -> Vec<PathBuf> {
+        let mut files = vec![self.remote_ssh_config()];
+        let own_config = self.remote_extra.iter().any(|a| a.starts_with("-F"));
+        if !own_config && let Some(own) = ferris_idea_remote::host_files() {
+            files.push(own.own);
+        }
+        files
+    }
+
+    /// Reads the host list again whenever one of its files changes, while the window lives
+    /// (`SPEC-0121` v7 behaviour 5a): checked every second by size and modification time.
+    fn watch_remote_hosts(&mut self, cx: &mut Context<Self>) {
+        let stamp = |files: &[PathBuf]| -> Vec<Option<(std::time::SystemTime, u64)>> {
+            files
+                .iter()
+                .map(|f| {
+                    std::fs::metadata(f)
+                        .ok()
+                        .map(|m| (m.modified().unwrap_or(std::time::UNIX_EPOCH), m.len()))
+                })
+                .collect()
+        };
+        let mut seen = stamp(&self.remote_host_files());
+        cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(std::time::Duration::from_secs(1))
+                    .await;
+                let Ok(files) = this.update(cx, |this, _| this.remote_host_files()) else {
+                    return;
+                };
+                let now = stamp(&files);
+                if now != seen {
+                    seen = now;
+                    if this
+                        .update(cx, |this, cx| this.load_remote_hosts(cx))
+                        .is_err()
+                    {
+                        return;
+                    }
+                }
+            }
+        })
+        .detach();
     }
 
     /// Uses these extra `ssh` arguments for every host (tests: a private config and key). A
@@ -9555,19 +10261,74 @@ impl WorkbenchView {
         let home = std::env::var_os("HOME")
             .map(PathBuf::from)
             .unwrap_or_default();
-        idecraft_remote::ssh_config_file(&self.remote_extra, &home)
+        ferris_idea_remote::ssh_config_file(&self.remote_extra, &home)
+    }
+
+    /// Adds `host` to Ferris IDEA's own host list in the background (`SPEC-0121` v5 behaviour 1b):
+    /// the form closes and the list is read again, or the form shows the refusal.
+    pub fn remote_add_host(&mut self, host: ferris_idea_remote::OwnHost, cx: &mut Context<Self>) {
+        let alias = host.alias.clone();
+        let task = cx.background_executor().spawn(async move {
+            let files = ferris_idea_remote::host_files()
+                .ok_or(ferris_idea_remote::HostFileError::NoFiles)?;
+            ferris_idea_remote::add_host(&files, &host, false)
+        });
+        cx.spawn(async move |this, cx| {
+            let result = task.await;
+            let _ = this.update(cx, |this, cx| {
+                let answer = result.as_ref().map(|_| ()).map_err(|e| e.to_string());
+                if answer.is_ok() {
+                    this.status = Some(format!("Added {alias} to Ferris IDEA's hosts"));
+                    this.load_remote_hosts(cx);
+                }
+                if let Some(v) = &this.remote_view {
+                    v.update(cx, |v, cx| v.host_added(answer, cx));
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Removes `alias` from Ferris IDEA's own host list in the background; a refusal is shown in the
+    /// window.
+    pub fn remote_remove_host(&mut self, alias: String, cx: &mut Context<Self>) {
+        let name = alias.clone();
+        let task = cx.background_executor().spawn(async move {
+            let files = ferris_idea_remote::host_files()
+                .ok_or(ferris_idea_remote::HostFileError::NoFiles)?;
+            ferris_idea_remote::remove_host(&files, &name, false)
+        });
+        cx.spawn(async move |this, cx| {
+            let result = task.await;
+            let _ = this.update(cx, |this, cx| {
+                match result {
+                    Ok(_) => {
+                        this.status = Some(format!("Removed {alias} from Ferris IDEA's hosts"));
+                        this.load_remote_hosts(cx);
+                    }
+                    Err(e) => {
+                        if let Some(v) = &this.remote_view {
+                            v.update(cx, |v, cx| v.show_error(e.to_string(), cx));
+                        }
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
     }
 
     /// A target from what the user typed: an alias or `[user@]host[:port]`.
-    fn remote_target(&self, spec: &str) -> idecraft_remote::SshTarget {
-        idecraft_remote::SshTarget::parse(spec, &self.remote_extra)
+    fn remote_target(&self, spec: &str) -> ferris_idea_remote::SshTarget {
+        ferris_idea_remote::SshTarget::parse(spec, &self.remote_extra)
     }
 
     fn load_remote_hosts(&mut self, cx: &mut Context<Self>) {
         let extra = self.remote_extra.clone();
         let task = cx
             .background_executor()
-            .spawn(async move { idecraft_remote::host_list(&extra) });
+            .spawn(async move { ferris_idea_remote::host_list(&extra) });
         cx.spawn(async move |this, cx| {
             let hosts = task.await;
             let _ = this.update(cx, |this, cx| {
@@ -9599,19 +10360,23 @@ impl WorkbenchView {
     }
 
     /// Connects to `target` in the background and shows its home folder (behaviour 1).
-    pub fn remote_connect(&mut self, target: idecraft_remote::SshTarget, cx: &mut Context<Self>) {
+    pub fn remote_connect(
+        &mut self,
+        target: ferris_idea_remote::SshTarget,
+        cx: &mut Context<Self>,
+    ) {
         let label = target.host.clone();
         if let Some(v) = &self.remote_view {
             v.update(cx, |v, cx| {
                 v.show_busy(format!("Connecting to {label}…"), cx)
             });
         }
-        let remote = idecraft_remote::Remote::new(target);
+        let remote = ferris_idea_remote::Remote::new(target);
         let r = remote.clone();
         let task = cx.background_executor().spawn(async move {
             let home = r.home()?;
             let entries = r.list(&home)?;
-            Ok::<_, idecraft_remote::RemoteError>((home, entries))
+            Ok::<_, ferris_idea_remote::RemoteError>((home, entries))
         });
         cx.spawn(async move |this, cx| {
             let result = task.await;
@@ -9651,7 +10416,7 @@ impl WorkbenchView {
         let task = cx.background_executor().spawn(async move {
             let dir = remote.resolve_dir(&path)?;
             let entries = remote.list(&dir)?;
-            Ok::<_, idecraft_remote::RemoteError>((dir, entries))
+            Ok::<_, ferris_idea_remote::RemoteError>((dir, entries))
         });
         cx.spawn(async move |this, cx| {
             let result = task.await;
@@ -9676,9 +10441,11 @@ impl WorkbenchView {
         let Some(remote) = self.remote.clone() else {
             return;
         };
-        let Some(local) =
-            idecraft_remote::mirror_path(&idecraft_remote::cache_dir(), &remote.target, &path)
-        else {
+        let Some(local) = ferris_idea_remote::mirror_path(
+            &ferris_idea_remote::cache_dir(),
+            &remote.target,
+            &path,
+        ) else {
             self.status = Some(format!("{path} cannot be opened"));
             cx.notify();
             return;
@@ -9689,12 +10456,12 @@ impl WorkbenchView {
             let file = r.read(&remote_path)?;
             if let Some(dir) = local.parent() {
                 std::fs::create_dir_all(dir)
-                    .map_err(|e| idecraft_remote::RemoteError::Failed(e.to_string()))?;
+                    .map_err(|e| ferris_idea_remote::RemoteError::Failed(e.to_string()))?;
             }
             std::fs::write(&local, &file.bytes)
-                .map_err(|e| idecraft_remote::RemoteError::Failed(e.to_string()))?;
+                .map_err(|e| ferris_idea_remote::RemoteError::Failed(e.to_string()))?;
             let local = local.canonicalize().unwrap_or(local);
-            Ok::<_, idecraft_remote::RemoteError>((local, file.stamp))
+            Ok::<_, ferris_idea_remote::RemoteError>((local, file))
         });
         let window_handle = window.window_handle();
         cx.spawn(async move |this, cx| {
@@ -9702,7 +10469,7 @@ impl WorkbenchView {
             let _ = cx.update_window(window_handle, |_, window, cx| {
                 let _ = this.update(cx, |this, cx| {
                     match result {
-                        Ok((local, stamp)) => {
+                        Ok((local, file)) => {
                             // An editor still showing an older copy reads the new one.
                             if let Some(e) = this.editors.get(&local).cloned() {
                                 e.update(cx, |e, cx| e.check_disk(cx));
@@ -9712,8 +10479,9 @@ impl WorkbenchView {
                                 RemoteOpened {
                                     remote: remote.clone(),
                                     path: path.clone(),
-                                    stamp,
-                                    overwrite: false,
+                                    stamp: file.stamp,
+                                    base: file.bytes,
+                                    host: None,
                                 },
                             );
                             this.open(&local, window, cx);
@@ -9739,7 +10507,7 @@ impl WorkbenchView {
         .detach();
     }
 
-    /// Starts IDECraft's backend on the connected host for the folder shown: an IDECraft of this
+    /// Starts Ferris IDEA's backend on the connected host for the folder shown: a Ferris IDEA of this
     /// version there, or this one uploaded when the host has the same system (`SPEC-0158`
     /// behaviours 1–4).
     pub fn remote_start_backend(&mut self, cx: &mut Context<Self>) {
@@ -9748,7 +10516,7 @@ impl WorkbenchView {
         };
         if let Some(v) = &self.remote_view {
             v.update(cx, |v, cx| {
-                v.show_busy(format!("Starting IDECraft's backend in {folder}…"), cx)
+                v.show_busy(format!("Starting Ferris IDEA's backend in {folder}…"), cx)
             });
         }
         let binary = self
@@ -9758,14 +10526,14 @@ impl WorkbenchView {
         let dir = folder.clone();
         let install = self.remote_backend_dir.clone();
         let task = cx.background_executor().spawn(async move {
-            let installed = idecraft_remote::ensure_backend(
+            let installed = ferris_idea_remote::ensure_backend(
                 &remote,
                 &install,
                 env!("CARGO_PKG_VERSION"),
                 &binary,
             )?;
-            let backend = idecraft_remote::Backend::start(&remote, installed.path(), &dir)?;
-            Ok::<_, idecraft_remote::RemoteError>((installed, backend))
+            let backend = ferris_idea_remote::Backend::start(&remote, installed.path(), &dir)?;
+            Ok::<_, ferris_idea_remote::RemoteError>((installed, backend))
         });
         cx.spawn(async move |this, cx| {
             let result = task.await;
@@ -9774,8 +10542,8 @@ impl WorkbenchView {
                     Ok((installed, backend)) => {
                         let name = backend.server.clone();
                         let how = match installed {
-                            idecraft_remote::Installed::Present(_) => "found on the host",
-                            idecraft_remote::Installed::Uploaded(_) => "uploaded",
+                            ferris_idea_remote::Installed::Present(_) => "found on the host",
+                            ferris_idea_remote::Installed::Uploaded(_) => "uploaded",
                         };
                         this.status = Some(format!(
                             "Backend {name} ({how}) runs in {folder} with {} tools",
@@ -9810,7 +10578,7 @@ impl WorkbenchView {
     }
 
     /// Uploads `binary` as the backend instead of this program (window tests, which run in a test
-    /// binary that is no `idecraft`).
+    /// binary that is no `ferris-idea`).
     pub fn set_remote_backend_binary(&mut self, binary: PathBuf) {
         self.remote_backend_binary = Some(binary);
     }
@@ -9832,9 +10600,9 @@ impl WorkbenchView {
             });
         }
         let task = cx.background_executor().spawn(async move {
-            let mut b = backend
-                .lock()
-                .map_err(|_| idecraft_remote::RemoteError::Failed("the backend is busy".into()))?;
+            let mut b = backend.lock().map_err(|_| {
+                ferris_idea_remote::RemoteError::Failed("the backend is busy".into())
+            })?;
             b.call("search_in_files", serde_json::json!({"pattern": query}))
         });
         cx.spawn(async move |this, cx| {
@@ -9849,7 +10617,7 @@ impl WorkbenchView {
                                     a.iter()
                                         .map(|m| {
                                             (
-                                                idecraft_remote::join(
+                                                ferris_idea_remote::join(
                                                     &folder,
                                                     m["path"].as_str().unwrap_or_default(),
                                                 ),
@@ -9887,9 +10655,9 @@ impl WorkbenchView {
             return;
         };
         let kind = if dir {
-            idecraft_remote::NewEntry::Dir
+            ferris_idea_remote::NewEntry::Dir
         } else {
-            idecraft_remote::NewEntry::File
+            ferris_idea_remote::NewEntry::File
         };
         let r = remote.clone();
         let target = path.clone();
@@ -9921,7 +10689,7 @@ impl WorkbenchView {
     fn remote_changed(
         &mut self,
         path: &str,
-        result: Result<(), idecraft_remote::RemoteError>,
+        result: Result<(), ferris_idea_remote::RemoteError>,
         verb: &str,
         cx: &mut Context<Self>,
     ) {
@@ -9937,7 +10705,7 @@ impl WorkbenchView {
                     let name = path.rsplit('/').next().unwrap_or(path).to_owned();
                     v.update(cx, |v, _| v.select_after_refresh(name));
                 }
-                self.remote_browse(idecraft_remote::parent(path), cx);
+                self.remote_browse(ferris_idea_remote::parent(path), cx);
             }
             Err(e) => {
                 if let Some(v) = &self.remote_view {
@@ -10022,13 +10790,13 @@ impl WorkbenchView {
         cx: &mut Context<Self>,
     ) -> Option<(
         String,
-        gpui::Task<Result<serde_json::Value, idecraft_remote::RemoteError>>,
+        gpui::Task<Result<serde_json::Value, ferris_idea_remote::RemoteError>>,
     )> {
         let (folder, backend) = self.remote_backend.clone()?;
         let task = cx.background_executor().spawn(async move {
-            let mut b = backend
-                .lock()
-                .map_err(|_| idecraft_remote::RemoteError::Failed("the backend is busy".into()))?;
+            let mut b = backend.lock().map_err(|_| {
+                ferris_idea_remote::RemoteError::Failed("the backend is busy".into())
+            })?;
             b.call(tool, arguments)
         });
         Some((folder, task))
@@ -10056,7 +10824,7 @@ impl WorkbenchView {
                             let mut hits: Vec<(String, usize, String)> = Vec::new();
                             for s in found["symbols"].as_array().into_iter().flatten() {
                                 hits.push((
-                                    idecraft_remote::join(
+                                    ferris_idea_remote::join(
                                         &folder,
                                         s["path"].as_str().unwrap_or_default(),
                                     ),
@@ -10070,7 +10838,7 @@ impl WorkbenchView {
                             }
                             for f in found["files"].as_array().into_iter().flatten() {
                                 hits.push((
-                                    idecraft_remote::join(
+                                    ferris_idea_remote::join(
                                         &folder,
                                         f["path"].as_str().unwrap_or_default(),
                                     ),
@@ -10176,7 +10944,7 @@ impl WorkbenchView {
                             if configs.is_empty() {
                                 v.update(cx, |v, cx| {
                                     v.show_error(
-                                        "The host's project has no run configurations (.idecraft/run.toml)".into(),
+                                        "The host's project has no run configurations (.ferris-idea/run.toml)".into(),
                                         cx,
                                     )
                                 });
@@ -10215,7 +10983,7 @@ impl WorkbenchView {
                     serde_json::json!({"name": task_name, "dry_run": true}),
                 )
                 .map_err(|e| e.to_string())?;
-            idecraft_remote::run_steps(&configs, &plan)
+            ferris_idea_remote::run_steps(&configs, &plan)
         });
         let window_handle = window.window_handle();
         cx.spawn(async move |this, cx| {
@@ -10224,7 +10992,7 @@ impl WorkbenchView {
                 let _ = this.update(cx, |this, cx| {
                     match steps {
                         Ok(steps) => {
-                            let script = idecraft_remote::run_script(&folder, &steps);
+                            let script = ferris_idea_remote::run_script(&folder, &steps);
                             // ADR-0025: the one start point checks the client and every hop.
                             let command = match remote.script_command(&script) {
                                 Ok(c) => c,
@@ -10263,10 +11031,10 @@ impl WorkbenchView {
             .map(|f| (f.remote.target.host.clone(), f.path.clone()))
     }
 
-    /// Sends a saved local copy back to its host (behaviour 4): refused once when the host's
-    /// file changed since it was read, so nobody's change is lost silently; saving again
-    /// overwrites it.
-    fn upload_remote(&mut self, path: &Path, cx: &mut Context<Self>) {
+    /// Sends a saved local copy back to its host (behaviour 4). When the host's file changed
+    /// since the base was read, nothing is sent: the host's version is read and the window asks
+    /// what to do (`SPEC-0121` v7 behaviour 4a) — a save alone never overwrites it.
+    pub(crate) fn upload_remote(&mut self, path: &Path, cx: &mut Context<Self>) {
         let key = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
         let Some(opened) = self.remote_files.get(&key).cloned() else {
             return;
@@ -10277,12 +11045,18 @@ impl WorkbenchView {
         let label = format!("{}:{}", opened.remote.target.host, opened.path);
         self.status = Some(format!("Uploading to {label}…"));
         let task = cx.background_executor().spawn(async move {
-            if opened.overwrite {
-                opened.remote.overwrite(&opened.path, &bytes)
-            } else {
-                opened
-                    .remote
-                    .write(&opened.path, &bytes, Some(&opened.stamp))
+            let expected = (opened.stamp != "absent").then_some(opened.stamp.as_str());
+            match opened.remote.write(&opened.path, &bytes, expected) {
+                Ok(stamp) => Ok(Ok((stamp, bytes))),
+                Err(ferris_idea_remote::RemoteError::Changed { host, .. }) => {
+                    // The host's version, for the question and a merge.
+                    if host == "absent" {
+                        return Ok(Err((None, host)));
+                    }
+                    let now = opened.remote.read(&opened.path)?;
+                    Ok(Err((Some(now.bytes), now.stamp)))
+                }
+                Err(e) => Err(e),
             }
         });
         cx.spawn(async move |this, cx| {
@@ -10290,18 +11064,20 @@ impl WorkbenchView {
             let _ = this.update(cx, |this, cx| {
                 let entry = this.remote_files.get_mut(&key);
                 match (result, entry) {
-                    (Ok(stamp), Some(e)) => {
+                    (Ok(Ok((stamp, bytes))), Some(e)) => {
                         e.stamp = stamp;
-                        e.overwrite = false;
+                        e.base = bytes;
+                        e.host = None;
                         let path = e.path.clone();
                         this.status = Some(format!("Uploaded to {label}"));
                         this.remote_check(path, cx);
                     }
-                    (Err(idecraft_remote::RemoteError::Changed(_)), Some(e)) => {
-                        e.overwrite = true;
+                    (Ok(Err(host)), Some(e)) => {
+                        e.host = Some(host);
                         this.status = Some(format!(
-                            "{label} changed on the host since it was opened: nothing was sent. Save again to overwrite it"
+                            "{label} changed on the host since it was opened: nothing was sent"
                         ));
+                        this.ask_remote_conflict(&key, cx);
                     }
                     (Err(err), _) => this.status = Some(format!("Upload failed: {err}")),
                     (Ok(_), None) => {}
@@ -10361,8 +11137,9 @@ impl WorkbenchView {
                 crate::ProfilerEvent::Again(kind) => this.profile_selected_kind(*kind, window, cx),
                 crate::ProfilerEvent::Attach(pid, kind) => this.profile_attach(*pid, *kind, cx),
                 crate::ProfilerEvent::ClosePicker => cx.notify(),
+                crate::ProfilerEvent::Changed => this.refresh_profile_lines(cx),
                 crate::ProfilerEvent::Open(file, line) => {
-                    match idecraft_profiler::find_source(&this.root, file) {
+                    match ferris_idea_profiler::find_source(&this.root, file) {
                         Some(path) => {
                             this.open_at_line(&path, line.saturating_sub(1) as usize, window, cx)
                         }
@@ -10374,9 +11151,12 @@ impl WorkbenchView {
                 }
             },
         ));
+        // "Only project code" of this project (SPEC-0120 v5 behaviour 12).
+        let root = self.root.clone();
+        view.update(cx, |v, _| v.set_project(root));
         // The last profile of the workspace, if one was stored.
         if let Some(run) =
-            idecraft_profiler::last_profile(&self.root.join(idecraft_profiler::PROFILES_DIR))
+            ferris_idea_profiler::last_profile(&self.root.join(ferris_idea_profiler::PROFILES_DIR))
         {
             let title = run.plan.command.join(" ");
             view.update(cx, |v, cx| v.show_run(title, Ok(run), cx));
@@ -10407,7 +11187,7 @@ impl WorkbenchView {
     /// Profiles the selected run configuration in the background and shows the result
     /// (`Profiler.ProfileSelected`, behaviour 5).
     pub fn profile_selected(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.profile_selected_kind(idecraft_profiler::Kind::Cpu, window, cx);
+        self.profile_selected_kind(ferris_idea_profiler::Kind::Cpu, window, cx);
     }
 
     /// Lists the user's processes in the Profiler window to attach to one
@@ -10418,7 +11198,7 @@ impl WorkbenchView {
         window.focus(&view.read(cx).focus());
         let task = cx
             .background_executor()
-            .spawn(async move { idecraft_profiler::processes() });
+            .spawn(async move { ferris_idea_profiler::processes() });
         cx.spawn(async move |this, cx| {
             let list = task.await;
             let _ = this.update(cx, |this, cx| {
@@ -10444,7 +11224,7 @@ impl WorkbenchView {
     pub fn profile_attach(
         &mut self,
         pid: u32,
-        kind: idecraft_profiler::Kind,
+        kind: ferris_idea_profiler::Kind,
         cx: &mut Context<Self>,
     ) {
         if self.profiling {
@@ -10457,11 +11237,11 @@ impl WorkbenchView {
         if let Some(view) = &self.profiler {
             view.update(cx, |v, cx| v.show_busy(format!("{title} (attached)"), cx));
         }
-        let dir = self.root.join(idecraft_profiler::PROFILES_DIR);
+        let dir = self.root.join(ferris_idea_profiler::PROFILES_DIR);
         let seconds = self.attach_seconds.unwrap_or(Self::ATTACH_SECONDS);
         let task = cx
             .background_executor()
-            .spawn(async move { idecraft_profiler::attach(pid, seconds, kind, &dir) });
+            .spawn(async move { ferris_idea_profiler::attach(pid, seconds, kind, &dir) });
         cx.spawn(async move |this, cx| {
             let run = task.await;
             let _ = this.update(cx, |this, cx| {
@@ -10488,7 +11268,7 @@ impl WorkbenchView {
     /// Profiles the selected run configuration for CPU or memory (SPEC-0120, SPEC-0250).
     pub fn profile_selected_kind(
         &mut self,
-        kind: idecraft_profiler::Kind,
+        kind: ferris_idea_profiler::Kind,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -10515,7 +11295,7 @@ impl WorkbenchView {
         let configs = self.run_configs.clone();
         let task_name = name.clone();
         let task = cx.background_executor().spawn(async move {
-            idecraft_profiler::profile_config_kind(&root, &configs, &task_name, kind)
+            ferris_idea_profiler::profile_config_kind(&root, &configs, &task_name, kind)
         });
         cx.spawn(async move |this, cx| {
             let run = task.await;
@@ -10536,14 +11316,14 @@ impl WorkbenchView {
     }
 
     /// The environment last read, if any.
-    pub fn python_env(&self) -> Option<&idecraft_core::PythonEnvironments> {
+    pub fn python_env(&self) -> Option<&ferris_idea_core::PythonEnvironments> {
         self.python_env.as_ref()
     }
 
     /// Label of the status bar widget, when the workspace is a Python project (behaviour 1).
     pub fn python_label(&self) -> Option<String> {
         let env = self.python_env.as_ref().filter(|_| self.python_project)?;
-        Some(idecraft_core::interpreter_label(env, &self.root))
+        Some(ferris_idea_core::interpreter_label(env, &self.root))
     }
 
     /// Shows or hides the Python Packages tool window (`ActivatePythonPackagesToolWindow`,
@@ -10656,7 +11436,7 @@ impl WorkbenchView {
             cx.notify();
             return;
         };
-        let mut items = idecraft_core::interpreter_choices(&env);
+        let mut items = ferris_idea_core::interpreter_choices(&env);
         let paths: Vec<String> = env.interpreters.iter().map(|i| i.path.clone()).collect();
         items.push("  Automatic choice".into());
         items.push("  New virtual environment in .venv".into());
@@ -10687,7 +11467,7 @@ impl WorkbenchView {
     /// Saves `interpreter` as the workspace's choice, or returns to the automatic one (behaviour 2).
     pub fn set_interpreter(&mut self, interpreter: Option<PathBuf>, cx: &mut Context<Self>) {
         self.status = Some(
-            match idecraft_core::save_interpreter(&self.root, interpreter.as_deref()) {
+            match ferris_idea_core::save_interpreter(&self.root, interpreter.as_deref()) {
                 Ok(Some(stored)) => format!("Python interpreter: {stored}"),
                 Ok(None) => "Python interpreter: automatic choice".into(),
                 Err(e) => format!("Cannot save the interpreter: {e}"),
@@ -10712,13 +11492,13 @@ impl WorkbenchView {
         let base = self
             .python_env
             .as_ref()
-            .map(idecraft_core::venv_base)
+            .map(ferris_idea_core::venv_base)
             .unwrap_or_else(|| PathBuf::from("python3"));
-        let command = idecraft_core::venv_command(&base, Path::new(".venv"));
+        let command = ferris_idea_core::venv_command(&base, Path::new(".venv"));
         self.run_python_tool(
             command,
             "Creating .venv…",
-            Some(idecraft_core::venv_python(&target)),
+            Some(ferris_idea_core::venv_python(&target)),
             window,
             cx,
         );
@@ -10744,8 +11524,8 @@ impl WorkbenchView {
             .cloned();
         let tools = self.python_tool_path.clone();
         let plan =
-            idecraft_core::environment_install_plan(&self.root, chosen.as_ref(), &specs, &|p| {
-                idecraft_core::find_tool(tools.as_deref(), p)
+            ferris_idea_core::environment_install_plan(&self.root, chosen.as_ref(), &specs, &|p| {
+                ferris_idea_core::find_tool(tools.as_deref(), p)
             });
         if let Some(why) = plan.refused {
             let message = match &chosen {
@@ -10788,7 +11568,7 @@ impl WorkbenchView {
         let root = self.root.clone();
         let task = cx
             .background_executor()
-            .spawn(async move { idecraft_core::run_tool(&command, &root) });
+            .spawn(async move { ferris_idea_core::run_tool(&command, &root) });
         cx.spawn_in(window, async move |this, cx| {
             let run = task.await;
             let _ = this.update_in(cx, |this, window, cx| {
@@ -10799,16 +11579,16 @@ impl WorkbenchView {
                 if run.ok {
                     this.status = Some(match &choose {
                         Some(_) => "Created .venv and chose it".into(),
-                        None => format!("Installed: {}", idecraft_core::last_line(&run)),
+                        None => format!("Installed: {}", ferris_idea_core::last_line(&run)),
                     });
                     if let Some(python) = choose.clone() {
-                        let _ = idecraft_core::save_interpreter(&this.root, Some(&python));
+                        let _ = ferris_idea_core::save_interpreter(&this.root, Some(&python));
                     }
                     // The Python language server reads the environment again, so imports of
                     // what was just installed resolve (SPEC-0117 v3 behaviour 7, D25).
-                    idecraft_languages::pool::restart_language(
+                    ferris_idea_languages::pool::restart_language(
                         &this.root,
-                        idecraft_languages::LanguageId::Python,
+                        ferris_idea_languages::LanguageId::Python,
                     );
                     let open: Vec<PathBuf> = this
                         .editors
@@ -10820,7 +11600,7 @@ impl WorkbenchView {
                         this.request_diagnostics(&path, cx);
                     }
                 } else {
-                    let message = format!("Failed: {}", idecraft_core::last_line(&run));
+                    let message = format!("Failed: {}", ferris_idea_core::last_line(&run));
                     let failure = crate::InstallFailure::of_run(&run);
                     this.show_python_failure(message, failure, window, cx);
                 }
@@ -10832,7 +11612,7 @@ impl WorkbenchView {
     }
 
     /// The last Spring bean model.
-    pub fn spring_model(&self) -> Option<&idecraft_languages::spring::SpringModel> {
+    pub fn spring_model(&self) -> Option<&ferris_idea_languages::spring::SpringModel> {
         self.spring_model.as_ref()
     }
 
@@ -10852,7 +11632,7 @@ impl WorkbenchView {
                 let at = e
                     .state
                     .buffer
-                    .position_to_offset(idecraft_editor::Position::new(line, 0))
+                    .position_to_offset(ferris_idea_editor::Position::new(line, 0))
                     .unwrap_or(0);
                 e.select_range(at..at, cx);
             });
@@ -10942,6 +11722,17 @@ impl WorkbenchView {
                         DatabaseEvent::EditConnection(profile) => {
                             this.open_connection_dialog(Some(profile.clone()), window, cx)
                         }
+                        // SPEC-0089 v16 behaviour 28: the user's Add… on a data source of `.idea`
+                        // opens the dialog filled; only its Save writes the connection.
+                        DatabaseEvent::AddIdeaSource(form) => {
+                            this.open_connection_dialog(None, window, cx);
+                            if let Some(dialog) = &this.connection_dialog {
+                                dialog.update(cx, |d, cx| {
+                                    // SPEC-0049 v10 behaviour 19: the user only where one logs in.
+                                    d.fill(form, ferris_idea_database::idea_source_note(form), cx)
+                                });
+                            }
+                        }
                         DatabaseEvent::RemoveConnection(id) => this.remove_connection(id, cx),
                         DatabaseEvent::ShowDiagram => this.show_er_diagram(window, cx),
                         DatabaseEvent::SchemaFailed(id) => {
@@ -11009,7 +11800,7 @@ impl WorkbenchView {
     /// shows the table as it is now (SPEC-0107 behaviour 5).
     fn submit_edits(
         &mut self,
-        set: idecraft_database::EditSet,
+        set: ferris_idea_database::EditSet,
         query: String,
         _window: &mut Window,
         cx: &mut Context<Self>,
@@ -11023,7 +11814,7 @@ impl WorkbenchView {
         let task = cx.background_executor().spawn(async move {
             let applied = apply_edits(&profile, &set);
             let rerun = applied.is_ok().then(|| {
-                let statements = idecraft_database::split_statements(&query, profile.dialect);
+                let statements = ferris_idea_database::split_statements(&query, profile.dialect);
                 run_console(&profile, statements)
             });
             (applied, rerun)
@@ -11154,7 +11945,7 @@ impl WorkbenchView {
         left
     }
 
-    /// What runs in this window and would end with IDECraft (`SPEC-0261` v2 behaviour 6): run
+    /// What runs in this window and would end with Ferris IDEA (`SPEC-0261` v2 behaviour 6): run
     /// configurations and tests in the Run window, a debug session, a running database statement;
     /// each named with the project.
     pub fn running_work(&self, cx: &gpui::App) -> Vec<String> {
@@ -11185,7 +11976,7 @@ impl WorkbenchView {
     /// Everything quitting would lose, over all project windows (`SPEC-0261` v2 behaviour 6):
     /// unsaved files named as the question names them, and running work.
     pub fn pending_work(cx: &gpui::App) -> (Vec<String>, Vec<String>) {
-        let unsaved: Vec<PathBuf> = idecraft_editor::documents::DocumentRegistry::global()
+        let unsaved: Vec<PathBuf> = ferris_idea_editor::documents::DocumentRegistry::global()
             .list()
             .into_iter()
             .filter(|d| d.modified)
@@ -11215,9 +12006,9 @@ impl WorkbenchView {
         // either way each file is named (behaviour 15), not "a file".
         let editors: Vec<PathBuf> = editors
             .iter()
-            .map(|p| idecraft_editor::documents::DocumentRegistry::key(p))
+            .map(|p| ferris_idea_editor::documents::DocumentRegistry::key(p))
             .collect();
-        let registry: Vec<PathBuf> = idecraft_editor::documents::DocumentRegistry::global()
+        let registry: Vec<PathBuf> = ferris_idea_editor::documents::DocumentRegistry::global()
             .list()
             .into_iter()
             .filter(|d| d.modified)
@@ -11231,10 +12022,10 @@ impl WorkbenchView {
         left
     }
 
-    /// The one step before IDECraft quits, for ⌘Q, the menu, `quit_ide` and `idecraft quit` alike
+    /// The one step before Ferris IDEA quits, for ⌘Q, the menu, `quit_ide` and `ferris-idea quit` alike
     /// (`SPEC-0261` v3 behaviour 15): checks, saves or discards as `choice` says. `Ok` means quit
     /// now (running programs end when the application quits, behaviour 13); `Err` names what keeps
-    /// IDECraft open.
+    /// Ferris IDEA open.
     pub fn prepare_quit(
         choice: crate::quit_model::QuitChoice,
         cx: &mut gpui::App,
@@ -11268,7 +12059,7 @@ impl WorkbenchView {
         }
     }
 
-    /// Quit IDECraft (`SPEC-0261` v4): at once when nothing is unsaved or running, else after asking
+    /// Quit Ferris IDEA (`SPEC-0261` v4): at once when nothing is unsaved or running, else after asking
     /// in a question drawn in the window in front (behaviour 5). The step runs after the key or
     /// menu handling that asked for it (behaviour 16): inside that handling the window in front is
     /// busy and cannot be reached, so v3 asked nothing and did not quit.
@@ -11279,7 +12070,7 @@ impl WorkbenchView {
     fn quit_now(cx: &mut gpui::App) {
         let (unsaved, running) = Self::pending_work(cx);
         // With nothing pending the user's setting may ask first (SPEC-0337 behaviour 2); only
-        // ⌘Q and the menu come here, never `quit_ide`, `idecraft quit` or a signal.
+        // ⌘Q and the menu come here, never `quit_ide`, `ferris-idea quit` or a signal.
         let confirm = crate::appearance::ide_settings(cx).system.confirm_quit;
         let Some(question) = crate::quit_model::question(&unsaved, &running)
             .or_else(|| confirm.then(crate::quit_model::confirm_question))
@@ -11303,7 +12094,7 @@ impl WorkbenchView {
         }
     }
 
-    /// Quits now; the process ends at the latest [`idecraft_core::QUIT_DEADLINE`] later
+    /// Quits now; the process ends at the latest [`ferris_idea_core::QUIT_DEADLINE`] later
     /// (`SPEC-0261` v4 behaviour 17). In a window test of the harness
     /// ([`crate::project_windows::QuitsInHarness`]) the quit is counted instead: that process is
     /// the test runner.
@@ -11312,7 +12103,7 @@ impl WorkbenchView {
             quits.0.set(quits.0.get() + 1);
             return;
         }
-        idecraft_core::arm_quit_deadline();
+        ferris_idea_core::arm_quit_deadline();
         cx.quit();
     }
 
@@ -11359,7 +12150,7 @@ impl WorkbenchView {
                     Ok(()) => Self::quit_decided(cx),
                     Err(why) => me.update(cx, |b, cx| {
                         b.drawn_question = Some((
-                            crate::dialogs::DrawnQuestion::notice("IDECraft did not quit", why),
+                            crate::dialogs::DrawnQuestion::notice("Ferris IDEA did not quit", why),
                             DrawnFor::Notice,
                         ));
                         cx.notify();
@@ -11396,12 +12187,20 @@ impl WorkbenchView {
                 }
             }
             DrawnFor::FileUndo(redo) => self.answer_file_undo(redo, i == 0, window, cx),
+            DrawnFor::GroupUndo(g, redo) => self.answer_group_undo(g, redo, i == 0, window, cx),
             DrawnFor::Encoding(path, to, answers) => {
                 let answer = answers
                     .get(i)
                     .copied()
                     .unwrap_or(crate::file_properties_model::EncodingAnswer::Cancel);
                 self.answer_encoding(path, to, answer, cx);
+            }
+            DrawnFor::RemoteConflict(path, answers) => {
+                let answer = answers
+                    .get(i)
+                    .copied()
+                    .unwrap_or(crate::remote_conflict::ConflictAnswer::Cancel);
+                self.answer_remote_conflict(path, answer, window, cx);
             }
             DrawnFor::EncodingReload(path, to) => {
                 if i == 0 {
@@ -11410,7 +12209,7 @@ impl WorkbenchView {
             }
             DrawnFor::EncodingLossy(path, to) => {
                 if i == 0 {
-                    let encoding = idecraft_core::file_properties::FileEncoding::of(to);
+                    let encoding = ferris_idea_core::file_properties::FileEncoding::of(to);
                     self.convert_to_encoding(&path, encoding, true, cx);
                 }
             }
@@ -11444,7 +12243,7 @@ impl WorkbenchView {
                 // Marked without a tooltip for the self-test's size check (SPEC-0261 v5).
                 .tip_text(
                     format!("drawn-question-button-{i}"),
-                    idecraft_ui::tooltip::Tip::default(),
+                    ferris_idea_ui::tooltip::Tip::default(),
                 )
                 .on_click(cx.listener(move |this, _: &gpui::ClickEvent, window, cx| {
                     this.answer_drawn_question(i, window, cx)
@@ -11470,7 +12269,10 @@ impl WorkbenchView {
                     .child(
                         div()
                             .id("drawn-question-box")
-                            .tip_text("drawn-question-frame", idecraft_ui::tooltip::Tip::default())
+                            .tip_text(
+                                "drawn-question-frame",
+                                ferris_idea_ui::tooltip::Tip::default(),
+                            )
                             .relative()
                             .w(px(440.))
                             .h_auto()
@@ -11527,10 +12329,10 @@ impl WorkbenchView {
         if self.remote_project.is_some() {
             return;
         }
-        let safe = !idecraft_core::trust::allows_project_code(&self.root);
+        let safe = !ferris_idea_core::trust::allows_project_code(&self.root);
         if safe != self.safe_mode {
             self.safe_mode = safe;
-            idecraft_languages::pool::restart_root(&self.root);
+            ferris_idea_languages::pool::restart_root(&self.root);
             cx.notify();
         }
     }
@@ -11544,7 +12346,7 @@ impl WorkbenchView {
         }
         let answers = crate::trust_model::answers(&self.root, opening);
         let buttons = crate::trust_model::prompt_buttons(&answers);
-        let (message, detail) = idecraft_core::trust::question(&self.root);
+        let (message, detail) = ferris_idea_core::trust::question(&self.root);
         window.activate_window();
         let reply = window.prompt(
             gpui::PromptLevel::Warning,
@@ -11575,14 +12377,29 @@ impl WorkbenchView {
         cx: &mut Context<Self>,
     ) {
         if *answer == crate::trust_model::Answer::DontOpen {
-            let last = cx.windows().len() <= 1;
+            // The project was not opened: its window goes; after the only project window the
+            // Welcome window follows, as after the last Close Project (SPEC-0278 v4 behaviour 2).
+            let this = window.window_handle();
+            let others = crate::project_windows::opened_windows(cx)
+                .into_iter()
+                .any(|w| w != this);
+            let welcome = cx
+                .try_global::<crate::project_windows::OnLastProjectClosed>()
+                .map(|h| h.0.clone());
+            crate::project_windows::unregister_unopened_window(&self.root, cx);
             window.remove_window();
-            if last {
-                cx.quit();
+            match crate::trust_model::after_dont_open(others, welcome.is_some()) {
+                crate::trust_model::AfterDontOpen::Nothing => {}
+                crate::trust_model::AfterDontOpen::Welcome => {
+                    if let Some(show) = welcome {
+                        cx.defer(move |cx| show(cx));
+                    }
+                }
+                crate::trust_model::AfterDontOpen::Quit => cx.quit(),
             }
             return;
         }
-        let Some(file) = idecraft_core::trust::trust_file() else {
+        let Some(file) = ferris_idea_core::trust::trust_file() else {
             self.status = Some("Cannot remember the trust decision: no settings folder".into());
             cx.notify();
             return;
@@ -11674,7 +12491,10 @@ impl WorkbenchView {
     /// The connection the SQL console uses: the one a `.sql` file is bound to or whose console it is
     /// (SPEC-0192 behaviour 1), else the one selected in the Database window, else the only profile
     /// of the workspace (SPEC-0093 behaviour 2).
-    fn console_connection(&self, cx: &gpui::App) -> Option<idecraft_database::ConnectionProfile> {
+    fn console_connection(
+        &self,
+        cx: &gpui::App,
+    ) -> Option<ferris_idea_database::ConnectionProfile> {
         if let Some(p) = self
             .active_path()
             .and_then(|path| self.sql_file_connection(&path))
@@ -11688,7 +12508,7 @@ impl WorkbenchView {
         {
             return Some(p);
         }
-        let mut profiles = idecraft_database::load_profiles(&self.root).ok()?;
+        let mut profiles = ferris_idea_database::load_profiles(&self.root).ok()?;
         (profiles.len() == 1).then(|| profiles.remove(0))
     }
 
@@ -11722,7 +12542,7 @@ impl WorkbenchView {
             // SPEC-0192 v6 behaviour 3b (OBS-0070 V1, OBS-0068 N2): the data-source popup opens at
             // once, and the run goes on after the choice.
             use crate::sql_editor_model::{NoDataSource, no_data_source};
-            let connections = idecraft_database::load_profiles(&self.root)
+            let connections = ferris_idea_database::load_profiles(&self.root)
                 .map(|p| p.len())
                 .unwrap_or(0);
             match no_data_source(connections) {
@@ -11730,7 +12550,7 @@ impl WorkbenchView {
                 NoDataSource::AddOne | NoDataSource::RunOnTheOnly => {
                     self.status = Some(format!(
                         "No connection: add one in the Database tool window or in {}",
-                        idecraft_database::PROFILE_FILE
+                        ferris_idea_database::PROFILE_FILE
                     ));
                     cx.notify();
                 }
@@ -11745,7 +12565,7 @@ impl WorkbenchView {
         if let Some(path) = path.as_deref()
             && unbound
         {
-            let _ = idecraft_database::bind_file(&self.root, path, Some(&profile.id));
+            let _ = ferris_idea_database::bind_file(&self.root, path, Some(&profile.id));
         }
         let (text, selection, caret) = {
             let e = editor.read(cx);
@@ -11815,15 +12635,15 @@ impl WorkbenchView {
     }
 
     /// The connection a `.sql` file is bound to, or whose console it is (SPEC-0192 behaviour 1).
-    fn sql_file_connection(&self, path: &Path) -> Option<idecraft_database::ConnectionProfile> {
+    fn sql_file_connection(&self, path: &Path) -> Option<ferris_idea_database::ConnectionProfile> {
         if !path
             .extension()
             .is_some_and(|e| e.eq_ignore_ascii_case("sql"))
         {
             return None;
         }
-        let profiles = idecraft_database::load_profiles(&self.root).ok()?;
-        let id = idecraft_database::bound_connection(&self.root, path, &profiles)?;
+        let profiles = ferris_idea_database::load_profiles(&self.root).ok()?;
+        let id = ferris_idea_database::bound_connection(&self.root, path, &profiles)?;
         profiles.into_iter().find(|p| p.id == id)
     }
 
@@ -11893,9 +12713,9 @@ impl WorkbenchView {
     /// behaviour 8, IMP-0062).
     fn confirm_and_run_sql(
         &mut self,
-        profile: idecraft_database::ConnectionProfile,
+        profile: ferris_idea_database::ConnectionProfile,
         editor: Entity<EditorView>,
-        statements: Vec<idecraft_database::Statement>,
+        statements: Vec<ferris_idea_database::Statement>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -11903,7 +12723,7 @@ impl WorkbenchView {
             .then(|| {
                 statements
                     .iter()
-                    .flat_map(|s| idecraft_database::inspect(&s.text, profile.dialect, &[]))
+                    .flat_map(|s| ferris_idea_database::inspect(&s.text, profile.dialect, &[]))
                     .find(|p| p.table.is_some())
             })
             .flatten();
@@ -11917,7 +12737,7 @@ impl WorkbenchView {
         let counted = profile.clone();
         let task = cx.background_executor().spawn(async move {
             connect(&counted).ok().and_then(|(rt, session)| {
-                rt.block_on(idecraft_database::count_rows(&session, &table))
+                rt.block_on(ferris_idea_database::count_rows(&session, &table))
                     .ok()
             })
         });
@@ -11959,9 +12779,9 @@ impl WorkbenchView {
     /// window and the time after each statement (SPEC-0093 behaviours 3–6, SPEC-0192 behaviour 5).
     fn run_sql_statements(
         &mut self,
-        profile: idecraft_database::ConnectionProfile,
+        profile: ferris_idea_database::ConnectionProfile,
         editor: Entity<EditorView>,
-        statements: Vec<idecraft_database::Statement>,
+        statements: Vec<ferris_idea_database::Statement>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -12033,9 +12853,9 @@ impl WorkbenchView {
                 let rx = cs.worker.run(move |rt, session| {
                     let script = text;
                     if begin {
-                        for sql in idecraft_database::begin_statements(
+                        for sql in ferris_idea_database::begin_statements(
                             session.dialect(),
-                            idecraft_database::Isolation::default(),
+                            ferris_idea_database::Isolation::default(),
                         )? {
                             crate::table_session::execute(rt, session, &sql)?;
                         }
@@ -12043,9 +12863,9 @@ impl WorkbenchView {
                     let mut notes = Vec::new();
                     // A COMMIT or ROLLBACK in the script ends the transaction; what follows goes
                     // into a new one, as Manual promises (SPEC-0093 v7 behaviour 11).
-                    let reopen = idecraft_database::begin_statements(
+                    let reopen = ferris_idea_database::begin_statements(
                         session.dialect(),
-                        idecraft_database::Isolation::default(),
+                        ferris_idea_database::Isolation::default(),
                     )?;
                     let run = rt.block_on(run_statements_in(
                         &profile,
@@ -12130,6 +12950,11 @@ impl WorkbenchView {
         self.sql_catalogs.remove(id);
         self.sql_schema_generations.refreshed(Some(id));
         self.inspect_after_refresh(Some(id), cx);
+        // SPEC-0089 v17 behaviour 29 (OBS-0120 X2): the Database window shows what the run
+        // created, a procedure as much as a table.
+        if let Some(db) = &self.database {
+            db.update(cx, |d, cx| d.schema_changed(id, cx));
+        }
     }
 
     /// Creates the next console of a connection and opens it (`Console.Open`, SPEC-0192
@@ -12149,12 +12974,12 @@ impl WorkbenchView {
             self.create_console(profile, window, cx);
             return;
         }
-        let profiles = idecraft_database::load_profiles(&self.root).unwrap_or_default();
+        let profiles = ferris_idea_database::load_profiles(&self.root).unwrap_or_default();
         match profiles.len() {
             0 => {
                 self.status = Some(format!(
                     "No connection: add one in {}",
-                    idecraft_database::PROFILE_FILE
+                    ferris_idea_database::PROFILE_FILE
                 ));
                 cx.notify();
             }
@@ -12183,12 +13008,12 @@ impl WorkbenchView {
 
     fn create_console(
         &mut self,
-        profile: idecraft_database::ConnectionProfile,
+        profile: ferris_idea_database::ConnectionProfile,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         self.sql_toolbar_cache.take();
-        match idecraft_database::create_console(&self.root, &profile.id) {
+        match ferris_idea_database::create_console(&self.root, &profile.id) {
             Ok(path) => {
                 self.open(&path, window, cx);
                 self.load_sql_catalog(profile, cx);
@@ -12217,11 +13042,11 @@ impl WorkbenchView {
             cx.notify();
             return;
         };
-        let profiles = idecraft_database::load_profiles(&self.root).unwrap_or_default();
+        let profiles = ferris_idea_database::load_profiles(&self.root).unwrap_or_default();
         if profiles.is_empty() {
             self.status = Some(format!(
                 "No connection: add one in {}",
-                idecraft_database::PROFILE_FILE
+                ferris_idea_database::PROFILE_FILE
             ));
             cx.notify();
             return;
@@ -12235,7 +13060,7 @@ impl WorkbenchView {
             .and_then(|e| {
                 crate::sql_editor_model::content_dialect(&e.read(cx).state.buffer.text())
             });
-        let fits = |p: &idecraft_database::ConnectionProfile| {
+        let fits = |p: &ferris_idea_database::ConnectionProfile| {
             content.is_none_or(|d| crate::sql_editor_model::dialect_fits(d, p.dialect))
         };
         let selected = profiles
@@ -12269,7 +13094,9 @@ impl WorkbenchView {
                     return;
                 };
                 this.sql_toolbar_cache.take();
-                if let Err(e) = idecraft_database::bind_file(&this.root, &path, Some(&profile.id)) {
+                if let Err(e) =
+                    ferris_idea_database::bind_file(&this.root, &path, Some(&profile.id))
+                {
                     this.status = Some(format!("Could not bind the file: {e}"));
                     return;
                 }
@@ -12291,7 +13118,7 @@ impl WorkbenchView {
     /// Reads the default schema of `profile` once, for the toolbar (SPEC-0192 behaviours 2–3).
     fn load_sql_catalog(
         &mut self,
-        profile: idecraft_database::ConnectionProfile,
+        profile: ferris_idea_database::ConnectionProfile,
         cx: &mut Context<Self>,
     ) {
         if self
@@ -12306,7 +13133,7 @@ impl WorkbenchView {
             let mut p = profile;
             p.read_only = true;
             connect(&p).ok().and_then(|(rt, session)| {
-                rt.block_on(idecraft_database::current_schema(&session))
+                rt.block_on(ferris_idea_database::current_schema(&session))
                     .ok()
             })
         });
@@ -12513,7 +13340,11 @@ impl WorkbenchView {
     /// Whether the console `path` of `profile` goes to Manual at its next run: its connection has
     /// Auto-commit off, it has no session yet and was not switched to Auto by hand (`SPEC-0093` v7
     /// behaviour 10).
-    fn starts_manual(&self, path: &Path, profile: &idecraft_database::ConnectionProfile) -> bool {
+    fn starts_manual(
+        &self,
+        path: &Path,
+        profile: &ferris_idea_database::ConnectionProfile,
+    ) -> bool {
         !profile.options.auto_commit
             && !self.console_sessions.contains_key(path)
             && !self.console_auto.contains(path)
@@ -12652,10 +13483,10 @@ impl WorkbenchView {
         ok: bool,
         cx: &mut Context<Self>,
     ) {
-        let file = idecraft_database::history_file(&self.root, id);
+        let file = ferris_idea_database::history_file(&self.root, id);
         let history = self.sql_history.entry(id.to_owned()).or_insert_with(|| {
             file.as_deref()
-                .map(idecraft_database::QueryHistory::load)
+                .map(ferris_idea_database::QueryHistory::load)
                 .unwrap_or_default()
         });
         let at = crate::console_session::now_secs();
@@ -12674,7 +13505,7 @@ impl WorkbenchView {
     }
 
     /// The history entries the popup shows, newest first (`SPEC-0093` v3 behaviour 13).
-    pub fn history_entries(&self) -> Vec<idecraft_database::HistoryEntry> {
+    pub fn history_entries(&self) -> Vec<ferris_idea_database::HistoryEntry> {
         let Some(popup) = &self.history_popup else {
             return Vec::new();
         };
@@ -12708,8 +13539,8 @@ impl WorkbenchView {
         self.sql_history
             .entry(profile.id.clone())
             .or_insert_with(|| {
-                idecraft_database::history_file(&root, &profile.id)
-                    .map(|f| idecraft_database::QueryHistory::load(&f))
+                ferris_idea_database::history_file(&root, &profile.id)
+                    .map(|f| ferris_idea_database::QueryHistory::load(&f))
                     .unwrap_or_default()
             });
         self.history_popup = Some(crate::console_session::HistoryPopup {
@@ -12815,13 +13646,13 @@ impl WorkbenchView {
                 }
                 let dialect = profile
                     .as_ref()
-                    .map_or(idecraft_database::Dialect::PostgreSql, |p| p.dialect);
+                    .map_or(ferris_idea_database::Dialect::PostgreSql, |p| p.dialect);
                 // Comments are coloured in the file's dialect (SPEC-0005 v5 behaviour 19).
                 let colours = profile
                     .as_ref()
                     .map(|p| p.dialect)
-                    .or_else(|| idecraft_database::file_dialect(&path))
-                    .unwrap_or(idecraft_database::Dialect::PostgreSql);
+                    .or_else(|| ferris_idea_database::file_dialect(&path))
+                    .unwrap_or(ferris_idea_database::Dialect::PostgreSql);
                 editor.update(cx, |e, cx| e.set_sql_dialect(Some(colours), cx));
                 if let (Some(p), Some(t)) = (&profile, &tables) {
                     this.sql_schemas
@@ -12830,15 +13661,15 @@ impl WorkbenchView {
                 }
                 let tables = tables.unwrap_or_default();
                 let text = editor.read(cx).state.buffer.text();
-                let problems = idecraft_database::inspect(&text, dialect, &tables);
+                let problems = ferris_idea_database::inspect(&text, dialect, &tables);
                 let found: Vec<_> = problems
                     .iter()
                     .map(|p| {
                         let severity = match p.severity {
-                            idecraft_database::Severity::Error => {
+                            ferris_idea_database::Severity::Error => {
                                 crate::diagnostics_model::Severity::Error
                             }
-                            idecraft_database::Severity::Warning => {
+                            ferris_idea_database::Severity::Warning => {
                                 crate::diagnostics_model::Severity::Warning
                             }
                         };
@@ -12885,8 +13716,8 @@ impl WorkbenchView {
         &mut self,
         cx: &mut Context<Self>,
     ) -> Option<(
-        idecraft_database::ConnectionProfile,
-        Vec<idecraft_database::Statement>,
+        ferris_idea_database::ConnectionProfile,
+        Vec<ferris_idea_database::Statement>,
         Option<String>,
     )> {
         let is_sql = self
@@ -12987,7 +13818,7 @@ impl WorkbenchView {
     /// Database window (`SPEC-0110` v5 behaviour 9).
     pub fn compare_schemas_of(
         &mut self,
-        source: Option<idecraft_database::ConnectionProfile>,
+        source: Option<ferris_idea_database::ConnectionProfile>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -13038,8 +13869,8 @@ impl WorkbenchView {
     /// current schema alone and says why (`SPEC-0110` v7 behaviour 16).
     fn listed_schemas(
         &mut self,
-        profile: &idecraft_database::ConnectionProfile,
-        listed: Result<Vec<idecraft_database::SchemaInfo>, String>,
+        profile: &ferris_idea_database::ConnectionProfile,
+        listed: Result<Vec<ferris_idea_database::SchemaInfo>, String>,
     ) -> Vec<String> {
         match listed {
             Ok(mut schemas) => {
@@ -13068,7 +13899,7 @@ impl WorkbenchView {
         cx: &mut Context<Self>,
     ) {
         use crate::db_compare_model::{CompareTarget, nothing_to_compare, target_choices};
-        let profiles = idecraft_database::load_profiles(&self.root).unwrap_or_default();
+        let profiles = ferris_idea_database::load_profiles(&self.root).unwrap_or_default();
         let choices = target_choices(&profiles, &source.profile, schemas.len() > 1);
         if choices.is_empty() {
             self.status = Some(nothing_to_compare(&source.profile));
@@ -13137,7 +13968,7 @@ impl WorkbenchView {
     fn compare_choose_schema(
         &mut self,
         source: CompareSide,
-        target: idecraft_database::ConnectionProfile,
+        target: ferris_idea_database::ConnectionProfile,
         current: Option<String>,
         schemas: Vec<String>,
         window: &mut Window,
@@ -13181,8 +14012,8 @@ impl WorkbenchView {
             cx.notify();
             return;
         };
-        let profiles = idecraft_database::load_profiles(&self.root).unwrap_or_default();
-        let targets: Vec<idecraft_database::ConnectionProfile> =
+        let profiles = ferris_idea_database::load_profiles(&self.root).unwrap_or_default();
+        let targets: Vec<ferris_idea_database::ConnectionProfile> =
             crate::db_compare_model::object_targets(&profiles, &source)
                 .into_iter()
                 .cloned()
@@ -13217,7 +14048,7 @@ impl WorkbenchView {
     fn compare_object_schema(
         &mut self,
         source: CompareSide,
-        target: idecraft_database::ConnectionProfile,
+        target: ferris_idea_database::ConnectionProfile,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -13275,7 +14106,7 @@ impl WorkbenchView {
                 p.read_only = true;
                 let schema = side.schema.clone();
                 connect(&p).and_then(|(rt, session)| {
-                    rt.block_on(idecraft_database::introspect_schema(
+                    rt.block_on(ferris_idea_database::introspect_schema(
                         &session,
                         schema.as_deref(),
                     ))
@@ -13353,14 +14184,14 @@ impl WorkbenchView {
             // Tables and view definitions (SPEC-0111 v2 behaviour 6).
             let (tables, views) = connect(&p).and_then(|(rt, session)| {
                 rt.block_on(async {
-                    let tables = idecraft_database::introspect(&session).await?;
-                    let views = idecraft_database::view_definitions(&session).await?;
-                    Ok::<_, idecraft_database::DbError>((tables, views))
+                    let tables = ferris_idea_database::introspect(&session).await?;
+                    let views = ferris_idea_database::view_definitions(&session).await?;
+                    Ok::<_, ferris_idea_database::DbError>((tables, views))
                 })
                 .map_err(|e| format!("{}: {e}", p.name))
             })?;
             let names = table.map(|t| vec![t]);
-            idecraft_database::er_model_with_views(&tables, &views, names.as_deref(), 1)
+            ferris_idea_database::er_model_with_views(&tables, &views, names.as_deref(), 1)
                 .map(|m| (p.name, m))
                 .map_err(|e| e.to_string())
         });
@@ -13513,8 +14344,11 @@ impl WorkbenchView {
                         // The script runs on the target, whatever the Database window has selected
                         // (SPEC-0110 v8 behaviour 5, hand test 37 retest).
                         if diffed {
-                            let _ =
-                                idecraft_database::bind_file(&this.root, &path, Some(&target_id));
+                            let _ = ferris_idea_database::bind_file(
+                                &this.root,
+                                &path,
+                                Some(&target_id),
+                            );
                         }
                         format!(
                             "Migration script: {} (Open Migration Script)",
@@ -13627,7 +14461,7 @@ impl WorkbenchView {
         self.send_http_requests(editor, Some(line), window, cx)
     }
 
-    /// Sends every request of the active `.http` file one after another (`IDECraft.HttpRunAllRequests`,
+    /// Sends every request of the active `.http` file one after another (`FerrisIDEA.HttpRunAllRequests`,
     /// `SPEC-0096` v5 behaviour 8); false outside a request file.
     pub fn run_all_http_requests(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
         let Some(editor) = self.active_editor() else {
@@ -13664,7 +14498,7 @@ impl WorkbenchView {
                 at.flatten().unwrap_or_else(|| e.status().line),
             )
         };
-        let file = idecraft_http::parse(&text);
+        let file = ferris_idea_http::parse(&text);
         let indices: Vec<usize> = match at {
             Some(_) => crate::http_model::request_at(&file, line)
                 .into_iter()
@@ -13683,10 +14517,10 @@ impl WorkbenchView {
             .as_ref()
             .and_then(|p| p.parent().map(Path::to_path_buf))
             .unwrap_or_else(|| self.root.clone());
-        let envs = idecraft_http::load_environments(&dir, &self.root);
+        let envs = ferris_idea_http::load_environments(&dir, &self.root);
         // The chosen environment of this file, the only one, or none; with several and none
         // chosen, nothing that uses one of their variables goes (SPEC-0102 v5 behaviour 2).
-        let bare = idecraft_http::resolve(&file, &BTreeMap::new());
+        let bare = ferris_idea_http::resolve(&file, &BTreeMap::new());
         let needed: Vec<String> = indices
             .iter()
             .flat_map(|&i| bare[i].unresolved.iter().cloned())
@@ -13701,9 +14535,9 @@ impl WorkbenchView {
         self.http_env_file = request_file;
         let refusal = choice.refusal();
         let chosen = match choice {
-            idecraft_http::EnvironmentChoice::Use(name) => Some(name),
-            idecraft_http::EnvironmentChoice::Without => None,
-            idecraft_http::EnvironmentChoice::Choose(names) => {
+            ferris_idea_http::EnvironmentChoice::Use(name) => Some(name),
+            ferris_idea_http::EnvironmentChoice::Without => None,
+            ferris_idea_http::EnvironmentChoice::Choose(names) => {
                 let why = refusal.unwrap_or_default();
                 let view = self.ensure_services(window, cx);
                 view.update(cx, |v, cx| v.ask_environment(names, why.clone(), cx));
@@ -13717,7 +14551,7 @@ impl WorkbenchView {
             .as_deref()
             .and_then(|n| envs.get(n))
             .unwrap_or_default();
-        let resolved = idecraft_http::resolve(&file, &variables);
+        let resolved = ferris_idea_http::resolve(&file, &variables);
         // Each request that can go: one that cannot is named in Output and the others still go
         // when all run; alone it leaves its reason in the status bar and nothing is sent.
         let mut prepared = Vec::new();
@@ -13732,7 +14566,7 @@ impl WorkbenchView {
                 ))
             } else {
                 // Bodies from files, only from inside the project (SPEC-0046 behaviour 11).
-                idecraft_http::finish_body(&mut request, &dir, &self.root)
+                ferris_idea_http::finish_body(&mut request, &dir, &self.root)
                     .err()
                     .map(|why| format!("Not sent: {why}"))
             };
@@ -13751,9 +14585,9 @@ impl WorkbenchView {
                 continue;
             }
             let settings = file.requests[index].settings.clone();
-            let options = idecraft_http::SendOptions {
+            let options = ferris_idea_http::SendOptions {
                 timeout: settings.timeout_secs.map_or(
-                    idecraft_http::DEFAULT_TIMEOUT,
+                    ferris_idea_http::DEFAULT_TIMEOUT,
                     std::time::Duration::from_secs,
                 ),
                 follow_redirects: !settings.no_redirect,
@@ -13779,7 +14613,7 @@ impl WorkbenchView {
             let mut sent: Vec<(usize, Vec<(String, bool)>)> = Vec::new();
             let mut answered = false;
             for (index, request, options, notes) in prepared {
-                match idecraft_http::send_with(&request, &options) {
+                match ferris_idea_http::send_with(&request, &options) {
                     Ok(response) => {
                         sent.push((
                             index,
@@ -13958,7 +14792,7 @@ impl WorkbenchView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let rows = match idecraft_vcs::Repo::discover(&self.root)
+        let rows = match ferris_idea_vcs::Repo::discover(&self.root)
             .and_then(|r| r.side_by_side_in_commit(commit, path))
         {
             Ok(rows) => rows,
@@ -13976,7 +14810,7 @@ impl WorkbenchView {
         &mut self,
         commit: &str,
         path: &str,
-        rows: Vec<idecraft_vcs::DiffRow>,
+        rows: Vec<ferris_idea_vcs::DiffRow>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -14014,7 +14848,7 @@ impl WorkbenchView {
     /// Opens the merge view on the files with merge conflicts (`Git.ResolveConflicts`, SPEC-0101
     /// behaviour 1); says so in the status bar when there are none.
     pub fn resolve_conflicts(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let conflicts = idecraft_vcs::Repo::discover(&self.root).and_then(|r| r.conflicts());
+        let conflicts = ferris_idea_vcs::Repo::discover(&self.root).and_then(|r| r.conflicts());
         let conflicts = match conflicts {
             Ok(c) if !c.is_empty() => c,
             Ok(_) => {
@@ -14107,7 +14941,7 @@ impl WorkbenchView {
         else {
             return;
         };
-        let history = match idecraft_core::LocalHistory::open(&root) {
+        let history = match ferris_idea_core::LocalHistory::open(&root) {
             Ok(h) => h,
             Err(e) => {
                 self.status = Some(e.to_string());
@@ -14254,7 +15088,8 @@ impl WorkbenchView {
     /// After an `.editorconfig` file is saved, every open editor reads its properties again
     /// (`SPEC-0137` behaviour 2).
     fn editorconfig_saved(&mut self, path: &Path, cx: &mut Context<Self>) {
-        if path.file_name().and_then(|n| n.to_str()) != Some(idecraft_core::editorconfig::FILE_NAME)
+        if path.file_name().and_then(|n| n.to_str())
+            != Some(ferris_idea_core::editorconfig::FILE_NAME)
         {
             return;
         }
@@ -14279,6 +15114,10 @@ impl WorkbenchView {
             && here.path != path
         {
             self.places.visit(here, std::time::SystemTime::now(), false);
+            // The context actions and the completion list belong to the file left behind
+            // (SPEC-0319 v7 behaviour 51a).
+            self.close_popup(Popup::Intentions);
+            self.close_editor_popups();
         }
         // A remote project's file opens through the session (SPEC-0317 v3 behaviour 8).
         if self.remote_project.is_some() && !self.editors.contains_key(path) {
@@ -14291,7 +15130,7 @@ impl WorkbenchView {
         let text = if self.remote_project.is_some() {
             String::new()
         } else {
-            match idecraft_core::file_properties::read_text(path, None) {
+            match ferris_idea_core::file_properties::read_text(path, None) {
                 Ok(file) => {
                     encoding = Some(file.encoding);
                     file.text
@@ -14381,7 +15220,7 @@ impl WorkbenchView {
                 let unbound = self.breakpoints_unbound.get(path);
                 // Method breakpoints on their header lines (SPEC-0146 v6 behaviour 12).
                 let methods = Self::method_marks(
-                    &idecraft_debugger::saved::load_special_breakpoints(&root),
+                    &ferris_idea_debugger::saved::load_special_breakpoints(&root),
                     path,
                 );
                 let tips = crate::tips::breakpoint_tips(self.breakpoint_props.get(path), unbound);
@@ -14389,7 +15228,7 @@ impl WorkbenchView {
                     .map(|m| m.keys().copied().collect())
                     .unwrap_or_default();
                 // The file's highlighting level (SPEC-0070 v6 behaviour 11).
-                let level = idecraft_languages::highlighting::level(&root, path);
+                let level = ferris_idea_languages::highlighting::level(&root, path);
                 // The history the file had when its last editor closed, while the file still
                 // holds that text (SPEC-0057 v8 behaviour 31).
                 let history = if remote {
@@ -14442,6 +15281,8 @@ impl WorkbenchView {
             // The file's bookmarks show in its gutter (SPEC-0331 behaviour 14).
             self.sync_bookmarks(cx);
             self.show_bookmark_marks(&editor, cx);
+            // The costs of the profile shown (SPEC-0120 v5 behaviour 10).
+            self.show_profile_lines(&editor, cx);
             // A remote document's language services run on the host (SPEC-0318): its diagnostics
             // arrive from there, its change markers come from the host's repository; nothing of
             // it is read or run on this machine.
@@ -14490,6 +15331,9 @@ impl WorkbenchView {
                         EditorEvent::EditBreakpoint(line) => {
                             this.edit_breakpoint(Some((path.clone(), *line)), window, cx)
                         }
+                        EditorEvent::AltClickBreakpoint(line) => {
+                            this.alt_click_breakpoint(&path, *line, cx)
+                        }
                         EditorEvent::Edited(edits) => {
                             // Editing keeps the preview tab (SPEC-0059 v9 behaviour 17).
                             this.keep_preview(&path);
@@ -14508,7 +15352,7 @@ impl WorkbenchView {
                             this.refresh_run_markers(&path, cx);
                             // Kotlin's gutter marks come from the syntax trees: they follow
                             // every edit (SPEC-0320 v4 behaviour 20).
-                            if idecraft_languages::kotlin_structure::is_kotlin(&path) {
+                            if ferris_idea_languages::kotlin_structure::is_kotlin(&path) {
                                 this.request_declaration_marks(&path, cx);
                             }
                             this.lint_js(&path, true, cx);
@@ -14530,7 +15374,7 @@ impl WorkbenchView {
                                 });
                             }
                             this.poll_build_files(cx);
-                            if idecraft_core::source_roots::is_jvm_source(&path) {
+                            if ferris_idea_core::source_roots::is_jvm_source(&path) {
                                 this.source_roots_stale = true;
                             }
                             this.upload_remote(&path, cx);
@@ -14542,7 +15386,7 @@ impl WorkbenchView {
                             if this.reference_index_asked
                                 && path
                                     .strip_prefix(&this.root)
-                                    .is_ok_and(idecraft_languages::reference_index::indexed)
+                                    .is_ok_and(ferris_idea_languages::reference_index::indexed)
                             {
                                 this.refresh_reference_index(cx);
                             }
@@ -14566,6 +15410,9 @@ impl WorkbenchView {
                             this.undid(&path, *step, *redo, window, cx)
                         }
                         EditorEvent::ShowCommit(id) => this.show_commit_in_log(id, window, cx),
+                        EditorEvent::ProfileLine(line) => {
+                            this.reveal_profile_line(&path, *line, window, cx)
+                        }
                         // The change bar and the author hints (SPEC-0064 v3, SPEC-0292 v4).
                         EditorEvent::ChangeMarker(index, at) => {
                             this.open_change_bar(&path, editor, *index, *at, window, cx)
@@ -14573,6 +15420,10 @@ impl WorkbenchView {
                         EditorEvent::ToggleAnnotations => {
                             this.focused_group = crate::editor_layout::MAIN;
                             this.toggle_annotations_of(&path, editor, cx)
+                        }
+                        EditorEvent::UsagesOf(line) => {
+                            this.focused_group = crate::editor_layout::MAIN;
+                            this.find_usages_of_count(&path, editor, *line, window, cx)
                         }
                         EditorEvent::ProblemHover(start) => {
                             if this.active_path().as_deref() == Some(path.as_path()) {
@@ -14587,6 +15438,9 @@ impl WorkbenchView {
                             if this.active_path().as_deref() == Some(path.as_path()) {
                                 this.doc_hover(*start, window, cx)
                             }
+                        }
+                        EditorEvent::RoomComments(line) => {
+                            this.room_comment_mark_clicked(&path, *line, window, cx)
                         }
                     }
                 }
@@ -14653,19 +15507,19 @@ impl WorkbenchView {
         }
         // Plugins' completion contributors add to the language's items, or stand alone in files
         // without a language server (SPEC-0210 behaviours 1–2).
-        let language = idecraft_languages::LanguageId::detect(&path);
+        let language = ferris_idea_languages::LanguageId::detect(&path);
         // A remote document asks the host's language server (SPEC-0318 behaviour 11); the
         // window's plugins do not see host text.
         let remote = self.remote_ask(&path);
         let jobs = if remote.is_some() {
             Vec::new()
         } else {
-            self.plugin_extensions(idecraft_plugins::ActionKind::Complete, &path)
+            self.plugin_extensions(ferris_idea_plugins::ActionKind::Complete, &path)
         };
         // Configuration files of the bean model complete their keys without a language server
         // (SPEC-0115 v7 behaviour 19).
         let config =
-            remote.is_none() && idecraft_languages::config_completion::is_config_path(&path);
+            remote.is_none() && ferris_idea_languages::config_completion::is_config_path(&path);
         if language.is_none() && jobs.is_empty() && !config {
             return;
         }
@@ -14690,9 +15544,9 @@ impl WorkbenchView {
         // In a `class` or `id` value of an HTML file the typed name reaches back to the start of
         // the word, `-` included (SPEC-0072 v15 behaviour 52).
         let word_start = language
-            .filter(|l| *l == idecraft_languages::LanguageId::Html)
+            .filter(|l| *l == ferris_idea_languages::LanguageId::Html)
             .and_then(|_| {
-                idecraft_languages::html_css::value_word(&text, line as u64, column as u64)
+                ferris_idea_languages::html_css::value_word(&text, line as u64, column as u64)
             })
             .map(|start| (start as usize).min(column))
             .unwrap_or_else(|| completion_model::word_start(&line_text, column));
@@ -14702,7 +15556,7 @@ impl WorkbenchView {
         let asked_len = text.len();
         let root = self.root.clone();
         let file = path.clone();
-        let plugin_context = idecraft_plugins::CompleteContext {
+        let plugin_context = ferris_idea_plugins::CompleteContext {
             path: path
                 .strip_prefix(&self.root)
                 .unwrap_or(&path)
@@ -14739,7 +15593,7 @@ impl WorkbenchView {
                             .build()
                             .ok()
                             .and_then(|rt| {
-                                rt.block_on(idecraft_languages::insight::complete_in(
+                                rt.block_on(ferris_idea_languages::insight::complete_in(
                                     &root,
                                     &file,
                                     Some(text),
@@ -14779,19 +15633,20 @@ impl WorkbenchView {
                     let mut failed = Vec::new();
                     // Not by themselves on a file a plugin could not read (SPEC-0156 v4
                     // behaviour 12).
-                    let jobs =
-                        if jobs.is_empty() || idecraft_plugins::guarded(&root, &file).is_none() {
-                            jobs
-                        } else {
-                            Vec::new()
-                        };
+                    let jobs = if jobs.is_empty()
+                        || ferris_idea_plugins::guarded(&root, &file).is_none()
+                    {
+                        jobs
+                    } else {
+                        Vec::new()
+                    };
                     for (plugin, id, access) in jobs {
                         match plugin.run_complete(&id, &plugin_context, access) {
                             Ok(items) => {
                                 found
                                     .get_or_insert_with(Vec::new)
                                     .extend(items.into_iter().map(|i| {
-                                        idecraft_languages::insight::CompletionItem {
+                                        ferris_idea_languages::insight::CompletionItem {
                                             insert: i.insert.unwrap_or_else(|| i.label.clone()),
                                             label: i.label,
                                             kind: Some("plugin".into()),
@@ -14858,7 +15713,7 @@ impl WorkbenchView {
         auto: bool,
         path: PathBuf,
         start: usize,
-        found: Option<Vec<idecraft_languages::insight::CompletionItem>>,
+        found: Option<Vec<ferris_idea_languages::insight::CompletionItem>>,
         cx: &mut Context<Self>,
     ) {
         self.show_completion_with(auto, path, start, found, None, None, cx);
@@ -14872,7 +15727,7 @@ impl WorkbenchView {
         auto: bool,
         path: PathBuf,
         start: usize,
-        found: Option<Vec<idecraft_languages::insight::CompletionItem>>,
+        found: Option<Vec<ferris_idea_languages::insight::CompletionItem>>,
         initial: Option<String>,
         expected: Option<String>,
         cx: &mut Context<Self>,
@@ -14903,10 +15758,10 @@ impl WorkbenchView {
                 .unwrap_or_default()
         };
         // Class names or ids in an HTML value (SPEC-0072 v15 behaviour 52).
-        let css_names = idecraft_languages::html_css::is_html(&path) && {
+        let css_names = ferris_idea_languages::html_css::is_html(&path) && {
             let e = editor.read(cx);
             let s = e.status();
-            idecraft_languages::html_css::value_word(
+            ferris_idea_languages::html_css::value_word(
                 &e.state.buffer.text(),
                 (s.line - 1) as u64,
                 (s.column - 1) as u64,
@@ -14943,7 +15798,7 @@ impl WorkbenchView {
         let Some(path) = self.active_path() else {
             return;
         };
-        if idecraft_languages::LanguageId::detect(&path).is_none()
+        if ferris_idea_languages::LanguageId::detect(&path).is_none()
             || path
                 .extension()
                 .is_some_and(|e| e.eq_ignore_ascii_case("sql"))
@@ -14981,7 +15836,7 @@ impl WorkbenchView {
                         .enable_all()
                         .build()
                         .map_err(|e| e.to_string())?;
-                    rt.block_on(idecraft_languages::smart::smart_complete_in(
+                    rt.block_on(ferris_idea_languages::smart::smart_complete_in(
                         &root,
                         &file,
                         &text,
@@ -15031,12 +15886,12 @@ impl WorkbenchView {
         let Some(c) = self.completion.as_mut() else {
             return;
         };
-        if c.initial.is_some() || idecraft_languages::LanguageId::detect(&c.path).is_none() {
+        if c.initial.is_some() || ferris_idea_languages::LanguageId::detect(&c.path).is_none() {
             return;
         }
         let first = c.selected.saturating_sub(9);
         let asked = &mut c.details_asked;
-        let wanted: Vec<idecraft_languages::insight::CompletionItem> = c
+        let wanted: Vec<ferris_idea_languages::insight::CompletionItem> = c
             .shown
             .iter()
             .skip(first)
@@ -15070,7 +15925,7 @@ impl WorkbenchView {
                         .enable_all()
                         .build()
                         .ok()?;
-                    rt.block_on(idecraft_languages::insight::resolve_details_in(
+                    rt.block_on(ferris_idea_languages::insight::resolve_details_in(
                         &root,
                         &path,
                         Some(&text),
@@ -15097,7 +15952,7 @@ impl WorkbenchView {
                         {
                             if let Some(d) = &r.detail {
                                 let (signature, ty) =
-                                    idecraft_languages::script_completion::detail_parts(
+                                    ferris_idea_languages::script_completion::detail_parts(
                                         &it.label, d,
                                     );
                                 it.label_detail = it.label_detail.take().or(signature);
@@ -15125,8 +15980,8 @@ impl WorkbenchView {
         let (path, start) = (c.path.clone(), c.start);
         if c.origins_asked
             || c.initial.is_some()
-            || idecraft_languages::LanguageId::detect(&path)
-                != Some(idecraft_languages::LanguageId::Python)
+            || ferris_idea_languages::LanguageId::detect(&path)
+                != Some(ferris_idea_languages::LanguageId::Python)
             || self.remote_ask(&path).is_some()
         {
             return;
@@ -15144,7 +15999,7 @@ impl WorkbenchView {
             c.origins_asked = true;
         }
         // Only a member access after a name has an origin; nothing is asked otherwise.
-        if idecraft_languages::python_origin::receiver_end(&line_text, column).is_none() {
+        if ferris_idea_languages::python_origin::receiver_end(&line_text, column).is_none() {
             return;
         }
         let root = self.root.clone();
@@ -15156,7 +16011,7 @@ impl WorkbenchView {
                         .enable_all()
                         .build()
                         .ok()?;
-                    rt.block_on(idecraft_languages::python_origin::member_origins_in(
+                    rt.block_on(ferris_idea_languages::python_origin::member_origins_in(
                         &root,
                         &path,
                         Some(&text),
@@ -15176,8 +16031,8 @@ impl WorkbenchView {
                 if c.path != asked || c.start != start {
                     return;
                 }
-                idecraft_languages::python_origin::set_origins(&hierarchy, &mut c.items);
-                idecraft_languages::python_origin::set_origins(&hierarchy, &mut c.shown);
+                ferris_idea_languages::python_origin::set_origins(&hierarchy, &mut c.items);
+                ferris_idea_languages::python_origin::set_origins(&hierarchy, &mut c.shown);
                 cx.notify();
             });
         })
@@ -15218,7 +16073,7 @@ impl WorkbenchView {
         let items = names
             .into_iter()
             .enumerate()
-            .map(|(i, n)| idecraft_languages::insight::CompletionItem {
+            .map(|(i, n)| ferris_idea_languages::insight::CompletionItem {
                 label: n.clone(),
                 insert: n,
                 kind: Some("variable".into()),
@@ -15296,7 +16151,7 @@ impl WorkbenchView {
             return;
         }
         c.docs.insert(key.clone(), None);
-        if item.raw.is_none() || idecraft_languages::LanguageId::detect(&c.path).is_none() {
+        if item.raw.is_none() || ferris_idea_languages::LanguageId::detect(&c.path).is_none() {
             return;
         }
         let path = c.path.clone();
@@ -15315,7 +16170,7 @@ impl WorkbenchView {
                         .enable_all()
                         .build()
                         .ok()?;
-                    rt.block_on(idecraft_languages::insight::resolve_completion_in(
+                    rt.block_on(ferris_idea_languages::insight::resolve_completion_in(
                         &root,
                         &path,
                         Some(&text),
@@ -15392,7 +16247,7 @@ impl WorkbenchView {
             let _ = this.update_in(cx, |this, _window, cx| {
                 let found = refreshed.map(|(tables, catalog)| {
                     let others = catalog.others.clone().unwrap_or_default();
-                    let items = idecraft_database::complete_for(
+                    let items = ferris_idea_database::complete_for(
                         &text,
                         cursor,
                         dialect,
@@ -15403,20 +16258,20 @@ impl WorkbenchView {
                     )
                     .into_iter()
                     .enumerate()
-                    .map(|(i, c)| idecraft_languages::insight::CompletionItem {
+                    .map(|(i, c)| ferris_idea_languages::insight::CompletionItem {
                         label: c.label,
                         // Join clauses keep their place before the plain tables (SPEC-0014 v3
                         // behaviour 14): items with a ranking key come first in the list.
-                        sort_text: (c.kind == idecraft_database::CandidateKind::Join)
+                        sort_text: (c.kind == ferris_idea_database::CandidateKind::Join)
                             .then(|| format!("{i:04}")),
                         kind: Some(
                             match c.kind {
-                                idecraft_database::CandidateKind::Column => "column",
-                                idecraft_database::CandidateKind::Table => "table",
-                                idecraft_database::CandidateKind::View => "view",
-                                idecraft_database::CandidateKind::Keyword => "keyword",
-                                idecraft_database::CandidateKind::Schema => "schema",
-                                idecraft_database::CandidateKind::Join => "join",
+                                ferris_idea_database::CandidateKind::Column => "column",
+                                ferris_idea_database::CandidateKind::Table => "table",
+                                ferris_idea_database::CandidateKind::View => "view",
+                                ferris_idea_database::CandidateKind::Keyword => "keyword",
+                                ferris_idea_database::CandidateKind::Schema => "schema",
+                                ferris_idea_database::CandidateKind::Join => "join",
                             }
                             .into(),
                         ),
@@ -15516,7 +16371,10 @@ impl WorkbenchView {
             let before_text = buffer.text();
             let offset = |line: u64, ch: u64| {
                 buffer
-                    .position_to_offset(idecraft_editor::Position::new(line as usize, ch as usize))
+                    .position_to_offset(ferris_idea_editor::Position::new(
+                        line as usize,
+                        ch as usize,
+                    ))
                     .ok()
             };
             // The server's range when it starts before the identifier: a postfix template covers
@@ -15649,11 +16507,11 @@ impl WorkbenchView {
             asked = Some((before_text, start));
             e.replace_ranges(&edits, cx);
             if !others.is_empty() {
-                let carets: Vec<idecraft_editor::Caret> = completion_model::ends_after(&edits)
+                let carets: Vec<ferris_idea_editor::Caret> = completion_model::ends_after(&edits)
                     .into_iter()
                     .zip(at_carets)
                     .filter(|(_, mine)| *mine)
-                    .map(|(at, _)| idecraft_editor::Caret::at(at))
+                    .map(|(at, _)| ferris_idea_editor::Caret::at(at))
                     .collect();
                 e.state.carets.moved_to(carets);
                 // The late import of behaviour 20 needs a single caret.
@@ -15695,7 +16553,7 @@ impl WorkbenchView {
             .raw
             .as_ref()
             .is_some_and(|r| r.get("additionalTextEdits").is_none())
-            && idecraft_languages::LanguageId::detect(&c.path).is_some()
+            && ferris_idea_languages::LanguageId::detect(&c.path).is_some()
             && let Some((before, start)) = asked
         {
             self.resolve_completion_edits(c.path.clone(), item, before, start, cx);
@@ -15710,7 +16568,7 @@ impl WorkbenchView {
     fn resolve_completion_edits(
         &mut self,
         path: PathBuf,
-        item: idecraft_languages::insight::CompletionItem,
+        item: ferris_idea_languages::insight::CompletionItem,
         before: String,
         start: usize,
         cx: &mut Context<Self>,
@@ -15729,7 +16587,7 @@ impl WorkbenchView {
                         .enable_all()
                         .build()
                         .ok()?;
-                    rt.block_on(idecraft_languages::insight::resolve_completion_edits_in(
+                    rt.block_on(ferris_idea_languages::insight::resolve_completion_edits_in(
                         &root,
                         &file,
                         Some(&asked),
@@ -15759,7 +16617,7 @@ impl WorkbenchView {
                         .filter_map(|a| {
                             let at = |line: u64, ch: u64| {
                                 buffer
-                                    .position_to_offset(idecraft_editor::Position::new(
+                                    .position_to_offset(ferris_idea_editor::Position::new(
                                         line as usize,
                                         ch as usize,
                                     ))
@@ -15929,6 +16787,27 @@ impl WorkbenchView {
         true
     }
 
+    /// Whether the caret is inside the template being filled in (its places, those visited and
+    /// those to come, with what was typed into the current one).
+    fn caret_in_snippet(&self, cx: &Context<Self>) -> bool {
+        let Some(sn) = self.snippet.as_ref() else {
+            return false;
+        };
+        if self.active_path().as_ref() != Some(&sn.path) {
+            return false;
+        }
+        let Some(editor) = self.editors.get(&sn.path) else {
+            return false;
+        };
+        let e = editor.read(cx);
+        let delta = e.state.buffer.len_chars() as isize - sn.len as isize;
+        let all = sn.stops.iter().chain(sn.visited.iter()).flatten();
+        let low = all.clone().map(|r| r.start).min().unwrap_or(0);
+        let high = all.map(|r| r.end).max().unwrap_or(0) as isize + delta.max(0);
+        let caret = e.caret();
+        caret >= low && caret as isize <= high
+    }
+
     /// Keys for the completion list while it is shown: Up/Down, Enter/Tab, Escape (behaviour 5).
     fn on_capture_key(
         &mut self,
@@ -15956,6 +16835,19 @@ impl WorkbenchView {
         if self.input_chord(event, window, cx) {
             cx.stop_propagation();
             cx.notify();
+            return;
+        }
+        // Escape closes the Go to family's popup also when the focus is not in it (SPEC-0069 v5
+        // behaviour 10, OBS-0119 K1); with the focus in it the popup handles Escape itself.
+        if event.keystroke.key == "escape"
+            && let Some(popup) = self.goto.clone()
+            && !popup.read(cx).focus(cx).contains_focused(window, cx)
+            && self.close_popup(Popup::Goto)
+        {
+            crate::key_diagnostics::note_ran("close popup", "workbench");
+            self.focus_active(window, cx);
+            cx.notify();
+            cx.stop_propagation();
             return;
         }
         // Escape closes the documentation; any other key closes it and goes on (SPEC-0077
@@ -16036,10 +16928,18 @@ impl WorkbenchView {
                 return;
             }
         }
-        if self.completion.is_none() && self.snippet.is_some() {
+        // The list of suggested names of a place belongs to the template (SPEC-0072 v19
+        // behaviour 51): ⇧Tab and the keys that choose from it and go on are the template's.
+        let name_list = self
+            .completion
+            .as_ref()
+            .is_some_and(|c| c.initial.is_some());
+        if self.snippet.is_some() && (self.completion.is_none() || name_list) {
             let k = &event.keystroke;
             if k.key == "escape" {
-                self.snippet = None;
+                if self.completion.is_none() {
+                    self.snippet = None;
+                }
             } else {
                 // The keys of Next and Previous Template Variable in the keymap in use (Tab and
                 // Enter, ⇧Tab; SPEC-0072 v14 behaviour 51).
@@ -16056,17 +16956,33 @@ impl WorkbenchView {
                         .as_ref()
                         .is_some_and(|s| crate::keymap_actions::is_shortcut_of(&keymap, id, s))
                 };
-                if bound(completion_model::NEXT_TEMPLATE_VARIABLE) && self.next_snippet_stop(cx) {
+                let next = bound(completion_model::NEXT_TEMPLATE_VARIABLE);
+                if next && name_list {
+                    // The selected name goes into the place, then on to the next one in the
+                    // same press (OBS-0086 K2).
+                    self.accept_completion(false, cx);
+                    self.next_snippet_stop(cx);
+                    crate::key_diagnostics::note_ran("choose name, next snippet stop", "workbench");
+                    cx.stop_propagation();
+                    cx.notify();
+                    return;
+                }
+                if next && self.next_snippet_stop(cx) {
                     crate::key_diagnostics::note_ran("next snippet stop", "workbench");
                     cx.stop_propagation();
                     return;
                 }
-                if bound(completion_model::PREVIOUS_TEMPLATE_VARIABLE)
-                    && self.previous_snippet_stop(cx)
-                {
-                    crate::key_diagnostics::note_ran("previous snippet stop", "workbench");
-                    cx.stop_propagation();
-                    return;
+                if bound(completion_model::PREVIOUS_TEMPLATE_VARIABLE) {
+                    if name_list {
+                        self.completion = None;
+                        cx.notify();
+                    }
+                    // At the first place ⇧Tab stays there, no unindent (OBS-0086 K3).
+                    if self.previous_snippet_stop(cx) || self.caret_in_snippet(cx) {
+                        crate::key_diagnostics::note_ran("previous snippet stop", "workbench");
+                        cx.stop_propagation();
+                        return;
+                    }
                 }
             }
         }
@@ -16252,7 +17168,7 @@ impl WorkbenchView {
         let doc = c
             .shown
             .get(c.selected)
-            .and_then(|i| c.docs.get(&completion_key(i)).cloned().flatten());
+            .and_then(|i| completion_model::shown_doc(i, &c.docs));
         Some((completion_model::HINT, doc))
     }
 
@@ -16267,6 +17183,12 @@ impl WorkbenchView {
         self.completion
             .as_ref()
             .map(|c| c.shown.iter().map(|i| i.label.trim().to_owned()).collect())
+    }
+
+    /// The label of the selected suggestion of the open list (SPEC-0072 v20 behaviour 13).
+    pub fn completion_selected_label(&self) -> Option<String> {
+        let c = self.completion.as_ref()?;
+        c.shown.get(c.selected).map(|i| i.label.trim().to_owned())
     }
 
     /// The rows of the open list as drawn: label and the grey text at the right edge (SPEC-0072
@@ -16375,7 +17297,7 @@ impl WorkbenchView {
         let doc = open
             .shown
             .get(selected)
-            .and_then(|i| open.docs.get(&completion_key(i)).cloned().flatten());
+            .and_then(|i| completion_model::shown_doc(i, &open.docs));
         let list = div()
             .w(px(COMPLETION_LIST_WIDTH))
             .flex_none()
@@ -16530,6 +17452,14 @@ impl WorkbenchView {
         self.usages.clone()
     }
 
+    /// The symbol the Find tool window's usages are of, if it shows any (for window tests of
+    /// `SPEC-0292` v8 behaviour 15).
+    pub fn find_usages_symbol(&self, cx: &gpui::App) -> Option<String> {
+        self.find_usages
+            .as_ref()
+            .map(|v| v.read(cx).symbol().to_owned())
+    }
+
     /// Opens the rename popup for the symbol at the caret (`RenameElement`, ⇧F6; SPEC-0074
     /// behaviour 1).
     fn open_rename(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -16544,7 +17474,7 @@ impl WorkbenchView {
             self.open_sql_rename(window, cx);
             return;
         }
-        if idecraft_languages::LanguageId::detect(&here.path).is_none() {
+        if ferris_idea_languages::LanguageId::detect(&here.path).is_none() {
             return;
         }
         let Some(editor) = self.active_editor() else {
@@ -16558,10 +17488,10 @@ impl WorkbenchView {
             .unwrap_or_default();
         // A class or id starts the popup whole and without its mark, also on the mark and with a
         // `-` in it (SPEC-0042 v22 behaviour 38).
-        let css_name = (idecraft_languages::html_css::is_html(&here.path)
-            || idecraft_languages::html_css::is_stylesheet(&here.path))
+        let css_name = (ferris_idea_languages::html_css::is_html(&here.path)
+            || ferris_idea_languages::html_css::is_stylesheet(&here.path))
         .then(|| {
-            idecraft_languages::html_css::name_at(
+            ferris_idea_languages::html_css::name_at(
                 &here.path,
                 &editor.read(cx).state.buffer.text(),
                 here.line as u64,
@@ -16576,7 +17506,18 @@ impl WorkbenchView {
         if old.is_empty() {
             return;
         }
-        self.rename_at = Some(here);
+        // A keyword, literal or built-in type is no symbol: nothing is offered (SPEC-0074 v2
+        // behaviour 5, window check A12 R1).
+        let text = editor.read(cx).state.buffer.text();
+        if !checked_by_planner
+            && ferris_idea_languages::rename::keyword_at(&here.path, &text, here.line, here.column)
+                .is_some()
+        {
+            self.status = Some(ferris_idea_languages::rename::NOT_RENAMEABLE.into());
+            cx.notify();
+            return;
+        }
+        self.rename_at = Some(here.clone());
         self.introduced_name = None;
         self.extract_name_prompt = None;
         let options = self.rename_options;
@@ -16589,6 +17530,42 @@ impl WorkbenchView {
             }
         });
         self.show_goto(view, window, cx);
+        // The language server's `prepareRename` decides the other places: when it says there is
+        // nothing to rename, the popup closes with the same message (SPEC-0074 v2 behaviour 5).
+        // A remote document and the stylesheet names are not asked.
+        if checked_by_planner || self.remote_ask(&here.path).is_some() {
+            return;
+        }
+        let root = self.root.clone();
+        let (path, line, column) = (here.path.clone(), here.line as u64, here.column as u64);
+        cx.spawn_in(window, async move |this, cx| {
+            let renameable = cx
+                .background_spawn(async move {
+                    let rt = tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                        .ok()?;
+                    rt.block_on(ferris_idea_languages::rename::can_rename(
+                        &root,
+                        &path,
+                        Some(&text),
+                        line,
+                        column,
+                        std::time::Duration::from_secs(10),
+                    ))
+                })
+                .await;
+            let _ = this.update_in(cx, |this, window, cx| {
+                if renameable == Some(false) && this.rename_at.as_ref() == Some(&here) {
+                    this.rename_at = None;
+                    this.goto = None;
+                    this.status = Some(ferris_idea_languages::rename::NOT_RENAMEABLE.into());
+                    this.focus_active(window, cx);
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
     }
 
     /// Plans the rename with the language server on the editor's text; with occurrences in
@@ -16622,11 +17599,11 @@ impl WorkbenchView {
             .map(|(p, e)| (p.clone(), e.read(cx).state.buffer.text()))
             .collect();
         let options = self.rename_options;
-        // A class or id is renamed by IDECraft itself in the open pages and stylesheets as their
+        // A class or id is renamed by Ferris IDEA itself in the open pages and stylesheets as their
         // editors show them (SPEC-0042 v22 behaviour 38c, SPEC-0220 v4 behaviour 13).
         let css = |p: &Path| {
-            idecraft_languages::html_css::is_html(p)
-                || idecraft_languages::html_css::is_stylesheet(p)
+            ferris_idea_languages::html_css::is_html(p)
+                || ferris_idea_languages::html_css::is_stylesheet(p)
         };
         let shown: Vec<(PathBuf, String)> = if css(&at.path) {
             open.iter()
@@ -16648,7 +17625,7 @@ impl WorkbenchView {
                         .enable_all()
                         .build()
                         .map_err(|e| e.to_string())?;
-                    let planning = idecraft_languages::rename::plan_rename_in(
+                    let planning = ferris_idea_languages::rename::plan_rename_in(
                         &root,
                         &from.path,
                         Some(&text),
@@ -16658,11 +17635,11 @@ impl WorkbenchView {
                         std::time::Duration::from_secs(30),
                     );
                     let plan = rt
-                        .block_on(idecraft_languages::shown::scope(shown, planning))
+                        .block_on(ferris_idea_languages::shown::scope(shown, planning))
                         .map_err(|e| e.to_string())?;
                     let mut plan = plan;
                     if introduced.as_deref() == Some(plan.old_name.as_str()) {
-                        idecraft_languages::actions::complete_introduced_rename(
+                        ferris_idea_languages::actions::complete_introduced_rename(
                             &mut plan, &from.path, &text,
                         );
                     }
@@ -16676,10 +17653,10 @@ impl WorkbenchView {
                     };
                     // Usages outside the project's own sources are offered apart and unticked
                     // (SPEC-0148 v3 behaviour 7, OBS-0034 L14).
-                    let outside = idecraft_languages::rename_text::split_outside(
+                    let outside = ferris_idea_languages::rename_text::split_outside(
                         &root, &mut plan, &from.path,
                     );
-                    let extra = idecraft_languages::rename_text::find_occurrences(
+                    let extra = ferris_idea_languages::rename_text::find_occurrences(
                         &root, &plan, options, &text_of,
                     );
                     Ok::<_, String>((plan, extra, outside))
@@ -16711,9 +17688,9 @@ impl WorkbenchView {
     /// behaviour 3).
     fn open_rename_preview(
         &mut self,
-        plan: idecraft_languages::rename::RenamePlan,
-        extra: Vec<idecraft_languages::rename_text::Occurrence>,
-        outside: Vec<idecraft_languages::rename_text::OutsideFile>,
+        plan: ferris_idea_languages::rename::RenamePlan,
+        extra: Vec<ferris_idea_languages::rename_text::Occurrence>,
+        outside: Vec<ferris_idea_languages::rename_text::OutsideFile>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -16727,8 +17704,8 @@ impl WorkbenchView {
                 match event {
                     crate::RenamePreviewEvent::Apply(plan, chosen, outside) => {
                         let mut plan = plan.clone();
-                        idecraft_languages::rename_text::merge_outside(&mut plan, outside);
-                        idecraft_languages::rename_text::merge(&mut plan, chosen);
+                        ferris_idea_languages::rename_text::merge_outside(&mut plan, outside);
+                        ferris_idea_languages::rename_text::merge(&mut plan, chosen);
                         if plan.files.is_empty() {
                             this.status = Some("Nothing to rename here.".into());
                             this.focus_active(window, cx);
@@ -16751,7 +17728,7 @@ impl WorkbenchView {
 
     /// Sets the options the next rename popup starts with, as ticking its boxes would (SPEC-0148
     /// behaviour 1; the self-test).
-    pub fn set_rename_options(&mut self, options: idecraft_languages::rename_text::TextOptions) {
+    pub fn set_rename_options(&mut self, options: ferris_idea_languages::rename_text::TextOptions) {
         self.rename_options = options;
     }
 
@@ -16764,7 +17741,7 @@ impl WorkbenchView {
     /// disk; `extra` of the edits are in comments, strings or text files.
     fn apply_rename(
         &mut self,
-        plan: idecraft_languages::rename::RenamePlan,
+        plan: ferris_idea_languages::rename::RenamePlan,
         extra: usize,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -16773,7 +17750,7 @@ impl WorkbenchView {
         // A Java type takes its file along (SPEC-0148 v2 behaviour 6, D29); the open editor's text
         // counts.
         let moves: Vec<(PathBuf, PathBuf)> =
-            idecraft_languages::rename::java_type_files(&plan, |p| {
+            ferris_idea_languages::rename::java_type_files(&plan, |p| {
                 let c = p.canonicalize().unwrap_or(p.to_path_buf());
                 match self.editors.get(&c) {
                     Some(e) => Some(e.read(cx).state.buffer.text()),
@@ -16834,7 +17811,7 @@ impl WorkbenchView {
             self.open_sql_refactoring(true, window, cx);
             return;
         }
-        if idecraft_languages::LanguageId::detect(&here.path).is_none() {
+        if ferris_idea_languages::LanguageId::detect(&here.path).is_none() {
             return;
         }
         let Some(text) = self.active_editor().map(|e| e.read(cx).state.buffer.text()) else {
@@ -16913,6 +17890,12 @@ impl WorkbenchView {
         let Some(path) = self.active_path() else {
             return;
         };
+        self.open_move_of(path, window, cx);
+    }
+
+    /// Asks where to move `path`, a file or (from the Project tree) a folder (SPEC-0114 v4
+    /// behaviour 1, SPEC-0275 v22 behaviour 49).
+    fn open_move_of(&mut self, path: PathBuf, window: &mut Window, cx: &mut Context<Self>) {
         let name = path
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
@@ -16934,8 +17917,18 @@ impl WorkbenchView {
         let Some(from) = self.move_from.take() else {
             return;
         };
-        if self.doc_modified(&from, cx) {
+        if self.doc_modified(&from, cx) || (from.is_dir() && self.open_and_modified(&from, cx)) {
             self.status = Some("Save the file before moving it".into());
+            cx.notify();
+            return;
+        }
+        // A folder moves plainly, as a cut and pasted one does, and is a step of the tree's
+        // history (SPEC-0275 v22 behaviour 49).
+        if from.is_dir() {
+            let note = self.move_folder(&from, &dir, window, cx);
+            self.status = Some(match note {
+                Ok(note) | Err(note) => note,
+            });
             cx.notify();
             return;
         }
@@ -16950,7 +17943,7 @@ impl WorkbenchView {
                         .enable_all()
                         .build()
                         .map_err(|e| e.to_string())?;
-                    rt.block_on(idecraft_languages::move_file::plan_move(
+                    rt.block_on(ferris_idea_languages::move_file::plan_move(
                         &root,
                         &file,
                         &dir,
@@ -16958,8 +17951,8 @@ impl WorkbenchView {
                     ))
                 })
                 .await;
-            let _ = this.update_in(cx, |this, window, cx| {
-                match plan.and_then(|plan| this.apply_move(plan, false, window, cx)) {
+            let _ = this.update_in(cx, |this, _, cx| {
+                match plan.and_then(|plan| this.apply_move_group(plan, cx)) {
                     Ok(note) => this.status = Some(note),
                     Err(e) => this.status = Some(format!("Move: {e}")),
                 }
@@ -16969,12 +17962,43 @@ impl WorkbenchView {
         .detach();
     }
 
+    /// Applies a planned move as one undo group of the window, named "Move <file> to <folder>":
+    /// the moved file and the files referring to it change (open ones through their editors), the
+    /// file moves, its editor, tab, bookmarks and language servers follow. ⌘Z in one of its editors
+    /// or in the Project tree takes all of it back (SPEC-0114 v5 behaviour 10, SPEC-0193 v7
+    /// behaviour 12; window check A12 V2).
+    fn apply_move_group(
+        &mut self,
+        plan: ferris_idea_languages::move_file::MovePlan,
+        cx: &mut Context<Self>,
+    ) -> Result<String, String> {
+        let root = self.root.canonicalize().unwrap_or(self.root.clone());
+        let shown = |p: &Path| p.strip_prefix(&root).unwrap_or(p).display().to_string();
+        let file = plan
+            .from
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let folder = plan.to.parent().map(shown).unwrap_or_default();
+        let name = format!("Move {file} to {folder}");
+        let moves = [(plan.from.clone(), plan.to.clone())];
+        // Files that are not the project's own stay as they are (SPEC-0114 v3 behaviour 8).
+        self.apply_refactoring(&name, &plan.files, &moves, cx)?;
+        self.tree = self.tree.reloaded();
+        Ok(crate::usages_model::move_report(
+            &shown(&plan.to),
+            plan.files.len(),
+            plan.server,
+            plan.outside.len(),
+        ))
+    }
+
     /// Applies a planned move (SPEC-0114 behaviours 3–5).
     /// With `record` (Paste, SPEC-0275 v3 behaviour 26) the move itself goes through
-    /// [`idecraft_core::file_ops::transfer`], so the Local History keeps the old path and a label.
+    /// [`ferris_idea_core::file_ops::transfer`], so the Local History keeps the old path and a label.
     fn apply_move(
         &mut self,
-        mut plan: idecraft_languages::move_file::MovePlan,
+        mut plan: ferris_idea_languages::move_file::MovePlan,
         record: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -16991,29 +18015,68 @@ impl WorkbenchView {
         self.apply_file_edits(&open, cx)?;
         plan.files = rest;
         if record {
-            idecraft_languages::rename::apply_files(&plan.files)?;
+            ferris_idea_languages::rename::apply_files(&plan.files)?;
             let dir = plan.to.parent().ok_or("no target folder")?;
             let name = plan
                 .to
                 .file_name()
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_default();
-            idecraft_core::file_ops::transfer(
+            ferris_idea_core::file_ops::transfer(
                 &self.root,
                 &plan.from,
                 dir,
                 Some(&name),
-                idecraft_core::file_ops::Transfer::Move,
+                ferris_idea_core::file_ops::Transfer::Move,
             )
             .map_err(|e| e.to_string())?;
         } else {
-            idecraft_languages::move_file::apply_move(&plan)?;
+            // The move is a step of the tree's history; the moved file's own edits go in right
+            // after it, so undo puts its old text back (SPEC-0275 v22 behaviour 49). Edits of
+            // other files are not part of the step.
+            let (own, others): (Vec<_>, Vec<_>) = plan
+                .files
+                .iter()
+                .cloned()
+                .partition(|f| f.path.canonicalize().unwrap_or(f.path.clone()) == from);
+            ferris_idea_languages::rename::apply_files(&others)?;
+            let dir = plan.to.parent().ok_or("no target folder")?.to_path_buf();
+            std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+            let name = plan
+                .to
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            let mut own_failed = None;
+            self.file_undo
+                .transfer(
+                    &plan.from,
+                    &dir,
+                    Some(&name),
+                    ferris_idea_core::file_ops::Transfer::Move,
+                    |moved| {
+                        let at_new: Vec<_> = own
+                            .iter()
+                            .map(|f| ferris_idea_languages::rename::FileEdits {
+                                path: moved.to.clone(),
+                                edits: f.edits.clone(),
+                            })
+                            .collect();
+                        if let Err(e) = ferris_idea_languages::rename::apply_files(&at_new) {
+                            own_failed = Some(e);
+                        }
+                    },
+                )
+                .map_err(|e| e.to_string())?;
+            if let Some(e) = own_failed {
+                return Err(e);
+            }
             // The moved file keeps its bookmarks (SPEC-0331 behaviour 9).
-            idecraft_core::bookmarks::follow_move(&self.root, &plan.from, &plan.to);
+            ferris_idea_core::bookmarks::follow_move(&self.root, &plan.from, &plan.to);
         }
         let to = plan.to.canonicalize().unwrap_or(plan.to.clone());
         // The editor's language servers learn the new place (hand test 201).
-        idecraft_languages::pool::files_moved(&self.root, &from, &to);
+        ferris_idea_languages::pool::files_moved(&self.root, &from, &to);
         // The file's tabs follow in every group (SPEC-0275 behaviour 21); a document kept
         // without a tab goes.
         if !self.tabs_follow(&from, &to, window, cx) {
@@ -17033,6 +18096,52 @@ impl WorkbenchView {
         ))
     }
 
+    /// Moves the folder `from` into `dir` (relative to the project folder, made when missing) as
+    /// one step of the tree's history; tabs of its files follow and the tree shows it at its new
+    /// place (SPEC-0275 v22 behaviour 49). `Ok` and `Err` are the status line.
+    fn move_folder(
+        &mut self,
+        from: &Path,
+        dir: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Result<String, String> {
+        let root = self.root.canonicalize().unwrap_or(self.root.clone());
+        let target = ferris_idea_languages::move_file::normalize(
+            &root.join(dir.trim().trim_end_matches('/')),
+        );
+        if !target.starts_with(&root) {
+            return Err(format!("Move: {dir} lies outside the project"));
+        }
+        if !target.exists() {
+            std::fs::create_dir_all(&target)
+                .map_err(|e| format!("Move: {}: {e}", target.display()))?;
+        }
+        let name = from
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let plan = self
+            .transfer_one(
+                from,
+                &target,
+                &name,
+                ferris_idea_core::file_ops::Transfer::Move,
+                window,
+                cx,
+            )
+            .map_err(|e| format!("Move: {e}"))?;
+        self.tree = self.tree.reloaded();
+        self.show_pasted(std::slice::from_ref(&plan.to), window, cx);
+        let shown = plan
+            .to
+            .strip_prefix(&root)
+            .unwrap_or(&plan.to)
+            .display()
+            .to_string();
+        Ok(format!("Moved to {shown}"))
+    }
+
     /// The file a Move popup is open for.
     pub fn moving(&self) -> Option<&Path> {
         self.move_from.as_deref()
@@ -17041,7 +18150,7 @@ impl WorkbenchView {
     /// Applies edits of several files: open ones through their editors, the others on disk.
     fn apply_file_edits(
         &mut self,
-        files: &[idecraft_languages::rename::FileEdits],
+        files: &[ferris_idea_languages::rename::FileEdits],
         cx: &mut Context<Self>,
     ) -> Result<(), String> {
         let mut on_disk = Vec::new();
@@ -17052,7 +18161,7 @@ impl WorkbenchView {
                 None => on_disk.push(file.clone()),
             }
         }
-        idecraft_languages::rename::apply_files(&on_disk).map(|_| ())
+        ferris_idea_languages::rename::apply_files(&on_disk).map(|_| ())
     }
 
     /// Applies a refactoring's edits as one undo group named `name` (`SPEC-0193` behaviours 1, 2, 6):
@@ -17061,11 +18170,11 @@ impl WorkbenchView {
     fn apply_refactoring(
         &mut self,
         name: &str,
-        files: &[idecraft_languages::rename::FileEdits],
+        files: &[ferris_idea_languages::rename::FileEdits],
         moves: &[(PathBuf, PathBuf)],
         cx: &mut Context<Self>,
     ) -> Result<(), String> {
-        use idecraft_languages::undo_group::{Group, Part, record_history, write};
+        use ferris_idea_languages::undo_group::{Group, Part, record_history, write};
         let mut open = Vec::new();
         let mut disk = Vec::new();
         for file in files {
@@ -17075,7 +18184,7 @@ impl WorkbenchView {
                 None => {
                     let before = std::fs::read_to_string(&path)
                         .map_err(|e| format!("{}: {e}", path.display()))?;
-                    let after = idecraft_languages::rename::apply_edits(&before, &file.edits)
+                    let after = ferris_idea_languages::rename::apply_edits(&before, &file.edits)
                         .map_err(|e| format!("{}: {e}", path.display()))?;
                     disk.push(Part {
                         path,
@@ -17093,7 +18202,7 @@ impl WorkbenchView {
             .filter(|(_, editor, _)| !editor.read(cx).is_modified())
             .map(|(p, _, _)| p.as_path())
             .collect();
-        idecraft_languages::undo_group::record_history_before(&self.root, &open_paths, name);
+        ferris_idea_languages::undo_group::record_history_before(&self.root, &open_paths, name);
         let mut parts = Vec::new();
         for (path, editor, edits) in open {
             let before = editor.read(cx).state.buffer.text();
@@ -17151,10 +18260,16 @@ impl WorkbenchView {
     /// own step, named. Also for an agent's refactoring (`SPEC-0193` v5 behaviour 10).
     pub(crate) fn keep_refactoring_group(
         &mut self,
-        group: idecraft_languages::undo_group::Group,
+        group: ferris_idea_languages::undo_group::Group,
         cx: &mut Context<Self>,
     ) {
         if !group.is_single_step() {
+            // A refactoring that moved files is also undone from the Project tree, in its order
+            // with the tree's file operations (`SPEC-0193` v7 behaviour 12).
+            let mut group = group;
+            if !group.moves.is_empty() {
+                group.tree_depth = Some(self.file_undo.steps().0.len());
+            }
             for part in &group.parts {
                 if let (Some(step), Some(editor)) = (part.step, self.editors.get(&part.path)) {
                     editor.update(cx, |e, _| e.mark_group_step(step, true));
@@ -17185,9 +18300,9 @@ impl WorkbenchView {
             self.breakpoints.insert(to.to_path_buf(), lines);
         }
         // Its bookmarks too (SPEC-0331 behaviour 9).
-        idecraft_core::bookmarks::follow_move(&self.root, from, to);
+        ferris_idea_core::bookmarks::follow_move(&self.root, from, to);
         self.sync_bookmarks(cx);
-        idecraft_languages::pool::files_moved(&self.root, from, to);
+        ferris_idea_languages::pool::files_moved(&self.root, from, to);
         if let Some(text) = self.editors.get(to).map(|e| e.read(cx).state.buffer.text()) {
             let (root, to) = (self.root.clone(), to.to_path_buf());
             cx.background_spawn(async move {
@@ -17195,7 +18310,7 @@ impl WorkbenchView {
                     .enable_all()
                     .build()
                 {
-                    let _ = rt.block_on(idecraft_languages::pool::sync_text(&root, &to, &text));
+                    let _ = rt.block_on(ferris_idea_languages::pool::sync_text(&root, &to, &text));
                 }
             })
             .detach();
@@ -17219,7 +18334,7 @@ impl WorkbenchView {
             return;
         }
         if let Some(name) = self.refactoring_steps.get(&(path.to_path_buf(), step)) {
-            self.status = Some(idecraft_languages::actions::undo_message(name, redo));
+            self.status = Some(ferris_idea_languages::actions::undo_message(name, redo));
             cx.notify();
         }
     }
@@ -17297,14 +18412,12 @@ impl WorkbenchView {
     /// whole refactoring back (or redoes it) after checking that none of its files changed since
     /// (`SPEC-0193` behaviours 3–5).
     fn group_undo(&mut self, path: &Path, step: u64, redo: bool, cx: &mut Context<Self>) {
-        use idecraft_languages::undo_group::{Now, check, record_history, write};
         let found = if redo {
             self.undo_groups.for_redo(path, step)
         } else {
             self.undo_groups.for_undo(path, step)
         };
-        let Some((i, group)) = found.and_then(|i| Some((i, self.undo_groups.get(i)?.clone())))
-        else {
+        let Some(i) = found.filter(|i| self.undo_groups.get(*i).is_some()) else {
             // A group dropped meanwhile: plain undo of this file.
             if let Some(editor) = self.editors.get(path) {
                 editor.update(cx, |e, cx| {
@@ -17314,8 +18427,19 @@ impl WorkbenchView {
             }
             return;
         };
+        self.undo_group_at(i, redo, cx);
+    }
+
+    /// Undoes (or redoes) group `i` of the window's refactorings in every file, after checking that
+    /// none of its files changed since (`SPEC-0193` behaviours 3–5); from an editor's ⌘Z or, for a
+    /// group that moved files, from the Project tree's (v7 behaviour 12).
+    pub(super) fn undo_group_at(&mut self, i: usize, redo: bool, cx: &mut Context<Self>) {
+        use ferris_idea_languages::undo_group::{Now, check, record_history, write};
+        let Some(group) = self.undo_groups.get(i).cloned() else {
+            return;
+        };
         // A file renamed with the group is at its earlier name while the group is undone.
-        let editor_of = |p: &idecraft_languages::undo_group::Part| {
+        let editor_of = |p: &ferris_idea_languages::undo_group::Part| {
             p.step
                 .and(self.editors.get(&group.location(p, redo)))
                 .cloned()
@@ -17336,6 +18460,11 @@ impl WorkbenchView {
                 })
             }
         });
+        if let Some(reason) = self.group_occupied(&group, redo) {
+            self.status = Some(reason);
+            cx.notify();
+            return;
+        }
         if let Err(changed) = checked {
             // The group stays: undoing it in this file alone would leave the other files with the
             // new name (`SPEC-0193` v3 behaviour 3, OBS-0030, IMP-0393).
@@ -17401,8 +18530,8 @@ impl WorkbenchView {
         let Some(here) = self.here(cx) else {
             return;
         };
-        // Files without a language (properties, text) still have IDECraft's own fixes (SPEC-0155).
-        let detected = idecraft_languages::LanguageId::detect(&here.path).is_some();
+        // Files without a language (properties, text) still have Ferris IDEA's own fixes (SPEC-0155).
+        let detected = ferris_idea_languages::LanguageId::detect(&here.path).is_some();
         let Some(editor) = self.active_editor() else {
             return;
         };
@@ -17414,7 +18543,7 @@ impl WorkbenchView {
                 .offset_to_position(selection.start)
                 .unwrap_or_default();
             let b = buffer.offset_to_position(selection.end).unwrap_or_default();
-            let range = idecraft_languages::insight::Range {
+            let range = ferris_idea_languages::insight::Range {
                 start_line: a.line as u64,
                 start_character: a.column as u64,
                 end_line: b.line as u64,
@@ -17424,7 +18553,7 @@ impl WorkbenchView {
         };
         let project_findings = editor.read(cx).project_findings_at(byte_of(&text, offset));
         let root = self.root.clone();
-        // IDECraft's own quick fixes at the caret come first (SPEC-0125 behaviour 3).
+        // Ferris IDEA's own quick fixes at the caret come first (SPEC-0125 behaviour 3).
         let is_sql = here
             .path
             .extension()
@@ -17435,7 +18564,7 @@ impl WorkbenchView {
                 None => return,
             }
         } else {
-            let mut own = idecraft_languages::inspections::fixes_at(
+            let mut own = ferris_idea_languages::inspections::fixes_at(
                 &here.path,
                 &text,
                 byte_of(&text, offset),
@@ -17448,7 +18577,7 @@ impl WorkbenchView {
             if let Some((checked, problems)) = self.eslint_findings.get(&here.path)
                 && checked == &text
             {
-                own.extend(idecraft_languages::js_tools::fixes_at(
+                own.extend(ferris_idea_languages::js_tools::fixes_at(
                     problems,
                     byte_of(&text, offset),
                 ));
@@ -17476,7 +18605,9 @@ impl WorkbenchView {
         };
         let install_rows: Vec<String> = installs.iter().map(|f| f.title.clone()).collect();
         self.install_fixes = installs;
-        if !detected && own.is_empty() {
+        // Run, Debug and Profile at a ▶ marker on the caret's line (SPEC-0076 v11 behaviour 14).
+        let run_rows = self.context_run_rows(&here.path, &text, range.start_line as usize);
+        if !detected && own.is_empty() && run_rows.is_empty() {
             self.hold_status(crate::intentions_model::no_actions_message(None), cx);
             return;
         }
@@ -17494,24 +18625,38 @@ impl WorkbenchView {
         };
         self.own_targets = targets;
         self.intention_options = options;
+        self.intentions_request += 1;
         let request = self.intentions_request;
         // With own fixes at hand the list does not wait long for a slow language server.
-        let has_own = !own.is_empty() || !install_rows.is_empty();
+        let has_own = !own.is_empty() || !install_rows.is_empty() || !run_rows.is_empty();
         let wait = std::time::Duration::from_secs(if has_own { 3 } else { 30 });
         let at = IntentionsAt {
             path: here.path.clone(),
             range,
             offset,
         };
+        let own_titles: Vec<String> = own.iter().map(|f| f.title.clone()).collect();
+        // Ferris IDEA's own offers open the list at once; the language server's actions join it
+        // when they come (SPEC-0076 v12 behaviour 18).
+        let local =
+            crate::intentions_model::local_actions(&install_rows, &own_titles, &option_rows);
+        let opened_early = !local.is_empty();
+        if opened_early {
+            self.own_fixes = own.clone();
+            self.own_fixes_text = text.clone();
+            self.open_intentions(local.clone(), at.clone(), window, cx);
+        }
         // A remote document's server actions come from the host (SPEC-0318 v2 detail 8).
         let remote = self.remote_ask(&here.path);
         // The status bar says what is asked until the list or a message takes its place
         // (SPEC-0095 v10 behaviour 11).
         let progress = crate::intentions_model::progress_message(
             "Context actions",
-            idecraft_languages::pool::loading(&self.root, &here.path).as_deref(),
+            ferris_idea_languages::pool::loading(&self.root, &here.path).as_deref(),
         );
-        self.hold_status(progress.clone(), cx);
+        if !opened_early {
+            self.hold_status(progress.clone(), cx);
+        }
         cx.spawn_in(window, async move |this, cx| {
             let ask = at.clone();
             let found = cx
@@ -17523,7 +18668,7 @@ impl WorkbenchView {
                         .enable_all()
                         .build()
                         .map_err(|e| e.to_string())?;
-                    rt.block_on(idecraft_languages::actions::code_actions_in(
+                    rt.block_on(ferris_idea_languages::actions::code_actions_in(
                         &root,
                         &ask.path,
                         Some(&text),
@@ -17537,6 +18682,20 @@ impl WorkbenchView {
                 if this.intentions_request != request {
                     return;
                 }
+                if opened_early {
+                    // The list is open with the own offers: the server's actions join it while it
+                    // is still open; a missing or failing server leaves it as it is.
+                    let more = crate::intentions_model::server_additions(
+                        &local,
+                        found.unwrap_or_default(),
+                    );
+                    if let Some((view, _)) = this.intentions.as_ref()
+                        && !more.is_empty()
+                    {
+                        view.update(cx, |v, cx| v.add_actions(more, cx));
+                    }
+                    return;
+                }
                 // Own fixes stand even when the language server has nothing or is missing.
                 let found = match found {
                     Err(_) if has_own => Ok(Vec::new()),
@@ -17544,12 +18703,12 @@ impl WorkbenchView {
                 }
                 .map(|lsp| {
                     // The install entries fix the import's error, so they come first.
-                    let mut all: Vec<idecraft_languages::actions::CodeAction> = install_rows
+                    let mut all: Vec<ferris_idea_languages::actions::CodeAction> = install_rows
                         .iter()
                         .cloned()
                         .chain(own.iter().map(|f| f.title.clone()))
                         .chain(option_rows.iter().cloned())
-                        .map(|title| idecraft_languages::actions::CodeAction {
+                        .map(|title| ferris_idea_languages::actions::CodeAction {
                             title,
                             kind: Some("quickfix".into()),
                             preferred: true,
@@ -17562,12 +18721,19 @@ impl WorkbenchView {
                             .filter(|a| own.iter().all(|f| f.title != a.title)),
                     );
                     all
+                })
+                // Disabled intentions are left out, the others get their submenu (v11
+                // behaviour 15); the run rows join (behaviour 14).
+                .map(|all| {
+                    let mut all = this.with_intention_options(all, cx);
+                    all.extend(run_rows.iter().cloned());
+                    all
                 });
                 this.own_fixes = own.clone();
                 this.own_fixes_text = own_text.clone();
                 // A server that is still loading the project is not taken at its word (v10
                 // behaviour 12).
-                let loading = idecraft_languages::pool::loading(&this.root, &at.path);
+                let loading = ferris_idea_languages::pool::loading(&this.root, &at.path);
                 let actions = match found {
                     Ok(a) if !a.is_empty() => a,
                     Ok(_) => {
@@ -17602,7 +18768,7 @@ impl WorkbenchView {
     /// list of expressions a refactoring shortcut can act on (SPEC-0095 v2 behaviour 6).
     fn open_intentions(
         &mut self,
-        actions: Vec<idecraft_languages::actions::CodeAction>,
+        actions: Vec<ferris_idea_languages::actions::CodeAction>,
         at: IntentionsAt,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -17616,7 +18782,17 @@ impl WorkbenchView {
             |this, _, event: &IntentionsEvent, window, cx| {
                 if let IntentionsEvent::RunOption(title, label) = event {
                     this.intentions = None;
+                    // An intention's own options (SPEC-0076 v11 behaviour 15).
+                    if this.run_intention_option(title, label, window, cx) {
+                        return;
+                    }
                     this.run_inspection_option(title, label, window, cx);
+                    return;
+                }
+                // A run row (SPEC-0076 v11 behaviour 14).
+                if let IntentionsEvent::Apply(title) = event
+                    && this.apply_context_run(title, window, cx)
+                {
                     return;
                 }
                 if let IntentionsEvent::Preview(title) = event {
@@ -17643,7 +18819,7 @@ impl WorkbenchView {
                     return;
                 }
                 let at = this.intentions.take().map(|(_, at)| at);
-                // IDECraft's own entry of Refactor This runs its action (SPEC-0095 v5 behaviour 4a).
+                // Ferris IDEA's own entry of Refactor This runs its action (SPEC-0095 v5 behaviour 4a).
                 let own = std::mem::take(&mut this.refactor_own);
                 if let IntentionsEvent::Apply(title) = event
                     && let Some(own) = own.iter().find(|o| o.title == title)
@@ -17687,6 +18863,16 @@ impl WorkbenchView {
                                     this.keep_finding(keep, cx);
                                 }
                                 this.focus_active(window, cx);
+                            }
+                            // A key added to the bundle's other files (SPEC-0163 v3
+                            // behaviour 3).
+                            (Some(fix), Some(_)) if fix.bundle_key.is_some() => {
+                                this.focus_active(window, cx);
+                                this.add_missing_bundle_key(
+                                    &at.path,
+                                    fix.bundle_key.as_deref().unwrap_or_default(),
+                                    cx,
+                                );
                             }
                             // A fix that runs an action (SPEC-0098 v9 behaviour 17).
                             (Some(fix), Some(_)) if fix.action.is_some() => {
@@ -17735,7 +18921,7 @@ impl WorkbenchView {
     /// context-actions popup; none says why in the status bar.
     fn refactor_shortcut(
         &mut self,
-        refactoring: idecraft_languages::actions::Refactoring,
+        refactoring: ferris_idea_languages::actions::Refactoring,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -17746,7 +18932,7 @@ impl WorkbenchView {
             );
             return;
         };
-        // SQL files have IDECraft's own refactorings and no language server (SPEC-0152 v3
+        // SQL files have Ferris IDEA's own refactorings and no language server (SPEC-0152 v3
         // behaviour 6a, OBS-0068 L4): Inline inlines the WITH query at the caret, Refactor This
         // lists what the caret offers (the ⌥↩ list), the others say they are not offered here.
         if here
@@ -17754,7 +18940,7 @@ impl WorkbenchView {
             .extension()
             .is_some_and(|e| e.eq_ignore_ascii_case("sql"))
         {
-            use idecraft_languages::actions::Refactoring;
+            use ferris_idea_languages::actions::Refactoring;
             match refactoring {
                 Refactoring::Inline => self.inline_sql(&here.path, &editor, cx),
                 Refactoring::Any => self.show_intentions(window, cx),
@@ -17765,7 +18951,7 @@ impl WorkbenchView {
             }
             return;
         }
-        if idecraft_languages::LanguageId::detect(&here.path).is_none() {
+        if ferris_idea_languages::LanguageId::detect(&here.path).is_none() {
             self.hold_status(
                 format!(
                     "{} needs a language server; this file has no language.",
@@ -17783,7 +18969,7 @@ impl WorkbenchView {
                 .offset_to_position(selection.start)
                 .unwrap_or_default();
             let b = buffer.offset_to_position(selection.end).unwrap_or_default();
-            let range = idecraft_languages::insight::Range {
+            let range = ferris_idea_languages::insight::Range {
                 start_line: a.line as u64,
                 start_character: a.column as u64,
                 end_line: b.line as u64,
@@ -17798,25 +18984,25 @@ impl WorkbenchView {
                 selected,
             )
         };
-        // Refactor This offers Rename on a name: the caret's word, or a selection that is exactly
-        // that word (SPEC-0095 v5 behaviour 4a).
-        let on_name = {
-            let line = editor
-                .read(cx)
-                .state
-                .buffer
-                .line(here.line)
-                .unwrap_or_default();
-            let word = usages_model::word_at(line.trim_end_matches(['\n', '\r']), here.column);
-            !word.is_empty()
-                && !word.starts_with(|c: char| c.is_ascii_digit())
-                && selected.as_deref().is_none_or(|t| t.trim() == word)
-        };
+        // Refactor This offers what can act at the place: Rename on a name (the caret's word, or a
+        // selection that is exactly that word) and the rest (SPEC-0095 v5 behaviour 4a, v14
+        // behaviour 4b).
+        let project_file = self.remote_project.is_none()
+            && self.remote_ask(&here.path).is_none()
+            && here.path.starts_with(&self.root);
+        let spot = crate::intentions_model::refactor_spot(
+            &here.path,
+            &text,
+            here.line,
+            here.column,
+            selected.as_deref(),
+            project_file,
+        );
         self.intentions_request += 1;
         let request = self.intentions_request;
         // From the first moment the status bar says what is asked, in front of the problem at
         // the caret, and whether the server is still loading (SPEC-0095 v10 behaviour 11).
-        let loading = idecraft_languages::pool::loading(&self.root, &here.path);
+        let loading = ferris_idea_languages::pool::loading(&self.root, &here.path);
         self.hold_status(
             crate::intentions_model::progress_message(refactoring.name(), loading.as_deref()),
             cx,
@@ -17830,7 +19016,7 @@ impl WorkbenchView {
         let asked = crate::intentions_model::Asked {
             refactoring,
             selected,
-            on_name,
+            spot,
         };
         cx.spawn_in(window, async move |this, cx| {
             use crate::intentions_model::{FileServer, Outcome, Step};
@@ -17915,14 +19101,14 @@ impl WorkbenchView {
     /// status bar, held in front of the problem at the caret.
     fn show_refactoring_outcome(
         &mut self,
-        refactoring: idecraft_languages::actions::Refactoring,
+        refactoring: ferris_idea_languages::actions::Refactoring,
         outcome: crate::intentions_model::Outcome,
         at: IntentionsAt,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         use crate::intentions_model::Outcome;
-        let row = |title: String| idecraft_languages::actions::CodeAction {
+        let row = |title: String| ferris_idea_languages::actions::CodeAction {
             title,
             kind: Some("refactor".into()),
             preferred: false,
@@ -17931,10 +19117,10 @@ impl WorkbenchView {
         };
         match outcome {
             Outcome::Status(line) => self.hold_status(line, cx),
-            // Refactor This: the server's refactorings and IDECraft's own (v5 behaviour 4a).
+            // Refactor This: the server's refactorings and Ferris IDEA's own (v5 behaviour 4a).
             Outcome::Menu { actions, own, note } => {
-                let mut rows = actions;
-                rows.extend(own.iter().map(|o| row(o.title.to_owned())));
+                // In the reference's order (v14 behaviour 4c).
+                let rows = ferris_idea_languages::actions::refactor_this_rows(actions, &own);
                 match note {
                     Some(note) => self.hold_status(note, cx),
                     None => self.status = None,
@@ -17950,7 +19136,7 @@ impl WorkbenchView {
                 if one_place {
                     let target = targets.remove(0);
                     if target.actions.len() == 1
-                        && refactoring != idecraft_languages::actions::Refactoring::Any
+                        && refactoring != ferris_idea_languages::actions::Refactoring::Any
                     {
                         self.apply_refactoring_target(at, target, window, cx);
                     } else {
@@ -17986,11 +19172,11 @@ impl WorkbenchView {
             editor.update(cx, |e, cx| {
                 let b = &e.state.buffer;
                 let r = &target.range;
-                let start = b.position_to_offset(idecraft_editor::Position::new(
+                let start = b.position_to_offset(ferris_idea_editor::Position::new(
                     r.start_line as usize,
                     r.start_character as usize,
                 ));
-                let end = b.position_to_offset(idecraft_editor::Position::new(
+                let end = b.position_to_offset(ferris_idea_editor::Position::new(
                     r.end_line as usize,
                     r.end_character as usize,
                 ));
@@ -18020,7 +19206,7 @@ impl WorkbenchView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
-        use idecraft_languages::actions::{self, CodeAction, Refactoring};
+        use ferris_idea_languages::actions::{self, CodeAction, Refactoring};
         if !actions::introduces_name(title) || self.active_path().as_deref() != Some(path) {
             return false;
         }
@@ -18075,7 +19261,7 @@ impl WorkbenchView {
         let Some(here) = self.here(cx) else {
             return;
         };
-        if idecraft_languages::LanguageId::detect(&here.path).is_none() {
+        if ferris_idea_languages::LanguageId::detect(&here.path).is_none() {
             return;
         }
         let Some(editor) = self.active_editor() else {
@@ -18099,7 +19285,7 @@ impl WorkbenchView {
                         .enable_all()
                         .build()
                         .map_err(|e| e.to_string())?;
-                    rt.block_on(idecraft_languages::insight::hover_in(
+                    rt.block_on(ferris_idea_languages::insight::hover_in(
                         &root,
                         &from.path,
                         Some(&text),
@@ -18197,11 +19383,11 @@ impl WorkbenchView {
         {
             problem.described = true;
             if let Some(id) = problem.inspection
-                && let Some(text) = idecraft_languages::inspections::description(id)
+                && let Some(text) = ferris_idea_languages::inspections::description(id)
             {
                 doc.blocks.push(crate::doc_model::DocBlock::Rule);
                 doc.blocks.push(crate::doc_model::DocBlock::Heading(
-                    idecraft_languages::inspections::name_of(id).to_owned(),
+                    ferris_idea_languages::inspections::name_of(id).to_owned(),
                 ));
                 doc.blocks
                     .extend(crate::doc_model::description_blocks(text));
@@ -18244,10 +19430,11 @@ impl WorkbenchView {
             }
             return;
         }
-        let fix = idecraft_languages::inspections::fixes_at(&path, &text, byte_of(&text, offset))
-            .into_iter()
-            .find(|f| f.learn.is_none() && f.keep.is_none())
-            .map(|f| f.title);
+        let fix =
+            ferris_idea_languages::inspections::fixes_at(&path, &text, byte_of(&text, offset))
+                .into_iter()
+                .find(|f| f.learn.is_none() && f.keep.is_none())
+                .map(|f| f.title);
         self.doc = Some(DocPopup {
             path,
             offset,
@@ -18332,7 +19519,7 @@ impl WorkbenchView {
         let (Some(path), Some(editor)) = (self.active_path(), self.active_editor()) else {
             return;
         };
-        if idecraft_languages::LanguageId::detect(&path).is_none() {
+        if ferris_idea_languages::LanguageId::detect(&path).is_none() {
             return;
         }
         let (text, revision, position) = {
@@ -18364,7 +19551,7 @@ impl WorkbenchView {
                         .enable_all()
                         .build()
                         .map_err(|e| e.to_string())?;
-                    rt.block_on(idecraft_languages::insight::hover_in(
+                    rt.block_on(ferris_idea_languages::insight::hover_in(
                         &root,
                         &path,
                         Some(&text),
@@ -18411,7 +19598,7 @@ impl WorkbenchView {
         self.doc.as_ref().is_some_and(|d| d.pointer.is_some())
     }
 
-    /// Applies IDECraft's first quick fix for the problems at the caret, or at the problem popup's
+    /// Applies Ferris IDEA's first quick fix for the problems at the caret, or at the problem popup's
     /// place, without a list (⌥⇧↩; SPEC-0078 v2 behaviours 5, 7).
     fn apply_first_fix(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(editor) = self.active_editor() else {
@@ -18428,7 +19615,7 @@ impl WorkbenchView {
             .unwrap_or_else(|| editor.read(cx).state.carets.primary().head);
         let text = editor.read(cx).state.buffer.text();
         let at = byte_of(&text, offset);
-        let fix = idecraft_languages::inspections::fixes_at(&path, &text, at)
+        let fix = ferris_idea_languages::inspections::fixes_at(&path, &text, at)
             .into_iter()
             .chain(
                 editor
@@ -18445,6 +19632,14 @@ impl WorkbenchView {
                 editor.update(cx, |e, cx| e.select_range(offset..offset, cx));
                 self.focus_active(window, cx);
                 self.run_fix_action(fix.action.unwrap_or_default(), window, cx);
+            }
+            // The bundle's other files change (SPEC-0163 v3 behaviour 3, IMP-0536).
+            Some(fix) if fix.bundle_key.is_some() => {
+                self.add_missing_bundle_key(
+                    &path,
+                    fix.bundle_key.as_deref().unwrap_or_default(),
+                    cx,
+                );
             }
             Some(fix) => {
                 apply_byte_edits(&editor, &text, &fix.edits, true, cx);
@@ -18481,17 +19676,17 @@ impl WorkbenchView {
         let text = editor.read(cx).state.buffer.text();
         self.focus_active(window, cx);
         let edits = match FindingOption::of_label(label) {
-            Some(FindingOption::FixAll) => {
-                Some(idecraft_languages::inspections::fix_all(&path, &text, id))
-            }
+            Some(FindingOption::FixAll) => Some(ferris_idea_languages::inspections::fix_all(
+                &path, &text, id,
+            )),
             Some(FindingOption::Suppress(scope)) => {
-                idecraft_languages::inspections::suppress(&text, at, id, scope)
+                ferris_idea_languages::inspections::suppress(&text, at, id, scope)
             }
             Some(FindingOption::Disable) => {
                 self.set_inspection(id, Some(false), None, cx);
                 self.status = Some(format!(
                     "Inspection '{}' turned off for this project",
-                    idecraft_languages::inspections::name_of(id)
+                    ferris_idea_languages::inspections::name_of(id)
                 ));
                 cx.notify();
                 return;
@@ -18501,18 +19696,18 @@ impl WorkbenchView {
                 return;
             }
             Some(FindingOption::SuppressAll) => {
-                idecraft_languages::inspections::suppress_all(&text, at)
+                ferris_idea_languages::inspections::suppress_all(&text, at)
             }
             Some(FindingOption::FixOnly) => {
                 self.set_inspection(
                     id,
                     None,
-                    Some(idecraft_languages::inspections::Level::Info),
+                    Some(ferris_idea_languages::inspections::Level::Info),
                     cx,
                 );
                 self.status = Some(format!(
                     "Inspection '{}' no longer highlighted; its fix stays in the context actions{}",
-                    idecraft_languages::inspections::name_of(id),
+                    ferris_idea_languages::inspections::name_of(id),
                     crate::keymaps::in_parens(&crate::keymaps::label("ShowIntentionActions"))
                 ));
                 cx.notify();
@@ -18523,6 +19718,7 @@ impl WorkbenchView {
                 let choices =
                     crate::problems_model::InspectScope::choices(self.active_path().as_deref());
                 self.inspect_only = Some(id);
+                self.copyright_dialog = false;
                 self.inspect_dialog = Some((choices, 0));
                 window.focus(&self.inspect_dialog_focus);
                 cx.notify();
@@ -18546,10 +19742,10 @@ impl WorkbenchView {
         &mut self,
         id: &str,
         enabled: Option<bool>,
-        level: Option<idecraft_languages::inspections::Level>,
+        level: Option<ferris_idea_languages::inspections::Level>,
         cx: &mut Context<Self>,
     ) {
-        use idecraft_languages::inspection_profile as profile;
+        use ferris_idea_languages::inspection_profile as profile;
         let mut current = profile::load(&self.root).unwrap_or_default();
         current.set(id, enabled, level);
         if let Err(e) = profile::save(&self.root, &current) {
@@ -18560,7 +19756,7 @@ impl WorkbenchView {
 
     /// Returns an inspection to its default in the project's profile (`SPEC-0315` behaviour 4).
     pub fn reset_inspection(&mut self, id: &str, cx: &mut Context<Self>) {
-        use idecraft_languages::inspection_profile as profile;
+        use ferris_idea_languages::inspection_profile as profile;
         let mut current = profile::load(&self.root).unwrap_or_default();
         current.reset(id);
         if let Err(e) = profile::save(&self.root, &current) {
@@ -18573,7 +19769,7 @@ impl WorkbenchView {
     fn reinspect_editors(&mut self, cx: &mut Context<Self>) {
         let root = self.root.clone();
         for (path, e) in &self.editors {
-            let level = idecraft_languages::highlighting::level(&root, path);
+            let level = ferris_idea_languages::highlighting::level(&root, path);
             e.update(cx, |e, cx| {
                 e.set_highlight_level(level);
                 e.reinspect(cx)
@@ -18606,7 +19802,7 @@ impl WorkbenchView {
         let Some(here) = self.here(cx) else {
             return;
         };
-        if idecraft_languages::LanguageId::detect(&here.path).is_none() {
+        if ferris_idea_languages::LanguageId::detect(&here.path).is_none() {
             return;
         }
         let Some(editor) = self.active_editor() else {
@@ -18622,7 +19818,7 @@ impl WorkbenchView {
                         .enable_all()
                         .build()
                         .map_err(|e| e.to_string())?;
-                    rt.block_on(idecraft_languages::insight::symbols_in(
+                    rt.block_on(ferris_idea_languages::insight::symbols_in(
                         &root,
                         &file,
                         Some(&text),
@@ -18728,14 +19924,14 @@ impl WorkbenchView {
                         .map_err(|e| e.to_string())?;
                     rt.block_on(async {
                         let wait = std::time::Duration::from_secs(5);
-                        let symbols = idecraft_languages::insight::symbols_in(
+                        let symbols = ferris_idea_languages::insight::symbols_in(
                             &root,
                             &path,
                             Some(&text),
                             wait,
                         )
                         .await?;
-                        idecraft_languages::structure::with_inherited_in(
+                        ferris_idea_languages::structure::with_inherited_in(
                             &root,
                             &path,
                             Some(&text),
@@ -18780,7 +19976,7 @@ impl WorkbenchView {
         let Some(path) = self.here(cx).map(|h| h.path) else {
             return;
         };
-        if idecraft_languages::LanguageId::detect(&path).is_none() {
+        if ferris_idea_languages::LanguageId::detect(&path).is_none() {
             return;
         }
         self.request_params(path, editor, ParamsAsk::Open, window, cx);
@@ -18825,7 +20021,7 @@ impl WorkbenchView {
                         .enable_all()
                         .build()
                         .map_err(|e| e.to_string())?;
-                    rt.block_on(idecraft_languages::insight::signature_help_in(
+                    rt.block_on(ferris_idea_languages::insight::signature_help_in(
                         &root,
                         &file,
                         Some(&text),
@@ -18900,7 +20096,7 @@ impl WorkbenchView {
         let Some(path) = self.here(cx).map(|h| h.path) else {
             return;
         };
-        if idecraft_languages::LanguageId::detect(&path).is_none() {
+        if ferris_idea_languages::LanguageId::detect(&path).is_none() {
             return;
         }
         cx.spawn_in(window, async move |this, cx| {
@@ -18934,15 +20130,15 @@ impl WorkbenchView {
         let Some(path) = self.here(cx).map(|h| h.path) else {
             return;
         };
-        if idecraft_languages::LanguageId::detect(&path).is_none()
-            && !idecraft_languages::config_completion::is_config_path(&path)
+        if ferris_idea_languages::LanguageId::detect(&path).is_none()
+            && !ferris_idea_languages::config_completion::is_config_path(&path)
         {
             return;
         }
         let sql_file = path
             .extension()
             .is_some_and(|e| e.eq_ignore_ascii_case("sql"));
-        let html_file = idecraft_languages::html_css::is_html(&path);
+        let html_file = ferris_idea_languages::html_css::is_html(&path);
         self.auto_complete_seq += 1;
         let seq = self.auto_complete_seq;
         cx.spawn_in(window, async move |this, cx| {
@@ -18962,7 +20158,7 @@ impl WorkbenchView {
                         && e.in_comment_or_string(caret - 1)
                         && !(html_file && {
                             let s = e.status();
-                            idecraft_languages::html_css::value_word(
+                            ferris_idea_languages::html_css::value_word(
                                 &e.state.buffer.text(),
                                 (s.line - 1) as u64,
                                 (s.column - 1) as u64,
@@ -19025,9 +20221,21 @@ impl WorkbenchView {
         Some((labels, active))
     }
 
+    /// Where parameter info goes (`SPEC-0080` v5 behaviour 9): over the line of the offset it
+    /// was opened at, starting at that offset and moved left only as far as needed to stay inside
+    /// the editor area; `None` while closed or before the editor was drawn.
+    pub fn params_placement(&self, cx: &gpui::App) -> Option<crate::popup_place::Place> {
+        let p = self.params.as_ref()?;
+        let (spot, area) = self.editors.get(&p.path)?.read(cx).caret_spot(p.offset)?;
+        let (width, height) = params_size(&p.help);
+        Some(crate::popup_place::place_over_caret(
+            spot, area, width, height,
+        ))
+    }
+
     fn params_overlay(&self, cx: &mut Context<Self>) -> Option<impl IntoElement> {
         let p = self.params.as_ref()?;
-        let at = self.editors.get(&p.path)?.read(cx).point_above(p.offset)?;
+        let place = self.params_placement(cx)?;
         let pal = Palette::current();
         let active_sig = p.help.active_signature;
         let rows = p.help.signatures.iter().enumerate().map(|(i, s)| {
@@ -19044,7 +20252,7 @@ impl WorkbenchView {
             let row = div()
                 .flex()
                 .px_2()
-                .h(px(22.))
+                .h(px(PARAMS_ROW))
                 .items_center()
                 .font_family(crate::fonts::editor_family())
                 .text_color(c(if i == active_sig {
@@ -19065,17 +20273,24 @@ impl WorkbenchView {
                 None => row.child(s.label.clone()),
             }
         });
+        // Placed by the rule above; the toolkit only keeps it inside the window and never turns
+        // it around (its default puts a popup too wide for the right side left of the anchor,
+        // over the project tree: window check 2026-11-18 gap P1).
         Some(
             gpui::anchored()
-                .anchor(gpui::Corner::BottomLeft)
-                .position(at)
+                .anchor(if place.above {
+                    gpui::Corner::BottomLeft
+                } else {
+                    gpui::Corner::TopLeft
+                })
+                .position(gpui::point(px(place.x), px(place.y)))
+                .snap_to_window_with_margin(px(4.))
                 .child(
                     div()
                         .occlude()
                         .flex()
                         .flex_col()
                         .py_1()
-                        .mb_1()
                         .bg(c(pal.island))
                         .border_1()
                         .border_color(c(pal.separator))
@@ -19201,6 +20416,258 @@ impl WorkbenchView {
         self.intentions.as_ref().map(|(v, _)| v.clone())
     }
 
+    /// Opens `path` in a tab with the caret at the 1-based `line` and `column`, as choosing it in
+    /// Search Everywhere does (the UI driver's `open_file`, SPEC-0319 v7 behaviour 46).
+    pub fn open_at(
+        &mut self,
+        path: &Path,
+        line: Option<usize>,
+        column: Option<usize>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.remember_place(cx);
+        // A popup of the editor left behind does not stay over the next file (SPEC-0319 v7
+        // behaviour 51a).
+        self.close_popups();
+        self.close_editor_popups();
+        self.context_menu = None;
+        let line = line.map(|l| l.saturating_sub(1));
+        let column = column.map(|c| c.saturating_sub(1));
+        if let Some(l) = line {
+            self.remote_pend(path, remote_host::PendingPlace::GoTo(l, column));
+        }
+        self.open(path, window, cx);
+        if let (Some(line), Some(editor)) = (line, self.editors.get(path).cloned()) {
+            editor.update(cx, |e, cx| match column {
+                Some(col) => e.go_to(line, col, cx),
+                None => e.go_to_line(line, cx),
+            });
+        }
+        cx.notify();
+    }
+
+    /// Closes every open popup, submenu, context menu and the completion list without a choice,
+    /// as Escape does, and gives the keys back to the editor (the UI driver's `dismiss`,
+    /// SPEC-0319 v7 behaviour 51a); answers whether anything was open.
+    pub fn driver_dismiss(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        let editor_popups =
+            self.completion.is_some() || self.params.is_some() || self.doc.is_some();
+        let menu = self.context_menu.take().is_some();
+        let popups = self.close_popups();
+        self.close_editor_popups();
+        let closed = editor_popups || menu || popups;
+        if closed {
+            self.focus_active(window, cx);
+        }
+        cx.notify();
+        closed
+    }
+
+    /// Shows (`open`), focuses (`focus`) or hides (`close`) a tool window for the UI driver
+    /// (SPEC-0319 v7 behaviour 47), the way its activation action does; answers whether it is
+    /// shown and has the focus afterwards.
+    pub fn driver_tool_window(
+        &mut self,
+        w: ToolWindow,
+        op: ferris_idea_uidriver::ToolWindowOp,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> (bool, bool) {
+        use ferris_idea_uidriver::ToolWindowOp;
+        let shown = self.tool_window_shown(w);
+        match op {
+            ToolWindowOp::Close => {
+                if shown {
+                    self.hide_tool_window(w);
+                    self.focus_active(window, cx);
+                }
+            }
+            ToolWindowOp::Open | ToolWindowOp::Focus => {
+                let focused = shown && self.tool_window_focused(w, window, cx);
+                // A shown window without the focus gets it; a focused one stays (toggling it
+                // would hide it).
+                if !shown || (op == ToolWindowOp::Focus && !focused) {
+                    self.toggle_tool_window(w, window, cx);
+                }
+            }
+        }
+        cx.notify();
+        (
+            self.tool_window_shown(w),
+            self.tool_window_focused(w, window, cx),
+        )
+    }
+
+    /// Opens the Settings dialog on `page`, or closes it as Escape does for `None` (the UI
+    /// driver, SPEC-0319 v7 behaviour 48). Closing saves nothing: changes apply as they are made.
+    pub fn driver_settings(
+        &mut self,
+        page: Option<crate::settings_model::Page>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.settings.take().is_some() {
+            self._settings_events = None;
+        }
+        match page {
+            Some(page) => self.open_settings(page, window, cx),
+            None => self.focus_active(window, cx),
+        }
+        cx.notify();
+    }
+
+    /// Where typed text would go (the UI driver's `type_text`, SPEC-0319 v7 behaviour 50): the
+    /// field of an open popup that has the focus, or the focused editor with its file; `None`
+    /// anywhere else (dialogs, tool windows, the terminal, secret fields).
+    pub fn driver_typing_target(
+        &self,
+        window: &Window,
+        cx: &gpui::App,
+    ) -> Option<(&'static str, Option<PathBuf>)> {
+        if self
+            .everywhere
+            .as_ref()
+            .is_some_and(|v| v.read(cx).focus(cx).is_focused(window))
+        {
+            return Some(("search_everywhere", None));
+        }
+        if self
+            .goto
+            .as_ref()
+            .is_some_and(|v| v.read(cx).focus(cx).is_focused(window))
+        {
+            return Some(("goto", None));
+        }
+        if self
+            .intentions
+            .as_ref()
+            .is_some_and(|(v, _)| v.read(cx).focus().is_focused(window))
+        {
+            return Some(("intentions", None));
+        }
+        let editor = self.active_editor()?;
+        editor
+            .read(cx)
+            .focus()
+            .contains_focused(window, cx)
+            .then(|| ("editor", self.active_path()))
+    }
+
+    /// The open popup or list with its visible items, the most recent first (the UI driver's
+    /// `popup`, SPEC-0319 v7 behaviour 51): the context actions of ⌥↩, the completion list,
+    /// Search Everywhere and its Go to tabs, and the Go to Line / Recent Files popup.
+    pub fn driver_popup(&self, cx: &gpui::App) -> Option<DriverPopup> {
+        if let Some((v, _)) = &self.intentions {
+            let items = v
+                .read(cx)
+                .titles()
+                .into_iter()
+                .map(|t| DriverItem::new("intention", t))
+                .collect();
+            return Some(DriverPopup {
+                kind: "intentions",
+                items,
+                selected: None,
+            });
+        }
+        if let Some(c) = &self.completion {
+            let items = c
+                .shown
+                .iter()
+                .map(|i| {
+                    let row = completion_model::row(i, &c.prefix);
+                    let mut item = DriverItem::new("suggestion", row.label);
+                    item.detail = (!row.type_text.is_empty()).then_some(row.type_text);
+                    item
+                })
+                .collect();
+            return Some(DriverPopup {
+                kind: "completion",
+                items,
+                selected: Some(c.selected),
+            });
+        }
+        if let Some(v) = &self.everywhere {
+            let v = v.read(cx);
+            let results = v.results();
+            let items = results.rows.iter().map(DriverItem::of_row).collect();
+            return Some(DriverPopup {
+                kind: "search_everywhere",
+                items,
+                selected: results.selected,
+            });
+        }
+        if let Some(v) = &self.goto {
+            let v = v.read(cx);
+            let items = v
+                .shown()
+                .iter()
+                .map(|p| {
+                    let shown = p.strip_prefix(&self.root).unwrap_or(p);
+                    DriverItem::new("file", shown.display().to_string())
+                })
+                .collect();
+            return Some(DriverPopup {
+                kind: "goto",
+                items,
+                selected: Some(v.selected()),
+            });
+        }
+        None
+    }
+
+    /// Chooses the item at `index` of the open popup as Return on it does (the UI driver's
+    /// `choose`, SPEC-0319 v7 behaviour 51); the caller checked its effects first.
+    pub fn driver_choose(
+        &mut self,
+        index: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Result<(), String> {
+        let Some(popup) = self.driver_popup(cx) else {
+            return Err("no popup is open".into());
+        };
+        let Some(item) = popup.items.get(index) else {
+            return Err(format!(
+                "the popup has {} items; there is no item {index}",
+                popup.items.len()
+            ));
+        };
+        match popup.kind {
+            "intentions" => {
+                let title = item.label.clone();
+                if let Some((v, _)) = self.intentions.clone() {
+                    v.update(cx, |v, cx| v.choose_title(&title, cx));
+                }
+            }
+            "completion" => {
+                if let Some(c) = self.completion.as_mut() {
+                    c.selected = index;
+                }
+                self.accept_completion(false, cx);
+            }
+            "search_everywhere" => {
+                let chosen = self
+                    .everywhere
+                    .clone()
+                    .is_some_and(|v| v.update(cx, |v, cx| v.choose_row(index, cx)));
+                if !chosen {
+                    return Err(format!("item {index} is a heading"));
+                }
+            }
+            _ => {
+                return Err(format!(
+                    "choosing in the {} popup is not supported; type into its field and invoke the action of Return there",
+                    popup.kind
+                ));
+            }
+        }
+        let _ = window;
+        cx.notify();
+        Ok(())
+    }
+
     /// Whether the open Go to popup is the name popup of an extraction, shown at the new name
     /// (`SPEC-0095` v5 behaviour 8b; the self-test).
     pub fn goto_at_name(&self) -> bool {
@@ -19221,6 +20688,11 @@ impl WorkbenchView {
         else {
             return;
         };
+        // A run row shows its command (SPEC-0076 v11 behaviour 14).
+        if let Some(lines) = self.context_run_preview(&title) {
+            view.update(cx, |v, cx| v.set_preview(&title, Ok(lines), cx));
+            return;
+        }
         // An install entry names what pip installs and where (SPEC-0117 v4 behaviour 8).
         if let Some(fix) = self.install_fixes.iter().find(|f| f.title == title) {
             let into = self
@@ -19238,11 +20710,11 @@ impl WorkbenchView {
                 Err("Saves the word to the project dictionary".into())
             } else if let Some(keep) = &fix.keep {
                 Err(match keep {
-                    idecraft_languages::inspections::Keep::Ignore { .. } => format!(
+                    ferris_idea_languages::inspections::Keep::Ignore { .. } => format!(
                         "Not reported again in this project ({})",
-                        idecraft_languages::grammar_ignore::FILE
+                        ferris_idea_languages::grammar_ignore::FILE
                     ),
-                    idecraft_languages::inspections::Keep::Disable(_) => {
+                    ferris_idea_languages::inspections::Keep::Disable(_) => {
                         "Turns the rule off in the project's inspection profile".to_owned()
                     }
                 })
@@ -19312,7 +20784,7 @@ impl WorkbenchView {
                         .enable_all()
                         .build()
                         .map_err(|e| e.to_string())?;
-                    rt.block_on(idecraft_languages::actions::plan_code_action_in(
+                    rt.block_on(ferris_idea_languages::actions::plan_code_action_in(
                         &root,
                         &path,
                         Some(&text),
@@ -19364,7 +20836,7 @@ impl WorkbenchView {
         };
         // In front of the problem at the caret from the first moment (SPEC-0095 v10
         // behaviour 11).
-        let loading = idecraft_languages::pool::loading(&self.root, &at.path);
+        let loading = ferris_idea_languages::pool::loading(&self.root, &at.path);
         self.hold_status(
             crate::intentions_model::progress_message(&title, loading.as_deref()),
             cx,
@@ -19382,11 +20854,11 @@ impl WorkbenchView {
                         .map_err(|e| e.to_string())?;
                     // The plan has a limit in all, after which the status bar says so
                     // (SPEC-0095 v9 behaviour 11).
-                    let server = idecraft_languages::actions::server_name(&root, &at.path);
-                    rt.block_on(idecraft_languages::actions::within(
+                    let server = ferris_idea_languages::actions::server_name(&root, &at.path);
+                    rt.block_on(ferris_idea_languages::actions::within(
                         crate::intentions_model::REFACTORING_LIMIT,
                         &server,
-                        idecraft_languages::actions::plan_code_action_in(
+                        ferris_idea_languages::actions::plan_code_action_in(
                             &root,
                             &at.path,
                             Some(&text),
@@ -19404,7 +20876,7 @@ impl WorkbenchView {
                     Err(e) => {
                         // A server that is still loading is named as the likely reason (v10
                         // behaviour 12).
-                        let loading = idecraft_languages::pool::loading(&this.root, &path);
+                        let loading = ferris_idea_languages::pool::loading(&this.root, &path);
                         this.hold_status(
                             crate::intentions_model::failed_message(&title, &e, loading.as_deref()),
                             cx,
@@ -19429,6 +20901,9 @@ impl WorkbenchView {
     fn intentions_overlay(&self, cx: &mut Context<Self>) -> Option<impl IntoElement> {
         let (view, at) = self.intentions.as_ref()?;
         let point = self.editors.get(&at.path)?.read(cx).point_near(at.offset)?;
+        // The list knows its left edge, so its submenu can go left of it near the window's right
+        // edge (SPEC-0076 v13 behaviour 19).
+        view.update(cx, |v, _| v.set_left(f32::from(point.x)));
         Some(
             div()
                 .absolute()
@@ -19449,26 +20924,26 @@ impl WorkbenchView {
             .active_editor()
             .is_some_and(|e| e.read(cx).state.carets.primary().range().is_empty());
         if whole_file
-            && idecraft_core::trust::require_trusted(&self.root).is_ok()
-            && idecraft_languages::js_tools::find_prettier(&self.root, &path).is_some()
+            && ferris_idea_core::trust::require_trusted(&self.root).is_ok()
+            && ferris_idea_languages::js_tools::find_prettier(&self.root, &path).is_some()
         {
             self.js_tool_action(false, cx);
             return;
         }
         // Python: the project's ruff or black, also for a selection (SPEC-0329 behaviour 7).
-        if idecraft_languages::LanguageId::detect(&path)
-            == Some(idecraft_languages::LanguageId::Python)
+        if ferris_idea_languages::LanguageId::detect(&path)
+            == Some(ferris_idea_languages::LanguageId::Python)
         {
             self.python_reformat(cx);
             return;
         }
-        // SQL and Markdown: IDECraft's own formatters (SPEC-0075 v4 behaviour 7).
-        if let Some(own) = idecraft_languages::format::OwnFormatter::of(&path) {
+        // SQL and Markdown: Ferris IDEA's own formatters (SPEC-0075 v4 behaviour 7).
+        if let Some(own) = ferris_idea_languages::format::OwnFormatter::of(&path) {
             self.own_reformat(own, cx);
             return;
         }
         // A file without a formatter says so instead of doing nothing (SPEC-0075 v3 behaviour 6).
-        if let Some(why) = idecraft_languages::format::no_formatter(&path) {
+        if let Some(why) = ferris_idea_languages::format::no_formatter(&path) {
             self.status = Some(why);
             cx.notify();
             return;
@@ -19485,25 +20960,23 @@ impl WorkbenchView {
                     .offset_to_position(selection.start)
                     .unwrap_or_default();
                 let b = buffer.offset_to_position(selection.end).unwrap_or_default();
-                idecraft_languages::insight::Range {
+                ferris_idea_languages::insight::Range {
                     start_line: a.line as u64,
                     start_character: a.column as u64,
                     end_line: b.line as u64,
                     end_character: b.column as u64,
                 }
             });
-            let indent = &e.state.indent;
-            let options = idecraft_languages::format::FormatOptions {
-                tab_size: if indent == "\t" {
-                    e.tab_width() as u32
-                } else {
-                    indent.chars().count().max(1) as u32
-                },
-                insert_spaces: indent != "\t",
+            // `.editorconfig`, else the project's scheme, else the editor's (SPEC-0150 v6
+            // behaviour 8).
+            let (tab_size, insert_spaces) = e.reformat_indent();
+            let options = ferris_idea_languages::format::FormatOptions {
+                tab_size,
+                insert_spaces,
                 trim_trailing_whitespace: true,
                 insert_final_newline: true,
             }
-            .with_editorconfig(&idecraft_core::editorconfig::editorconfig_for(&path));
+            .with_editorconfig(&ferris_idea_core::editorconfig::editorconfig_for(&path));
             (buffer.text(), range, options)
         };
         self.status = Some("Reformatting…".into());
@@ -19518,7 +20991,7 @@ impl WorkbenchView {
                         .enable_all()
                         .build()
                         .map_err(|e| e.to_string())?;
-                    rt.block_on(idecraft_languages::format::plan_format_in(
+                    rt.block_on(ferris_idea_languages::format::plan_format_in(
                         &root,
                         &file,
                         Some(&text),
@@ -19553,14 +21026,14 @@ impl WorkbenchView {
         .detach();
     }
 
-    /// Reformats the active SQL or Markdown file with IDECraft's own formatter, on the editor's
+    /// Reformats the active SQL or Markdown file with Ferris IDEA's own formatter, on the editor's
     /// text and as one undo step (SPEC-0075 v5 behaviour 7). A selection is not formatted alone.
     fn own_reformat(
         &mut self,
-        own: idecraft_languages::format::OwnFormatter,
+        own: ferris_idea_languages::format::OwnFormatter,
         cx: &mut Context<Self>,
     ) {
-        use idecraft_languages::format::OwnFormatter;
+        use ferris_idea_languages::format::OwnFormatter;
         let Some(editor) = self.active_editor() else {
             return;
         };
@@ -19581,18 +21054,21 @@ impl WorkbenchView {
             own.whole_files_only()
         } else {
             let formatted = match own {
-                OwnFormatter::Sql => idecraft_database::sql_format::format_sql(&text, indent),
+                OwnFormatter::Sql => ferris_idea_database::sql_format::format_sql(&text, indent),
                 OwnFormatter::Markdown => {
-                    idecraft_languages::markdown_format::format_markdown(&text)
+                    ferris_idea_languages::markdown_format::format_markdown(&text)
                 }
             };
             match formatted {
                 Err(why) => format!(
-                    "Reformat failed: IDECraft's {} formatter changed nothing: {why}",
+                    "Reformat failed: Ferris IDEA's {} formatter changed nothing: {why}",
                     own.language()
                 ),
                 Ok(new) if editor.update(cx, |e, cx| e.apply_reformat(&new, cx)) => {
-                    format!("Reformatted with IDECraft's {} formatter.", own.language())
+                    format!(
+                        "Reformatted with Ferris IDEA's {} formatter.",
+                        own.language()
+                    )
                 }
                 Ok(_) => "Already formatted.".into(),
             }
@@ -19611,22 +21087,108 @@ impl WorkbenchView {
         })
     }
 
+    /// Update Copyright (`UpdateCopyright`, `SPEC-0155` v5 behaviour 11): the scope dialog —
+    /// whole project, current file (chosen at the start), folder of the current file.
+    pub fn update_copyright_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let choices = crate::problems_model::InspectScope::choices(self.active_path().as_deref());
+        let at = usize::from(choices.len() > 1);
+        self.inspect_only = None;
+        self.copyright_dialog = true;
+        self.inspect_dialog = Some((choices, at));
+        window.focus(&self.inspect_dialog_focus);
+        cx.notify();
+    }
+
+    /// Whether the open scope dialog is Update Copyright's.
+    pub fn copyright_dialog(&self) -> bool {
+        self.inspect_dialog.is_some() && self.copyright_dialog
+    }
+
+    /// Writes or updates the copyright notice in every file of `scope` (`SPEC-0155` v5 behaviour
+    /// 11): an open editor's as one undo step, any other file on disk through a temporary file;
+    /// the status bar says how many files changed and how many were up to date.
+    pub fn update_copyright_in(
+        &mut self,
+        scope: &crate::problems_model::InspectScope,
+        cx: &mut Context<Self>,
+    ) {
+        use crate::problems_model::InspectScope;
+        use ferris_idea_languages::copyright;
+        if let InspectScope::File(path) = scope
+            && self.active_path().as_ref() == Some(path)
+        {
+            self.update_copyright(cx);
+            return;
+        }
+        let Some(profile) = copyright::load_profile(&self.root) else {
+            self.status = Some(
+                "No copyright profile: add .ferris-idea/copyright.txt or .idea/copyright/".into(),
+            );
+            cx.notify();
+            return;
+        };
+        let files: Vec<PathBuf> = match scope {
+            InspectScope::File(path) => vec![path.clone()],
+            _ => copyright::scope_files(&self.root, scope.place())
+                .into_iter()
+                .map(|rel| self.root.join(rel))
+                .collect(),
+        };
+        let year = copyright::current_year();
+        let (mut updated, mut current, mut failed) = (0usize, 0usize, Vec::new());
+        for file in files {
+            let Some(text) = self.text_of(&file, cx) else {
+                continue;
+            };
+            let values = copyright::values(&self.root, &file, year);
+            let Some(new) = copyright::update(&file, &text, &profile, &values) else {
+                current += 1;
+                continue;
+            };
+            let key = file.canonicalize().unwrap_or_else(|_| file.clone());
+            let written = if self.editors.contains_key(&key) {
+                self.write_text(&file, &new, cx)
+            } else {
+                ferris_idea_core::file_properties::write_atomic_keeping_mode(&key, new.as_bytes())
+                    .map_err(|e| e.to_string())
+            };
+            match written {
+                Ok(()) => updated += 1,
+                Err(e) => failed.push(format!(
+                    "{}: {e}",
+                    file.strip_prefix(&self.root).unwrap_or(&file).display()
+                )),
+            }
+        }
+        let files = |n: usize| if n == 1 { "file" } else { "files" };
+        let mut status = format!(
+            "Copyright notice updated in {updated} {}, {current} {} up to date",
+            files(updated),
+            files(current)
+        );
+        if !failed.is_empty() {
+            status.push_str(&format!("; not written: {}", failed.join(", ")));
+        }
+        self.status = Some(status);
+        cx.notify();
+    }
+
     /// Writes or updates the copyright notice at the top of the active file from the project's
     /// profile, as one undo step (`UpdateCopyright`, `SPEC-0155` behaviour 2).
     pub fn update_copyright(&mut self, cx: &mut Context<Self>) {
         let (Some(path), Some(editor)) = (self.active_path(), self.active_editor()) else {
             return;
         };
-        let Some(profile) = idecraft_languages::copyright::load_profile(&self.root) else {
+        let Some(profile) = ferris_idea_languages::copyright::load_profile(&self.root) else {
             self.status = Some(
-                "No copyright profile: add .idecraft/copyright.txt or .idea/copyright/".into(),
+                "No copyright profile: add .ferris-idea/copyright.txt or .idea/copyright/".into(),
             );
             cx.notify();
             return;
         };
         let text = editor.read(cx).state.buffer.text();
-        let values = idecraft_languages::copyright::Values {
-            year: idecraft_languages::copyright::current_year(),
+        let values = ferris_idea_languages::copyright::Values {
+            year: ferris_idea_languages::copyright::current_year(),
             file_name: path
                 .file_name()
                 .map(|n| n.to_string_lossy().into_owned())
@@ -19638,7 +21200,7 @@ impl WorkbenchView {
                 .unwrap_or_default(),
             user: std::env::var("USER").unwrap_or_default(),
         };
-        let Some(new) = idecraft_languages::copyright::update(&path, &text, &profile, &values)
+        let Some(new) = ferris_idea_languages::copyright::update(&path, &text, &profile, &values)
         else {
             self.status = Some("The copyright notice is up to date".into());
             cx.notify();
@@ -19664,7 +21226,7 @@ impl WorkbenchView {
             .rev()
             .find(|s| text.is_char_boundary(text.len() - s) && new.is_char_boundary(new.len() - s))
             .unwrap_or(0);
-        let edit = idecraft_languages::jvm::TextEdit {
+        let edit = ferris_idea_languages::jvm::TextEdit {
             range: prefix..text.len() - suffix,
             text: new[prefix..new.len() - suffix].to_owned(),
         };
@@ -19675,6 +21237,7 @@ impl WorkbenchView {
 
     /// Opens `place` and puts the caret there.
     fn show_place(&mut self, place: &Place, window: &mut Window, cx: &mut Context<Self>) {
+        self.close_goto_on_navigation(cx);
         // A remote project's place is a document of the session, never a file here
         // (SPEC-0318 behaviour 11): open it there and go to the place once it is open.
         if self.remote_project.is_some() && self.remote_rel(&place.path).is_some() {
@@ -19710,10 +21273,24 @@ impl WorkbenchView {
 
     /// Records the caret's place before a jump (behaviour 4).
     fn remember_place(&mut self, cx: &gpui::App) {
+        self.close_goto_on_navigation(cx);
         if let Some(here) = self.here(cx) {
             self.places
                 .visit(here.clone(), std::time::SystemTime::now(), false);
             self.nav.jumped(here);
+        }
+    }
+
+    /// A navigation moves the caret to another place: an open Go to Line, Recent Files or Recent
+    /// Locations popup no longer belongs to it and closes (`SPEC-0069` v5 behaviour 10, OBS-0119
+    /// K1). The name popups of the family (rename, signature, move) stay.
+    fn close_goto_on_navigation(&mut self, cx: &gpui::App) {
+        if self
+            .goto
+            .as_ref()
+            .is_some_and(|g| g.read(cx).is_navigation())
+        {
+            self.close_popup(Popup::Goto);
         }
     }
 
@@ -19741,7 +21318,7 @@ impl WorkbenchView {
             return;
         }
         self.goto_locations(
-            idecraft_languages::insight::LocationKind::Definition,
+            ferris_idea_languages::insight::LocationKind::Definition,
             window,
             cx,
         );
@@ -19752,15 +21329,15 @@ impl WorkbenchView {
     /// One target is opened directly; several are offered in a chooser popup.
     fn goto_locations(
         &mut self,
-        kind: idecraft_languages::insight::LocationKind,
+        kind: ferris_idea_languages::insight::LocationKind,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        use idecraft_languages::insight::LocationKind;
+        use ferris_idea_languages::insight::LocationKind;
         let Some(here) = self.here(cx) else {
             return;
         };
-        if idecraft_languages::LanguageId::detect(&here.path).is_none() {
+        if ferris_idea_languages::LanguageId::detect(&here.path).is_none() {
             return;
         }
         let what = match kind {
@@ -19781,7 +21358,7 @@ impl WorkbenchView {
         cx.notify();
         let root = self.root.clone();
         let from = here.clone();
-        let language = idecraft_languages::LanguageId::detect(&here.path);
+        let language = ferris_idea_languages::LanguageId::detect(&here.path);
         let remote = self.remote_ask(&here.path);
         cx.spawn_in(window, async move |this, cx| {
             let found = cx
@@ -19798,7 +21375,7 @@ impl WorkbenchView {
                         .build()
                         .map_err(|e| e.to_string())?;
                     let found = rt
-                        .block_on(idecraft_languages::insight::found_in(
+                        .block_on(ferris_idea_languages::insight::found_in(
                             &root,
                             &from.path,
                             text.as_deref(),
@@ -19809,15 +21386,15 @@ impl WorkbenchView {
                         ))
                         .map_err(|e| match (e, language) {
                             // Which server is missing and how to get it (SPEC-0042 v7 behaviour 15).
-                            (idecraft_languages::lsp::LspError::NoServer(why), Some(l)) => {
-                                idecraft_languages::servers::no_server_message(l, &why)
+                            (ferris_idea_languages::lsp::LspError::NoServer(why), Some(l)) => {
+                                ferris_idea_languages::servers::no_server_message(l, &why)
                             }
                             (e, _) => format!("The language server gave no answer: {e}"),
                         })?;
                     // Several targets: the class, package and module of each for the chooser,
                     // within 5 s (SPEC-0081 v2 behaviour 4).
                     let contexts = if found.locations.len() > 1 {
-                        rt.block_on(idecraft_languages::context::contexts_in(
+                        rt.block_on(ferris_idea_languages::context::contexts_in(
                             &root,
                             &from.path,
                             text.as_deref(),
@@ -19842,7 +21419,7 @@ impl WorkbenchView {
                 };
                 let outside = found.outside;
                 let outside_places = found.outside_places;
-                let known: Vec<(Place, idecraft_languages::context::PlaceContext)> = found
+                let known: Vec<(Place, ferris_idea_languages::context::PlaceContext)> = found
                     .locations
                     .iter()
                     .zip(contexts)
@@ -19888,14 +21465,14 @@ impl WorkbenchView {
                     // library's sources archive (SPEC-0149 v3 behaviour 11).
                     0 if !outside.is_empty() => {
                         let opened = outside_places.first().and_then(|(uri, line)| {
-                            let cache = idecraft_core::user_cache_dir()?;
-                            let file = idecraft_languages::javadoc::library_source(uri, &cache)?;
+                            let cache = ferris_idea_core::user_cache_dir()?;
+                            let file = ferris_idea_languages::javadoc::library_source(uri, &cache)?;
                             let line = if *line > 0 {
                                 *line as usize
                             } else {
-                                let class = idecraft_languages::javadoc::library_class(uri)?;
+                                let class = ferris_idea_languages::javadoc::library_class(uri)?;
                                 std::fs::read_to_string(&file)
-                                    .map(|t| idecraft_languages::javadoc::declaration_line(&t, &class))
+                                    .map(|t| ferris_idea_languages::javadoc::declaration_line(&t, &class))
                                     .unwrap_or(0)
                             };
                             Some((file, line))
@@ -19907,7 +21484,7 @@ impl WorkbenchView {
                                 // is (SPEC-0149 v4 behaviour 11).
                                 let archive = file
                                     .strip_prefix(
-                                        idecraft_core::user_cache_dir()
+                                        ferris_idea_core::user_cache_dir()
                                             .unwrap_or_default()
                                             .join("library-sources"),
                                     )
@@ -19944,13 +21521,13 @@ impl WorkbenchView {
                     }
                     n => {
                         this.status = None;
-                        let open: HashMap<PathBuf, idecraft_editor::TextBuffer> = this
+                        let open: HashMap<PathBuf, ferris_idea_editor::TextBuffer> = this
                             .editors
                             .iter()
                             .map(|(p, e)| (p.clone(), e.read(cx).state.buffer.clone()))
                             .collect();
                         // Rows name the class, package and module (SPEC-0081 v2 behaviour 4).
-                        let contexts: Vec<Option<idecraft_languages::context::PlaceContext>> =
+                        let contexts: Vec<Option<ferris_idea_languages::context::PlaceContext>> =
                             targets
                                 .iter()
                                 .map(|t| {
@@ -20022,7 +21599,7 @@ impl WorkbenchView {
         };
         self.diag_saves
             .insert(path.to_path_buf(), editor.read(cx).saves());
-        if idecraft_languages::LanguageId::detect(path).is_none()
+        if ferris_idea_languages::LanguageId::detect(path).is_none()
             || !self.diag_running.insert(path.to_path_buf())
         {
             return;
@@ -20037,7 +21614,7 @@ impl WorkbenchView {
                             .enable_all()
                             .build()
                             .ok()?;
-                        rt.block_on(idecraft_languages::lsp::file_diagnostics(
+                        rt.block_on(ferris_idea_languages::lsp::file_diagnostics(
                             &root,
                             &file,
                             std::time::Duration::from_secs(30),
@@ -20072,7 +21649,7 @@ impl WorkbenchView {
         let Some(editor) = self.editors.get(path) else {
             return;
         };
-        if idecraft_languages::LanguageId::detect(path).is_none() {
+        if ferris_idea_languages::LanguageId::detect(path).is_none() {
             return;
         }
         if !self.semantic_running.insert(path.to_path_buf()) {
@@ -20094,7 +21671,7 @@ impl WorkbenchView {
                             .build()
                             .ok()?;
                         Some(
-                            rt.block_on(idecraft_languages::semantic::semantic_tokens_in(
+                            rt.block_on(ferris_idea_languages::semantic::semantic_tokens_in(
                                 &root,
                                 &file,
                                 Some(&text),
@@ -20166,71 +21743,240 @@ impl WorkbenchView {
         .detach();
     }
 
-    /// Counts the usages of the types declared in the file through its language server in the
+    /// Counts the usages of the declarations of the file through its language server in the
     /// background (`SPEC-0292` behaviours 1–3); only with the server pool, one question per file at
-    /// a time.
+    /// a time. Kept counts of the same text are shown at once; then the visible declarations are
+    /// counted, then the rest (v8 behaviours 12–13); a failed question or an answer for an older
+    /// text is asked again (v8 behaviour 14).
     fn request_usage_counts(&mut self, path: &Path, cx: &mut Context<Self>) {
+        use ferris_idea_languages::usages::{Plan, usage_counts_planned};
         if self.remote_project.is_some() {
             return;
         }
-        if !idecraft_languages::pool::enabled()
+        if !ferris_idea_languages::pool::enabled()
             || !crate::appearance::ide_settings(cx).editor.usage_counts
         {
             return;
         }
-        let Some(editor) = self.editors.get(path) else {
+        let Some(editor) = self.editors.get(path).cloned() else {
             return;
         };
-        if idecraft_languages::LanguageId::detect(path).is_none() {
+        if ferris_idea_languages::LanguageId::detect(path).is_none() {
             return;
         }
         if !self.usages_running.insert(path.to_path_buf()) {
             self.usages_again.insert(path.to_path_buf());
             return;
         }
-        let (text, revision) = {
+        let (text, revision, (first_line, last_line)) = {
             let e = editor.read(cx);
-            (e.state.buffer.text(), e.revision())
+            (e.state.buffer.text(), e.revision(), e.visible_lines())
         };
+        let kept = self.usage_cache.get(path, &text).unwrap_or_default();
+        if !kept.is_empty() {
+            let settings = crate::appearance::ide_settings(cx).editor;
+            editor.update(cx, |e, cx| {
+                e.set_usage_counts_at_line_end(!settings.usage_counts_above, cx);
+                e.set_usage_counts(revision, &kept, cx)
+            });
+        }
         let (root, file) = (self.root.clone(), path.to_path_buf());
+        let (first_line, last_line) = (first_line as u64, last_line as u64);
+        // One question in the background; `None` when no runtime could be built.
+        let ask = move |root: PathBuf,
+                        file: PathBuf,
+                        text: String,
+                        wait: std::time::Duration,
+                        plan: Plan| async move {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .ok()?;
+            Some(rt.block_on(usage_counts_planned(&root, &file, Some(&text), wait, &plan)))
+        };
         cx.spawn(async move |this, cx| {
-            let found = cx
-                .background_spawn({
-                    let file = file.clone();
-                    async move {
-                        let rt = tokio::runtime::Builder::new_current_thread()
-                            .enable_all()
-                            .build()
-                            .ok()?;
-                        rt.block_on(idecraft_languages::usages::usage_counts_in(
-                            &root,
-                            &file,
-                            Some(&text),
-                            std::time::Duration::from_secs(60),
-                        ))
-                        .ok()
-                    }
-                })
+            // The visible declarations first (v8 behaviour 12).
+            let first = cx
+                .background_spawn(ask(
+                    root.clone(),
+                    file.clone(),
+                    text.clone(),
+                    std::time::Duration::from_secs(15),
+                    Plan::visible(first_line, last_line),
+                ))
                 .await;
+            let first = match first {
+                Some(Ok(counted)) => counted.counts,
+                failed => {
+                    let _ = this.update(cx, |this, cx| {
+                        this.usages_running.remove(&file);
+                        let error = match &failed {
+                            Some(Err(e)) => Some(e.clone()),
+                            _ => None,
+                        };
+                        this.usage_counts_failed(&file, error, cx);
+                    });
+                    return;
+                }
+            };
+            let shown = this
+                .update(cx, |this, cx| {
+                    // Kept counts of this text stand for the rest until it is counted.
+                    let now = crate::usage_counts_model::merged(&kept, &first);
+                    let shown = this.show_usage_counts(&file, revision, &now, cx);
+                    if shown {
+                        this.usage_cache.put(&file, &text, first.clone());
+                    }
+                    shown
+                })
+                .unwrap_or(false);
+            // Then the rest, nearest to the visible lines first, without what is counted.
+            let rest = if shown {
+                cx.background_spawn(ask(
+                    root,
+                    file.clone(),
+                    text.clone(),
+                    std::time::Duration::from_secs(60),
+                    Plan::rest(
+                        first_line,
+                        last_line,
+                        crate::usage_counts_model::counted_places(&first),
+                    ),
+                ))
+                .await
+            } else {
+                None
+            };
             let _ = this.update(cx, |this, cx| {
                 this.usages_running.remove(&file);
-                let settings = crate::appearance::ide_settings(cx).editor;
-                let on = settings.usage_counts;
-                if let (Some(counts), Some(editor), true) =
-                    (found, this.editors.get(&file).cloned(), on)
-                    && editor.update(cx, |e, cx| {
-                        e.set_usage_counts_at_line_end(!settings.usage_counts_above, cx);
-                        e.set_usage_counts(revision, &counts, cx)
-                    })
-                {
-                    this.sync_twin(&file, cx);
+                this.usage_retries.remove(&file);
+                let all = match rest {
+                    Some(Ok(counted)) => crate::usage_counts_model::merged(&first, &counted.counts),
+                    _ => first,
+                };
+                if this.show_usage_counts(&file, revision, &all, cx) {
+                    this.usage_cache.put(&file, &text, all);
                 }
+                let on = crate::appearance::ide_settings(cx).editor.usage_counts;
                 if this.usages_again.remove(&file) && on {
                     this.request_usage_counts(&file, cx);
                 }
             });
         })
         .detach();
+    }
+
+    /// Shows `counts` of the text of `revision` in the file's editor; an answer for an older text
+    /// is not shown, and the file is asked again once its text has rested (`SPEC-0292` v8
+    /// behaviour 14). Returns whether it was shown.
+    fn show_usage_counts(
+        &mut self,
+        file: &Path,
+        revision: u64,
+        counts: &[ferris_idea_languages::usages::UsageCount],
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let settings = crate::appearance::ide_settings(cx).editor;
+        let Some(editor) = self.editors.get(file).cloned() else {
+            return false;
+        };
+        if !settings.usage_counts {
+            return false;
+        }
+        let shown = editor.update(cx, |e, cx| {
+            e.set_usage_counts_at_line_end(!settings.usage_counts_above, cx);
+            e.set_usage_counts(revision, counts, cx)
+        });
+        if shown {
+            self.sync_twin(file, cx);
+        } else {
+            let now = editor.read(cx).revision();
+            self.ask_usages_later(
+                file.to_path_buf(),
+                now,
+                std::time::Duration::from_secs(2),
+                cx,
+            );
+        }
+        shown
+    }
+
+    /// A usage-count question failed: asked again after the pauses of semantic tokens while the
+    /// server is starting, never when it is missing (`SPEC-0292` v8 behaviour 14).
+    fn usage_counts_failed(
+        &mut self,
+        file: &Path,
+        error: Option<ferris_idea_languages::lsp::LspError>,
+        cx: &mut Context<Self>,
+    ) {
+        let on = crate::appearance::ide_settings(cx).editor.usage_counts;
+        if self.usages_again.remove(file) && on {
+            self.request_usage_counts(file, cx);
+            return;
+        }
+        let Some(error) = error else {
+            return;
+        };
+        let pause = crate::semantic_model::retry_after(&mut self.usage_retries, file, Some(&error));
+        let revision = self.editors.get(file).map(|e| e.read(cx).revision());
+        if let (Some(pause), Some(revision), true) = (pause, revision, on) {
+            self.ask_usages_later(file.to_path_buf(), revision, pause, cx);
+        }
+    }
+
+    /// Asks for the usage counts of `file` again after `pause` if its text is still that of
+    /// `revision` and its tab is open (`SPEC-0292` v8 behaviour 14).
+    fn ask_usages_later(
+        &mut self,
+        file: PathBuf,
+        revision: u64,
+        pause: std::time::Duration,
+        cx: &mut Context<Self>,
+    ) {
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(pause).await;
+            let _ = this.update(cx, |this, cx| {
+                let rested = this
+                    .editors
+                    .get(&file)
+                    .is_some_and(|e| e.read(cx).revision() == revision);
+                if rested && crate::appearance::ide_settings(cx).editor.usage_counts {
+                    this.request_usage_counts(&file, cx);
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// A click on the count of the declaration on `line` (`SPEC-0292` v8 behaviour 15): the caret
+    /// goes to the declaration's name and Find Usages opens for it.
+    pub(crate) fn find_usages_of_count(
+        &mut self,
+        path: &Path,
+        editor: &Entity<EditorView>,
+        line: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(counts) = self.usage_cache.latest(path) else {
+            return;
+        };
+        let line_text = editor.read(cx).state.buffer.line(line).unwrap_or_default();
+        let Some(column) = crate::usage_counts_model::declaration_at(counts, line, &line_text)
+        else {
+            return;
+        };
+        let at = editor
+            .read(cx)
+            .state
+            .buffer
+            .position_to_offset(ferris_idea_editor::Position::new(line, column))
+            .ok();
+        let Some(at) = at else {
+            return;
+        };
+        editor.update(cx, |e, cx| e.select_range(at..at, cx));
+        self.find_usages_window(window, cx);
     }
 
     /// Asks the file's language server for parameter name hints of the editor's text in the
@@ -20242,7 +21988,7 @@ impl WorkbenchView {
         let Some(editor) = self.editors.get(path) else {
             return;
         };
-        if idecraft_languages::LanguageId::detect(path).is_none() {
+        if ferris_idea_languages::LanguageId::detect(path).is_none() {
             return;
         }
         if !self.hints_running.insert(path.to_path_buf()) {
@@ -20263,12 +22009,14 @@ impl WorkbenchView {
                             .enable_all()
                             .build()
                             .ok()?;
-                        Some(rt.block_on(idecraft_languages::inlay::parameter_hints_in(
-                            &root,
-                            &file,
-                            Some(&text),
-                            std::time::Duration::from_secs(30),
-                        )))
+                        Some(
+                            rt.block_on(ferris_idea_languages::inlay::parameter_hints_in(
+                                &root,
+                                &file,
+                                Some(&text),
+                                std::time::Duration::from_secs(30),
+                            )),
+                        )
                     }
                 })
                 .await;
@@ -20303,7 +22051,7 @@ impl WorkbenchView {
         self.refresh_import_hint(cx);
         // First show what the server published for the text it has; a publication for an older
         // text waits until the editor and the server agree again (or a newer one replaces it).
-        let (seen, mut changed) = idecraft_languages::pool::diagnostics_since(self.pool_seen);
+        let (seen, mut changed) = ferris_idea_languages::pool::diagnostics_since(self.pool_seen);
         self.pool_seen = seen;
         // Library sources are read, not checked (SPEC-0149 v4 behaviour 11).
         changed.retain(|(p, _)| !is_library_source(p));
@@ -20340,7 +22088,7 @@ impl WorkbenchView {
         let mut changed_texts = Vec::new();
         let remote = self.remote_project.is_some();
         for (path, editor) in &self.editors {
-            let Some(language) = idecraft_languages::LanguageId::detect(path) else {
+            let Some(language) = ferris_idea_languages::LanguageId::detect(path) else {
                 continue;
             };
             if !self.pool_synced.contains_key(path) && !remote {
@@ -20364,7 +22112,8 @@ impl WorkbenchView {
                     .enable_all()
                     .build();
                 if let Ok(rt) = rt {
-                    let _ = rt.block_on(idecraft_languages::pool::sync_text(&root, &file, &text));
+                    let _ =
+                        rt.block_on(ferris_idea_languages::pool::sync_text(&root, &file, &text));
                 }
             })
             .detach();
@@ -20421,6 +22170,9 @@ impl WorkbenchView {
                     editor.update(cx, |e, cx| e.clear_usage_counts(cx));
                 }
             }
+            if !usages_on {
+                self.usage_cache.clear();
+            }
         }
         // Authors follow their setting (SPEC-0292 v4 behaviour 7f).
         self.code_authors_setting(cx);
@@ -20441,7 +22193,7 @@ impl WorkbenchView {
         for language in opened {
             if self.server_hints.insert(language)
                 && let Some(message) =
-                    idecraft_languages::servers::missing_server_message(language, &self.root)
+                    ferris_idea_languages::servers::missing_server_message(language, &self.root)
             {
                 self.status = Some(message);
                 cx.notify();
@@ -20461,7 +22213,7 @@ impl WorkbenchView {
                     .enable_all()
                     .build()
                 {
-                    rt.block_on(idecraft_languages::pool::close_text(&path));
+                    rt.block_on(ferris_idea_languages::pool::close_text(&path));
                 }
             })
             .detach();
@@ -20523,7 +22275,11 @@ impl WorkbenchView {
     }
 
     /// Gutter markers of the editor of `path`, if it is open (`SPEC-0064`).
-    pub fn changes_of(&self, path: &Path, cx: &gpui::App) -> Option<Vec<idecraft_vcs::LineChange>> {
+    pub fn changes_of(
+        &self,
+        path: &Path,
+        cx: &gpui::App,
+    ) -> Option<Vec<ferris_idea_vcs::LineChange>> {
         self.editors
             .get(path)
             .map(|e| e.read(cx).changes().to_vec())
@@ -20674,11 +22430,11 @@ impl WorkbenchView {
     fn request_hierarchy(
         &mut self,
         origin: Place,
-        direction: idecraft_languages::insight::CallDirection,
+        direction: ferris_idea_languages::insight::CallDirection,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if idecraft_languages::LanguageId::detect(&origin.path).is_none() {
+        if ferris_idea_languages::LanguageId::detect(&origin.path).is_none() {
             return;
         }
         let text = self
@@ -20696,7 +22452,7 @@ impl WorkbenchView {
                         .enable_all()
                         .build()
                         .map_err(|e| e.to_string())?;
-                    rt.block_on(idecraft_languages::insight::call_hierarchy_in(
+                    rt.block_on(ferris_idea_languages::insight::call_hierarchy_in(
                         &root,
                         &from.path,
                         text.as_deref(),
@@ -20876,7 +22632,7 @@ impl WorkbenchView {
     /// Shows the open hierarchy in the other direction, as the Callers/Callees buttons do.
     pub fn set_hierarchy_direction(
         &mut self,
-        direction: idecraft_languages::insight::CallDirection,
+        direction: ferris_idea_languages::insight::CallDirection,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -21000,7 +22756,7 @@ impl WorkbenchView {
                 .get(&path)
                 .map(|editor| editor.read(cx).state.buffer.text())
         };
-        let plan = idecraft_core::Workspace::open(&self.root)
+        let plan = ferris_idea_core::Workspace::open(&self.root)
             .map_err(|e| e.to_string())
             .and_then(|workspace| {
                 request
@@ -21015,7 +22771,7 @@ impl WorkbenchView {
                 return;
             }
         };
-        let mut history = idecraft_core::LocalHistory::open(&self.root).ok();
+        let mut history = ferris_idea_core::LocalHistory::open(&self.root).ok();
         let (mut count, mut changed, mut failed) = (0, 0, Vec::new());
         for file in &plan.files {
             let rel = file.path.to_string_lossy().replace('\\', "/");
@@ -21079,7 +22835,7 @@ impl WorkbenchView {
         let (plugins, problems) = self
             .plugins_dir
             .as_deref()
-            .map(idecraft_plugins::load_dir)
+            .map(ferris_idea_plugins::load_dir)
             .unwrap_or_default();
         if let Some(p) = problems.first() {
             self.status = Some(format!("Plugin not loaded: {p}"));
@@ -21098,13 +22854,13 @@ impl WorkbenchView {
             self.refresh_plugin_panels(cx);
         }
         self.schedule_plugin_status(cx);
-        idecraft_plugins::action_list(&self.plugins)
+        ferris_idea_plugins::action_list(&self.plugins)
     }
 
-    /// The plugin file type of `path`, unless IDECraft has a language of its own for it.
-    fn plugin_file_type(&self, path: &Path) -> Option<idecraft_plugins::FileType> {
-        let builtin = idecraft_languages::LanguageId::detect(path).is_some();
-        idecraft_plugins::file_type_for(&self.plugins, path, builtin).map(|(_, t)| t.clone())
+    /// The plugin file type of `path`, unless Ferris IDEA has a language of its own for it.
+    fn plugin_file_type(&self, path: &Path) -> Option<ferris_idea_plugins::FileType> {
+        let builtin = ferris_idea_languages::LanguageId::detect(path).is_some();
+        ferris_idea_plugins::file_type_for(&self.plugins, path, builtin).map(|(_, t)| t.clone())
     }
 
     fn apply_plugin_file_type(
@@ -21122,22 +22878,22 @@ impl WorkbenchView {
     fn plugin_file_log(&self) -> Option<std::path::PathBuf> {
         self.plugins_dir
             .as_deref()
-            .map(|d| d.join(idecraft_plugins::FILE_AUDIT))
+            .map(|d| d.join(ferris_idea_plugins::FILE_AUDIT))
     }
 
-    fn plugin_access(&self, plugin: &idecraft_plugins::Plugin) -> idecraft_plugins::Access {
+    fn plugin_access(&self, plugin: &ferris_idea_plugins::Plugin) -> ferris_idea_plugins::Access {
         let project_read = plugin
             .manifest
             .permissions
-            .contains(&idecraft_plugins::Permission::ProjectRead)
+            .contains(&ferris_idea_plugins::Permission::ProjectRead)
             && self.plugins_dir.as_deref().is_some_and(|d| {
-                idecraft_plugins::granted(
+                ferris_idea_plugins::granted(
                     d,
                     &plugin.file(),
-                    idecraft_plugins::Permission::ProjectRead,
+                    ferris_idea_plugins::Permission::ProjectRead,
                 )
             });
-        idecraft_plugins::Access {
+        ferris_idea_plugins::Access {
             root: Some(self.root.clone()),
             project_read,
             network: None,
@@ -21148,9 +22904,13 @@ impl WorkbenchView {
     /// The plugins' actions of `kind` that apply to `path`, with what each may read.
     fn plugin_extensions(
         &self,
-        kind: idecraft_plugins::ActionKind,
+        kind: ferris_idea_plugins::ActionKind,
         path: &Path,
-    ) -> Vec<(idecraft_plugins::Plugin, String, idecraft_plugins::Access)> {
+    ) -> Vec<(
+        ferris_idea_plugins::Plugin,
+        String,
+        ferris_idea_plugins::Access,
+    )> {
         self.plugins
             .iter()
             .flat_map(|p| {
@@ -21168,7 +22928,7 @@ impl WorkbenchView {
     fn schedule_plugin_status(&mut self, cx: &mut Context<Self>) {
         let jobs = self
             .active_path()
-            .map(|p| self.plugin_extensions(idecraft_plugins::ActionKind::Status, &p))
+            .map(|p| self.plugin_extensions(ferris_idea_plugins::ActionKind::Status, &p))
             .unwrap_or_default();
         let (Some(path), Some(editor), false) =
             (self.active_path(), self.active_editor(), jobs.is_empty())
@@ -21194,7 +22954,7 @@ impl WorkbenchView {
                 .background_spawn(async move {
                     // No widget by itself for a file a plugin could not read (SPEC-0156 v4
                     // behaviour 12).
-                    if idecraft_plugins::guarded(&root, &shown_path).is_some() {
+                    if ferris_idea_plugins::guarded(&root, &shown_path).is_some() {
                         return Vec::new();
                     }
                     jobs.into_iter()
@@ -21268,14 +23028,14 @@ impl WorkbenchView {
         // A file a plugin could not read is not named to the panels (SPEC-0156 v4 behaviour 12).
         let active = self
             .active_path()
-            .filter(|p| idecraft_plugins::guarded(&self.root, p).is_none())
+            .filter(|p| ferris_idea_plugins::guarded(&self.root, p).is_none())
             .map(|p| {
                 p.strip_prefix(&self.root)
                     .unwrap_or(&p)
                     .to_string_lossy()
                     .into_owned()
             });
-        let context = idecraft_plugins::PanelContext {
+        let context = ferris_idea_plugins::PanelContext {
             project: self
                 .root
                 .file_name()
@@ -21284,10 +23044,10 @@ impl WorkbenchView {
             active,
         };
         let jobs: Vec<(
-            idecraft_plugins::Plugin,
+            ferris_idea_plugins::Plugin,
             String,
             String,
-            idecraft_plugins::Access,
+            ferris_idea_plugins::Access,
         )> = self
             .plugins
             .iter()
@@ -21295,7 +23055,7 @@ impl WorkbenchView {
                 p.manifest
                     .actions
                     .iter()
-                    .filter(|a| a.kind == idecraft_plugins::ActionKind::Panel)
+                    .filter(|a| a.kind == ferris_idea_plugins::ActionKind::Panel)
                     .map(|a| {
                         (
                             p.clone(),
@@ -21416,7 +23176,7 @@ impl WorkbenchView {
                         let link = row.path.is_some();
                         list = list.child(
                             div()
-                                .id(("plugin-panel-row", n * idecraft_plugins::MAX_ROWS + i))
+                                .id(("plugin-panel-row", n * ferris_idea_plugins::MAX_ROWS + i))
                                 .relative()
                                 .semantics(
                                     crate::semantics::Semantics::new(
@@ -21485,17 +23245,18 @@ impl WorkbenchView {
         path: &Path,
         editor: &Entity<EditorView>,
         cx: &Context<Self>,
-    ) -> idecraft_plugins::EditorContext {
+    ) -> ferris_idea_plugins::EditorContext {
         let e = editor.read(cx);
         let range = e.state.carets.primary().range();
         let s = e.status();
-        idecraft_plugins::EditorContext {
+        ferris_idea_plugins::EditorContext {
             path: path
                 .strip_prefix(&self.root)
                 .unwrap_or(path)
                 .to_string_lossy()
                 .into_owned(),
-            language: idecraft_languages::LanguageId::detect(path).map(|l| l.lsp_id().to_owned()),
+            language: ferris_idea_languages::LanguageId::detect(path)
+                .map(|l| l.lsp_id().to_owned()),
             text: e.state.buffer.text(),
             selection_start: range.start,
             selection_end: range.end,
@@ -21524,11 +23285,11 @@ impl WorkbenchView {
 
     /// The active file when plugin action `id` exists and the file is one a plugin could not read:
     /// the path relative to the project and why (SPEC-0156 v4 behaviour 12).
-    fn plugin_action_guard(&self, id: &str) -> Option<(String, idecraft_plugins::Refusal)> {
-        idecraft_plugins::find_action(&self.plugins, id)?;
+    fn plugin_action_guard(&self, id: &str) -> Option<(String, ferris_idea_plugins::Refusal)> {
+        ferris_idea_plugins::find_action(&self.plugins, id)?;
         self.active_editor()?;
         let path = self.active_path()?;
-        let refusal = idecraft_plugins::guarded(&self.root, &path)?;
+        let refusal = ferris_idea_plugins::guarded(&self.root, &path)?;
         let shown = path.strip_prefix(&self.root).unwrap_or(&path);
         Some((shown.to_string_lossy().into_owned(), refusal))
     }
@@ -21545,11 +23306,15 @@ impl WorkbenchView {
         let Some((shown, refusal)) = self.plugin_action_guard(id) else {
             return self.run_plugin_action_on(id, false, cx);
         };
-        let Some((plugin, action)) = idecraft_plugins::find_action(&self.plugins, id) else {
+        let Some((plugin, action)) = ferris_idea_plugins::find_action(&self.plugins, id) else {
             return false;
         };
-        let question =
-            idecraft_plugins::guard_question(&plugin.manifest.name, &action.title, &shown, refusal);
+        let question = ferris_idea_plugins::guard_question(
+            &plugin.manifest.name,
+            &action.title,
+            &shown,
+            refusal,
+        );
         let title = action.title.clone();
         // "Cancel" first: it is the default, and Escape.
         let buttons = [
@@ -21586,8 +23351,8 @@ impl WorkbenchView {
     /// Runs plugin action `id`; on a file a plugin could not read only when `confirmed` says the
     /// user answered the question, which is then noted in the log of file requests.
     fn run_plugin_action_on(&mut self, id: &str, confirmed: bool, cx: &mut Context<Self>) -> bool {
-        let found =
-            idecraft_plugins::find_action(&self.plugins, id).map(|(p, a)| (p.clone(), a.clone()));
+        let found = ferris_idea_plugins::find_action(&self.plugins, id)
+            .map(|(p, a)| (p.clone(), a.clone()));
         let Some((plugin, action)) = found else {
             return false;
         };
@@ -21606,7 +23371,7 @@ impl WorkbenchView {
                 cx.notify();
                 return true;
             }
-            idecraft_plugins::note_passed_on(
+            ferris_idea_plugins::note_passed_on(
                 self.plugin_file_log().as_deref(),
                 &plugin.file(),
                 "action",
@@ -21615,7 +23380,7 @@ impl WorkbenchView {
                 "confirmed by the user",
             );
         }
-        if action.kind == idecraft_plugins::ActionKind::Edit {
+        if action.kind == ferris_idea_plugins::ActionKind::Edit {
             return self.run_plugin_edit(plugin, action, editor, cx);
         }
         let (range, input) = {
@@ -21632,24 +23397,24 @@ impl WorkbenchView {
             let result = task.await;
             let _ = this.update(cx, |this, cx| {
                 match (result, action.kind) {
-                    (Ok(output), idecraft_plugins::ActionKind::Replace) => {
+                    (Ok(output), ferris_idea_plugins::ActionKind::Replace) => {
                         editor.update(cx, |e, cx| e.replace_ranges(&[(range, output)], cx));
                         this.status = Some(format!("{} done", action.title));
                     }
-                    (Ok(output), idecraft_plugins::ActionKind::Message) => {
+                    (Ok(output), ferris_idea_plugins::ActionKind::Message) => {
                         this.status = Some(output);
                     }
                     // Handled by `run_plugin_edit`; inspections and other extension points run by
                     // themselves (SPEC-0166, SPEC-0210).
                     (
                         Ok(_),
-                        idecraft_plugins::ActionKind::Edit
-                        | idecraft_plugins::ActionKind::Inspect
-                        | idecraft_plugins::ActionKind::Complete
-                        | idecraft_plugins::ActionKind::Status
-                        | idecraft_plugins::ActionKind::Panel
-                        | idecraft_plugins::ActionKind::RunConfig
-                        | idecraft_plugins::ActionKind::Connector,
+                        ferris_idea_plugins::ActionKind::Edit
+                        | ferris_idea_plugins::ActionKind::Inspect
+                        | ferris_idea_plugins::ActionKind::Complete
+                        | ferris_idea_plugins::ActionKind::Status
+                        | ferris_idea_plugins::ActionKind::Panel
+                        | ferris_idea_plugins::ActionKind::RunConfig
+                        | ferris_idea_plugins::ActionKind::Connector,
                     ) => {}
                     (Err(e), _) => this.status = Some(e.to_string()),
                 }
@@ -21683,7 +23448,7 @@ impl WorkbenchView {
     /// Saves `word` to the project dictionary of the active file and checks the open files again
     /// (`SPEC-0163` behaviour 1).
     pub fn learn_word(&mut self, word: &str, cx: &mut Context<Self>) {
-        use idecraft_languages::project_dictionary as pd;
+        use ferris_idea_languages::project_dictionary as pd;
         // The project of the file, else this window's folder.
         let file = self
             .active_path()
@@ -21702,17 +23467,63 @@ impl WorkbenchView {
         cx.notify();
     }
 
+    /// "Add missing translation to …" of a key that other files of its resource bundle lack (`SPEC-0163` v3
+    /// behaviour 3, IMP-0536): adds the key with an empty value to each of those files — open ones
+    /// in their editors, the others on disk — as one undo group "Add Missing Key", and names the
+    /// files in the status bar; when nothing can be added the status bar says why.
+    pub fn add_missing_bundle_key(&mut self, path: &Path, key: &str, cx: &mut Context<Self>) {
+        let texts: std::collections::HashMap<PathBuf, String> =
+            ferris_idea_languages::properties::bundle_files(path)
+                .into_iter()
+                .filter_map(|(_, p)| self.text_of(&p, cx).map(|t| (p, t)))
+                .collect();
+        let changes = ferris_idea_languages::properties::add_missing_key(path, key, |p| {
+            texts.get(p).cloned()
+        });
+        let message = match changes {
+            Err(why) => format!("'{key}' not added: {why}"),
+            Ok(changes) => {
+                let files: Vec<ferris_idea_languages::rename::FileEdits> = changes
+                    .iter()
+                    .map(
+                        |(p, before, after)| ferris_idea_languages::rename::FileEdits {
+                            path: p.clone(),
+                            edits: vec![ferris_idea_languages::rename::edit_between(before, after)],
+                        },
+                    )
+                    .collect();
+                let names: Vec<String> = changes
+                    .iter()
+                    .map(|(p, ..)| {
+                        p.file_name()
+                            .map_or_else(String::new, |n| n.to_string_lossy().into_owned())
+                    })
+                    .collect();
+                match self.apply_refactoring("Add Missing Key", &files, &[], cx) {
+                    Ok(()) => format!("Added '{key}' to {}", names.join(", ")),
+                    Err(e) => format!("'{key}' not added: {e}"),
+                }
+            }
+        };
+        for e in self.editors.values() {
+            e.update(cx, |e, cx| e.reinspect(cx));
+        }
+        // Held in front of the caret's problem, which stays until the changed files are saved
+        // (IMP-0536: the fix always says what it did).
+        self.hold_status(message, cx);
+    }
+
     /// "Ignore '…'" and "Disable rule '…'" of a grammar finding (`SPEC-0155` v3 behaviour 10):
     /// keeps the text in the project's ignore file (the one that applies to the active file, else
     /// the window folder's), or turns the rule off in the project's profile; the open files are
     /// checked again.
     pub fn keep_finding(
         &mut self,
-        keep: idecraft_languages::inspections::Keep,
+        keep: ferris_idea_languages::inspections::Keep,
         cx: &mut Context<Self>,
     ) {
-        use idecraft_languages::grammar_ignore as gi;
-        use idecraft_languages::inspections::{Keep, name_of};
+        use ferris_idea_languages::grammar_ignore as gi;
+        use ferris_idea_languages::inspections::{Keep, name_of};
         match keep {
             Keep::Ignore { rule, text } => {
                 let file = self
@@ -21774,11 +23585,11 @@ impl WorkbenchView {
         cx.spawn(async move |this, cx| {
             let answer = cx
                 .background_spawn(async move {
-                    let key = idecraft_ai::stored_key(
-                        &idecraft_database::SystemStore,
+                    let key = ferris_idea_ai::stored_key(
+                        &ferris_idea_database::SystemStore,
                         &settings.endpoint,
                     );
-                    idecraft_ai::inline_alternative(
+                    ferris_idea_ai::inline_alternative(
                         &settings,
                         key.as_deref(),
                         &language,
@@ -21821,19 +23632,19 @@ impl WorkbenchView {
     /// each in the background with the inspection budget; the findings go to the editor while its
     /// text is still the one checked. A plugin that fails is named in the status bar.
     fn schedule_plugin_inspections(&mut self, path: &Path, cx: &mut Context<Self>) {
-        let wanted: Vec<(idecraft_plugins::Plugin, String, bool)> = self
+        let wanted: Vec<(ferris_idea_plugins::Plugin, String, bool)> = self
             .plugins
             .iter()
             .flat_map(|p| {
                 let project_read = p
                     .manifest
                     .permissions
-                    .contains(&idecraft_plugins::Permission::ProjectRead)
+                    .contains(&ferris_idea_plugins::Permission::ProjectRead)
                     && self.plugins_dir.as_deref().is_some_and(|d| {
-                        idecraft_plugins::granted(
+                        ferris_idea_plugins::granted(
                             d,
                             &p.file(),
-                            idecraft_plugins::Permission::ProjectRead,
+                            ferris_idea_plugins::Permission::ProjectRead,
                         )
                     });
                 p.manifest
@@ -21857,7 +23668,8 @@ impl WorkbenchView {
             .unwrap_or(&path)
             .to_string_lossy()
             .into_owned();
-        let language = idecraft_languages::LanguageId::detect(&path).map(|l| l.lsp_id().to_owned());
+        let language =
+            ferris_idea_languages::LanguageId::detect(&path).map(|l| l.lsp_id().to_owned());
         let root = self.root.clone();
         let log = self.plugin_file_log();
         cx.spawn(async move |this, cx| {
@@ -21870,7 +23682,7 @@ impl WorkbenchView {
             }) else {
                 return;
             };
-            let context = idecraft_plugins::InspectContext {
+            let context = ferris_idea_plugins::InspectContext {
                 path: rel,
                 language,
                 text: text.clone(),
@@ -21880,13 +23692,13 @@ impl WorkbenchView {
                 .background_spawn(async move {
                     // Not by themselves on a file a plugin could not read (SPEC-0156 v4
                     // behaviour 12).
-                    if idecraft_plugins::guarded(&root, &checked_path).is_some() {
+                    if ferris_idea_plugins::guarded(&root, &checked_path).is_some() {
                         return Vec::new();
                     }
                     wanted
                         .into_iter()
                         .map(|(plugin, id, project_read)| {
-                            let access = idecraft_plugins::Access {
+                            let access = ferris_idea_plugins::Access {
                                 root: Some(root.clone()),
                                 project_read,
                                 network: None,
@@ -21913,9 +23725,9 @@ impl WorkbenchView {
                     .iter()
                     .map(|(name, f)| {
                         let severity = match f.level {
-                            idecraft_plugins::FindingLevel::Error => Severity::Error,
-                            idecraft_plugins::FindingLevel::Warning => Severity::Warning,
-                            idecraft_plugins::FindingLevel::Weak => Severity::Weak,
+                            ferris_idea_plugins::FindingLevel::Error => Severity::Error,
+                            ferris_idea_plugins::FindingLevel::Warning => Severity::Warning,
+                            ferris_idea_plugins::FindingLevel::Weak => Severity::Weak,
                         };
                         (f.start..f.end, severity, format!("{name}: {}", f.message))
                     })
@@ -21935,7 +23747,7 @@ impl WorkbenchView {
         path: &Path,
         text: &str,
         at: usize,
-    ) -> Vec<idecraft_languages::inspections::Fix> {
+    ) -> Vec<ferris_idea_languages::inspections::Fix> {
         let Some((checked, found)) = self.plugin_findings.get(path) else {
             return Vec::new();
         };
@@ -21946,18 +23758,19 @@ impl WorkbenchView {
             .iter()
             .filter(|(_, f)| f.start <= at && at <= f.end)
             .filter_map(|(_, f)| f.fix.as_ref())
-            .map(|fix| idecraft_languages::inspections::Fix {
+            .map(|fix| ferris_idea_languages::inspections::Fix {
                 title: fix.title.clone(),
                 edits: fix
                     .edits
                     .iter()
-                    .map(|e| idecraft_languages::jvm::TextEdit {
+                    .map(|e| ferris_idea_languages::jvm::TextEdit {
                         range: byte_of(text, e.start)..byte_of(text, e.end),
                         text: e.text.clone(),
                     })
                     .collect(),
                 learn: None,
                 keep: None,
+                bundle_key: None,
                 action: None,
             })
             .collect()
@@ -21997,7 +23810,7 @@ impl WorkbenchView {
         self.inline_alternatives = None;
         let request = self.inline_request;
         let path = path.to_path_buf();
-        let language = idecraft_languages::LanguageId::detect(&path)
+        let language = ferris_idea_languages::LanguageId::detect(&path)
             .map_or("text", |l| l.lsp_id())
             .to_owned();
         cx.spawn(async move |this, cx| {
@@ -22038,11 +23851,11 @@ impl WorkbenchView {
             );
             let answer = cx
                 .background_spawn(async move {
-                    let key = idecraft_ai::stored_key(
-                        &idecraft_database::SystemStore,
+                    let key = ferris_idea_ai::stored_key(
+                        &ferris_idea_database::SystemStore,
                         &settings.endpoint,
                     );
-                    idecraft_ai::inline_completion(
+                    ferris_idea_ai::inline_completion(
                         &settings,
                         key.as_deref(),
                         &language,
@@ -22080,8 +23893,8 @@ impl WorkbenchView {
     /// (`SPEC-0156` behaviours 1–5).
     fn run_plugin_edit(
         &mut self,
-        plugin: idecraft_plugins::Plugin,
-        action: idecraft_plugins::ActionInfo,
+        plugin: ferris_idea_plugins::Plugin,
+        action: ferris_idea_plugins::ActionInfo,
         editor: Entity<EditorView>,
         cx: &mut Context<Self>,
     ) -> bool {
@@ -22093,13 +23906,13 @@ impl WorkbenchView {
             let primary = e.state.carets.primary();
             let range = primary.range();
             let s = e.status();
-            idecraft_plugins::EditorContext {
+            ferris_idea_plugins::EditorContext {
                 path: path
                     .strip_prefix(&self.root)
                     .unwrap_or(&path)
                     .to_string_lossy()
                     .into_owned(),
-                language: idecraft_languages::LanguageId::detect(&path)
+                language: ferris_idea_languages::LanguageId::detect(&path)
                     .map(|l| l.lsp_id().to_owned()),
                 text: e.state.buffer.text(),
                 selection_start: range.start,
@@ -22111,16 +23924,16 @@ impl WorkbenchView {
         let project_read = plugin
             .manifest
             .permissions
-            .contains(&idecraft_plugins::Permission::ProjectRead)
+            .contains(&ferris_idea_plugins::Permission::ProjectRead)
             && self.plugins_dir.as_deref().is_some_and(|d| {
-                idecraft_plugins::granted(
+                ferris_idea_plugins::granted(
                     d,
                     &plugin.file(),
-                    idecraft_plugins::Permission::ProjectRead,
+                    ferris_idea_plugins::Permission::ProjectRead,
                 )
             });
         let log = self.plugin_file_log();
-        let access = idecraft_plugins::Access {
+        let access = ferris_idea_plugins::Access {
             root: Some(self.root.clone()),
             project_read,
             network: None,
@@ -22168,7 +23981,7 @@ impl WorkbenchView {
                         // Only a file the plugin could read: an own source that is no secret
                         // by its name (SPEC-0156 v3 behaviour 11); a refusal is logged.
                         if let Some(open) = r.open
-                            && let Some(target) = idecraft_plugins::openable(
+                            && let Some(target) = ferris_idea_plugins::openable(
                                 &this.root,
                                 &open.path,
                                 log.as_deref(),
@@ -22362,7 +24175,7 @@ impl WorkbenchView {
     pub fn git_operation(
         &mut self,
         label: String,
-        op: impl FnOnce(&Repo) -> Result<idecraft_vcs::OpOutcome, idecraft_vcs::GitError>
+        op: impl FnOnce(&Repo) -> Result<ferris_idea_vcs::OpOutcome, ferris_idea_vcs::GitError>
         + Send
         + 'static,
         cx: &mut Context<Self>,
@@ -22374,10 +24187,10 @@ impl WorkbenchView {
     pub fn git_operation_then(
         &mut self,
         label: String,
-        op: impl FnOnce(&Repo) -> Result<idecraft_vcs::OpOutcome, idecraft_vcs::GitError>
+        op: impl FnOnce(&Repo) -> Result<ferris_idea_vcs::OpOutcome, ferris_idea_vcs::GitError>
         + Send
         + 'static,
-        then: impl FnOnce(&mut Self, &idecraft_vcs::OpOutcome) + 'static,
+        then: impl FnOnce(&mut Self, &ferris_idea_vcs::OpOutcome) + 'static,
         cx: &mut Context<Self>,
     ) {
         let root = self.root.clone();
@@ -22427,7 +24240,7 @@ impl WorkbenchView {
     /// The stash popup on `stashes` (of this machine or the host).
     pub(super) fn show_stashes(
         &mut self,
-        stashes: Vec<idecraft_vcs::Stash>,
+        stashes: Vec<ferris_idea_vcs::Stash>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -22500,7 +24313,7 @@ impl WorkbenchView {
         &mut self,
         index: usize,
         message: &str,
-        files: &[idecraft_vcs::StashFile],
+        files: &[ferris_idea_vcs::StashFile],
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -22538,7 +24351,7 @@ impl WorkbenchView {
     /// Opens the connection dialog for a new connection or for `profile` (SPEC-0108 behaviour 1).
     pub fn open_connection_dialog(
         &mut self,
-        profile: Option<idecraft_database::ConnectionProfile>,
+        profile: Option<ferris_idea_database::ConnectionProfile>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -22560,24 +24373,25 @@ impl WorkbenchView {
                     view.update(cx, |v, cx| v.set_note("Saving…".into(), false, cx));
                     let task = cx.background_executor().spawn(async move {
                         // A non-relational store becomes a store profile (SPEC-0310 behaviour 6).
-                        match idecraft_nosql::form_profile(&form, id.as_deref().unwrap_or("new")) {
+                        match ferris_idea_nosql::form_profile(&form, id.as_deref().unwrap_or("new"))
+                        {
                             Some(store) => store
                                 .and_then(|p| {
-                                    idecraft_nosql::save_store(
+                                    ferris_idea_nosql::save_store(
                                         &root,
                                         p,
                                         id.as_deref(),
                                         password.as_deref(),
-                                        &idecraft_database::SystemStore,
+                                        &ferris_idea_database::SystemStore,
                                     )
                                 })
                                 .map_err(|e| e.to_string()),
-                            None => idecraft_database::save_connection(
+                            None => ferris_idea_database::save_connection(
                                 &root,
                                 id.as_deref(),
                                 &form,
                                 password.as_deref(),
-                                &idecraft_database::SystemStore,
+                                &ferris_idea_database::SystemStore,
                             ),
                         }
                     });
@@ -22622,23 +24436,26 @@ impl WorkbenchView {
                     );
                     let view = view.clone();
                     let task = cx.background_executor().spawn(async move {
-                        match idecraft_nosql::form_profile(&form, id.as_deref().unwrap_or("test")) {
-                            Some(Ok(store)) => idecraft_nosql::test_store_form(
+                        match ferris_idea_nosql::form_profile(
+                            &form,
+                            id.as_deref().unwrap_or("test"),
+                        ) {
+                            Some(Ok(store)) => ferris_idea_nosql::test_store_form(
                                 &root,
                                 id.as_deref(),
                                 &store,
                                 password.as_deref(),
-                                &idecraft_database::SystemStore,
+                                &ferris_idea_database::SystemStore,
                             )
                             .map(|note| (note, Vec::new())),
                             Some(Err(e)) => Err(e.to_string()),
                             // SPEC-0108 v3: the summary plus version, driver, round trip, TLS.
-                            None => idecraft_database::test_form(
+                            None => ferris_idea_database::test_form(
                                 &root,
                                 id.as_deref(),
                                 &form,
                                 password.as_deref(),
-                                &idecraft_database::SystemStore,
+                                &ferris_idea_database::SystemStore,
                             )
                             .map(|test| (test.summary(), test.detail_lines())),
                         }
@@ -22652,18 +24469,41 @@ impl WorkbenchView {
                     })
                     .detach();
                 }
+                // SPEC-0108 v13 behaviour 23: the user's click creates the file, anywhere the
+                // user can write; never over an existing one.
+                crate::ConnectionDialogEvent::CreateFile { form } => {
+                    let (root, form) = (this.root.clone(), form.clone());
+                    let view = view.clone();
+                    let task = cx.background_executor().spawn(async move {
+                        ferris_idea_database::create_database_file(
+                            &root,
+                            &form,
+                            ferris_idea_database::FileScope::Anywhere,
+                        )
+                    });
+                    cx.spawn(async move |_, cx| {
+                        let result = task.await;
+                        let _ = view.update(cx, |v, cx| match result {
+                            Ok(file) => {
+                                v.set_note(format!("Created {}", file.display()), false, cx)
+                            }
+                            Err(e) => v.set_note(e, true, cx),
+                        });
+                    })
+                    .detach();
+                }
                 crate::ConnectionDialogEvent::Report { id, form, error } => {
                     let profile = form
                         .to_profile(id.as_deref().unwrap_or("new"), None, None)
                         .ok();
-                    let catalogue = idecraft_database::catalogue();
+                    let catalogue = ferris_idea_database::catalogue();
                     if let Some(connector) =
                         catalogue.for_profile(form.dialect, form.system.as_deref())
                     {
                         let step = if error.is_some() {
-                            idecraft_database::report::ReportStep::Connect
+                            ferris_idea_database::report::ReportStep::Connect
                         } else {
-                            idecraft_database::report::ReportStep::Other
+                            ferris_idea_database::report::ReportStep::Other
                         };
                         this.open_report_dialog(
                             connector.clone(),
@@ -22705,12 +24545,12 @@ impl WorkbenchView {
         &mut self,
         dialog: Entity<crate::ConnectionDialog>,
         id: Option<String>,
-        form: &idecraft_database::ConnectionForm,
+        form: &ferris_idea_database::ConnectionForm,
         password: Option<String>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
-        let catalogue = idecraft_database::catalogue();
+        let catalogue = ferris_idea_database::catalogue();
         let Some(connector) = form.system.as_deref().and_then(|s| catalogue.get(s)) else {
             return false;
         };
@@ -22728,7 +24568,7 @@ impl WorkbenchView {
             "" => "localhost",
             h => h,
         };
-        let target = idecraft_plugins::Target::new(host, port);
+        let target = ferris_idea_plugins::Target::new(host, port);
         let Some(dir) = self.plugins_dir.clone() else {
             dialog.update(cx, |v, cx| v.set_note("No plugins folder".into(), true, cx));
             return true;
@@ -22738,7 +24578,7 @@ impl WorkbenchView {
             dialog: dialog.clone(),
             id,
             // The form's SSL mode and CA file go with the grant (`SPEC-0314` v2 behaviour 10).
-            request: idecraft_plugins::ConnectorRequest {
+            request: ferris_idea_plugins::ConnectorRequest {
                 op: "test".into(),
                 host: target.host.clone(),
                 port,
@@ -22752,7 +24592,7 @@ impl WorkbenchView {
                     .tls
                     .ca_file
                     .as_deref()
-                    .map(idecraft_database::expand_home),
+                    .map(ferris_idea_database::expand_home),
             },
             dir,
             module,
@@ -22771,14 +24611,14 @@ impl WorkbenchView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        use idecraft_plugins::Readiness;
-        match idecraft_plugins::readiness(
+        use ferris_idea_plugins::Readiness;
+        match ferris_idea_plugins::readiness(
             &pending.dir,
             &pending.module,
             &pending.connector,
             pending.status,
             &pending.target,
-            idecraft_plugins::Holder::User,
+            ferris_idea_plugins::Holder::User,
             false,
         ) {
             Readiness::Missing(e) | Readiness::NotPermitted(e, _) => {
@@ -22797,11 +24637,11 @@ impl WorkbenchView {
                         window.focus(&pending.dialog.read(cx).focus(cx));
                         match event {
                             crate::PluginNetworkDialogEvent::Allow => {
-                                match idecraft_plugins::grant_network(
+                                match ferris_idea_plugins::grant_network(
                                     &pending.dir,
                                     &pending.module,
                                     &pending.target,
-                                    idecraft_plugins::Holder::User,
+                                    ferris_idea_plugins::Holder::User,
                                 ) {
                                     Ok(_) => this.continue_plugin_test(pending, window, cx),
                                     Err(e) => pending
@@ -22810,7 +24650,7 @@ impl WorkbenchView {
                                 }
                             }
                             crate::PluginNetworkDialogEvent::Cancel => {
-                                let name = idecraft_plugins::Plugin::load(
+                                let name = ferris_idea_plugins::Plugin::load(
                                     &pending.dir.join(format!("{}.wasm", pending.module)),
                                 )
                                 .map_or_else(|_| pending.module.clone(), |p| p.manifest.name);
@@ -22840,31 +24680,30 @@ impl WorkbenchView {
                     ..
                 } = pending;
                 let root = self.root.clone();
-                let task = cx.background_executor().spawn(async move {
-                    if request.password.is_none() {
-                        // The stored password of a saved connection, read off the UI thread.
-                        request.password = id
-                            .as_deref()
-                            .and_then(|id| {
-                                idecraft_database::load_profiles(&root)
-                                    .ok()?
-                                    .into_iter()
-                                    .find(|p| p.id == id)
-                            })
-                            .and_then(|p| {
-                                match idecraft_database::resolve_credentials(
-                                    &p,
-                                    &idecraft_database::SystemStore,
-                                ) {
-                                    Ok(idecraft_database::Credentials::Available(s)) => {
-                                        Some(s.expose().to_owned())
-                                    }
-                                    _ => None,
-                                }
-                            });
-                    }
-                    plugin.run_connector(&request, access)
-                });
+                let task =
+                    cx.background_executor().spawn(async move {
+                        if request.password.is_none() {
+                            // The stored password of a saved connection, read off the UI thread.
+                            request.password =
+                                id.as_deref()
+                                    .and_then(|id| {
+                                        ferris_idea_database::load_profiles(&root)
+                                            .ok()?
+                                            .into_iter()
+                                            .find(|p| p.id == id)
+                                    })
+                                    .and_then(|p| match ferris_idea_database::resolve_credentials(
+                                        &p,
+                                        &ferris_idea_database::SystemStore,
+                                    ) {
+                                        Ok(ferris_idea_database::Credentials::Available(s)) => {
+                                            Some(s.expose().to_owned())
+                                        }
+                                        _ => None,
+                                    });
+                        }
+                        plugin.run_connector(&request, access)
+                    });
                 cx.spawn(async move |_, cx| {
                     let result = task.await;
                     let _ = dialog.update(cx, |v, cx| match result {
@@ -22894,9 +24733,9 @@ impl WorkbenchView {
     #[allow(clippy::too_many_arguments)]
     pub fn open_report_dialog(
         &mut self,
-        connector: idecraft_database::Connector,
-        profile: Option<idecraft_database::ConnectionProfile>,
-        step: idecraft_database::report::ReportStep,
+        connector: ferris_idea_database::Connector,
+        profile: Option<ferris_idea_database::ConnectionProfile>,
+        step: ferris_idea_database::report::ReportStep,
         error: String,
         statement: Option<String>,
         window: &mut Window,
@@ -22947,7 +24786,7 @@ impl WorkbenchView {
             .map(|h| std::path::PathBuf::from(h).join("Downloads"))
             .filter(|d| d.is_dir())
             .unwrap_or_else(|| self.root.clone());
-        let name = idecraft_database::connector_share::export_profile_file_name(&profile);
+        let name = ferris_idea_database::connector_share::export_profile_file_name(&profile);
         let chosen = cx.prompt_for_new_path(&dir, Some(&name));
         cx.spawn(async move |this, cx| {
             if let Ok(Ok(Some(path))) = chosen.await {
@@ -22972,7 +24811,7 @@ impl WorkbenchView {
             cx.notify();
             return;
         };
-        let catalogue = idecraft_database::catalogue();
+        let catalogue = ferris_idea_database::catalogue();
         let Some(connector) = catalogue
             .for_profile(profile.dialect, profile.system.as_deref())
             .cloned()
@@ -22987,7 +24826,7 @@ impl WorkbenchView {
         self.open_report_dialog(
             connector,
             Some(profile),
-            idecraft_database::report::ReportStep::Other,
+            ferris_idea_database::report::ReportStep::Other,
             String::new(),
             None,
             window,
@@ -23000,7 +24839,7 @@ impl WorkbenchView {
     fn remove_connection(&mut self, id: &str, cx: &mut Context<Self>) {
         let (root, id) = (self.root.clone(), id.to_owned());
         let task = cx.background_executor().spawn(async move {
-            idecraft_database::remove_connection(&root, &id, &idecraft_database::SystemStore)
+            ferris_idea_database::remove_connection(&root, &id, &ferris_idea_database::SystemStore)
         });
         cx.spawn(async move |this, cx| {
             let removed = task.await;
@@ -23073,7 +24912,7 @@ impl WorkbenchView {
     /// The push popup for `outgoing` (of this machine or the host).
     pub(super) fn show_push(
         &mut self,
-        outgoing: Result<idecraft_vcs::Outgoing, String>,
+        outgoing: Result<ferris_idea_vcs::Outgoing, String>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -23091,7 +24930,7 @@ impl WorkbenchView {
                         this.remote_operation(
                             "Push".into(),
                             move |r| {
-                                let done = r.push_with(&options, idecraft_vcs::REMOTE_TIMEOUT);
+                                let done = r.push_with(&options, ferris_idea_vcs::REMOTE_TIMEOUT);
                                 crate::vcs_ops_model::push_report(&done, count)
                             },
                             cx,
@@ -23150,7 +24989,7 @@ impl WorkbenchView {
     pub fn open_rebase(&mut self, onto: &str, window: &mut Window, cx: &mut Context<Self>) {
         if self.remote_project.is_some() {
             if onto.is_empty() {
-                self.status = Some(idecraft_ui::keymap::local_keys(
+                self.status = Some(ferris_idea_ui::keymap::local_keys(
                     "Interactive rebase: start from a commit in the Git log (⌥I)",
                     cfg!(target_os = "macos"),
                 ));
@@ -23167,7 +25006,7 @@ impl WorkbenchView {
                     .find(|t| t.current)
                     .and_then(|t| t.upstream)
                     .ok_or_else(|| {
-                        idecraft_vcs::GitError::Rejected(idecraft_ui::keymap::local_keys(
+                        ferris_idea_vcs::GitError::Rejected(ferris_idea_ui::keymap::local_keys(
                             "the branch has no upstream; start from a commit in the Git log (⌥I)",
                             cfg!(target_os = "macos"),
                         ))
@@ -23203,7 +25042,7 @@ impl WorkbenchView {
         &mut self,
         onto: String,
         label: String,
-        entries: Vec<idecraft_vcs::TodoEntry>,
+        entries: Vec<ferris_idea_vcs::TodoEntry>,
         root: Option<PathBuf>,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -23253,20 +25092,24 @@ impl WorkbenchView {
     }
 
     /// Fetches and merges or rebases the current branch's upstream in the background.
-    pub fn update_project(&mut self, method: idecraft_core::UpdateMethod, cx: &mut Context<Self>) {
+    pub fn update_project(
+        &mut self,
+        method: ferris_idea_core::UpdateMethod,
+        cx: &mut Context<Self>,
+    ) {
         if self.remote_project.is_some() {
-            self.remote_pull(method == idecraft_core::UpdateMethod::Rebase, cx);
+            self.remote_pull(method == ferris_idea_core::UpdateMethod::Rebase, cx);
             return;
         }
         self.update_operation(
             "Update".into(),
             move |r| {
                 let done = match method {
-                    idecraft_core::UpdateMethod::Merge => {
-                        r.pull(false, idecraft_vcs::REMOTE_TIMEOUT)
+                    ferris_idea_core::UpdateMethod::Merge => {
+                        r.pull(false, ferris_idea_vcs::REMOTE_TIMEOUT)
                     }
-                    idecraft_core::UpdateMethod::Rebase => {
-                        r.pull_rebase(false, idecraft_vcs::REMOTE_TIMEOUT)
+                    ferris_idea_core::UpdateMethod::Rebase => {
+                        r.pull_rebase(false, ferris_idea_vcs::REMOTE_TIMEOUT)
                     }
                 };
                 // What came in opens in the Update Info popup (SPEC-0144 v4 behaviour 8).
@@ -23353,7 +25196,7 @@ impl WorkbenchView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let extra = idecraft_languages::everywhere::UNBOUND_ACTIONS.to_vec();
+        let extra = ferris_idea_languages::everywhere::UNBOUND_ACTIONS.to_vec();
         let plugins_dir = self.plugins_dir.clone();
         let root = self.root.clone();
         let view = cx.new(|cx| {
@@ -23413,10 +25256,11 @@ impl WorkbenchView {
                     crate::SettingsEvent::RunInTerminal(command) => {
                         // The program asks for the account in the terminal (SPEC-0160).
                         this.settings = None;
-                        this.new_terminal_tab(window, cx);
-                        if let Some(t) = this.terminal() {
-                            t.update(cx, |t, _| t.send_text(&format!("{command}\n")));
-                        }
+                        this.run_in_new_terminal(command, window, cx);
+                    }
+                    crate::SettingsEvent::OpenClaudeCode => {
+                        this.settings = None;
+                        this.open_claude_code_terminal(window, cx);
                     }
                 }
                 cx.notify();
@@ -23425,6 +25269,37 @@ impl WorkbenchView {
         window.focus(&view.read(cx).focus());
         self.settings = Some(view);
         cx.notify();
+    }
+
+    /// Runs `command` in a new terminal tab of the project: typed with Enter, so the program it
+    /// starts talks to the person there (sign-ins, Claude Code; `SPEC-0160`).
+    pub fn run_in_new_terminal(
+        &mut self,
+        command: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.new_terminal_tab(window, cx);
+        if let Some(t) = self.terminal() {
+            t.update(cx, |t, _| t.send_text(&format!("{command}\n")));
+        }
+    }
+
+    /// Claude with the user's plan in the Terminal (`SPEC-0160` v2 behaviour 7): a new terminal tab
+    /// of the project running the user's own Claude Code, which signs in by itself; Ferris IDEA
+    /// never reads, stores or passes Claude's credentials. Every way to open it (Settings, the
+    /// chat's action) comes here, so the IDE integration Claude Code talks to can hook in here.
+    pub fn open_claude_code_terminal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        match ferris_idea_ai::subscription::claude_code_command() {
+            Some(command) => self.run_in_new_terminal(&command, window, cx),
+            None => {
+                self.status = Some(format!(
+                    "Claude Code is not installed; {}",
+                    ferris_idea_ai::subscription::Cli::Claude.install_hint()
+                ));
+                cx.notify();
+            }
+        }
     }
 
     /// Opens Settings › Editor › Inspections, with the inspection `id` selected (`SPEC-0315`
@@ -23452,7 +25327,7 @@ impl WorkbenchView {
     }
 
     /// Switches every window to `theme` and saves the choice (behaviour 10).
-    pub fn choose_theme(&mut self, theme: idecraft_ui::theme::ThemeId, cx: &mut Context<Self>) {
+    pub fn choose_theme(&mut self, theme: ferris_idea_ui::theme::ThemeId, cx: &mut Context<Self>) {
         self.status = match crate::appearance::choose_theme(theme, cx) {
             Ok(()) => None,
             Err(e) => Some(format!("Theme not saved: {e}")),
@@ -23607,7 +25482,7 @@ impl WorkbenchView {
                 branches,
                 tracking: r.tracking().unwrap_or_default(),
                 recent: r
-                    .recent_branches(idecraft_vcs::RECENT_BRANCHES)
+                    .recent_branches(ferris_idea_vcs::RECENT_BRANCHES)
                     .unwrap_or_default(),
                 tags: r.tags().unwrap_or_default(),
                 operation: r.operation_in_progress(),
@@ -23678,7 +25553,7 @@ impl WorkbenchView {
             let done = Repo::discover(&self.root).and_then(|r| r.checkout(name, *create));
             self.status = Some(match done {
                 Ok(out) => format!("Checked out {}", out.branch),
-                Err(idecraft_vcs::GitError::Rejected(m))
+                Err(ferris_idea_vcs::GitError::Rejected(m))
                     if m.starts_with("local changes would be overwritten") =>
                 {
                     let files = m.split_once(": ").map(|(_, f)| f).unwrap_or_default();
@@ -23718,11 +25593,11 @@ impl WorkbenchView {
                     let shortcut = keymap
                         .shortcuts(id)
                         .iter()
-                        .find(|s| !matches!(s, idecraft_ui::keymap::Shortcut::Mouse { .. }))
+                        .find(|s| !matches!(s, ferris_idea_ui::keymap::Shortcut::Mouse { .. }))
                         .map(|s| s.display(cfg!(target_os = "macos")))
                         .unwrap_or_default();
                     (
-                        idecraft_languages::everywhere::action_title(id).0,
+                        ferris_idea_languages::everywhere::action_title(id).0,
                         shortcut,
                         (*id).to_owned(),
                     )
@@ -23764,11 +25639,15 @@ impl WorkbenchView {
                         None => std::fs::read_to_string(&r.place.path).ok(),
                     })
                     .clone()?;
-                let mut around: Vec<idecraft_languages::syntax::DeclarationSpan> =
-                    idecraft_languages::syntax::declaration_spans_of(&r.place.path, &text, 10_000)
-                        .into_iter()
-                        .filter(|d| d.start_line <= r.place.line && r.place.line <= d.end_line)
-                        .collect();
+                let mut around: Vec<ferris_idea_languages::syntax::DeclarationSpan> =
+                    ferris_idea_languages::syntax::declaration_spans_of(
+                        &r.place.path,
+                        &text,
+                        10_000,
+                    )
+                    .into_iter()
+                    .filter(|d| d.start_line <= r.place.line && r.place.line <= d.end_line)
+                    .collect();
                 around.sort_by_key(|d| d.start_line);
                 let symbols = around
                     .iter()
@@ -23818,7 +25697,7 @@ impl WorkbenchView {
                             }
                             this.focus_active(window, cx);
                         }
-                        GotoEvent::Open(path) => this.open(path, window, cx),
+                        GotoEvent::Open(path) => this.open_as_jump(path, window, cx),
                         GotoEvent::OpenAt(path, line, column) => {
                             this.remember_place(cx);
                             this.open(path, window, cx);
@@ -23856,7 +25735,7 @@ impl WorkbenchView {
                             // name, and the status line says so (SPEC-0095 v5 behaviour 8a).
                             if let Some(name) = prompt {
                                 this.status =
-                                    Some(idecraft_languages::actions::kept_name_message(&name));
+                                    Some(ferris_idea_languages::actions::kept_name_message(&name));
                             }
                             this.focus_active(window, cx)
                         }
@@ -23920,9 +25799,9 @@ impl WorkbenchView {
         self.everywhere.clone().filter(|_| self.show_everywhere)
     }
 
-    /// Turns the keyboard diagnostics on or off (`IDECraft.KeyboardDiagnostics`, SPEC-0270
+    /// Turns the keyboard diagnostics on or off (`FerrisIDEA.KeyboardDiagnostics`, SPEC-0270
     /// behaviour 1).
-    /// About IDECraft (D62): name, version and platform in a dialog; Copy puts them on the
+    /// About Ferris IDEA (D62): name, version and platform in a dialog; Copy puts them on the
     /// clipboard for a defect report.
     fn show_about(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let (title, detail) = about_text();
@@ -23950,7 +25829,7 @@ impl WorkbenchView {
 
     fn toggle_key_diagnostics(&mut self, cx: &mut Context<Self>) {
         let on = crate::key_diagnostics::set_on(!crate::key_diagnostics::is_on());
-        let log = idecraft_core::logs::keyboard_log();
+        let log = ferris_idea_core::logs::keyboard_log();
         self.status = Some(match (on, log) {
             (true, Some(log)) => format!(
                 "Keyboard diagnostics on: press the keys; rows go to {}",
@@ -23992,12 +25871,12 @@ impl WorkbenchView {
             .then(|| {
                 cx.keyboard_mapper()
                     .get_key_equivalents()
-                    .and_then(|e| idecraft_ui::keymap::us_key_for(&k.key, e))
+                    .and_then(|e| ferris_idea_ui::keymap::us_key_for(&k.key, e))
             })
             .flatten()
             .filter(|us| us.to_string() != k.key);
         let keymap = crate::keymaps::current();
-        let stroke = idecraft_ui::keymap::EventStrokes::of(
+        let stroke = ferris_idea_ui::keymap::EventStrokes::of(
             &k.key,
             m.control,
             m.alt,
@@ -24018,7 +25897,7 @@ impl WorkbenchView {
             .unwrap_or_default();
         let layout = cx.keyboard_layout();
         crate::key_diagnostics::begin(crate::key_diagnostics::KeyRecord {
-            time: idecraft_core::logs::utc_stamp(std::time::SystemTime::now()),
+            time: ferris_idea_core::logs::utc_stamp(std::time::SystemTime::now()),
             event: if event.is_held { "repeat" } else { "down" },
             key: k.key.clone(),
             key_char: k.key_char.clone(),
@@ -24048,7 +25927,7 @@ impl WorkbenchView {
     ) {
         let layout = cx.keyboard_layout();
         crate::key_diagnostics::begin(crate::key_diagnostics::KeyRecord {
-            time: idecraft_core::logs::utc_stamp(std::time::SystemTime::now()),
+            time: ferris_idea_core::logs::utc_stamp(std::time::SystemTime::now()),
             event: "modifiers",
             modifiers: crate::key_diagnostics::modifiers(
                 m.control, m.alt, m.shift, m.platform, m.function,
@@ -24063,10 +25942,10 @@ impl WorkbenchView {
 
     /// Appends a closed record's line to the log; a failure is said once in the status bar.
     fn write_key_record(&mut self, line: Option<String>) {
-        let (Some(line), Some(log)) = (line, idecraft_core::logs::keyboard_log()) else {
+        let (Some(line), Some(log)) = (line, ferris_idea_core::logs::keyboard_log()) else {
             return;
         };
-        if let Err(e) = idecraft_core::logs::append_line(&log, &line) {
+        if let Err(e) = ferris_idea_core::logs::append_line(&log, &line) {
             self.status = Some(format!(
                 "Keyboard diagnostics: cannot write {}: {e}",
                 log.display()
@@ -24241,7 +26120,7 @@ impl WorkbenchView {
         let label = bar.state.label(&bar.query.read(cx).state.buffer.text());
         let failed = bar.state.error.is_some()
             || (bar.state.matches.is_empty() && !bar.query.read(cx).state.buffer.is_empty());
-        let nav = |control: &'static idecraft_ui::tooltip::Control,
+        let nav = |control: &'static ferris_idea_ui::tooltip::Control,
                    text: &'static str,
                    forward: bool,
                    cx: &mut Context<Self>| {
@@ -24255,7 +26134,7 @@ impl WorkbenchView {
                 .on_click(cx.listener(move |this, _, _, cx| this.find_step(forward, cx)))
         };
         let tool =
-            |control: &'static idecraft_ui::tooltip::Control, key: &'static str, on: bool| {
+            |control: &'static ferris_idea_ui::tooltip::Control, key: &'static str, on: bool| {
                 div()
                     .id(control.name)
                     .tip(control)
@@ -24392,7 +26271,7 @@ impl WorkbenchView {
                 .into_any_element();
             let newline = tool(
                 declared!(FIND_BAR, "replace-preserve-case"),
-                "idecraft/preserveCase",
+                "ferris-idea/preserveCase",
                 bar.preserve_case,
             )
             .on_click(cx.listener(|this, _, _, cx| {
@@ -24441,7 +26320,7 @@ impl WorkbenchView {
         });
         let replacing = bar.replace.is_some();
         let narrowed = bar.in_selection.is_some()
-            || bar.context != idecraft_languages::syntax::SearchContext::Anywhere;
+            || bar.context != ferris_idea_languages::syntax::SearchContext::Anywhere;
         let clear = div()
             .id("find-clear")
             .tip(declared!(FIND_BAR, "find-clear"))
@@ -24455,7 +26334,7 @@ impl WorkbenchView {
             .into_any_element();
         let newline = tool(
             declared!(FIND_BAR, "find-newline"),
-            "idecraft/newLine",
+            "ferris-idea/newLine",
             false,
         )
         .on_click(cx.listener(|this, _, _, cx| this.find_new_line(cx)))
@@ -24547,7 +26426,7 @@ impl WorkbenchView {
             .child(
                 tool(
                     declared!(FIND_BAR, "find-filter"),
-                    "idecraft/filter",
+                    "ferris-idea/filter",
                     narrowed,
                 )
                 .on_click(cx.listener(|this, _, _, cx| {
@@ -24680,23 +26559,25 @@ impl WorkbenchView {
                         .child("Search scope")
                         .into_any_element(),
                 ];
-                items.extend(idecraft_languages::syntax::SearchContext::ALL.map(|ctx| {
-                    entry(
-                        format!("find-context-{}", ctx.label()),
-                        bar.context == ctx,
-                        ctx.label().into(),
-                        String::new(),
-                    )
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        if let Some(b) = this.find.as_mut() {
-                            b.context = ctx;
-                            b.menu = None;
-                            b.searched = None;
-                        }
-                        this.refind(true, cx);
-                    }))
-                    .into_any_element()
-                }));
+                items.extend(
+                    ferris_idea_languages::syntax::SearchContext::ALL.map(|ctx| {
+                        entry(
+                            format!("find-context-{}", ctx.label()),
+                            bar.context == ctx,
+                            ctx.label().into(),
+                            String::new(),
+                        )
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            if let Some(b) = this.find.as_mut() {
+                                b.context = ctx;
+                                b.menu = None;
+                                b.searched = None;
+                            }
+                            this.refind(true, cx);
+                        }))
+                        .into_any_element()
+                    }),
+                );
                 items
             }
             FindMenu::More => {
@@ -24973,7 +26854,7 @@ impl WorkbenchView {
         cx.notify();
     }
 
-    /// Sets the highlighting level of the active file, stores it in `.idecraft/highlighting.json`
+    /// Sets the highlighting level of the active file, stores it in `.ferris-idea/highlighting.json`
     /// and shows the editor's problems accordingly (SPEC-0070 v6 behaviour 11).
     pub fn set_file_highlight_level(
         &mut self,
@@ -24983,7 +26864,7 @@ impl WorkbenchView {
         let (Some(editor), Some(path)) = (self.active_editor(), self.active_path()) else {
             return;
         };
-        if let Err(e) = idecraft_languages::highlighting::set_level(&self.root, &path, level) {
+        if let Err(e) = ferris_idea_languages::highlighting::set_level(&self.root, &path, level) {
             self.status = Some(format!("Cannot store the highlighting level: {e}"));
         }
         editor.update(cx, |e, cx| {
@@ -25148,7 +27029,7 @@ impl WorkbenchView {
         }
         // ↑ ↓ act as ⇧F2 and F2 (SPEC-0070 v5 behaviour 9).
         let arrow = |id: &'static str,
-                     tip: &'static idecraft_ui::tooltip::Control,
+                     tip: &'static ferris_idea_ui::tooltip::Control,
                      glyph: &'static str,
                      forward: bool,
                      cx: &mut Context<Self>| {
@@ -25367,7 +27248,7 @@ impl WorkbenchView {
             .children(marks.into_iter().map(|m| {
                 let fraction = crate::diagnostics_model::stripe_fraction(m.line, lines);
                 let offset = m.offset;
-                let tip = idecraft_ui::tooltip::Tip {
+                let tip = ferris_idea_ui::tooltip::Tip {
                     title: m.messages.first().cloned().unwrap_or_default(),
                     shortcut: String::new(),
                     details: m.messages.iter().skip(1).cloned().collect(),
@@ -25427,7 +27308,7 @@ impl WorkbenchView {
         // A chord with Shift and a digit arrives as the character the layout types there (⌃⇧2
         // as `@`, on German layouts as `"`), without Shift; it is the digit's chord on every
         // layout (SPEC-0028 v5 behaviour 10).
-        let strokes = idecraft_ui::keymap::EventStrokes::of(
+        let strokes = ferris_idea_ui::keymap::EventStrokes::of(
             &event.keystroke.key,
             m.control,
             m.alt,
@@ -25503,7 +27384,7 @@ impl WorkbenchView {
                 let command =
                     crate::tree_nav::on_key(&self.tree.nav_rows(), self.tree.selected_row(), key);
                 if let Some(path) = self.tree.apply(command) {
-                    self.open(&path, window, cx);
+                    self.open_tree_path(&path, window, cx);
                 }
                 crate::key_diagnostics::note_ran(&stroke.key, "project tree");
                 cx.stop_propagation();
@@ -25519,7 +27400,7 @@ impl WorkbenchView {
         // A chord the focused editor did not know under the key's own name is the editor's
         // under the name the keymap has for it: ⇧⌘. arrives as `>` and is Fold Code Block
         // (SPEC-0028 v5 behaviour 10, SPEC-0057 v6).
-        let own = idecraft_ui::keymap::Keystroke::from_platform(
+        let own = ferris_idea_ui::keymap::Keystroke::from_platform(
             &event.keystroke.key,
             m.control,
             m.alt,
@@ -25532,7 +27413,7 @@ impl WorkbenchView {
                 .filter(|e| e.read(cx).focus().is_focused(window))
         {
             let bound: Vec<&str> = actions.iter().map(String::as_str).collect();
-            let ran = idecraft_editor::editor_first(&bound)
+            let ran = ferris_idea_editor::editor_first(&bound)
                 .into_iter()
                 .find(|id| editor.update(cx, |e, cx| e.run_action(id, cx)))
                 .map(str::to_owned);
@@ -25570,6 +27451,18 @@ impl WorkbenchView {
             let root = self.tree.selection_fixed();
             if actions.iter().any(|a| a == "$Delete") && !root {
                 self.ask_delete(&paths, window, cx);
+                cx.stop_propagation();
+                return;
+            }
+            // F6 moves the tree's selection, a file or a folder (SPEC-0275 v22 behaviour 49).
+            if actions.iter().any(|a| a == "Move") && self.remote_project.is_none() {
+                if root || paths.len() > 1 {
+                    self.status = Some(menus::ONE_TO_MOVE.into());
+                    cx.notify();
+                } else {
+                    self.open_move_of(path, window, cx);
+                }
+                crate::key_diagnostics::note_ran("Move", "project tree");
                 cx.stop_propagation();
                 return;
             }
@@ -25761,8 +27654,10 @@ impl WorkbenchView {
                 crate::tree_nav::TreeKey::Open,
             );
             if let Some(path) = self.tree.apply(command) {
-                self.open(&path, window, cx);
-                self.focus_editor(window, cx);
+                // A bundle node opens its bundle editor, which keeps the focus.
+                if self.open_tree_path(&path, window, cx) {
+                    self.focus_editor(window, cx);
+                }
                 cx.notify();
                 return true;
             }
@@ -25783,7 +27678,7 @@ impl WorkbenchView {
             return self.run_plugin_action_asking(id, window, cx);
         }
         // A build tool task's own shortcut (SPEC-0100 v3 behaviour 19).
-        if id.starts_with(idecraft_core::buildtasks::TASK_ACTION_PREFIX) {
+        if id.starts_with(ferris_idea_core::buildtasks::TASK_ACTION_PREFIX) {
             return self.run_task_action(id, window, cx);
         }
         // The VCS operations popup's file actions (SPEC-0109 v2 behaviour 6).
@@ -25812,11 +27707,11 @@ impl WorkbenchView {
             return true;
         }
         // Apply, Rename… and Delete… of one named layout (SPEC-0333 behaviours 6, 10, 11).
-        if id.starts_with("IDECraft.Layout.") {
+        if id.starts_with("FerrisIDEA.Layout.") {
             return self.run_layout_action(id, window, cx);
         }
         match id {
-            // Actions the bundled keymaps bind, carried out by what IDECraft already has
+            // Actions the bundled keymaps bind, carried out by what Ferris IDEA already has
             // (`workbench_keymap_actions.rs`). The diff viewer (SPEC-0084 v4 behaviours 14, 15):
             "NextDiff" => return self.step_diff(true, window, cx),
             "PreviousDiff" => return self.step_diff(false, window, cx),
@@ -25931,20 +27826,20 @@ impl WorkbenchView {
             // Like the stripe button and the More list: the window of its placement gives way
             // at once, and a shown window without the focus takes it (SPEC-0115 v6 behaviour 18).
             "Spring.ToolWindow" => self.toggle_tool_window(ToolWindow::Spring, window, cx),
-            "IDECraft.AiChat" => self.show_ai_chat(true, window, cx),
-            "IDECraft.AiExplainCode" => self.ai_explain(window, cx),
+            "FerrisIDEA.AiChat" => self.show_ai_chat(true, window, cx),
+            "FerrisIDEA.AiExplainCode" => self.ai_explain(window, cx),
             // SPEC-0313: attach and explain from the terminal, Run, Problems and the diff.
-            "IDECraft.AiExplainTerminal"
-            | "IDECraft.AiAttachTerminalSelection"
-            | "IDECraft.AiAttachTerminalCommand"
-            | "IDECraft.AiAttachTerminalLines"
-            | "IDECraft.AiShareTerminal"
-            | "IDECraft.AiExplainRun"
-            | "IDECraft.AiAttachRun"
-            | "IDECraft.AiExplainTest"
-            | "IDECraft.AiAttachTest"
-            | "IDECraft.AiAttachProblems"
-            | "IDECraft.AiAttachGitDiff" => {
+            "FerrisIDEA.AiExplainTerminal"
+            | "FerrisIDEA.AiAttachTerminalSelection"
+            | "FerrisIDEA.AiAttachTerminalCommand"
+            | "FerrisIDEA.AiAttachTerminalLines"
+            | "FerrisIDEA.AiShareTerminal"
+            | "FerrisIDEA.AiExplainRun"
+            | "FerrisIDEA.AiAttachRun"
+            | "FerrisIDEA.AiExplainTest"
+            | "FerrisIDEA.AiAttachTest"
+            | "FerrisIDEA.AiAttachProblems"
+            | "FerrisIDEA.AiAttachGitDiff" => {
                 self.ai_item(id, window, cx);
             }
             "ActivatePythonPackagesToolWindow" => self.toggle_python(window, cx),
@@ -25952,6 +27847,14 @@ impl WorkbenchView {
             "Profiler.ToolWindow" => self.toggle_profiler(window, cx),
             "Remote.ToolWindow" => self.toggle_remote(window, cx),
             "Remote.OpenProject" => self.open_remote_development(window, cx),
+            // SPEC-0323 v6 behaviour 37.
+            "Remote.ShareProject" => self.open_share_dialog(window, cx),
+            // SPEC-0323 v7 behaviour 48.
+            "Remote.JoinByLink" => self.open_join_dialog(window, cx),
+            // SPEC-0323 v9 behaviour 61.
+            "Room.ShowHistory" => self.open_room_history(window, cx),
+            // SPEC-0323 v8 behaviour 54.
+            crate::room_comments_model::ADD_COMMENT => self.room_add_comment(window, cx),
             "Remote.Ports" => self.remote_show_ports(window, cx),
             "OptimizeImports" => self.optimize_imports(cx),
             "Javascript.Linters.EsLint.Fix" => self.js_tool_action(true, cx),
@@ -25960,7 +27863,7 @@ impl WorkbenchView {
             "Remote.OpenTerminal" => self.remote_terminal(window, cx),
             "Profiler.ProfileSelected" => self.profile_selected(window, cx),
             "Profiler.ProfileMemory" => {
-                self.profile_selected_kind(idecraft_profiler::Kind::Memory, window, cx)
+                self.profile_selected_kind(ferris_idea_profiler::Kind::Memory, window, cx)
             }
             "Profiler.AttachToProcess" => self.profile_attach_picker(window, cx),
             "Python.SelectInterpreter" => self.choose_interpreter(window, cx),
@@ -26018,7 +27921,7 @@ impl WorkbenchView {
                 if let Some(here) = self.here(cx) {
                     self.request_hierarchy(
                         here,
-                        idecraft_languages::insight::CallDirection::Callers,
+                        ferris_idea_languages::insight::CallDirection::Callers,
                         window,
                         cx,
                     );
@@ -26044,12 +27947,12 @@ impl WorkbenchView {
             "GotoLine" => self.open_goto(false, window, cx),
             "GotoDeclaration" => self.goto_declaration(window, cx),
             "GotoTypeDeclaration" => self.goto_locations(
-                idecraft_languages::insight::LocationKind::TypeDefinition,
+                ferris_idea_languages::insight::LocationKind::TypeDefinition,
                 window,
                 cx,
             ),
             "GotoImplementation" => self.goto_locations(
-                idecraft_languages::insight::LocationKind::Implementation,
+                ferris_idea_languages::insight::LocationKind::Implementation,
                 window,
                 cx,
             ),
@@ -26117,13 +28020,13 @@ impl WorkbenchView {
             // The editor font size, one step (SPEC-0129 v4 behaviour 8).
             "EditorIncreaseFontSizeGlobal" => return self.change_editor_font_size(1.0, cx),
             "EditorDecreaseFontSizeGlobal" => return self.change_editor_font_size(-1.0, cx),
-            "IDECraft.KeyboardDiagnostics" => self.toggle_key_diagnostics(cx),
+            "FerrisIDEA.KeyboardDiagnostics" => self.toggle_key_diagnostics(cx),
             // The emergency stop of UI automation (SPEC-0319 behaviour 37).
-            "IDECraft.StopUiAutomation" => {
-                crate::semantics::emergency_stop(idecraft_uidriver::StopSource::Menu, window, cx)
+            "FerrisIDEA.StopUiAutomation" => {
+                crate::semantics::emergency_stop(ferris_idea_uidriver::StopSource::Menu, window, cx)
             }
             "About" => self.show_about(window, cx),
-            "UpdateCopyright" => self.update_copyright(cx),
+            "UpdateCopyright" => self.update_copyright_dialog(window, cx),
             "ChangeSignature" => self.open_change_signature(window, cx),
             "Move" => self.open_move(window, cx),
             "ReformatCode" => self.reformat(window, cx),
@@ -26154,10 +28057,10 @@ impl WorkbenchView {
             "NextProjectWindow" => return self.step_project_window(true, window, cx),
             "PreviousProjectWindow" => return self.step_project_window(false, window, cx),
             // The Settings button's menu (SPEC-0061 v6 behaviour 28).
-            "IDECraft.SettingsPlugins" => {
+            "FerrisIDEA.SettingsPlugins" => {
                 self.open_settings(crate::settings_model::Page::Plugins, window, cx)
             }
-            "IDECraft.SettingsKeymap" => {
+            "FerrisIDEA.SettingsKeymap" => {
                 self.open_settings(crate::settings_model::Page::Keymap, window, cx)
             }
             // File › Manage IDE Settings (SPEC-0105 v9 behaviour 14).
@@ -26181,7 +28084,7 @@ impl WorkbenchView {
             // behaviour 7, SPEC-0275 v8 behaviour 14c).
             "VcsShowNextChangeMarker" => self.step_change(true, cx),
             "VcsShowPrevChangeMarker" => self.step_change(false, cx),
-            "Vcs.RollbackChangedLines" => self.rollback_change_at_caret(cx),
+            "Vcs.RollbackChangedLines" => return self.rollback_change_at_caret(cx),
             // Commit File, Rollback, Show History and Show Diff run through `vcs_file_action`
             // (the keymap's ids, shared with the VCS operations popup).
             crate::context_menu::VCS_COMPARE_BRANCH => {
@@ -26195,7 +28098,7 @@ impl WorkbenchView {
                 }
             }
             // ⌥⇧↩ in the editor applies the first quick fix (SPEC-0078 v2 behaviour 7); the
-            // keymap gives the keystroke to this tool window action, which IDECraft has not.
+            // keymap gives the keystroke to this tool window action, which Ferris IDEA has not.
             "MoveToolWindowTabToEditorAction" => self.apply_first_fix(window, cx),
             "ExtractInterface" => {
                 self.class_refactoring(workbench_ts::ClassRefactoring::Interface, window, cx)
@@ -26311,6 +28214,10 @@ impl WorkbenchView {
             "ToggleLineBreakpoint" => self.toggle_breakpoint(cx),
             // SPEC-0127 v8 behaviour 18.
             "ToggleTemporaryLineBreakpoint" => return self.toggle_temporary_breakpoint(cx),
+            // SPEC-0127 v15 behaviours 31 and 32.
+            "ToggleBreakpointEnabled" => return self.toggle_breakpoint_enabled(cx),
+            "Debugger.RemoveAllBreakpoints" => return self.remove_all_breakpoints(false, cx),
+            "Debugger.RemoveAllBreakpointsInFile" => return self.remove_all_breakpoints(true, cx),
             "ViewBreakpoints" => self.open_breakpoints(None, window, cx),
             // SPEC-0127 v10 behaviour 19.
             "EditBreakpoint" => self.edit_breakpoint(None, window, cx),
@@ -26384,8 +28291,8 @@ impl WorkbenchView {
             "ForceRunToCursor" => return self.force_run_to_cursor(cx),
             // SPEC-0091 v12 behaviours 25–29, 37: the further actions of the ⋮ menu.
             "StepOutOfBlock"
-            | "IDECraft.Debug.ResumeAll"
-            | "IDECraft.Debug.PauseAll"
+            | "FerrisIDEA.Debug.ResumeAll"
+            | "FerrisIDEA.Debug.PauseAll"
             | "DumpThreads"
             | "Debugger.ForceEarlyReturn"
             | "Debugger.ThrowException"
@@ -26397,8 +28304,8 @@ impl WorkbenchView {
                     .is_some_and(|v| {
                         v.update(cx, |v, cx| match id {
                             "StepOutOfBlock" => v.step_out_of_block(cx),
-                            "IDECraft.Debug.ResumeAll" => v.resume_all(cx),
-                            "IDECraft.Debug.PauseAll" => v.pause_all(cx),
+                            "FerrisIDEA.Debug.ResumeAll" => v.resume_all(cx),
+                            "FerrisIDEA.Debug.PauseAll" => v.pause_all(cx),
                             "DumpThreads" => v.thread_dump(cx),
                             "Debugger.ForceEarlyReturn" => v.force_return(cx),
                             "Debugger.ThrowException" => v.throw_exception(cx),
@@ -26472,7 +28379,7 @@ impl WorkbenchView {
             }
             "Console.Execute.Multiline" => return self.execute_sql(window, cx),
             // SPEC-0096 v5 behaviour 8.
-            "IDECraft.HttpRunAllRequests" => return self.run_all_http_requests(window, cx),
+            "FerrisIDEA.HttpRunAllRequests" => return self.run_all_http_requests(window, cx),
             "Sql.ExplainPlan" => self.explain_plan(false, window, cx),
             "Sql.ExplainAnalyze" => self.explain_plan(true, window, cx),
             "Sql.CompareSchemas" => self.compare_schemas(window, cx),
@@ -26481,7 +28388,7 @@ impl WorkbenchView {
             "Database.ExportConnection" => self.export_connection(cx),
             "Sql.ShowErDiagram" => self.show_er_diagram(window, cx),
             // SPEC-0089 v5 behaviour 11.
-            "IDECraft.Database.ShowDdl" => {
+            "FerrisIDEA.Database.ShowDdl" => {
                 if let Some(d) = self.database.clone() {
                     d.update(cx, |d, cx| d.show_ddl(cx));
                 }
@@ -26567,7 +28474,7 @@ impl WorkbenchView {
                         let info = this.tree.folder_info(row.id).cloned();
                         let role_icon = info.as_ref().map(|i| folder_role_icon(i.role));
                         let module = info.as_ref().is_some_and(|i| {
-                            i.role == idecraft_core::buildtools::FolderRole::Module
+                            i.role == ferris_idea_core::buildtools::FolderRole::Module
                         });
                         let module_name = info.as_ref().and_then(|i| i.module_name.clone());
                         let tint = info.as_ref().and_then(|i| folder_role_tint(i.role));
@@ -26576,6 +28483,9 @@ impl WorkbenchView {
                             key
                         } else if let Some(key) = role_icon {
                             key
+                        } else if row.dir && this.tree.is_package(row.id) {
+                            // A package in a source or test folder (SPEC-0275 v25 behaviour 30).
+                            "nodes/package"
                         } else if row.dir {
                             "nodes/folder"
                         } else {
@@ -26603,7 +28513,7 @@ impl WorkbenchView {
                         // 31, OBS-0020).
                         crate::metrics::tree_row(id, row.depth)
                             .w_full()
-                            .pl(px(row.depth as f32 * idecraft_ui::metrics::TREE_INDENT))
+                            .pl(px(row.depth as f32 * ferris_idea_ui::metrics::TREE_INDENT))
                             .when_some(tint.filter(|_| !chosen.contains(&id)), |d, t| d.bg(t))
                             .when(chosen.contains(&id), |d| d.bg(selection))
                             .when(!chosen.contains(&id), |d| d.hover(|s| s.bg(hover)))
@@ -26628,10 +28538,26 @@ impl WorkbenchView {
                                         cx.notify();
                                     })),
                             )
-                            .child(crate::file_type_icons::with_override_mark(
-                                icon(kind),
-                                overridden,
-                            ))
+                            // The icon is named by its key in the semantic tree, so a driver
+                            // tells a package, a module file and a folder apart (SPEC-0275 v24
+                            // behaviour 30).
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_none()
+                                    .relative()
+                                    .child(crate::file_type_icons::with_override_mark(
+                                        icon(kind),
+                                        overridden,
+                                    ))
+                                    .semantics(
+                                        crate::semantics::Semantics::new(
+                                            crate::semantics::Role::Image,
+                                        )
+                                        .name(kind)
+                                        .test_id(format!("tree-icon-{}", row.name)),
+                                    ),
+                            )
                             .child(
                                 div()
                                     .flex_none()
@@ -26680,7 +28606,7 @@ impl WorkbenchView {
                                 let clicks = e.click_count().min(2);
                                 for c in crate::tree_nav::on_click(&rows, i, false, clicks) {
                                     if let Some(path) = this.tree.apply(c) {
-                                        this.open(&path, window, cx);
+                                        this.open_tree_path(&path, window, cx);
                                     }
                                 }
                                 cx.notify();
@@ -26863,6 +28789,10 @@ impl WorkbenchView {
                 )
             })
             .child(div().flex_1())
+            // The other people in the project room, before the run widget (`SPEC-0323` v5
+            // behaviour 31).
+            .children(self.share_button(cx))
+            .children(self.room_avatars(cx))
             .child(self.run_widget(cx))
     }
 
@@ -26936,7 +28866,7 @@ impl WorkbenchView {
                     // Names the configuration it runs (`SPEC-0294` behaviour 2).
                     .tip_with("run-button", move || {
                         let control = declared!(MAIN_TOOLBAR, "run-button");
-                        let mut tip = idecraft_ui::tooltip::Tip::of(
+                        let mut tip = ferris_idea_ui::tooltip::Tip::of(
                             control,
                             &crate::keymaps::current(),
                             crate::tips::macos(),
@@ -26964,7 +28894,7 @@ impl WorkbenchView {
                 run_button("debug-button")
                     .tip_with("debug-button", move || {
                         let control = declared!(MAIN_TOOLBAR, "debug-button");
-                        let mut tip = idecraft_ui::tooltip::Tip::of(
+                        let mut tip = ferris_idea_ui::tooltip::Tip::of(
                             control,
                             &crate::keymaps::current(),
                             crate::tips::macos(),
@@ -27013,7 +28943,7 @@ impl WorkbenchView {
     fn toolbar_menu_items(
         &self,
         place: &'static str,
-        entries: &'static [idecraft_ui::menus::Entry],
+        entries: &'static [ferris_idea_ui::menus::Entry],
         close: fn(&mut Self),
         cx: &mut Context<Self>,
     ) -> Vec<gpui::AnyElement> {
@@ -27022,7 +28952,7 @@ impl WorkbenchView {
             .iter()
             .enumerate()
             .filter_map(|(i, e)| match *e {
-                idecraft_ui::menus::Entry::Action(label, action) => Some(
+                ferris_idea_ui::menus::Entry::Action(label, action) => Some(
                     crate::metrics::menu_item((place, i), false)
                         .child(label)
                         // The shortcut after the label (OBS-0020).
@@ -27042,7 +28972,7 @@ impl WorkbenchView {
                         .into_any_element(),
                 ),
                 // A line inset like the items, in the popup's border colour (OBS-0020).
-                idecraft_ui::menus::Entry::Separator => Some(
+                ferris_idea_ui::menus::Entry::Separator => Some(
                     div()
                         .my_1()
                         .mx(px(8.))
@@ -27050,7 +28980,7 @@ impl WorkbenchView {
                         .bg(c(p.popup_border))
                         .into_any_element(),
                 ),
-                idecraft_ui::menus::Entry::Sub(..) => None,
+                ferris_idea_ui::menus::Entry::Sub(..) => None,
             })
             .collect()
     }
@@ -27064,7 +28994,7 @@ impl WorkbenchView {
         let menu = self.settings_menu.then(|| {
             let items = self.toolbar_menu_items(
                 "settings-menu-item",
-                idecraft_ui::menus::SETTINGS_BUTTON_MENU,
+                ferris_idea_ui::menus::SETTINGS_BUTTON_MENU,
                 close,
                 cx,
             );
@@ -27128,7 +29058,7 @@ impl WorkbenchView {
         let menu = self.run_more_menu.then(|| {
             let items = self.toolbar_menu_items(
                 "run-more-item",
-                idecraft_ui::menus::RUN_WIDGET_MORE,
+                ferris_idea_ui::menus::RUN_WIDGET_MORE,
                 |this| this.run_more_menu = false,
                 cx,
             );
@@ -27350,7 +29280,7 @@ impl WorkbenchView {
                     .when(self.more_menu, |d| d.bg(c(p.stripe_shown)))
                     .hover(|st| st.bg(c(p.toolbar_hover)))
                     .child(crate::icon_images::icon_sized(
-                        "idecraft/moreHorizontal",
+                        "ferris-idea/moreHorizontal",
                         s.icon,
                     ))
                     .on_click(cx.listener(|this, _, _, cx| {
@@ -27399,7 +29329,7 @@ impl WorkbenchView {
                     .top(px(hy))
                     // Title and activation shortcut (`SPEC-0294` behaviour 3).
                     .tip_with(format!("stripe-{}", w.id()), move || {
-                        idecraft_ui::tooltip::stripe(
+                        ferris_idea_ui::tooltip::stripe(
                             w,
                             &crate::keymaps::current(),
                             crate::tips::macos(),
@@ -27611,7 +29541,7 @@ impl WorkbenchView {
             return;
         };
         let size = window.viewport_size();
-        let step = idecraft_ui::tool_windows::STRETCH_SHARE * f32::from(size.height);
+        let step = ferris_idea_ui::tool_windows::STRETCH_SHARE * f32::from(size.height);
         let side = self.tool_layout.side(w);
         let sign = match (side, toward, up) {
             (Side::Left, Side::Right, _) | (Side::Right, Side::Left, _) => 1.0,
@@ -27623,7 +29553,7 @@ impl WorkbenchView {
         let gap = Palette::current().island_gap;
         let current = self.tool_layout.size(w).unwrap_or(match side {
             Side::Bottom => {
-                idecraft_ui::tool_windows::DEFAULT_WEIGHT * f32::from(size.height) - gap
+                ferris_idea_ui::tool_windows::DEFAULT_WEIGHT * f32::from(size.height) - gap
             }
             _ => w.width_in(f32::from(size.width), gap),
         });
@@ -28039,7 +29969,7 @@ impl WorkbenchView {
                         // No tooltip over the open menu (OBS-0020).
                         .when(self.header_menu != Some(w), |d| {
                             d.tip_with(options, || {
-                                idecraft_ui::tooltip::Tip::of(
+                                ferris_idea_ui::tooltip::Tip::of(
                                     declared!(TOOL_WINDOW_HEADER, "tool-window-options"),
                                     &crate::keymaps::current(),
                                     crate::tips::macos(),
@@ -28061,7 +29991,7 @@ impl WorkbenchView {
                 .into_any_element(),
             button(hide.clone())
                 .tip_with(hide, || {
-                    idecraft_ui::tooltip::Tip::of(
+                    ferris_idea_ui::tooltip::Tip::of(
                         declared!(TOOL_WINDOW_HEADER, "tool-window-hide"),
                         &crate::keymaps::current(),
                         crate::tips::macos(),
@@ -28352,7 +30282,8 @@ impl WorkbenchView {
                         .tool_layout
                         .size(w)
                         .unwrap_or(
-                            idecraft_ui::tool_windows::DEFAULT_WEIGHT * viewport_h - p.island_gap,
+                            ferris_idea_ui::tool_windows::DEFAULT_WEIGHT * viewport_h
+                                - p.island_gap,
                         ))),
                 };
                 Some(d.into_any_element())
@@ -28612,7 +30543,7 @@ impl WorkbenchView {
         let row = tab.side_by_side;
         let mut body = flex(row);
         let groups: Vec<usize> = tab.panes.iter().map(|p| p.group).collect();
-        for (k, run) in idecraft_terminal::cell_runs(&groups)
+        for (k, run) in ferris_idea_terminal::cell_runs(&groups)
             .into_iter()
             .enumerate()
         {
@@ -28637,7 +30568,7 @@ impl WorkbenchView {
             return Vec::new();
         };
         let groups: Vec<usize> = tab.panes.iter().map(|p| p.group).collect();
-        idecraft_terminal::cell_runs(&groups)
+        ferris_idea_terminal::cell_runs(&groups)
             .into_iter()
             .map(|r| tab.panes[r].iter().map(|p| p.view.clone()).collect())
             .collect()
@@ -28815,8 +30746,16 @@ impl WorkbenchView {
                     .child(message),
             );
         }
+        // The project room, before the connection (SPEC-0323 v6 behaviour 43).
+        if let Some(widget) = self.room_widget(cx) {
+            bar = bar.child(widget);
+        }
         // The host and the connection of a remote project (SPEC-0317 v3 behaviour 6).
         if let Some(widget) = self.remote_widget(cx) {
+            bar = bar.child(widget);
+        }
+        // Claude Code linked to this project (SPEC-0358 behaviour 23).
+        if let Some(widget) = self.claude_link_widget(cx) {
             bar = bar.child(widget);
         }
         // The problem counts are in the editor's corner (SPEC-0070 v4 behaviour 3).
@@ -28857,7 +30796,7 @@ impl WorkbenchView {
                     .when_some(tooltip.clone(), |d, t| {
                         d.tip_text(
                             format!("plugin-status-widget-{i}"),
-                            idecraft_ui::tooltip::Tip::plain(t),
+                            ferris_idea_ui::tooltip::Tip::plain(t),
                         )
                     })
                     .map(status_widget)
@@ -29047,24 +30986,25 @@ fn toolbar_label(text: String) -> gpui::Div {
 }
 
 /// Width of a stripe: one button of the theme (SPEC-0061 v4 behaviour 12).
-/// With `IDECRAFT_TRACE_RUN_EDITOR` set, names a step of opening and closing the run
+/// With `FERRIS_IDEA_TRACE_RUN_EDITOR` set, names a step of opening and closing the run
 /// configuration editor on stderr and in `run-editor-trace.log` of the log folder (window check
 /// of #485, D1).
 pub(crate) fn run_editor_trace(what: &str) {
     // Also switched on by the file `run-editor-trace.on` in the log folder, for a bundle started
     // from Finder or `open`, which does not get the shell's environment.
-    let on = std::env::var_os("IDECRAFT_TRACE_RUN_EDITOR").is_some()
-        || idecraft_core::logs::log_dir().is_some_and(|d| d.join("run-editor-trace.on").exists());
+    let on = ferris_idea_core::product_var_os("FERRIS_IDEA_TRACE_RUN_EDITOR").is_some()
+        || ferris_idea_core::logs::log_dir()
+            .is_some_and(|d| d.join("run-editor-trace.on").exists());
     if !on {
         return;
     }
     let line = format!(
         "{} {what}",
-        idecraft_core::logs::utc_stamp(std::time::SystemTime::now())
+        ferris_idea_core::logs::utc_stamp(std::time::SystemTime::now())
     );
     eprintln!("run editor: {line}");
-    if let Some(dir) = idecraft_core::logs::log_dir() {
-        let _ = idecraft_core::logs::append_line(&dir.join("run-editor-trace.log"), &line);
+    if let Some(dir) = ferris_idea_core::logs::log_dir() {
+        let _ = ferris_idea_core::logs::append_line(&dir.join("run-editor-trace.log"), &line);
     }
 }
 
@@ -29086,9 +31026,10 @@ fn debug_adapter(kind: crate::debug_model::Kind) -> Result<Vec<String>, String> 
     use crate::debug_model::Kind;
     // Java debugging runs inside jdtls (SPEC-0097); the plugin is checked when it starts.
     let adapter = if matches!(kind, Kind::Java) {
-        idecraft_languages::java_debug::java_debug_plugin().map(|p| vec![p.display().to_string()])
+        ferris_idea_languages::java_debug::java_debug_plugin()
+            .map(|p| vec![p.display().to_string()])
     } else {
-        idecraft_debugger::known_adapters()
+        ferris_idea_debugger::known_adapters()
             .into_iter()
             .find(|a| a.name == kind.adapter_name())
             .and_then(|a| a.command)
@@ -29103,18 +31044,18 @@ fn debug_adapter(kind: crate::debug_model::Kind) -> Result<Vec<String>, String> 
                 "Cannot debug Java: the java-debug plugin is not installed (com.microsoft.java.debug.plugin jar in ~/.local/opt/java-debug)".into()
             }
             Kind::Node | Kind::PackageScript | Kind::Browser => {
-                "Cannot debug JavaScript: node or js-debug is missing (unpack the js-debug release into ~/.local/opt or set IDECRAFT_JS_DEBUG)".into()
+                "Cannot debug JavaScript: node or js-debug is missing (unpack the js-debug release into ~/.local/opt or set FERRIS_IDEA_JS_DEBUG)".into()
             }
             Kind::Kotlin => {
-                "Cannot debug Kotlin: kotlin-debug-adapter is missing (unpack its release into ~/.local/opt or set IDECRAFT_KOTLIN_DEBUG)".into()
+                "Cannot debug Kotlin: kotlin-debug-adapter is missing (unpack its release into ~/.local/opt or set FERRIS_IDEA_KOTLIN_DEBUG)".into()
             }
             Kind::Go => {
-                "Cannot debug Go: Delve is not installed (go install github.com/go-delve/delve/cmd/dlv@latest, or set IDECRAFT_DLV)".into()
+                "Cannot debug Go: Delve is not installed (go install github.com/go-delve/delve/cmd/dlv@latest, or set FERRIS_IDEA_DLV)".into()
             }
         });
     };
     // Delve takes over the program as lldb does.
-    if matches!(kind, Kind::Native | Kind::Go) && !idecraft_debugger::can_debug_unattended() {
+    if matches!(kind, Kind::Native | Kind::Go) && !ferris_idea_debugger::can_debug_unattended() {
         return Err(
             "Cannot debug: this Mac needs Developer Mode (`sudo DevToolsSecurity -enable`)".into(),
         );
@@ -29215,7 +31156,7 @@ impl Render for WorkbenchView {
             });
         // No tooltip over an open menu or Git popup (SPEC-0294 v2 behaviour 11): the widget's
         // tooltip stayed over the branch popup, a tab's over the tab menu.
-        idecraft_ui::tooltip::set_suppressed(
+        ferris_idea_ui::tooltip::set_suppressed(
             self.context_menu.is_some()
                 || self.tab_list.is_some()
                 || self.stripe_menu.is_some()
@@ -29373,7 +31314,7 @@ impl Render for WorkbenchView {
         let editor_body = editor_body.on_drop(cx.listener(
             |this, paths: &gpui::ExternalPaths, window, cx| {
                 for file in chrome::dropped_files(paths.paths()) {
-                    if idecraft_core::format::is_exchange_file(&file) {
+                    if ferris_idea_core::format::is_exchange_file(&file) {
                         // Exchange files open their import preview (SPEC-0303 behaviour 17).
                         this.open_import(&file, window, cx);
                     } else {
@@ -29404,7 +31345,7 @@ impl Render for WorkbenchView {
             .iter()
             .chain(&bottom_right)
             .find_map(|(w, _)| self.tool_layout.size(*w))
-            .unwrap_or(idecraft_ui::tool_windows::DEFAULT_WEIGHT * viewport_h - p.island_gap);
+            .unwrap_or(ferris_idea_ui::tool_windows::DEFAULT_WEIGHT * viewport_h - p.island_gap);
         let bottom_max = self
             .maximized
             .filter(|(w, _)| bottom_left.iter().chain(&bottom_right).any(|(b, _)| b == w))
@@ -29412,7 +31353,7 @@ impl Render for WorkbenchView {
         let bottom_heights = if bottom_max && rows == 1 {
             vec![(column - p.island_gap).max(0.0)]
         } else {
-            idecraft_ui::tool_windows::bottom_heights_in(column, p.island_gap, rows, preferred).1
+            ferris_idea_ui::tool_windows::bottom_heights_in(column, p.island_gap, rows, preferred).1
         };
         let bottom_island = |this: &Self, w: ToolWindow, body: gpui::AnyElement| {
             island()
@@ -29874,6 +31815,8 @@ impl Render for WorkbenchView {
                         .child(dialog),
                 )
             })
+            // The thread popover of the room's comments (SPEC-0323 v8 behaviour 54).
+            .children(self.room_comment_popup_element(cx))
             .when_some(self.breakpoint_popup.clone(), |d, popup| {
                 let spot = self.breakpoint_popup_spot(cx);
                 d.child(match spot {
@@ -29929,6 +31872,42 @@ impl Render for WorkbenchView {
                     div()
                         .absolute()
                         .top(px(toolbar_height() + 100.))
+                        .left_0()
+                        .right_0()
+                        .flex()
+                        .justify_center()
+                        .child(dialog),
+                )
+            })
+            .when_some(self.join_dialog_element(cx), |d, dialog| {
+                d.child(
+                    div()
+                        .absolute()
+                        .top(px(toolbar_height() + 40.))
+                        .left_0()
+                        .right_0()
+                        .flex()
+                        .justify_center()
+                        .child(dialog),
+                )
+            })
+            .when_some(self.room_history_element(cx), |d, dialog| {
+                d.child(
+                    div()
+                        .absolute()
+                        .top(px(toolbar_height() + 40.))
+                        .left_0()
+                        .right_0()
+                        .flex()
+                        .justify_center()
+                        .child(dialog),
+                )
+            })
+            .when_some(self.share_dialog_element(cx), |d, dialog| {
+                d.child(
+                    div()
+                        .absolute()
+                        .top(px(toolbar_height() + 40.))
                         .left_0()
                         .right_0()
                         .flex()
@@ -30054,14 +32033,14 @@ impl Render for WorkbenchView {
 /// its comments/strings filter (`SPEC-0065` v4 behaviours 12–13).
 fn narrowed(
     bar: &FindBar,
-    query: &idecraft_core::Query,
+    query: &ferris_idea_core::Query,
     text: &str,
     from: usize,
     path: &Path,
 ) -> FindState {
     let mut state = FindState::search(query, text, from);
     if bar.in_selection.is_some()
-        || bar.context != idecraft_languages::syntax::SearchContext::Anywhere
+        || bar.context != ferris_idea_languages::syntax::SearchContext::Anywhere
     {
         let kept = find_model::narrow_matches(
             std::mem::take(&mut state.matches),
@@ -30082,12 +32061,12 @@ fn plan_signature(
     at: &Place,
     text: &str,
     list: Option<&str>,
-) -> Result<idecraft_languages::signature::SignaturePlan, String> {
+) -> Result<ferris_idea_languages::signature::SignaturePlan, String> {
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .map_err(|e| e.to_string())?;
-    rt.block_on(idecraft_languages::signature::plan_change_signature_in(
+    rt.block_on(ferris_idea_languages::signature::plan_change_signature_in(
         root,
         &at.path,
         Some(text),
@@ -30118,7 +32097,7 @@ type FileFindings = (
 );
 
 /// Output lines for a table copy (`SPEC-0191` behaviour 6): the outcome first, then notes.
-fn copy_report_lines(report: &idecraft_database::CopyReport) -> Vec<String> {
+fn copy_report_lines(report: &ferris_idea_database::CopyReport) -> Vec<String> {
     let mut lines = vec![match (&report.error, report.rows) {
         (Some((Some(i), e)), _) => format!(
             "Copy failed at statement {}: {e} ({})",
@@ -30149,9 +32128,9 @@ enum DbRead {
 /// A current-thread runtime and a session with `profile`'s stored credentials, for work on a
 /// background thread.
 fn connect(
-    profile: &idecraft_database::ConnectionProfile,
-) -> Result<(tokio::runtime::Runtime, idecraft_database::Session), String> {
-    use idecraft_database::{Session, SystemStore, resolve_credentials};
+    profile: &ferris_idea_database::ConnectionProfile,
+) -> Result<(tokio::runtime::Runtime, ferris_idea_database::Session), String> {
+    use ferris_idea_database::{Session, SystemStore, resolve_credentials};
     let credentials =
         resolve_credentials(profile, &SystemStore).map_err(|e| format!("{}: {e}", profile.name))?;
     let rt = tokio::runtime::Builder::new_current_thread()
@@ -30166,7 +32145,7 @@ fn connect(
 
 /// The plan of `sql` (SPEC-0110 behaviours 1–2). Runs on a background thread.
 fn run_explain(
-    profile: &idecraft_database::ConnectionProfile,
+    profile: &ferris_idea_database::ConnectionProfile,
     sql: &str,
     analyze: bool,
     cancel: Option<crate::console_session::CancelSlot>,
@@ -30181,7 +32160,7 @@ fn run_explain(
             *s = session.cancel_handle();
         }
         let plan = rt
-            .block_on(idecraft_database::explain(&session, sql, analyze))
+            .block_on(ferris_idea_database::explain(&session, sql, analyze))
             .map_err(|e| e.to_string());
         if let Some(slot) = &cancel
             && let Ok(mut s) = slot.lock()
@@ -30210,19 +32189,19 @@ fn run_explain(
 /// The schemas of `profile` with the current one marked, read over a read-only session
 /// (`SPEC-0110` v7 behaviour 16).
 fn schemas_of(
-    profile: &idecraft_database::ConnectionProfile,
-) -> Result<Vec<idecraft_database::SchemaInfo>, String> {
+    profile: &ferris_idea_database::ConnectionProfile,
+) -> Result<Vec<ferris_idea_database::SchemaInfo>, String> {
     let mut p = profile.clone();
     p.read_only = true;
     let (rt, session) = connect(&p)?;
-    rt.block_on(idecraft_database::list_schemas(&session))
+    rt.block_on(ferris_idea_database::list_schemas(&session))
         .map_err(|e| e.to_string())
 }
 
 /// The side for schema `i` of `schemas` (the current one first) of `profile`: the current schema is
 /// `None`, so no switch statement is written for it.
 fn side_in(
-    profile: &idecraft_database::ConnectionProfile,
+    profile: &ferris_idea_database::ConnectionProfile,
     schemas: &[String],
     i: usize,
 ) -> CompareSide {
@@ -30253,14 +32232,14 @@ fn run_compare(
         connect(&p).and_then(|(rt, session)| {
             rt.block_on(async {
                 let tables =
-                    idecraft_database::introspect_schema(&session, schema.as_deref()).await?;
+                    ferris_idea_database::introspect_schema(&session, schema.as_deref()).await?;
                 let views =
-                    idecraft_database::view_definitions_in(&session, schema.as_deref()).await?;
+                    ferris_idea_database::view_definitions_in(&session, schema.as_deref()).await?;
                 let name = match schema {
                     Some(name) => name,
-                    None => idecraft_database::current_schema(&session).await?,
+                    None => ferris_idea_database::current_schema(&session).await?,
                 };
-                Ok::<_, idecraft_database::DbError>((tables, views, name))
+                Ok::<_, ferris_idea_database::DbError>((tables, views, name))
             })
             .map_err(|e| format!("{label}: {e}"))
         })
@@ -30277,7 +32256,7 @@ fn run_compare(
     };
     // Two single objects (SPEC-0110 v12 behaviour 18, SPEC-0018 v8 behaviour 20).
     if let (Some(a), Some(b)) = (&source_side.object, &target_side.object) {
-        match idecraft_database::narrow_to_objects(&from, &from_views, a, &to, &to_views, b) {
+        match ferris_idea_database::narrow_to_objects(&from, &from_views, a, &to, &to_views, b) {
             Ok(n) => {
                 (from, from_views, to, to_views) =
                     (n.source, n.source_views, n.target, n.target_views);
@@ -30290,7 +32269,7 @@ fn run_compare(
         }
     }
     let schemas = Some((from_schema.as_str(), to_schema.as_str()));
-    let diff = idecraft_database::compare_between(
+    let diff = ferris_idea_database::compare_between(
         &from,
         &to,
         &from_views,
@@ -30298,7 +32277,7 @@ fn run_compare(
         source.dialect,
         schemas,
     );
-    let statements = idecraft_database::migration_between(
+    let statements = ferris_idea_database::migration_between(
         &from,
         &to,
         &from_views,
@@ -30346,17 +32325,17 @@ fn run_compare(
 /// Connects with `profile` and runs `statements` one by one, stopping at the first failure
 /// (SPEC-0093 behaviours 3 and 6). Runs on a background thread.
 fn run_console(
-    profile: &idecraft_database::ConnectionProfile,
-    statements: Vec<idecraft_database::Statement>,
+    profile: &ferris_idea_database::ConnectionProfile,
+    statements: Vec<ferris_idea_database::Statement>,
 ) -> ConsoleRun {
     run_console_noting(profile, statements, |_, _, _| {})
 }
 
 /// [`run_console`], telling `note` each statement's outcome and time (SPEC-0192 behaviour 5).
 fn run_console_noting(
-    profile: &idecraft_database::ConnectionProfile,
-    statements: Vec<idecraft_database::Statement>,
-    note: impl FnMut(&idecraft_database::Statement, &idecraft_database::Outcome, Duration),
+    profile: &ferris_idea_database::ConnectionProfile,
+    statements: Vec<ferris_idea_database::Statement>,
+    note: impl FnMut(&ferris_idea_database::Statement, &ferris_idea_database::Outcome, Duration),
 ) -> ConsoleRun {
     run_console_cancellable(profile, statements, None, note)
 }
@@ -30365,12 +32344,12 @@ fn run_console_noting(
 /// (SPEC-0093 v3 behaviour 12).
 /// Runs on a background thread: it reads the keychain (OBS-0026 L26).
 fn run_console_cancellable(
-    profile: &idecraft_database::ConnectionProfile,
-    statements: Vec<idecraft_database::Statement>,
+    profile: &ferris_idea_database::ConnectionProfile,
+    statements: Vec<ferris_idea_database::Statement>,
     cancel: Option<crate::console_session::CancelSlot>,
-    note: impl FnMut(&idecraft_database::Statement, &idecraft_database::Outcome, Duration),
+    note: impl FnMut(&ferris_idea_database::Statement, &ferris_idea_database::Outcome, Duration),
 ) -> ConsoleRun {
-    use idecraft_database::{Session, SystemStore, resolve_credentials};
+    use ferris_idea_database::{Session, SystemStore, resolve_credentials};
     let mut run = ConsoleRun::default();
     let fail = |run: &mut ConsoleRun, why: String| {
         run.output.push((why, true));
@@ -30421,19 +32400,19 @@ fn run_console_cancellable(
 /// transaction, `reopen` (a Manual console's begin statements; empty in Auto) starts the next one
 /// (v7 behaviour 11).
 async fn run_statements_in(
-    profile: &idecraft_database::ConnectionProfile,
-    session: &idecraft_database::Session,
-    statements: Vec<idecraft_database::Statement>,
+    profile: &ferris_idea_database::ConnectionProfile,
+    session: &ferris_idea_database::Session,
+    statements: Vec<ferris_idea_database::Statement>,
     reopen: &[String],
-    mut note: impl FnMut(&idecraft_database::Statement, &idecraft_database::Outcome, Duration),
+    mut note: impl FnMut(&ferris_idea_database::Statement, &ferris_idea_database::Outcome, Duration),
 ) -> ConsoleRun {
     use crate::sql_console_model::not_run_line;
-    use idecraft_database::{OnError, Outcome};
+    use ferris_idea_database::{OnError, Outcome};
     let mut run = ConsoleRun::default();
     {
         let total = statements.len();
         // Read once, when the first result might be editable (SPEC-0107).
-        let mut tables: Option<Vec<idecraft_database::Table>> = None;
+        let mut tables: Option<Vec<ferris_idea_database::Table>> = None;
         for (i, statement) in statements.into_iter().enumerate() {
             // SPEC-0190 v7 behaviour 1: the statements that ran replace their result tabs.
             run.ran = i + 1;
@@ -30525,31 +32504,31 @@ fn failed_run(why: String) -> ConsoleRun {
 /// Pending-edit state for a result of `sql` when its rows come from one table whose key columns it
 /// selects (SPEC-0107 behaviour 1); `tables` is read on first use.
 async fn editable(
-    profile: &idecraft_database::ConnectionProfile,
-    session: &idecraft_database::Session,
+    profile: &ferris_idea_database::ConnectionProfile,
+    session: &ferris_idea_database::Session,
     sql: &str,
     columns: &[String],
-    tables: &mut Option<Vec<idecraft_database::Table>>,
-) -> Option<idecraft_database::GridEdits> {
-    let name = idecraft_database::editable_source(sql, profile.dialect)?;
+    tables: &mut Option<Vec<ferris_idea_database::Table>>,
+) -> Option<ferris_idea_database::GridEdits> {
+    let name = ferris_idea_database::editable_source(sql, profile.dialect)?;
     if tables.is_none() {
-        *tables = idecraft_database::introspect(session).await.ok();
+        *tables = ferris_idea_database::introspect(session).await.ok();
     }
     let table = tables
         .as_ref()?
         .iter()
         .find(|t| t.name.eq_ignore_ascii_case(&name))?;
-    let target = idecraft_database::EditTarget::new(table, profile.dialect).ok()?;
-    idecraft_database::GridEdits::new(target, columns.to_vec()).ok()
+    let target = ferris_idea_database::EditTarget::new(table, profile.dialect).ok()?;
+    ferris_idea_database::GridEdits::new(target, columns.to_vec()).ok()
 }
 
 /// Applies `set` in one transaction (SPEC-0107 behaviour 5); the note for the status bar.
 /// Runs on a background thread: it reads the keychain (OBS-0026 L26).
 fn apply_edits(
-    profile: &idecraft_database::ConnectionProfile,
-    set: &idecraft_database::EditSet,
+    profile: &ferris_idea_database::ConnectionProfile,
+    set: &ferris_idea_database::EditSet,
 ) -> Result<String, String> {
-    use idecraft_database::{Applied, Session, SystemStore, resolve_credentials};
+    use ferris_idea_database::{Applied, Session, SystemStore, resolve_credentials};
     let credentials = resolve_credentials(profile, &SystemStore).map_err(|e| e.to_string())?;
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -30658,17 +32637,17 @@ fn doc_block_elements(blocks: &[crate::doc_model::DocBlock], p: &Palette) -> Vec
 /// schemas, and the tables of a schema named before the cursor. Runs on a background thread;
 /// `None` when nothing can be read.
 fn refresh_catalog(
-    profile: &idecraft_database::ConnectionProfile,
-    cached: Option<Vec<idecraft_database::Table>>,
+    profile: &ferris_idea_database::ConnectionProfile,
+    cached: Option<Vec<ferris_idea_database::Table>>,
     mut catalog: crate::sql_editor_model::CatalogCache,
     check: bool,
     text: &str,
     cursor: usize,
 ) -> Option<(
-    Vec<idecraft_database::Table>,
+    Vec<ferris_idea_database::Table>,
     crate::sql_editor_model::CatalogCache,
 )> {
-    use idecraft_database::{SchemaEntry, is_system_schema, wanted_schema};
+    use ferris_idea_database::{SchemaEntry, is_system_schema, wanted_schema};
     let dialect = profile.dialect;
     // A system schema is offered only when typed: `pg_catalog.` (behaviour 11).
     let typed: String = text
@@ -30694,7 +32673,7 @@ fn refresh_catalog(
             tables: None,
         });
     }
-    let wanted = |tables: &[idecraft_database::Table],
+    let wanted = |tables: &[ferris_idea_database::Table],
                   catalog: &crate::sql_editor_model::CatalogCache| {
         wanted_schema(
             text,
@@ -30719,10 +32698,12 @@ fn refresh_catalog(
     rt.block_on(async {
         let mut tables = cached;
         if check || tables.is_none() {
-            let fingerprint = idecraft_database::schema_fingerprint(&session).await.ok();
+            let fingerprint = ferris_idea_database::schema_fingerprint(&session)
+                .await
+                .ok();
             catalog.checked = Some(std::time::Instant::now());
             if tables.is_none() || fingerprint.is_none() || fingerprint != catalog.fingerprint {
-                tables = idecraft_database::introspect(&session)
+                tables = ferris_idea_database::introspect(&session)
                     .await
                     .ok()
                     .or(tables);
@@ -30731,7 +32712,7 @@ fn refresh_catalog(
             catalog.fingerprint = fingerprint;
         }
         if catalog.others.is_none() {
-            let mut others: Vec<SchemaEntry> = idecraft_database::list_schemas(&session)
+            let mut others: Vec<SchemaEntry> = ferris_idea_database::list_schemas(&session)
                 .await
                 .unwrap_or_default()
                 .into_iter()
@@ -30750,11 +32731,11 @@ fn refresh_catalog(
             catalog.others = Some(others);
         }
         if catalog.schema.is_none() {
-            catalog.schema = idecraft_database::current_schema(&session).await.ok();
+            catalog.schema = ferris_idea_database::current_schema(&session).await.ok();
         }
         let tables = tables?;
         if let Some(name) = wanted(&tables, &catalog)
-            && let Ok(read) = idecraft_database::introspect_schema(&session, Some(&name)).await
+            && let Ok(read) = ferris_idea_database::introspect_schema(&session, Some(&name)).await
             && let Some(entry) = catalog
                 .others
                 .as_mut()
@@ -30768,9 +32749,9 @@ fn refresh_catalog(
 
 /// Runs on a background thread: it reads the keychain (OBS-0026 L26).
 fn read_tables(
-    profile: &idecraft_database::ConnectionProfile,
-) -> Option<Vec<idecraft_database::Table>> {
-    use idecraft_database::{Session, SystemStore, introspect, resolve_credentials};
+    profile: &ferris_idea_database::ConnectionProfile,
+) -> Option<Vec<ferris_idea_database::Table>> {
+    use ferris_idea_database::{Session, SystemStore, introspect, resolve_credentials};
     let credentials = resolve_credentials(profile, &SystemStore).ok()?;
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -30804,21 +32785,21 @@ fn mid_line_ok(rest: &str) -> bool {
 /// Writes `profile` to `path` as a `.idcsources` file, and its user or imported system's definition
 /// next to it (`SPEC-0302` behaviour 5); the status bar text.
 pub fn write_connection_export(
-    profile: &idecraft_database::ConnectionProfile,
+    profile: &ferris_idea_database::ConnectionProfile,
     path: &std::path::Path,
 ) -> String {
-    use idecraft_database::connector_share::{export, export_file_name, export_profile};
+    use ferris_idea_database::connector_share::{export, export_file_name, export_profile};
     let (text, left_out) = export_profile(profile, false);
     if let Err(e) = std::fs::write(path, text) {
         return format!("{}: {e}", path.display());
     }
-    let catalogue = idecraft_database::catalogue();
+    let catalogue = ferris_idea_database::catalogue();
     let mut note = format!("Exported `{}` to {}", profile.name, path.display());
     if let Some(c) = profile
         .system
         .as_deref()
         .and_then(|id| catalogue.get(id))
-        .filter(|c| c.origin != idecraft_database::connector::Origin::BuiltIn)
+        .filter(|c| c.origin != ferris_idea_database::connector::Origin::BuiltIn)
     {
         let def = path.with_file_name(export_file_name(c));
         if let Err(e) = std::fs::write(&def, export(c)) {
@@ -30836,18 +32817,18 @@ pub fn write_connection_export(
 struct PendingPluginTest {
     dialog: Entity<crate::ConnectionDialog>,
     id: Option<String>,
-    request: idecraft_plugins::ConnectorRequest,
+    request: ferris_idea_plugins::ConnectorRequest,
     dir: PathBuf,
     module: String,
-    target: idecraft_plugins::Target,
+    target: ferris_idea_plugins::Target,
     connector: String,
     status: &'static str,
 }
 
 /// A profile's SSL mode as the plugin host knows it (`SPEC-0314` v2 behaviour 10).
-fn plugin_ssl(mode: idecraft_database::SslMode) -> idecraft_plugins::NetMode {
-    use idecraft_database::SslMode;
-    use idecraft_plugins::NetMode;
+fn plugin_ssl(mode: ferris_idea_database::SslMode) -> ferris_idea_plugins::NetMode {
+    use ferris_idea_database::SslMode;
+    use ferris_idea_plugins::NetMode;
     match mode {
         SslMode::Disable => NetMode::Disable,
         SslMode::Prefer => NetMode::Prefer,
@@ -30859,7 +32840,7 @@ fn plugin_ssl(mode: idecraft_database::SslMode) -> idecraft_plugins::NetMode {
 
 /// Whether `path` is a library source copied to the cache (SPEC-0149 v3 behaviour 11).
 fn is_library_source(path: &Path) -> bool {
-    idecraft_core::user_cache_dir().is_some_and(|c| path.starts_with(c.join("library-sources")))
+    ferris_idea_core::user_cache_dir().is_some_and(|c| path.starts_with(c.join("library-sources")))
 }
 
 #[cfg(test)]
@@ -30884,7 +32865,8 @@ mod tests {
     /// starts in the target's schema and names both sides with their schema.
     #[test]
     fn two_schemas_of_one_connection_compare() {
-        let dir = std::env::temp_dir().join(format!("idecraft-two-schemas-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("ferris-idea-two-schemas-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let db = dir.join("d.duckdb");
@@ -30897,7 +32879,7 @@ mod tests {
         )
         .unwrap();
         drop(conn);
-        let profile = idecraft_database::ConnectionProfile::from_url(
+        let profile = ferris_idea_database::ConnectionProfile::from_url(
             "d",
             &format!("duckdb://{}", db.display()),
         )
@@ -30927,8 +32909,10 @@ mod tests {
             "{script:?}"
         );
         // SPEC-0110 v11 AK-21: the first statement pins the target schema.
-        let first =
-            idecraft_database::split_statements(&tab.script, idecraft_database::Dialect::DuckDb);
+        let first = ferris_idea_database::split_statements(
+            &tab.script,
+            ferris_idea_database::Dialect::DuckDb,
+        );
         assert_eq!(first[0].text, "SET search_path TO \"old\"", "{script:?}");
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -31066,7 +33050,7 @@ struct StatusHold {
 struct RunFile {
     path: PathBuf,
     revision: u64,
-    model: idecraft_core::ProjectModel,
+    model: ferris_idea_core::ProjectModel,
     runnable: bool,
 }
 
@@ -31082,4 +33066,108 @@ enum JvmPopupPlace {
     /// At a gutter mark: file and char offset of the start of the mark's line (`SPEC-0115` v6
     /// behaviour 17). Under the line at the editor's left edge, or over it without room.
     Mark(PathBuf, usize),
+}
+
+/// The open popup as the UI driver reads it (SPEC-0319 v7 behaviour 51).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct DriverPopup {
+    /// `intentions`, `completion`, `search_everywhere` or `goto`.
+    pub kind: &'static str,
+    /// Its visible items in order.
+    pub items: Vec<DriverItem>,
+    /// The selected item.
+    pub selected: Option<usize>,
+}
+
+/// One item of a popup.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct DriverItem {
+    /// `intention`, `suggestion`, `header`, `calculator`, `file`, `class`, `symbol`, `action`,
+    /// `settings`, `text` or `endpoint`.
+    pub kind: &'static str,
+    /// The text shown.
+    pub label: String,
+    /// The grey text beside it (file and line, type), if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    /// The action id of an action row, or the title of a Settings page row.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub action: Option<String>,
+}
+
+impl DriverItem {
+    fn new(kind: &'static str, label: impl Into<String>) -> Self {
+        Self {
+            kind,
+            label: label.into(),
+            detail: None,
+            action: None,
+        }
+    }
+
+    fn of_row(row: &crate::everywhere_model::Row) -> Self {
+        use crate::everywhere_model::Row;
+        let at = |path: &str, line: usize| Some(format!("{path}:{}", line + 1));
+        match row {
+            Row::Header(t) => Self::new("header", *t),
+            Row::Calculator(v) => Self::new("calculator", v.clone()),
+            Row::File(f) => Self::new("file", f.path.clone()),
+            Row::Class(h) | Row::Symbol(h) => {
+                let mut item = Self::new(
+                    if matches!(row, Row::Class(_)) {
+                        "class"
+                    } else {
+                        "symbol"
+                    },
+                    h.name.clone(),
+                );
+                item.detail = at(&h.path, h.line);
+                item
+            }
+            Row::Action(a) => match a.id.strip_prefix(crate::everywhere_view::SETTINGS_PREFIX) {
+                Some(page) => {
+                    let mut item = Self::new("settings", a.name.clone());
+                    item.action = Some(page.to_owned());
+                    item
+                }
+                None => {
+                    let mut item = Self::new("action", a.name.clone());
+                    item.action = Some(a.id.clone());
+                    item.detail = a.shortcut.clone();
+                    item
+                }
+            },
+            Row::Text(t) => {
+                let mut item = Self::new("text", t.text.clone());
+                item.detail = at(&t.path, t.line);
+                item
+            }
+            Row::Endpoint(e) => {
+                let mut item = Self::new(
+                    "endpoint",
+                    format!("{} {}", e.endpoint.methods.join(","), e.endpoint.path),
+                );
+                item.detail = Some(e.endpoint.handler.clone());
+                item
+            }
+        }
+    }
+}
+
+/// What the engine's watcher and a followed log send to the Containers window (SPEC-0119 v5
+/// behaviours 9, 10); log messages carry the number of their follow.
+enum ContainerFeed {
+    Watch(ferris_idea_containers::events::WatchEvent),
+    LogStart(u64, String, Vec<i128>),
+    Log(u64, String, String),
+    LogEnded(u64, String),
+    LogFailed(u64, String),
+    /// A progress line of the pull shown under this title.
+    Pull(String, String),
+    /// The pull under this title of this reference ended.
+    PullDone(
+        String,
+        String,
+        Result<ferris_idea_containers::images::PullResult, String>,
+    ),
 }

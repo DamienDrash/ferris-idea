@@ -1,7 +1,7 @@
 //! Status-bar text for stash, cherry-pick and rebase (`SPEC-0106` behaviour 9) and smart checkout
 //! (`SPEC-0231`), without drawing.
 
-use idecraft_vcs::{GitError, OpOutcome, Operation, SmartOutcome, SwitchOutcome};
+use ferris_idea_vcs::{GitError, OpOutcome, Operation, SmartOutcome, SwitchOutcome};
 
 /// Lines of an outcome's output about local changes put aside or brought back (`SPEC-0231`).
 fn stash_notes(o: &OpOutcome) -> String {
@@ -121,9 +121,9 @@ mod tests {
     fn smart_checkout_texts() {
         assert_eq!(short_file_list("a, b"), "a, b");
         assert_eq!(short_file_list("a, b, c, d, e"), "a, b, c +2 more");
-        let stash = |restored: bool, conflicts: &[&str]| idecraft_vcs::SmartStash {
+        let stash = |restored: bool, conflicts: &[&str]| ferris_idea_vcs::SmartStash {
             id: "abc".into(),
-            message: "On main: IDECraft smart checkout: main → topic".into(),
+            message: "On main: Ferris IDEA smart checkout: main → topic".into(),
             restored,
             conflicts: conflicts.iter().map(|c| (*c).to_owned()).collect(),
         };
@@ -144,7 +144,7 @@ mod tests {
         let kept = smart_checkout_outcome(switched(Some(stash(false, &["b.txt"]))));
         assert_eq!(
             report("Smart checkout topic", &Ok(kept)),
-            "Smart checkout topic stopped: conflicts in b.txt — local changes kept in the stash \"On main: IDECraft smart checkout: main → topic\": they conflict"
+            "Smart checkout topic stopped: conflicts in b.txt — local changes kept in the stash \"On main: Ferris IDEA smart checkout: main → topic\": they conflict"
         );
         let waiting = smart_outcome(SmartOutcome {
             result: outcome(false, &["a.txt"], Some(Operation::Merge)),

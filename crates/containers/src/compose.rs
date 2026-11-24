@@ -1,4 +1,4 @@
-//! Docker Compose (`SPEC-0242`): the project's Compose file and services read by IDECraft itself,
+//! Docker Compose (`SPEC-0242`): the project's Compose file and services read by Ferris IDEA itself,
 //! states from the container labels, up and down through the Compose CLI.
 
 use std::path::{Path, PathBuf};
@@ -326,7 +326,7 @@ impl ComposeCli {
             cmd.env_remove("DOCKER_TLS_VERIFY");
             // The CLI starts `ssh` from PATH itself: give it the stand-in with the shared options
             // and the route over jump hosts (post-quantum key exchange on every hop, ADR-0025).
-            let shim = idecraft_remote::SshCommand::stand_in_dir().map_err(|e| e.to_string())?;
+            let shim = ferris_idea_remote::SshCommand::stand_in_dir().map_err(|e| e.to_string())?;
             let mut path = vec![shim];
             if let Some(old) = std::env::var_os("PATH") {
                 path.extend(std::env::split_paths(&old));
@@ -337,17 +337,24 @@ impl ComposeCli {
             );
         }
         let mut child = cmd.spawn().map_err(|e| e.to_string())?;
+        // Both streams line by line in the order they arrive (OBS-0116 D7).
+        let (tx, rx) = std::sync::mpsc::channel::<String>();
         let read = |pipe: Option<Box<dyn std::io::Read + Send>>| {
+            let tx = tx.clone();
             std::thread::spawn(move || {
-                let mut s = String::new();
-                if let Some(mut p) = pipe {
-                    let _ = p.read_to_string(&mut s);
+                if let Some(p) = pipe {
+                    use std::io::BufRead;
+                    for line in std::io::BufReader::new(p).lines().map_while(Result::ok) {
+                        if tx.send(line).is_err() {
+                            break;
+                        }
+                    }
                 }
-                s
             })
         };
         let out = read(child.stdout.take().map(|o| Box::new(o) as _));
         let err = read(child.stderr.take().map(|e| Box::new(e) as _));
+        drop(tx);
         let started = Instant::now();
         let status = loop {
             if let Some(s) = child.try_wait().map_err(|e| e.to_string())? {
@@ -360,11 +367,8 @@ impl ComposeCli {
             }
             std::thread::sleep(Duration::from_millis(50));
         };
-        let text = format!(
-            "{}{}",
-            out.join().unwrap_or_default(),
-            err.join().unwrap_or_default()
-        );
+        let _ = (out.join(), err.join());
+        let text = once_each(rx.try_iter());
         if status.success() {
             Ok(text)
         } else {
@@ -376,6 +380,23 @@ impl ComposeCli {
                 .to_owned())
         }
     }
+}
+
+/// The CLI's lines joined, each line once: Compose repeats a progress line without a terminal
+/// (`Network x Creating` twice), and a line repeated right after itself says nothing new.
+pub fn once_each(lines: impl IntoIterator<Item = String>) -> String {
+    let mut out = String::new();
+    let mut last: Option<String> = None;
+    for line in lines {
+        let key = line.trim_end().to_owned();
+        if last.as_deref() == Some(key.as_str()) {
+            continue;
+        }
+        out.push_str(&line);
+        out.push('\n');
+        last = Some(key);
+    }
+    out
 }
 
 /// The last line of a CLI output worth showing in a status line.
@@ -414,8 +435,16 @@ pub fn service_logs(
 mod tests {
     use super::*;
 
+    #[test]
+    fn each_line_once() {
+        let lines = ["a", "a", "b ", "b", "a", "c"].map(String::from);
+        assert_eq!(once_each(lines), "a\nb \na\nc\n");
+        assert_eq!(once_each(Vec::<String>::new()), "");
+    }
+
     fn dir(tag: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("idecraft-compose-{tag}-{}", std::process::id()));
+        let d =
+            std::env::temp_dir().join(format!("ferris-idea-compose-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
@@ -447,7 +476,7 @@ mod tests {
         );
         assert_eq!(
             p.name,
-            format!("idecraft-compose-myshop-{}", std::process::id())
+            format!("ferris-idea-compose-myshop-{}", std::process::id())
         );
         assert_eq!(p.services, ["web", "db", "cache"]);
         assert_eq!(p.error, None);
@@ -476,11 +505,14 @@ mod tests {
             id: name.into(),
             name: name.into(),
             image: "x".into(),
+            image_id: String::new(),
             state: state.into(),
             status: String::new(),
             ports: vec![],
             compose_project: Some("shop".into()),
             compose_service: Some(svc.into()),
+            compose_dir: None,
+            networks: Vec::new(),
         };
         let states = service_states(
             &p,

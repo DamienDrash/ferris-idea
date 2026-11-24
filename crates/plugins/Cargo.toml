@@ -1,5 +1,5 @@
 [package]
-name = "idecraft-plugins"
+name = "ferris-idea-plugins"
 description = "Plugins as sandboxed WebAssembly modules"
 version.workspace = true
 edition.workspace = true
@@ -9,7 +9,7 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
-idecraft-core.workspace = true
+ferris-idea-core.workspace = true
 # TLS the host makes for connector plugins (`SPEC-0314` v2 behaviour 10).
 native-tls.workspace = true
 serde.workspace = true

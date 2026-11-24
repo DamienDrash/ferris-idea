@@ -11,7 +11,7 @@
 - **Changes in v3:** language-server edits and refactorings go through the open buffers, computed against
   the shown text, as one all-or-nothing change of several editors (behaviours 13–16, AK-7 to AK-9);
   behaviour 9 narrows to the tools that still compute from the disk
-- **Changes in v4:** before a change that can touch several files the language server and IDECraft's
+- **Changes in v4:** before a change that can touch several files the language server and Ferris IDEA's
   own planners get the unsaved text of every open file of the workspace, so other unsaved files are no
   longer refused (behaviour 13); the window keeps an agent's refactoring as one of its undo groups
   (behaviour 15, SPEC-0193 v5 behaviour 10); `move_file` with reference updates goes through the
@@ -60,7 +60,7 @@ an older version on disk.
    step and nothing the user typed is lost. The tool's answer is the same as for a write to disk. [GEN,
    A2, ADR-0008]
 8. **The text the edit is based on.** A tool that computes its new text from text alone (generators,
-   IDECraft's own inspections and fixes, copyright notices, import optimisers and formatters that take
+   Ferris IDEA's own inspections and fixes, copyright notices, import optimisers and formatters that take
    the text on standard input or from the call) reads the file as the window shows it, saved or not
    (as `read_file` does, behaviour 6), so its result contains the user's unsaved edits. The window
    refuses an edit whose revision is no longer the file's (the user typed in between), and one for a
@@ -81,8 +81,8 @@ an older version on disk.
     edit within 10 seconds, or cannot take it, a file without unsaved changes is written to disk as in
     behaviour 9, and one with unsaved changes is refused as in behaviour 9: never a silent overwrite.
     [GEN]
-11. **IDECraft's own files.** Tools that change only files IDECraft keeps as its own data or settings
-    (`.idecraft/…`, `.idea/…` profiles and dictionaries, the user's settings folder, run
+11. **Ferris IDEA's own files.** Tools that change only files Ferris IDEA keeps as its own data or settings
+    (`.ferris-idea/…`, `.idea/…` profiles and dictionaries, the user's settings folder, run
     configurations), create files and folders that do not exist yet, change remote hosts or rooms
     (whose documents the backend owns, ADR-0026), or act through the window's own steps (closing,
     quitting, the Project tree's undo) are outside behaviours 7–9. An editor that shows such a file
@@ -97,15 +97,15 @@ an older version on disk.
     [GEN]
 
 13. **Language servers compute against the shown text.** Renaming a symbol, applying a code action,
-    formatting through a language server or IDECraft's own SQL and Markdown formatters, Change
+    formatting through a language server or Ferris IDEA's own SQL and Markdown formatters, Change
     Signature, Override Methods, Delegate Methods, Extract Interface, Extract Superclass, Pull
-    Members Up and moving a file with reference updates give the server (or IDECraft's own planner)
+    Members Up and moving a file with reference updates give the server (or Ferris IDEA's own planner)
     the text the window shows for the file the call names, saved or not, as the editor's own actions
     do (SPEC-0074, SPEC-0075, SPEC-0076); its positions refer to that text (as `read_file` returns
     it). (v4) Before such a call plans, the text of **every other open file of the workspace with
     unsaved changes** is given too: each one the same language server serves is brought to that text
     on the server — `didOpen` with it when the server does not have the file open, else `didChange`
-    with the whole text and a version higher than any the server had for the file — and IDECraft's
+    with the whole text and a version higher than any the server had for the file — and Ferris IDEA's
     own planners (text occurrences of a rename, SPEC-0148; a move's own reference rewriting and
     package line, SPEC-0114) read it in place of the disk. The server keeps that text afterwards, as
     it keeps the editor's. Edits of every file of the change therefore refer to the text the window
@@ -246,7 +246,7 @@ an older version on disk.
   `calc.h`, open with unsaved typing that adds a further usage, renames every usage in both buffers,
   the typed one included, without "save it first" (clangd renames in another file only when that
   file is open on it, so the header's rename shows that it got the shown text); the header's disk
-  is unchanged; one undo in each editor gives back exactly the user's text. Unit: while a call plans, IDECraft's planners read the given
+  is unchanged; one undo in each editor gives back exactly the user's text. Unit: while a call plans, Ferris IDEA's planners read the given
   texts in place of the disk (paths resolved), and the disk outside it. Protocol: `move_file` with reference updates of a file included by
   an open file with unsaved typing rewrites the include in that buffer, leaves its disk alone and
   moves the file; a moved file with unsaved changes is refused with "save it first".
@@ -284,7 +284,7 @@ instead of the disk; all are open in M6.8. Events for document changes (readines
 
 ## Known deviations from the reference
 None observed; the reference's behaviour for unsaved buffers over MCP was not examined. Refusing a
-change computed from the disk while the file has unsaved changes (behaviour 9) is IDECraft's own rule:
+change computed from the disk while the file has unsaved changes (behaviour 9) is Ferris IDEA's own rule:
 it never overwrites an editor's text or leaves the disk and the editor disagreeing behind the user's
 back.
 

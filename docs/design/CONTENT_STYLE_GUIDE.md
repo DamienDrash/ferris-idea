@@ -31,7 +31,7 @@ Bad: "The world's fastest IDE." / "A perfect IntelliJ replacement."
 - Numbers carry their kind: *measured* (with method link) or *estimated*.
 - Comparisons to the reference products describe targets, never achievements.
 - A number names the commit or date it was taken at, in the sentence or in the caption below it.
-- License wording: IDECraft is **source-available**. Never "open source", "free software",
+- License wording: Ferris IDEA is **source-available**. Never "open source", "free software",
   "FOSS" or "OSI-approved"; "free" never stands alone. A summary of the license says that it is
   a summary and that the license text decides.
 - Agent and security wording names the mechanism and its limit, not an adjective: "rights per
@@ -66,7 +66,7 @@ Never mix states in one sentence ("supports Java" when only file detection works
 
 Current stage: **stable**, the 1.0 stage (since v1.0.0, 2026-11-17; beta since v0.20.0, alpha since
 v0.2.0, 2026-10-31). The stage is a constant in
-`crates/core/src/release.rs`, shown by `idecraft --version` and the About dialog, and written as
+`crates/core/src/release.rs`, shown by `ferris-idea --version` and the About dialog, and written as
 the `Stage:` line of every version in `CHANGELOG.md`.
 
 | Stage | Criteria (all must hold) | Reached |
@@ -95,7 +95,7 @@ describes.
 ## 7. Release notes
 
 Format in [`CHANGELOG.md`](../../CHANGELOG.md): one section per version, newest first, headed
-`## IDECraft vX.Y.Z — YYYY-MM-DD`, followed by a line `Stage: <stage>` (§5) and the groups
+`## Ferris IDEA vX.Y.Z — YYYY-MM-DD`, followed by a line `Stage: <stage>` (§5) and the groups
 *Added*, *Changed*, *Fixed*, *Removed* and *Security* (a change that protects data or closes a
 weakness), each line a user-visible change in the active voice ending
 with its pull request numbers, e.g. `(#123)`. Internal work (observations, specifications only,
@@ -104,7 +104,7 @@ status records, CI internals) is left out.
 Versioning:
 
 - [Semantic Versioning](https://semver.org/); `0.x` until 1.0. The only source of the version is
-  `[workspace.package] version` in `Cargo.toml`; every crate, `idecraft --version`, the About
+  `[workspace.package] version` in `Cargo.toml`; every crate, `ferris-idea --version`, the About
   dialog, problem reports and the MCP `serverInfo.version` read it.
 - Every pull request with a user-visible change adds its lines as a fragment
   `changelog.d/<PR number>.md` in the format above, under its groups (`### Added` …), each line
@@ -113,9 +113,10 @@ Versioning:
   branch uses before its pull request exists, and `scripts/changelog.sh check` checks them.
 - At the end of each working day with fragments or entries under `## Unreleased`, cut a minor
   version: first `scripts/changelog.sh assemble` moves the fragments under `## Unreleased`
-  (newest pull request first in each group) and deletes them; then raise the
+  (newest pull request first in each group) and deletes them, and `scripts/traceability.sh
+  assemble` appends the traceability fragments to `TRACEABILITY.md` (ADR-0035); then raise the
   version in `Cargo.toml` (and `Cargo.lock`), rename `## Unreleased` to
-  `## IDECraft vX.Y.Z — YYYY-MM-DD` with its `Stage:` line, start a new empty `## Unreleased`,
+  `## Ferris IDEA vX.Y.Z — YYYY-MM-DD` with its `Stage:` line, start a new empty `## Unreleased`,
   and after the merge put an annotated tag `vX.Y.Z` on that merge commit and push it. The date is
   the merge date on `main` in Europe/Berlin.
 - A patch version (`vX.Y.Z+1`) is only for a fix to an already tagged version made outside the
@@ -123,5 +124,5 @@ Versioning:
 - `cargo test` checks that the newest changelog version equals the `Cargo.toml` version and that
   its stage equals the stage constant (`crates/core/src/release.rs`).
 
-GitHub releases use the title `IDECraft vX.Y.Z` and the same text. No GitHub release exists yet;
+GitHub releases use the title `Ferris IDEA vX.Y.Z` and the same text. No GitHub release exists yet;
 publishing needs the product owner's approval (GO-4).

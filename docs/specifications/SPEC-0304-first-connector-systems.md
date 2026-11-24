@@ -48,7 +48,7 @@ real server; DuckDB, an embedded analytical database, joins as a family of its o
    `family = "odbc"` (listed with their URL scheme and port, not connectable until the ODBC route
    exists; the note says so), and ClickHouse through its MySQL interface (MySQL family, port 9004,
    catalogue not verified). Not added: SQL Server LocalDB (Windows only), H2, HSQLDB and Derby (need
-   a JVM). Entry points the reference has and IDECraft not yet — a data source from the clipboard, a
+   a JVM). Entry points the reference has and Ferris IDEA not yet — a data source from the clipboard, a
    DDL-only source without a server, demo databases, quick buttons for the most used systems in the
    empty Database tool window, cloud explorers — are follow-ups outside this spec. [OBS-0015]
 5. **Licence.** `duckdb` and its dependencies are permissively licensed (MIT, Apache-2.0); `cargo
@@ -67,7 +67,7 @@ real server; DuckDB, an embedded analytical database, joins as a family of its o
 
 ## Acceptance criteria
 - **AK-1** Live tests pass against TimescaleDB, TiDB, YugabyteDB and CockroachDB (`connectors.rs` with
-  `IDECRAFT_TEST_{TIMESCALE,TIDB,YUGABYTE,COCKROACH}`); without the variables they pass without doing
+  `FERRIS_IDEA_TEST_{TIMESCALE,TIDB,YUGABYTE,COCKROACH}`); without the variables they pass without doing
   anything.
 - **AK-2** The built-in definitions of the four are `supported` with `tested`
   (`connector::tests::live_tested_family_systems_are_supported`).

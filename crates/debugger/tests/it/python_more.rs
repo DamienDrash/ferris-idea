@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use idecraft_debugger::{DebugSession, Lang, SourceBreakpoint, StopState, known_adapters};
+use ferris_idea_debugger::{DebugSession, Lang, SourceBreakpoint, StopState, known_adapters};
 use serde_json::json;
 
 const WAIT: Duration = Duration::from_secs(60);
@@ -51,13 +51,13 @@ fn stopped_at(state: &StopState) -> (i64, i64) {
 fn further_actions_with_debugpy() {
     let Some(adapter) = debugpy() else {
         assert!(
-            std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+            ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
             "required tool missing: debugpy"
         );
         eprintln!("skipped: debugpy is not installed");
         return;
     };
-    let dir = std::env::temp_dir().join(format!("idecraft-pymore-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-pymore-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let dir: PathBuf = dir.canonicalize().unwrap();

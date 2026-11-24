@@ -7,7 +7,7 @@ use std::io::BufReader;
 use std::net::TcpListener;
 use std::sync::{Arc, Mutex};
 
-use idecraft_debugger::{
+use ferris_idea_debugger::{
     DapClient, DebugSession, FunctionBreakpoint, SpecialBreakpoints, java_method_name,
     read_message, write_message,
 };
@@ -113,7 +113,7 @@ fn exception_types_and_method_breakpoints_reach_java_debug() {
     let (mut session, _) =
         DebugSession::launch_on(client, "java", json!({}), &BTreeMap::new(), &special).unwrap();
     let output = session.output().to_owned();
-    assert!(!output.contains("[IDECraft]"), "{output}");
+    assert!(!output.contains("[Ferris IDEA]"), "{output}");
     assert_eq!(
         *types.lock().unwrap(),
         vec![vec!["java.lang.NullPointerException".to_owned()]]
@@ -142,7 +142,7 @@ fn method_names_in_java_debug_syntax() {
     assert_eq!(java_method_name("Crash::area"), "Crash#area");
     assert_eq!(java_method_name("main"), "main");
     assert_eq!(
-        idecraft_debugger::exception_types("a.B, c.D  e.F"),
+        ferris_idea_debugger::exception_types("a.B, c.D  e.F"),
         ["a.B", "c.D", "e.F"]
     );
 }

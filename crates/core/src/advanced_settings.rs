@@ -124,7 +124,7 @@ pub const ADVANCED: &[AdvancedSetting] = &[
     AdvancedSetting {
         key: "database.report_url",
         label: "Address for database problem reports",
-        description: "Empty for IDECraft's issue template, off for copying the report only, else an https address with {title} and {body}.",
+        description: "Empty for Ferris IDEA's issue template, off for copying the report only, else an https address with {title} and {body}.",
         kind: Kind::Text,
         get: |s| Value::Text(s.database.report_url.clone()),
         put: |s, v| {

@@ -3,7 +3,7 @@
 
 use std::path::{Path, PathBuf};
 
-use idecraft_core::{
+use ferris_idea_core::{
     RunEvent, TestStatus, expand_vars, load_run_configs, parse_run_configs, run_config, start_run,
 };
 
@@ -11,11 +11,11 @@ struct Root(PathBuf);
 
 impl Root {
     fn new(tag: &str, run_toml: &str) -> Self {
-        let p = std::env::temp_dir().join(format!("idecraft-run-{tag}-{}", std::process::id()));
+        let p = std::env::temp_dir().join(format!("ferris-idea-run-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&p);
-        std::fs::create_dir_all(p.join(".idecraft")).unwrap();
+        std::fs::create_dir_all(p.join(".ferris-idea")).unwrap();
         std::fs::create_dir_all(p.join("sub")).unwrap();
-        std::fs::write(p.join(".idecraft/run.toml"), run_toml).unwrap();
+        std::fs::write(p.join(".ferris-idea/run.toml"), run_toml).unwrap();
         Self(p.canonicalize().unwrap())
     }
     fn path(&self) -> &Path {
@@ -187,7 +187,7 @@ command = ["/bin/sh", "-c", "mkdir -p out && printf '<testsuite name=\"s\"><test
 }
 
 /// Events of a run until it ends.
-fn events(handle: idecraft_core::RunHandle) -> Vec<RunEvent> {
+fn events(handle: ferris_idea_core::RunHandle) -> Vec<RunEvent> {
     handle.events.iter().collect()
 }
 
@@ -276,7 +276,7 @@ command = ["/bin/sh", "-c", "echo started; sleep 30 & wait"]
 
 #[test]
 fn detected_configurations_come_after_and_do_not_replace() {
-    use idecraft_core::{RunConfig, RunKind, add_detected, parse_run_configs};
+    use ferris_idea_core::{RunConfig, RunKind, add_detected, parse_run_configs};
     let mut configs =
         parse_run_configs("[[run]]\nname = \"npm run build\"\ncommand = [\"make\"]\n");
     let detected = |name: &str| RunConfig {
@@ -294,6 +294,7 @@ fn detected_configurations_come_after_and_do_not_replace() {
         allow_multiple: false,
         before_launch: Vec::new(),
         verbatim: false,
+        http: None,
     };
     let added = add_detected(
         &mut configs,
@@ -312,7 +313,7 @@ fn detected_configurations_come_after_and_do_not_replace() {
 /// list as given — `${…}` is not replaced — in its folder with its environment.
 #[test]
 fn verbatim_configuration_is_not_expanded() {
-    use idecraft_core::{RunConfig, RunConfigs, RunKind, run_plan};
+    use ferris_idea_core::{RunConfig, RunConfigs, RunKind, run_plan};
     let root = Root::new("verbatim", "");
     let config = RunConfig {
         name: "plugin".into(),
@@ -335,6 +336,7 @@ fn verbatim_configuration_is_not_expanded() {
         allow_multiple: false,
         before_launch: Vec::new(),
         verbatim: true,
+        http: None,
     };
     let configs = RunConfigs {
         configs: vec![config.clone()],
@@ -370,7 +372,7 @@ fn verbatim_configuration_is_not_expanded() {
 /// suggestion was made; a configuration of the user's own `run.toml` is not affected.
 #[test]
 fn verbatim_configuration_does_not_start_through_a_link() {
-    use idecraft_core::{RunConfig, RunConfigs, RunKind};
+    use ferris_idea_core::{RunConfig, RunConfigs, RunKind};
     let root = Root::new("verbatim-link", "");
     let outside = Root::new("verbatim-link-outside", "");
     std::os::unix::fs::symlink(outside.path(), root.path().join("out")).unwrap();
@@ -388,6 +390,7 @@ fn verbatim_configuration_does_not_start_through_a_link() {
             timeout: Some(20),
             url: None,
             verbatim,
+            http: None,
             folder: None,
             allow_multiple: false,
             before_launch: Vec::new(),

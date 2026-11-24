@@ -43,7 +43,7 @@ fn choosing_an_interpreter_is_saved_in_the_project() {
         json!({"interpreter": first["path"], "dry_run": false}),
     );
     assert!(
-        p.read(".idecraft/python.toml")
+        p.read(".ferris-idea/python.toml")
             .contains(&text(&first["path"]))
     );
     let venv = ide.ok("python_create_venv", json!({}));

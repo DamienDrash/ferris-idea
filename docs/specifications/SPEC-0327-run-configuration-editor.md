@@ -10,11 +10,11 @@
   to add, remove, copy and sort them, a type chooser with a typing filter, per type the program, arguments, working
   directory and environment, a name, before-launch tasks; temporary configurations from the current file that can be
   saved), GEN (run configuration dialogs in IDEs), OSS (action id `editRunConfigurations`), SPEC-0047 (format of
-  `.idecraft/run.toml`), SPEC-0087 (run widget), SPEC-0278 (trust)
+  `.ferris-idea/run.toml`), SPEC-0087 (run widget), SPEC-0278 (trust)
 - **Feature matrix rows:** F-077
 
 ## Purpose
-Create, change, copy and delete run configurations in the window, without writing `.idecraft/run.toml` by hand, and
+Create, change, copy and delete run configurations in the window, without writing `.ferris-idea/run.toml` by hand, and
 keep a configuration made from the current file.
 
 ## Behaviour
@@ -176,8 +176,8 @@ keep a configuration made from the current file.
 - **AK-12** v3 – By clicks on the controls, found by their test ids: in a window of the test harness New Folder,
   Rename, the folder chips, Remove Folder and Apply with the file's comment kept; Templates, a type, its fields,
   the instance switch, Before launch's Add with a configuration and Build, Apply, Add of that type as a copy,
-  Reset (`run_config_folders_templates`). In a real window (`idecraft ui --selftest` with
-  `IDECRAFT_SELFTEST_DRIVER=1`, groups `run-config-folders`, `run-config-templates`, `run-config-before-launch`):
+  Reset (`run_config_folders_templates`). In a real window (`ferris-idea ui --selftest` with
+  `FERRIS_IDEA_SELFTEST_DRIVER=1`, groups `run-config-folders`, `run-config-templates`, `run-config-before-launch`):
   the same through the run widget's list, the folder heading in the run widget's list, a configuration made from
   a template runs with the template's environment, Build added from the picker, a refused URL named and not
   written.

@@ -6,9 +6,9 @@
   `gpui-ce` as fallback, on its own branch as a draft PR that is not merged. The ADR stays proposed
   until the spike's measurements decide adoption.
 - **Context:** IMP-0005 asks that every window and dialog be exposed through the platform
-  accessibility API (role, title, actionable buttons). IDECraft uses GPUI 0.2.2 from crates.io
+  accessibility API (role, title, actionable buttons). Ferris IDEA uses GPUI 0.2.2 from crates.io
   (ADR-0003). That release has no accessibility tree: a screen reader or an accessibility client
-  sees an IDECraft window as one opaque view. Only native alerts drawn by macOS (quit question,
+  sees a Ferris IDEA window as one opaque view. Only native alerts drawn by macOS (quit question,
   SPEC-0261; trust question, SPEC-0278) are readable and pressable. State of the toolkit on
   2026-11-04, checked against public sources:
   - **crates.io `gpui`:** newest release 0.2.2 (2025-10-22); no AccessKit dependency.
@@ -30,17 +30,17 @@
      to drawn dialogs, tool windows or the editor.
   2. **Upstream GPUI as a Git dependency** at a pinned commit after PR #64143. Gives AccessKit with
      the code Zed itself ships, but crosses the 0.2 → main API break (platform crates,
-     renamed APIs), pins IDECraft to an unreleased commit, and `cargo deny` must allow a Git
+     renamed APIs), pins Ferris IDEA to an unreleased commit, and `cargo deny` must allow a Git
      source. Every view then needs roles, labels and actions added by hand.
   3. **Switch to `gpui-ce` 0.3.** A published crate with AccessKit, but a fork maintained by a
      community team, with a breaking rename of every GPUI import and the same per-view annotation
      work as option 2.
-  4. **Bridge only IDECraft's own dialogs** by attaching an AccessKit subtree to the GPUI 0.2.2
+  4. **Bridge only Ferris IDEA's own dialogs** by attaching an AccessKit subtree to the GPUI 0.2.2
      `NSView` (via `accesskit_macos` directly). Rejected: GPUI 0.2.2 owns the view and its
      `accessibility*` methods; a second adapter on the same view would fight GPUI's focus and hit
      testing, and would not exist on Linux or Windows.
 - **Decision (interim, now):** option 1. Simple yes/no confirmations become native alerts
-  (SPEC-0281); every decision of a drawn dialog has an MCP tool and, through `idecraft call`, a
+  (SPEC-0281); every decision of a drawn dialog has an MCP tool and, through `ferris-idea call`, a
   command line (SPEC-0281); the inventory of dialogs is machine-readable (MCP
   `dialog_decisions`). No toolkit upgrade without the project owner.
 - **Proposed next step (for the project owner):** a time-boxed spike of option 2 on a branch, pinned to an
@@ -50,7 +50,7 @@
   crate boundary of ADR-0003 (toolkit only in `crates/ui`, `crates/workbench`, `crates/app`)
   keeps either switch local.
 - **Follow-up (2026-11-07):** [ADR-0027](0027-ui-driver-and-semantic-tree.md) makes the
-  accessibility tree the source of truth for IDECraft's UI driver as well. Its phases 1 and 2 run on
+  accessibility tree the source of truth for Ferris IDEA's UI driver as well. Its phases 1 and 2 run on
   GPUI 0.2.2 with a bridge producer of AccessKit nodes; its phase 3 (one tree for screen readers
   and the driver) needs the adoption decided here, after the spike's pending window measurements.
 - **Consequences:** IMP-0005 stays "partly implemented": decisions are reachable for automation and

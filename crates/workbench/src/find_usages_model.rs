@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 use std::path::Path;
 
-use idecraft_languages::context::{PlaceContext, UsageKind};
+use ferris_idea_languages::context::{PlaceContext, UsageKind};
 
 use crate::nav_model::Place;
 
@@ -134,7 +134,7 @@ pub fn no_usages(symbol: &str, in_file: Option<&str>) -> String {
 /// How long the window shows a search as running before it ends it itself: the search's own
 /// deadline and as much again for the text search that follows it (v8 behaviour 21).
 pub const GIVE_UP_AFTER: std::time::Duration =
-    std::time::Duration::from_secs(2 * idecraft_languages::find_usages::DEADLINE.as_secs());
+    std::time::Duration::from_secs(2 * ferris_idea_languages::find_usages::DEADLINE.as_secs());
 
 /// Whether a search shown as running for `elapsed` is ended by the window (v8 behaviour 21).
 pub fn overdue(elapsed: std::time::Duration) -> bool {

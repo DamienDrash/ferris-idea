@@ -2,13 +2,14 @@
 
 use std::process::Command;
 
-use idecraft_vcs::{Labels, MarkerStyle, Merge3};
+use ferris_idea_vcs::{Labels, MarkerStyle, Merge3};
 
 fn git_merge_file(base: &str, ours: &str, theirs: &str, diff3: bool) -> Option<String> {
     // One folder per call: the tests of this file run at the same time.
     static CALLS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let call = CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let dir = std::env::temp_dir().join(format!("idecraft-merge3-{}-{call}", std::process::id()));
+    let dir =
+        std::env::temp_dir().join(format!("ferris-idea-merge3-{}-{call}", std::process::id()));
     std::fs::create_dir_all(&dir).ok()?;
     for (name, text) in [("base", base), ("ours", ours), ("theirs", theirs)] {
         std::fs::write(dir.join(name), text).ok()?;

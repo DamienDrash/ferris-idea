@@ -1,5 +1,5 @@
 //! Actions (`SPEC-0319` behaviours 16-21) and the input events they become. Input is delivered
-//! only into IDECraft's own window, on one of three levels (ADR-0027 section 3); this module only
+//! only into Ferris IDEA's own window, on one of three levels (ADR-0027 section 3); this module only
 //! plans the events, the window delivers them.
 
 use serde::{Deserialize, Serialize};
@@ -256,7 +256,7 @@ pub enum Level {
     /// Toolkit input events dispatched into the window.
     #[default]
     Window,
-    /// `NSEvent`s posted to IDECraft's own application queue (macOS, opt-in).
+    /// `NSEvent`s posted to Ferris IDEA's own application queue (macOS, opt-in).
     Native,
 }
 

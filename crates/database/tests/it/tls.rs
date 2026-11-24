@@ -1,13 +1,13 @@
 //! SPEC-0016 against the reference databases (local PostgreSQL without TLS, MySQL 8.4 with its
 //! self-signed certificate, v3: SQL Server 2022 with the test CA that `mssql.sh start` installs). Uses
-//! `IDECRAFT_TEST_PG` / `IDECRAFT_TEST_MYSQL` / `IDECRAFT_TEST_SQLSERVER`; the SSL mode in those
+//! `FERRIS_IDEA_TEST_PG` / `FERRIS_IDEA_TEST_MYSQL` / `FERRIS_IDEA_TEST_SQLSERVER`; the SSL mode in those
 //! URLs is replaced per test.
 
 use std::net::ToSocketAddrs;
 
 use crate::common;
 
-use idecraft_database::{ConnectionProfile, Driver, PgSession, Session, SessionError, SslMode};
+use ferris_idea_database::{ConnectionProfile, Driver, PgSession, Session, SessionError, SslMode};
 
 fn profile(var: &str, mode: SslMode) -> Option<ConnectionProfile> {
     let url = std::env::var(var).ok()?;
@@ -23,13 +23,13 @@ async fn encrypted(p: &ConnectionProfile) -> Option<bool> {
 
 #[tokio::test]
 async fn postgres_prefer_falls_back_and_require_fails() {
-    let Some(prefer) = profile("IDECRAFT_TEST_PG", SslMode::Prefer) else {
+    let Some(prefer) = profile("FERRIS_IDEA_TEST_PG", SslMode::Prefer) else {
         return;
     };
     // The reference PostgreSQL has no TLS; CI's may have. Either way prefer connects.
     assert!(encrypted(&prefer).await.is_some());
     if encrypted(&prefer).await == Some(false) {
-        let require = profile("IDECRAFT_TEST_PG", SslMode::Require).unwrap();
+        let require = profile("FERRIS_IDEA_TEST_PG", SslMode::Require).unwrap();
         let err = Session::connect(&require, &common::credentials(&require))
             .await
             .err()
@@ -49,16 +49,16 @@ async fn postgres_prefer_falls_back_and_require_fails() {
 
 #[tokio::test]
 async fn mysql_modes() {
-    let Some(require) = profile("IDECRAFT_TEST_MYSQL", SslMode::Require) else {
+    let Some(require) = profile("FERRIS_IDEA_TEST_MYSQL", SslMode::Require) else {
         return;
     };
     assert_eq!(encrypted(&require).await, Some(true));
-    let prefer = profile("IDECRAFT_TEST_MYSQL", SslMode::Prefer).unwrap();
+    let prefer = profile("FERRIS_IDEA_TEST_MYSQL", SslMode::Prefer).unwrap();
     assert_eq!(encrypted(&prefer).await, Some(true));
-    let disable = profile("IDECRAFT_TEST_MYSQL", SslMode::Disable).unwrap();
+    let disable = profile("FERRIS_IDEA_TEST_MYSQL", SslMode::Disable).unwrap();
     assert_eq!(encrypted(&disable).await, Some(false));
     // The server certificate is self-signed, so verification must fail.
-    let verify = profile("IDECRAFT_TEST_MYSQL", SslMode::VerifyFull).unwrap();
+    let verify = profile("FERRIS_IDEA_TEST_MYSQL", SslMode::VerifyFull).unwrap();
     let err = Session::connect(&verify, &common::credentials(&verify))
         .await
         .err()
@@ -75,15 +75,16 @@ async fn mysql_modes() {
     );
 }
 
-/// The MySQL server's own CA file (`IDECRAFT_TEST_MYSQL_CA`, set by `scripts/ci-local.sh` from the
+/// The MySQL server's own CA file (`FERRIS_IDEA_TEST_MYSQL_CA`, set by `scripts/ci-local.sh` from the
 /// reference server's data folder).
 fn mysql_ca() -> Option<std::path::PathBuf> {
-    let ca = std::path::PathBuf::from(std::env::var("IDECRAFT_TEST_MYSQL_CA").ok()?);
+    let ca =
+        std::path::PathBuf::from(ferris_idea_core::product_var("FERRIS_IDEA_TEST_MYSQL_CA").ok()?);
     ca.is_file().then_some(ca)
 }
 
 fn temp(tag: &str) -> std::path::PathBuf {
-    let d = std::env::temp_dir().join(format!("idecraft-tlsfiles-{tag}-{}", std::process::id()));
+    let d = std::env::temp_dir().join(format!("ferris-idea-tlsfiles-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).unwrap();
     d
@@ -112,7 +113,7 @@ fn foreign_ca(dir: &std::path::Path) -> Option<std::path::PathBuf> {
 #[tokio::test]
 async fn mysql_ca_files_are_checked() {
     let (Some(mut p), Some(ca)) = (
-        profile("IDECRAFT_TEST_MYSQL", SslMode::VerifyCa),
+        profile("FERRIS_IDEA_TEST_MYSQL", SslMode::VerifyCa),
         mysql_ca(),
     ) else {
         return;
@@ -171,7 +172,7 @@ async fn mysql_ca_files_are_checked() {
 #[tokio::test]
 async fn readable_client_keys_are_refused() {
     use std::os::unix::fs::PermissionsExt;
-    let Some(mut p) = profile("IDECRAFT_TEST_PG", SslMode::Require) else {
+    let Some(mut p) = profile("FERRIS_IDEA_TEST_PG", SslMode::Require) else {
         return;
     };
     let dir = temp("key");
@@ -208,7 +209,7 @@ async fn readable_client_keys_are_refused() {
 /// same server is reached without TLS and says so.
 #[tokio::test]
 async fn postgres_prefer_off_the_loopback_needs_tls() {
-    let Some(local) = profile("IDECRAFT_TEST_PG", SslMode::Prefer) else {
+    let Some(local) = profile("FERRIS_IDEA_TEST_PG", SslMode::Prefer) else {
         return;
     };
     let socket = format!(
@@ -257,16 +258,16 @@ async fn postgres_prefer_off_the_loopback_needs_tls() {
     }
 }
 
-/// The SQL Server profile of `IDECRAFT_TEST_SQLSERVER` with `mode`.
+/// The SQL Server profile of `FERRIS_IDEA_TEST_SQLSERVER` with `mode`.
 fn sql_server(mode: SslMode) -> Option<ConnectionProfile> {
-    profile("IDECRAFT_TEST_SQLSERVER", mode)
+    profile("FERRIS_IDEA_TEST_SQLSERVER", mode)
 }
 
 /// SPEC-0016 v3 AK-13, SPEC-0116 v6 AK-10 (live): TLS with SQL Server comes about on every
 /// platform, macOS included: `require` and `prefer` connect encrypted, `disable` does not;
 /// `verify-full` without a CA file fails on the certificate (the system trusts neither the
 /// server's own nor the test CA's); with the test CA of `mssql.sh tls`
-/// (`IDECRAFT_TEST_SQLSERVER_CA`) it connects to `localhost` and fails on the host name for
+/// (`FERRIS_IDEA_TEST_SQLSERVER_CA`) it connects to `localhost` and fails on the host name for
 /// `127.0.0.1`, which the certificate does not name. SPEC-0016 v4 AK-14, SPEC-0116 v7 AK-11: a CA
 /// file that did not sign the server's certificate is the only anchor, so the chain check ends the
 /// handshake naming that file, in `verify-full` and `verify-ca`.
@@ -304,7 +305,7 @@ async fn sql_server_modes() {
         ),
         "{err}"
     );
-    let Some(ca) = std::env::var("IDECRAFT_TEST_SQLSERVER_CA")
+    let Some(ca) = ferris_idea_core::product_var("FERRIS_IDEA_TEST_SQLSERVER_CA")
         .ok()
         .map(std::path::PathBuf::from)
         .filter(|ca| ca.is_file())

@@ -12,8 +12,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use idecraft_debugger::{DapClient, DebugSession, SourceBreakpoint, StopState};
-use idecraft_languages::java_debug::JavaDebugServer;
+use ferris_idea_debugger::{DapClient, DebugSession, SourceBreakpoint, StopState};
+use ferris_idea_languages::java_debug::JavaDebugServer;
 use serde_json::json;
 
 const PROGRAM: &str = "public class App {\n    static int v() {\n        return 1;\n    }\n    public static void main(String[] a) {\n        int n = v();\n        System.out.println(n);\n        System.out.println(v());\n    }\n}\n";
@@ -83,18 +83,18 @@ fn slow_java(dir: &Path, real: &Path) -> PathBuf {
 
 #[test]
 fn a_local_java_session_listens_on_no_other_interface() {
-    if !idecraft_languages::java_debug::java_debug_usable()
-        || idecraft_languages::servers::resolve(idecraft_languages::LanguageId::Java).is_err()
+    if !ferris_idea_languages::java_debug::java_debug_usable()
+        || ferris_idea_languages::servers::resolve(ferris_idea_languages::LanguageId::Java).is_err()
         || Command::new("lsof").arg("-v").output().is_err()
     {
         eprintln!("skipped: jdtls, java-debug or lsof is missing");
         return;
     }
-    let dir = std::env::temp_dir().join(format!("idecraft-javaport-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-javaport-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let root = dir.canonicalize().unwrap();
-    idecraft_core::trust::trust_for_process(&root);
+    ferris_idea_core::trust::trust_for_process(&root);
     let file = root.join("App.java");
     std::fs::write(&file, PROGRAM).unwrap();
     let server = JavaDebugServer::start(&root).expect("jdtls with java-debug");
@@ -133,7 +133,7 @@ fn a_local_java_session_listens_on_no_other_interface() {
     let settings = server.clone();
     let client = DapClient::connect(&address, Some(Box::new(server)))
         .unwrap()
-        .with_host(Box::new(idecraft_debugger::FnHost {
+        .with_host(Box::new(ferris_idea_debugger::FnHost {
             settings: Box::new(move |s| settings.lock().unwrap().update_settings(s)),
             sources: Box::new(move |f| sources.lock().unwrap().sources_changed(f)),
         }));

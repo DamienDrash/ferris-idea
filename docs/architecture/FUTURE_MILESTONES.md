@@ -107,7 +107,7 @@ M8 hardening items; they also feed the QG-1 gate report (M9.1).
 3. **Dependencies:** M9.
 4. **Prerequisites:** domain-first rule followed since ADR-0012; document registry from M6.8.
 5. **Deliverables:** capability crate(s); existing MCP tools (167 on 2026-11-03) moved behind capabilities with unchanged
-   behaviour; `idecraft serve`; event stream; permission model extended to all declared effects;
+   behaviour; `ferris-idea serve`; event stream; permission model extended to all declared effects;
    compatibility tests (old MCP tool names keep working for a deprecation period).
 6. **Acceptance:** every MCP tool and every GUI action that changes state goes through a capability;
    protocol tests unchanged and green; GUI and an MCP client edit the same open document and see each
@@ -119,7 +119,7 @@ M8 hardening items; they also feed the QG-1 gate report (M9.1).
 
 ## M11 · AI-native Integration (future)
 
-1. **Goal:** agents of different providers work in IDECraft through standard protocols (ADR-0013).
+1. **Goal:** agents of different providers work in Ferris IDEA through standard protocols (ADR-0013).
 2. **Requirements:** MCP adapter on the current revision (stateless, Streamable HTTP, OAuth 2.1 for
    remote, Tasks extension); ACP client hosting agents as subprocesses; agent adapter records per agent
    type (Claude Code via ACP adapter, Codex CLI via ACP adapter, Gemini CLI native, other ACP agents, local
@@ -133,10 +133,10 @@ M8 hardening items; they also feed the QG-1 gate report (M9.1).
    with GO-4); agent session view (minimal UI for Hybrid Mode); documentation per supported agent with its
    limits.
 6. **Acceptance:** each named agent completes a scripted task (edit, run tests, report) in a test project
-   through its connection type, with permission requests answered by IDECraft's policy; IDECraft works
+   through its connection type, with permission requests answered by Ferris IDEA's policy; Ferris IDEA works
    unchanged with no agent configured and no network.
 7. **Risks / open decisions:** protocol churn (MCP revised 2026-07, ACP v2 in draft); adapters maintained
-   outside IDECraft (Claude and Codex ACP adapters); Gemini CLI replaced by Antigravity CLI for some users;
+   outside Ferris IDEA (Claude and Codex ACP adapters); Gemini CLI replaced by Antigravity CLI for some users;
    provider terms of use; which adapters to ship vs. document.
 8. **Effort:** L.
 9. **Non-goals:** multi-agent coordination, own model hosting, model fine-tuning.
@@ -149,7 +149,7 @@ M8 hardening items; they also feed the QG-1 gate report (M9.1).
    recovery, handoffs, artefacts and decision log; deterministic state transitions with guards; structured
    agent messages; worktree per session; isolated runtime environments and test databases; conflict
    detection; merge queue that tests the merged state; reviews (deterministic checks, then semantic);
-   rollback; budgets and emergency stop; any agent can conduct through the `idecraft` skill, MCP and CLI
+   rollback; budgets and emergency stop; any agent can conduct through the `ferris-idea` skill, MCP and CLI
    (`agent.start/prompt/read/wait/stop`) under grants; agent-to-agent messages (direct, team, project)
    visible to people; model tier per task (light, standard, strong), changeable later, with rule-based
    escalation; shared gate watchers per worktree (ADR-0023 v2 rules 10, 12–14).
@@ -165,7 +165,7 @@ M8 hardening items; they also feed the QG-1 gate report (M9.1).
    repository); container runtime optional or required; review policy defaults; cost accounting across
    providers.
 8. **Effort:** XL.
-9. **Non-goals:** cross-project teams, switching models without a confirmed rule (IDECraft suggests a
+9. **Non-goals:** cross-project teams, switching models without a confirmed rule (Ferris IDEA suggests a
    tier, a person or conductor decides).
 
 ## M13 · Autonomous Project Organization (future)

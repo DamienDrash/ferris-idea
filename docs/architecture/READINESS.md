@@ -26,19 +26,19 @@ Status words: **implemented** (code and tests), **partial**, **stub** (crate wit
 | MCP server | implemented | `crates/mcp/src/lib.rs` (316 tools in the effects table `crates/mcp/src/effects.rs`, 2026-11-15), `crates/mcp/src/http.rs` | stdio (one process per client) and Streamable HTTP inside the window process (`SPEC-0221`); tool bodies still live inside the MCP crate |
 | MCP for the running UI | implemented | `crates/app/src/mcp_http.rs`, `SPEC-0221` | loopback only, token per start, one route per open project; an agent and a human share the open project and its unsaved text |
 | Agent rights | implemented | `core::permissions` (`run`, `http`, `debug`, `remote`, `ssh`, `trust`, `write`, `vcs-write`, `quit`, `terminal-read`, `ports`, `ui`, `secret-read`, `settings`, `recent-projects`), database permissions held by the user (`SPEC-0012` v3, ADR-0031), `mcp::effects`, `mcp::window` | grants in the user config folder, never in the project (IMP-0028, ADR-0031); since 2026-11-14 (#724) every tool that changes something checks a right, recorded per tool in `mcp::effects::TOOLS` and enforced by the ratchet `crates/mcp/tests/it/effects.rs` (two named exceptions: `ui_driver_stop`, `local_history`); over HTTP the window asks for a missing right (IMP-0007) |
-| Audit log | partial | `.idecraft/agent-log.jsonl` | since 2026-11-14 (#724) one line for every call of a tool that changes something or uses a database, from the effects table; no actor yet (A5) |
+| Audit log | partial | `.ferris-idea/agent-log.jsonl` | since 2026-11-14 (#724) one line for every call of a tool that changes something or uses a database, from the effects table; no actor yet (A5) |
 | Secrets | implemented | `database::secret` (OS keychain) | database passwords and AI provider keys (`ai` uses the same store); profiles refuse passwords in URLs |
 | Preview → apply | implemented | git, LSP edits, formatting, SQL rename, data edits, terminal commands | consistent `dry_run` default |
 | Shared action ids | implemented | `editor::perform(state, action)` | one string-keyed dispatcher for keymap, menus and MCP (`editor_action`) |
 | Local history | implemented | `core::LocalHistory` | written by window saves, MCP restore/format tools and refactorings (`SPEC-0193`) |
 | Workspace model | implemented, single root per server | `core::Workspace` | one root per MCP server; the window process serves several projects, each with its own server |
-| Open-buffer state | implemented | `editor::DocumentRegistry` (`SPEC-0220` v5) | the window publishes unsaved text; MCP `read_file`/`open_documents` read it; of the 86 tools that change files, 28 edit open files through the buffer (one undo step), 13 refuse unsaved ones and 45 write IDECraft's own or new files to the disk (`mcp::open_files`, 2026-11-15) |
+| Open-buffer state | implemented | `editor::DocumentRegistry` (`SPEC-0220` v5) | the window publishes unsaved text; MCP `read_file`/`open_documents` read it; of the 86 tools that change files, 28 edit open files through the buffer (one undo step), 13 refuse unsaved ones and 45 write Ferris IDEA's own or new files to the disk (`mcp::open_files`, 2026-11-15) |
 | Event bus / observable state | absent | — | GPUI `notify` inside the window; `core::watch` polls files and sends snapshots over a channel |
 | Cancellation | partial | `core::run`, `core::watch`, Search Everywhere, long database and copy operations in the window | stop flags where added since ADR-0012; most MCP calls still end by timeouts only |
 | Structured errors | absent | — | MCP errors carry text messages, no stable codes |
 | Capability versioning | absent | — | only the server version; tools are not versioned |
 | Language servers | implemented | `languages::pool` (`SPEC-0090`) | long-lived pool, one server per root and command, shared by the window and MCP in one process (B4 done for the classical phase) |
-| Debugger | implemented | `debugger`, Debug window | DAP launch and attach, conditions evaluated by IDECraft when the adapter cannot (`SPEC-0178`) |
+| Debugger | implemented | `debugger`, Debug window | DAP launch and attach, conditions evaluated by Ferris IDEA when the adapter cannot (`SPEC-0178`) |
 | UI driver and semantic tree | planned | [ADR-0027](../adr/0027-ui-driver-and-semantic-tree.md), [SPEC-0319](../specifications/SPEC-0319-ui-driver.md), ROADMAP M6.16 | today the self-test clicks by painted bounds of named marks (`hit_targets`) or calls view methods directly; the driver gives `ui.*` its first capabilities (AccessKit tree, locators by role and name, auto-waiting, events, right `ui`, off by default for external clients); the shared tree with screen readers waits for the toolkit decision of ADR-0019 |
 | Plugins | implemented | `crates/plugins` | `wasmi` modules without host functions (ADR-0016) |
 | AI integration | partial | `crates/ai` | AI Assistant with a user-chosen OpenAI-compatible endpoint or the provider's CLI, off by default (SPEC-0138, ADR-0017); agent integration (ACP, M11) gated by QG-1 |
@@ -74,7 +74,7 @@ refactoring now; each is a rule for new code plus one recorded decision.
 - *Effort / migration risk:* low per feature; moderate if postponed (estimated as a dedicated milestone).
 - *Decision needed now:* **yes, as a rule** (ADR-0012, proposed then). No code change now.
 - *State 2026-11-14:* **decided** — ADR-0012 accepted (coordinator under the Project Owner's general
-  authority of 2026-11-13): rules 1–4 bind new code; rule 5 (capability layer, `idecraft serve` as the
+  authority of 2026-11-13): rules 1–4 bind new code; rule 5 (capability layer, `ferris-idea serve` as the
   core for all callers) stays planned for M10.
 
 **A2. One document service for open buffers.**
@@ -111,8 +111,8 @@ refactoring now; each is a rule for new code plus one recorded decision.
   group that renamed files, a read-only target). **Refuses unsaved (13):** `delete_file`,
   `rename_file`, the eight Git operations of the working tree, `er_diagram`, `export_file`,
   `export_store_result`; under a saved editor they write the disk, which the editor takes as one
-  undo step. **Own files (45):** write the disk by design — IDECraft's data and settings in
-  `.idecraft/` and `.idea/` (22), new files only (7), the user's settings folder (2), SSH hosts and
+  undo step. **Own files (45):** write the disk by design — Ferris IDEA's data and settings in
+  `.ferris-idea/` and `.idea/` (22), new files only (7), the user's settings folder (2), SSH hosts and
   rooms (10; `remote_write` does not look at a remote project's open documents), the window's own
   steps and record (4). Still reading the disk: search, diagnostics, symbols. Pending: #830
   (`replace_text_in_file` through the buffer, `create_file` with a text).
@@ -158,7 +158,7 @@ refactoring now; each is a rule for new code plus one recorded decision.
 | ID | Gap | Fits onto | Milestone |
 |---|---|---|---|
 | B1 | Capability trait, registry, versioned schemas, generated MCP tool list | A1, rmcp argument structs | M10 |
-| B2 | Headless core service (`idecraft serve`) hosting workspaces, documents, sessions; GUI as a client of it or in-process | A2 | M10 |
+| B2 | Headless core service (`ferris-idea serve`) hosting workspaces, documents, sessions; GUI as a client of it or in-process | A2 | M10 |
 | B3 | Event stream (document changed, diagnostics, task state) for agents and UI | GPUI notify today; `core::watch` | M10 |
 | B4 | Long-lived language server pool shared by GUI and agents | `languages::lsp` | M8 (classical) / M10 |
 | B5 | Multi-root workspaces and several projects per process | `core::Workspace` | M10 |

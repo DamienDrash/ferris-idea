@@ -1,6 +1,6 @@
 //! Language, default level and description of every own inspection (`SPEC-0098` v3 behaviour 6,
 //! `SPEC-0315` behaviour 4): the data behind `inspections::description` and
-//! `inspections::catalogue`. The descriptions are IDECraft's own words.
+//! `inspections::catalogue`. The descriptions are Ferris IDEA's own words.
 
 use crate::inspections::Level;
 
@@ -414,16 +414,33 @@ pub(crate) const META: &[Meta] = &[
          reported; a word can be saved to the project dictionary from the quick fixes.\n\nReported:\n    // recieve the data\nAfter the quick fix:\n    // receive the data",
     ),
     meta(
+        crate::spelling_variants::OTHER_VARIANT,
+        PROSE,
+        Level::Weak,
+        "Reports a word in comments, Markdown and text files spelt the way of the other English \
+         variant than the dictionary chosen, for example an American spelling with English \
+         (United Kingdom). The quick fix writes the chosen spelling. Only applies while one of \
+         the two built-in English dictionaries is chosen alone.\n\nReported:\n    // English (United Kingdom) chosen\n    // pick a color\nAfter the quick fix:\n    // pick a colour",
+    ),
+    meta(
+        crate::spelling_variants::MIXED_SPELLING,
+        PROSE,
+        Level::Weak,
+        "Reports the less used of two spellings of one word in the same file, such as \
+         'organise' where 'organize' is used more often. The quick fix writes the other \
+         spelling, so the text reads alike throughout.\n\nReported:\n    // organize the files, then organise the tests\nAfter the quick fix:\n    // organize the files, then organize the tests",
+    ),
+    meta(
         "properties.duplicate-key",
         PROPERTIES,
-        Level::Warning,
+        Level::Error,
         "Reports a key that occurs more than once in a .properties file. Only the last value is \
          used when the file is loaded, so the earlier one is silently lost.\n\nReported:\n    title=Start\n    title=Home",
     ),
     meta(
         "properties.missing-in-bundle",
         PROPERTIES,
-        Level::Weak,
+        Level::Error,
         "Reports a key that is missing in other files of the same resource bundle, such as a key \
          of Messages.properties that Messages_de.properties lacks. Users of that locale then see \
          the fallback text.\n\nReported:\n    greeting=Hello   (no greeting in Messages_de.properties)",
@@ -431,7 +448,7 @@ pub(crate) const META: &[Meta] = &[
     meta(
         "properties.trailing-spaces",
         PROPERTIES,
-        Level::Weak,
+        Level::Warning,
         "Reports spaces at the end of a property value. They become part of the value, which is \
          rarely intended and invisible in most editors.\n\nReported:\n    name=Alice   \nAfter the quick fix:\n    name=Alice",
     ),

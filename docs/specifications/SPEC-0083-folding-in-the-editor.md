@@ -18,7 +18,7 @@
   `FOLDED_TEXT_ATTRIBUTES`), SPEC-0030 (folding regions from the syntax tree), SPEC-0058 (editor view),
   OBS-0011 step 2, finding 3 (v2: in an opened Java file the reference shows one-line method bodies
   folded next to the signature); v3: OBS-0013 item 3 (the reference keeps the colours of the folded
-  code and puts only the braces on a grey background; IDECraft drew the whole placeholder grey);
+  code and puts only the braces on a grey background; Ferris IDEA drew the whole placeholder grey);
   v6: OSS (action ids `ExpandRegionRecursively` ⌥⌘= / Ctrl+Alt+=, `CollapseRegionRecursively` ⌥⌘- /
   Ctrl+Alt+-, `ExpandAllToLevel1`…`5` and `ExpandToLevel1`…`5` with their two-key shortcuts in the
   ported keymaps, SPEC-0028), GEN (what expanding and collapsing with everything inside and down to a
@@ -100,7 +100,7 @@ Hide the parts of a file you are not working on.
 7a. **Default checked (v10):** the open platform folds one-line methods on open by default
    (`JavaCodeFoldingSettingsBase`: `COLLAPSE_ONE_LINE_METHODS = true`; `JavaBackendFoldings`: one
    statement on one line, the braces on the lines next to it, name and parameter list on one line,
-   and the folded line within the right margin). IDECraft keeps the default and, since v10, also the
+   and the folded line within the right margin). Ferris IDEA keeps the default and, since v10, also the
    two conditions it lacked: the method's name and the end of its parameter list stand on one line,
    and the folded line — the brace line up to `{` and the placeholder — is no wider than the right
    margin of Code Style (SPEC-0150, default 120). A method such as `int totalCents() {` /
@@ -356,20 +356,20 @@ Hide the parts of a file you are not working on.
 ## Acceptance criteria
 - **AK-1** Row/line mapping both ways, folds absorbing inner folds, reveal, edits shifting and
   unfolding (unit tests of `fold_model`).
-- **AK-2** In a real window (`idecraft ui --selftest`): ⌘- inside `main` folds its body and keeps the
+- **AK-2** In a real window (`ferris-idea ui --selftest`): ⌘- inside `main` folds its body and keeps the
   caret on the first line; ⌘= unfolds it.
 - **AK-3** Use by hand: gutter marks and placeholder clicks, ⇧⌘- / ⇧⌘=, scrolling past folds.
 - **AK-4 (v2)** The syntax tree finds Java bodies of one statement on one line with their placeholder
   and skips longer bodies, bodies on the signature's line, an opening brace alone on its line, a
   comment as the only content and other languages; a fold's own placeholder follows it through
   edits and goes when it is unfolded or absorbed (unit tests).
-- **AK-5 (v2)** In a real window (`idecraft ui --selftest`): opening the Java insight file folds both
+- **AK-5 (v2)** In a real window (`ferris-idea ui --selftest`): opening the Java insight file folds both
   one-line methods with their statements as placeholders; `folding_ranges` gives the
   `collapsed_text` (protocol test).
 - **AK-6 (v3)** The placeholder's statement takes the colours of the hidden line by character
   (tabs and non-ASCII text included), the closing brace is found, and other placeholders are left
   as before (unit test `fold_model::tests::placeholder_keeps_the_statements_colours`).
-- **AK-7 (v3)** In a real window (`idecraft ui --selftest`): both folded methods of the Java insight
+- **AK-7 (v3)** In a real window (`ferris-idea ui --selftest`): both folded methods of the Java insight
   file are drawn with at least three text colours in the placeholder and two brace backgrounds.
 - **AK-8 (v4)** The import block of a Java file spans its groups with the comment between them, a Kotlin
   file's likewise; one import, imports on one line, no import and other languages give none (unit test
@@ -462,7 +462,7 @@ Hide the parts of a file you are not working on.
 - **AK-27 (v8)** In a window (`…::folding_arrows_follow_the_pointer`): without the pointer only
   the two regions folded on open have an arrow; with the pointer over the editor every region
   in view has one; with the setting on `always` they are there without the pointer.
-- **AK-28 (v8)** In a real window (`idecraft ui --selftest`, `folding_steps`): the steps of AK-25
+- **AK-28 (v8)** In a real window (`ferris-idea ui --selftest`, `folding_steps`): the steps of AK-25
   to AK-27 on a file of the self-test's project — Collapse All from the Code menu's action,
   the placeholders as drawn, a custom region's name, all to level 1, the documentation comments,
   the arrows with the pointer over the editor and away from it.
@@ -502,48 +502,48 @@ what is folded on open beyond behaviours 8 and 10, a limit for the length of the
 The arrow keys unfold a region they enter instead of stepping over it; the placeholder is `…` and does
 not repeat the region's brackets. Not compared side by side yet.
 
-v4 (OBS-0027 L19): the reference shows the folded imports as the word `import` and an ellipsis; IDECraft
+v4 (OBS-0027 L19): the reference shows the folded imports as the word `import` and an ellipsis; Ferris IDEA
 keeps the whole first import line and puts the ellipsis after it. An import added while the block is
 folded opens the block.
 
-v10: OBS-0056 saw the reference show short Java methods unfolded where IDECraft folds them;
-IDECraft follows the open platform's default (behaviour 7a). Whether the reference's own folding
+v10: OBS-0056 saw the reference show short Java methods unfolded where Ferris IDEA folds them;
+Ferris IDEA follows the open platform's default (behaviour 7a). Whether the reference's own folding
 setting is switched off was not read (PO-STATUS question 44).
 
-v6: not compared with the reference. Open there: whether its levels count the same regions (IDECraft
+v6: not compared with the reference. Open there: whether its levels count the same regions (Ferris IDEA
 counts every foldable region of the syntax tree, also comments and import blocks), and which region
-`ExpandToLevelN` and the recursive actions take when the caret stands in nested regions (IDECraft:
+`ExpandToLevelN` and the recursive actions take when the caret stands in nested regions (Ferris IDEA:
 the innermost, as `CollapseRegion`).
 
 v7: taken from the open platform's sources, not compared with the reference IDE.
 - Folds are whole lines here. The open actions fold from the `{` to the `}` of a block and from
   the first to the last selected character, so text before and after stays on the line with a
-  `{...}` or `...` placeholder between; IDECraft keeps the whole first line, ends it with `…` and
+  `{...}` or `...` placeholder between; Ferris IDEA keeps the whole first line, ends it with `…` and
   hides the following lines whole — also what stands behind the closing brace or behind the
   selection on its last line. A block or selection inside one line is not folded at all.
 - The open `CollapseSelection` asks in a dialog before it removes folds a selection partly
-  overlaps and then folds; IDECraft folds nothing and says why. It refuses to remove a region of
-  the syntax that has exactly the selected range; IDECraft opens it.
+  overlaps and then folds; Ferris IDEA folds nothing and says why. It refuses to remove a region of
+  the syntax that has exactly the selected range; Ferris IDEA opens it.
 - A region made from a selection lives on in the open editor as an open region that can be
   folded again; here it is gone once opened.
-- After folding, the open actions put the caret behind the folded text; IDECraft leaves a
+- After folding, the open actions put the caret behind the folded text; Ferris IDEA leaves a
   visible caret where it is and moves a hidden one to the end of the fold's first line.
 - `CollapseBlock` is carried out for Java only: the open sources hold a block handler for Java
   and none for the other languages; what the reference's other language plugins do is not known.
 
 v8 (OBS-0044): compared on one Java file; the earlier notes on `…` and on the first import line
 no longer hold (behaviour 21).
-- Folds are still whole lines. The reference shows `if (a) {...} else {...}` on one row; IDECraft
+- Folds are still whole lines. The reference shows `if (a) {...} else {...}` on one row; Ferris IDEA
   shows `if (a) {...` and below it `} else {...}`. Text behind a block's closing bracket on its
   last line (`});`) is hidden with the block.
 - Levels count every foldable region of the syntax tree. Beside the `if` and the `else` that
-  OBS-0044 lists for "all to level 1", IDECraft also folds what is equally deep: the method of
+  OBS-0044 lists for "all to level 1", Ferris IDEA also folds what is equally deep: the method of
   an anonymous class and a call's argument list over several lines (a region here since
   SPEC-0030, probably none in the reference). "All to level 2" matched for the `for` and the
   lambda. Whether the reference keeps the regions inside a folded one folded was not observed.
 - The outermost container stays foldable by hand here; whether the reference offers that for
   the only class of a file was not observed. The rule for files with several top-level types
-  and the rules for Kotlin, JSON, HTML and XML are IDECraft's own.
+  and the rules for Kotlin, JSON, HTML and XML are Ferris IDEA's own.
 - Custom regions: only `// region Name` … `// endregion` in Java was observed; the other
   markers, nesting, unbalanced and crossing markers follow behaviour 19 without comparison.
 - The documentation comment actions were not carried out in the reference.

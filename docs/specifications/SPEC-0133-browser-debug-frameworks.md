@@ -22,20 +22,20 @@ Debug the front end of a web project the way the back end is debugged.
    (`open` / `xdg-open`); Debug opens it in Chrome under js-debug. After Run of a page without a
    command the status bar says so and names the Debug key (v2, hand test 60: "Debug in Browser"
    chosen with Enter opened the user's browser and looked like a failed debug start). [GEN]
-2. **Debugging a page:** Chrome (or Chromium/Edge; `IDECRAFT_CHROME` chooses) starts with a
+2. **Debugging a page:** Chrome (or Chromium/Edge; `FERRIS_IDEA_CHROME` chooses) starts with a
    profile folder of its own — never the user's profile, so no cookies, extensions or logins of
    the user are touched — and the configuration's folder as web root, so breakpoints in the
    project's scripts bind (also through source maps). Stops, locals, watches, stepping and the
    console work as in SPEC-0091. Without Chrome the status bar says so. [STD]
    - **Profile location (v3):** one folder per project, `browser-profiles/<project folder
-     name>-<16 hex digits of the SHA-256 of the project's full path>` in IDECraft's user cache
-     folder (`$XDG_CACHE_HOME/idecraft`, else `~/Library/Caches/idecraft` on macOS, else
-     `~/.cache/idecraft`). `browser-profiles` and the profile folder have mode 0700; a wider mode
+     name>-<16 hex digits of the SHA-256 of the project's full path>` in Ferris IDEA's user cache
+     folder (`$XDG_CACHE_HOME/ferris-idea`, else `~/Library/Caches/ferris-idea` on macOS, else
+     `~/.cache/ferris-idea`). `browser-profiles` and the profile folder have mode 0700; a wider mode
      of an existing folder is tightened; a symbolic link, a file or a folder of another user in
      their place is refused and the session does not start. The profile holds whatever the
      developer signs into while debugging, so it never lives inside the project, where it could
      be committed. [GEN]
-   - **Profile of an earlier version (v3):** an existing `<project>/.idecraft/browser-profile`
+   - **Profile of an earlier version (v3):** an existing `<project>/.ferris-idea/browser-profile`
      is moved (renamed, nothing copied or deleted) to the new folder when the new folder does not
      exist yet, it is a real folder and no browser holds it (no `SingletonLock` entry); the debug
      console says where it went. Otherwise it stays where it is and every page session says in the
@@ -43,8 +43,8 @@ Debug the front end of a web project the way the back end is debugged.
      with the reason it stayed. [GEN]
    - **Stop (v3):** ending the session (Stop, the page session ending, Rerun) ends js-debug's
      launching session too, which closes the whole browser it started (`cleanUp: wholeBrowser`);
-     IDECraft then ends js-debug and, should the browser still run, ends it itself (`SIGTERM`,
-     `SIGKILL` after 3 s). A browser IDECraft started is never left running after its session.
+     Ferris IDEA then ends js-debug and, should the browser still run, ends it itself (`SIGTERM`,
+     `SIGKILL` after 3 s). A browser Ferris IDEA started is never left running after its session.
      Keeping it open would leave a second, unrelated Chrome window holding the project's profile
      and block the next session's browser (windowed Chrome takes a profile only once). [STD, OSS, GEN]
    - **Rerun (v3):** a new page session waits up to 15 s until the previous session on the same
@@ -84,6 +84,6 @@ Vue, Angular and Svelte language servers and template support (next step), attac
 Chrome, Firefox, React/Vue component trees, framework project wizards, hot reload control.
 
 ## Known deviations from the reference
-Chrome runs with a separate profile per project in IDECraft's cache folder, so the user's browser
+Chrome runs with a separate profile per project in Ferris IDEA's cache folder, so the user's browser
 profile is never used by a debug session and the debug profile is never part of the project
 (IMP-0047). Where the reference keeps its debug profile was not observed. Not compared side by side.

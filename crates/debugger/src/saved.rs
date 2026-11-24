@@ -8,11 +8,11 @@ use std::path::{Path, PathBuf};
 use crate::{BreakpointRules, SourceBreakpoint};
 
 /// Where the breakpoints of a workspace and what they do are kept (`SPEC-0303` behaviour 14).
-pub const BREAKPOINTS_FILE: &str = ".idecraft/breakpoints.toml";
+pub const BREAKPOINTS_FILE: &str = ".ferris-idea/breakpoints.toml";
 
 /// Where older versions kept the breakpoint lines (`SPEC-0091` v3 behaviour 9); read while
 /// [`BREAKPOINTS_FILE`] does not exist.
-pub const LEGACY_BREAKPOINTS_FILE: &str = ".idecraft/breakpoints";
+pub const LEGACY_BREAKPOINTS_FILE: &str = ".ferris-idea/breakpoints";
 
 /// Breakpoints by file (0-based lines) from the text of the breakpoints file: one file per line,
 /// `path:line,line` with 1-based lines and paths relative to `root`. Malformed lines are skipped.
@@ -124,10 +124,10 @@ pub fn load_all(root: &Path) -> (BTreeMap<PathBuf, Vec<usize>>, BreakpointPropsM
             return (lines, load_legacy_props(root));
         }
     };
-    let Ok(file) = idecraft_core::format::read(
+    let Ok(file) = ferris_idea_core::format::read(
         &text,
         Some("breakpoints"),
-        idecraft_core::format::Use::Project,
+        ferris_idea_core::format::Use::Project,
     )
     .and_then(|d| d.body_as::<File>()) else {
         return Default::default();
@@ -185,15 +185,15 @@ pub fn save_all(root: &Path, lines: &BTreeMap<PathBuf, Vec<usize>>, props: &Brea
         }
     }
     let file = root.join(BREAKPOINTS_FILE);
-    if idecraft_core::format::prepare_write(&file, "breakpoints").is_err() {
+    if ferris_idea_core::format::prepare_write(&file, "breakpoints").is_err() {
         return;
     }
     if entries.is_empty() {
         let _ = std::fs::remove_file(&file);
     } else if let Some(dir) = file.parent()
         && std::fs::create_dir_all(dir).is_ok()
-        && let Ok(text) = idecraft_core::format::write(
-            &idecraft_core::format::Envelope::current("breakpoints"),
+        && let Ok(text) = ferris_idea_core::format::write(
+            &ferris_idea_core::format::Envelope::current("breakpoints"),
             &File {
                 breakpoint: entries,
             },
@@ -202,12 +202,12 @@ pub fn save_all(root: &Path, lines: &BTreeMap<PathBuf, Vec<usize>>, props: &Brea
         let _ = std::fs::write(&file, text);
     }
     for old in [LEGACY_BREAKPOINTS_FILE, BREAKPOINT_PROPS_FILE] {
-        let _ = idecraft_core::format::retire(&root.join(old));
+        let _ = ferris_idea_core::format::retire(&root.join(old));
     }
 }
 
 /// Where the exception and method breakpoints of a workspace are kept (`SPEC-0146`).
-pub const SPECIAL_BREAKPOINTS_FILE: &str = ".idecraft/special-breakpoints.json";
+pub const SPECIAL_BREAKPOINTS_FILE: &str = ".ferris-idea/special-breakpoints.json";
 
 /// The saved exception and method breakpoints of the workspace at `root`; none when the file is
 /// missing or unreadable.
@@ -232,7 +232,7 @@ pub fn save_special_breakpoints(root: &Path, special: &crate::SpecialBreakpoints
 }
 
 /// Where the renderers of a workspace are kept (`SPEC-0091` v12 behaviour 33).
-pub const RENDERERS_FILE: &str = ".idecraft/debug-renderers.json";
+pub const RENDERERS_FILE: &str = ".ferris-idea/debug-renderers.json";
 
 /// The saved renderers of the workspace at `root`; none when the file is missing or unreadable.
 pub fn load_renderers(root: &Path) -> Vec<crate::extras::Renderer> {
@@ -344,12 +344,52 @@ pub fn toggle_temporary(lines: &[usize], line: usize) -> Option<BreakpointProps>
     (!lines.contains(&line)).then(BreakpointProps::temporary)
 }
 
+/// `ToggleBreakpointEnabled` and ⌥-click on a breakpoint (`SPEC-0127` v15 behaviour 31): the
+/// properties of the breakpoint on `line` with Enabled switched, its other properties kept; `None`
+/// when the line has no breakpoint.
+pub fn toggle_enabled(
+    lines: &[usize],
+    props: Option<&BTreeMap<usize, BreakpointProps>>,
+    line: usize,
+) -> Option<BreakpointProps> {
+    if !lines.contains(&line) {
+        return None;
+    }
+    let mut p = props
+        .and_then(|m| m.get(&line))
+        .cloned()
+        .unwrap_or_default();
+    p.disabled = !p.disabled;
+    Some(p)
+}
+
+/// `Debugger.RemoveAllBreakpoints` and `Debugger.RemoveAllBreakpointsInFile` (`SPEC-0127` v15
+/// behaviour 32): removes the line breakpoints with their properties of `file`, or of every file
+/// with `None`, and returns how many were removed. Breakpoints of other files, and dependencies on
+/// a removed breakpoint, stay as they are.
+pub fn remove_all(
+    lines: &mut BTreeMap<PathBuf, Vec<usize>>,
+    props: &mut BreakpointPropsMap,
+    file: Option<&Path>,
+) -> usize {
+    match file {
+        Some(f) => {
+            props.remove(f);
+            lines.remove(f).map_or(0, |l| l.len())
+        }
+        None => {
+            props.clear();
+            std::mem::take(lines).values().map(Vec::len).sum()
+        }
+    }
+}
+
 /// Properties of breakpoints per file and 0-based line.
 pub type BreakpointPropsMap = BTreeMap<PathBuf, BTreeMap<usize, BreakpointProps>>;
 
 /// Where older versions kept the breakpoint properties, beside [`LEGACY_BREAKPOINTS_FILE`]; read
 /// while [`BREAKPOINTS_FILE`] does not exist.
-pub const BREAKPOINT_PROPS_FILE: &str = ".idecraft/breakpoint-properties.json";
+pub const BREAKPOINT_PROPS_FILE: &str = ".ferris-idea/breakpoint-properties.json";
 
 /// The breakpoints of one file as the debugger takes them: 1-based lines with their properties;
 /// disabled ones are left out.
@@ -444,7 +484,7 @@ mod tests {
     /// SPEC-0127 AK-1: properties follow moved breakpoints, reach the debugger, and are saved.
     #[test]
     fn special_breakpoints_round_trip() {
-        let root = std::env::temp_dir().join(format!("idecraft-special-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("ferris-idea-special-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         assert_eq!(
@@ -535,7 +575,8 @@ mod tests {
         assert_eq!(sent[1].condition.as_deref(), Some("i == 3"));
         assert_eq!(sent[2].log_message.as_deref(), Some("i={i}"));
 
-        let root = std::env::temp_dir().join(format!("idecraft-bp-props-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("ferris-idea-bp-props-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         let mut all = BreakpointPropsMap::new();
@@ -582,7 +623,8 @@ mod tests {
     /// relative to the workspace, and read back with it absolute; they draw the light centre.
     #[test]
     fn breakpoint_rules_round_trip() {
-        let root = std::env::temp_dir().join(format!("idecraft-bp-rules-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("ferris-idea-bp-rules-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         let file = root.join("src/Main.java");
@@ -615,6 +657,55 @@ mod tests {
         let sent = source_breakpoints(&[2, 6], load_all(&root).1.get(&file));
         assert_eq!(sent[1].rules.suspend, Some(crate::Suspend::All));
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// SPEC-0127 AK-20 (v15, behaviours 31, 32): Toggle Breakpoint Enabled switches only Enabled
+    /// and keeps the condition, does nothing on a line without a breakpoint, and switches back;
+    /// Remove All Breakpoints in File removes that file's lines and properties, Remove All
+    /// Breakpoints every file's, each counting what it removed.
+    #[test]
+    fn enabled_is_toggled_and_all_breakpoints_are_removed() {
+        let condition = BreakpointProps {
+            condition: Some("n > 1".into()),
+            ..BreakpointProps::default()
+        };
+        let file_props: BTreeMap<usize, BreakpointProps> = [(2, condition.clone())].into();
+        let off = toggle_enabled(&[2, 6], Some(&file_props), 2).unwrap();
+        assert!(off.disabled);
+        assert_eq!(off.condition.as_deref(), Some("n > 1"));
+        assert_eq!(off.look(), BreakpointLook::Disabled);
+        let plain_off = toggle_enabled(&[2, 6], Some(&file_props), 6).unwrap();
+        assert!(plain_off.disabled && !plain_off.is_plain());
+        assert_eq!(
+            toggle_enabled(&[2, 6], None, 4),
+            None,
+            "no breakpoint, nothing"
+        );
+        let on_again = toggle_enabled(&[2], Some(&[(2, off)].into()), 2).unwrap();
+        assert_eq!(on_again, condition);
+        assert_eq!(
+            toggle_enabled(&[6], Some(&[(6, plain_off)].into()), 6).map(|p| p.is_plain()),
+            Some(true)
+        );
+
+        let (a, b) = (PathBuf::from("/w/a.py"), PathBuf::from("/w/b.py"));
+        let mut lines: BTreeMap<PathBuf, Vec<usize>> =
+            [(a.clone(), vec![2, 6]), (b.clone(), vec![1])].into();
+        let mut props: BreakpointPropsMap = [
+            (a.clone(), file_props.clone()),
+            (b.clone(), file_props.clone()),
+        ]
+        .into();
+        assert_eq!(remove_all(&mut lines, &mut props, Some(&a)), 2);
+        assert_eq!(lines, [(b.clone(), vec![1])].into());
+        assert_eq!(props.keys().collect::<Vec<_>>(), vec![&b]);
+        assert_eq!(
+            remove_all(&mut lines, &mut props, Some(&a)),
+            0,
+            "nothing left there"
+        );
+        assert_eq!(remove_all(&mut lines, &mut props, None), 1);
+        assert!(lines.is_empty() && props.is_empty());
     }
 
     /// SPEC-0127 AK-13 (v8): a temporary breakpoint has "Remove once hit" and nothing else, is
@@ -654,7 +745,7 @@ mod tests {
         assert_eq!(carry_props(&[2, 6], &[2], &set), before);
 
         // Saved and read back, and sent to the debugger with the rule.
-        let root = std::env::temp_dir().join(format!("idecraft-bp-temp-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("ferris-idea-bp-temp-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         let file = root.join("src/main.py");
@@ -671,9 +762,9 @@ mod tests {
     /// `breakpoints.toml` at the next save, each kept once as `.bak`.
     #[test]
     fn old_breakpoint_files_migrate() {
-        let root = std::env::temp_dir().join(format!("idecraft-bp-mig-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("ferris-idea-bp-mig-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
-        std::fs::create_dir_all(root.join(".idecraft")).unwrap();
+        std::fs::create_dir_all(root.join(".ferris-idea")).unwrap();
         std::fs::write(root.join(LEGACY_BREAKPOINTS_FILE), "src/a.c:3,7\n").unwrap();
         std::fs::write(
             root.join(BREAKPOINT_PROPS_FILE),
@@ -689,14 +780,14 @@ mod tests {
         save_all(&root, &lines, &props);
         assert!(root.join(BREAKPOINTS_FILE).exists());
         assert!(!root.join(LEGACY_BREAKPOINTS_FILE).exists());
-        assert!(root.join(".idecraft/breakpoints.bak").exists());
+        assert!(root.join(".ferris-idea/breakpoints.bak").exists());
         assert!(
-            root.join(".idecraft/breakpoint-properties.json.bak")
+            root.join(".ferris-idea/breakpoint-properties.json.bak")
                 .exists()
         );
         assert_eq!(load_all(&root), (lines, props));
         let text = std::fs::read_to_string(root.join(BREAKPOINTS_FILE)).unwrap();
-        assert!(text.starts_with("[idecraft]\nkind = \"breakpoints\"\nformat = 1\n"));
+        assert!(text.starts_with("[ferris-idea]\nkind = \"breakpoints\"\nformat = 1\n"));
         let _ = std::fs::remove_dir_all(&root);
     }
 }

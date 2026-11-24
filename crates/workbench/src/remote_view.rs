@@ -1,16 +1,23 @@
 //! The Remote Host tool window (`SPEC-0121`): the SSH hosts of the user's config, then the folders
 //! and files of the chosen host; Enter opens a file for editing, the field takes a host or a path.
-//! New File, New Folder, Rename and Delete change the folder (`SPEC-0253`); with a backend, `@`,
+//! New File, New Folder, Rename and Delete change the folder (`SPEC-0253`); the list is a tree
+//! whose folders open in place, typing jumps to a name, and names sort without regard to case
+//! (`SPEC-0253` v3 behaviour 9); with a backend, `@`,
 //! `!` and `>` list symbols, problems and run configurations of the host's project (`SPEC-0158`).
+//! Add Host… and Remove Host change Ferris IDEA's own host list; the hosts of `~/.ssh/config` stay
+//! read-only (`SPEC-0121` v5 behaviours 1b and 5).
 
+use std::collections::BTreeMap;
+use std::time::{Duration, Instant};
+
+use ferris_idea_remote::{EntryKind, HostInfo, HostSource, OwnHost, RemoteEntry};
 use gpui::{
     Context, Entity, EventEmitter, FocusHandle, KeyDownEvent, Window, div, prelude::*, px, rgb,
 };
-use idecraft_remote::{EntryKind, HostInfo, RemoteEntry};
 
 use crate::editor_view::EditorView;
 use crate::palette::Palette;
-use crate::semantics::{Annotated, Role, Semantics};
+use crate::semantics::{Annotated, AxAction, Effect, Role, Semantics};
 use crate::workbench_view::c;
 
 /// What the window asks the workbench to do.
@@ -30,7 +37,7 @@ pub enum RemoteEvent {
     Terminal,
     /// Leave the host and show the host list.
     Hosts,
-    /// Start IDECraft's backend on the host for the folder shown (`SPEC-0158`).
+    /// Start Ferris IDEA's backend on the host for the folder shown (`SPEC-0158`).
     StartBackend,
     /// Search the host's project through the backend.
     Search(String),
@@ -58,7 +65,19 @@ pub enum RemoteEvent {
     OpenProject(String, String),
     /// Stop opening the remote project (`SPEC-0317` behaviour 3).
     CancelOpen,
+    /// Read this folder to show it open in place in the tree (`SPEC-0253` v3 behaviour 9).
+    Expand(String),
+    /// Add this host to Ferris IDEA's own host list (`SPEC-0121` v5 behaviour 1b).
+    AddHost(OwnHost),
+    /// Remove this alias from Ferris IDEA's own host list.
+    RemoveHost(String),
 }
+
+/// Typed letters older than this start a new name to jump to (`SPEC-0253` v3 behaviour 9).
+const TYPE_PAUSE: Duration = Duration::from_secs(1);
+
+/// Indentation of one tree level in the row texts.
+const INDENT: &str = "  ";
 
 /// A change that waits for a name or a confirmation in the field (`SPEC-0253` behaviour 4).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -71,19 +90,37 @@ pub enum Pending {
     Rename(String),
     /// Deleting this path, which holds this many entries.
     Delete(String, u64),
+    /// Removing this alias from Ferris IDEA's own hosts (`SPEC-0121` v5 behaviour 5).
+    RemoveHost(String),
+}
+
+/// The labels of the Add Host… form's fields, in order (`SPEC-0121` v5 behaviour 5).
+pub const ADD_HOST_FIELDS: [&str; 5] = ["Alias", "Host name", "Port", "User", "Identity file"];
+
+/// The Add Host… form: its fields, the one with the focus, and a refusal.
+struct AddForm {
+    fields: Vec<Entity<EditorView>>,
+    at: usize,
+    error: Option<String>,
+    /// Sent to the workbench, waiting for its answer.
+    sent: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Row {
     Host(HostInfo),
     Up,
-    Entry(RemoteEntry),
+    /// An entry of the folder shown or of a folder open in the tree: the entry, the folder it is
+    /// in, its depth below the folder shown (`SPEC-0253` v3 behaviour 9).
+    Entry(RemoteEntry, String, usize),
+    /// A note in place of an open folder's entries ("reading…", empty): text and depth.
+    Note(String, usize),
     /// A search hit: absolute path on the host, 0-based line, the line's text.
     Hit(String, usize, String),
     /// A run configuration of the host's project: name and command.
     Config(String, String),
     /// A recent remote project (Remote Development, `SPEC-0317` v3 behaviour 1).
-    Recent(idecraft_remote::RecentRemote),
+    Recent(ferris_idea_remote::RecentRemote),
     /// Open the folder shown as a remote project.
     OpenHere(String),
 }
@@ -118,12 +155,30 @@ pub struct RemoteView {
     /// Remote Development: choosing a host and a folder opens it as a remote project; the host
     /// list starts with the recent remote projects (`SPEC-0317` v3 behaviour 1).
     project_mode: bool,
-    recent: Vec<idecraft_remote::RecentRemote>,
+    recent: Vec<ferris_idea_remote::RecentRemote>,
+    /// Only choosing a folder to open as a remote project: no file actions, terminal or backend
+    /// (the Welcome window's SSH section, `SPEC-0355` v3 behaviour 12e).
+    chooser_only: bool,
+    /// Folders open in place in the tree with their entries, `None` while they are read
+    /// (`SPEC-0253` v3 behaviour 9).
+    expanded: BTreeMap<String, Option<Vec<RemoteEntry>>>,
+    /// Letters typed in the list to jump to a name, and when the last one came.
+    typed: String,
+    typed_at: Option<Instant>,
+    /// The Add Host… form, while shown.
+    adding: Option<AddForm>,
 }
 
 impl EventEmitter<RemoteEvent> for RemoteView {}
 
 fn host_text(h: &HostInfo) -> String {
+    let mut s = host_target(h);
+    s.push_str("  · ");
+    s.push_str(h.source.label());
+    s
+}
+
+fn host_target(h: &HostInfo) -> String {
     let mut s = h.alias.clone();
     if let Some(name) = &h.hostname {
         s.push_str("  ");
@@ -140,14 +195,33 @@ fn host_text(h: &HostInfo) -> String {
 
 fn row_text(r: &Row) -> String {
     match r {
+        Row::Entry(_, _, depth) | Row::Note(_, depth) if *depth > 0 => {
+            format!("{}{}", INDENT.repeat(*depth), row_label(r))
+        }
+        _ => row_label(r),
+    }
+}
+
+/// Depth of a row in the tree (0 for everything but open folders' entries).
+fn row_depth(r: &Row) -> usize {
+    match r {
+        Row::Entry(_, _, d) | Row::Note(_, d) => *d,
+        _ => 0,
+    }
+}
+
+/// A row's text without its indentation.
+fn row_label(r: &Row) -> String {
+    match r {
         Row::Host(h) => host_text(h),
         Row::Up => "..".into(),
-        Row::Entry(e) => format!(
+        Row::Entry(e, _, _) => format!(
             "{}{}{}",
             e.name,
             if e.kind == EntryKind::Dir { "/" } else { "" },
             if e.link { "  →" } else { "" }
         ),
+        Row::Note(text, _) => text.clone(),
         Row::Hit(path, line, text) => format!(
             "{}:{}  {}",
             path.rsplit('/').next().unwrap_or(path),
@@ -184,6 +258,9 @@ pub fn pending_prompt(p: &Pending) -> String {
             base(path),
             if *n == 1 { "entry" } else { "entries" }
         ),
+        Pending::RemoveHost(alias) => {
+            format!("Remove {alias} from Ferris IDEA's hosts? Enter removes, Escape keeps it")
+        }
     }
 }
 
@@ -209,7 +286,170 @@ impl RemoteView {
             select_after: None,
             project_mode: false,
             recent: Vec::new(),
+            chooser_only: false,
+            expanded: BTreeMap::new(),
+            typed: String::new(),
+            typed_at: None,
+            adding: None,
         }
+    }
+
+    /// Shows the Add Host… form with empty fields, the focus in the first (`SPEC-0121` v5
+    /// behaviour 5).
+    pub fn open_add_host(&mut self, cx: &mut Context<Self>) {
+        if self.place.is_some() || self.chooser_only {
+            return;
+        }
+        let fields = ADD_HOST_FIELDS
+            .iter()
+            .map(|_| cx.new(EditorView::field))
+            .collect();
+        self.adding = Some(AddForm {
+            fields,
+            at: 0,
+            error: None,
+            sent: false,
+        });
+        self.pending = None;
+        self.error = None;
+        cx.emit(RemoteEvent::FocusField);
+        cx.notify();
+    }
+
+    /// Whether the Add Host… form is shown.
+    pub fn adding_host(&self) -> bool {
+        self.adding.is_some()
+    }
+
+    /// The refusal the Add Host… form shows, if any.
+    pub fn add_host_error(&self) -> Option<&str> {
+        self.adding.as_ref().and_then(|f| f.error.as_deref())
+    }
+
+    /// The texts of the Add Host… form's fields (for tests).
+    pub fn add_host_values(&self, cx: &gpui::App) -> Vec<String> {
+        self.adding
+            .as_ref()
+            .map(|f| {
+                f.fields
+                    .iter()
+                    .map(|e| e.read(cx).state.buffer.text())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// The answer to [`RemoteEvent::AddHost`]: `Ok` closes the form, a refusal stays in it with
+    /// the values typed.
+    pub fn host_added(&mut self, result: Result<(), String>, cx: &mut Context<Self>) {
+        match result {
+            Ok(()) => {
+                self.adding = None;
+                cx.emit(RemoteEvent::FocusField);
+            }
+            Err(e) => {
+                if let Some(f) = &mut self.adding {
+                    f.error = Some(e);
+                    f.sent = false;
+                }
+            }
+        }
+        cx.notify();
+    }
+
+    /// The host of the selected row, when the host list is shown.
+    fn selected_host(&self) -> Option<&HostInfo> {
+        match (self.rows.get(self.selected), &self.place) {
+            (Some(Row::Host(h)), None) => Some(h),
+            _ => None,
+        }
+    }
+
+    /// Remove Host on the selected row: asks for one of Ferris IDEA's hosts; says that a host of
+    /// `~/.ssh/config` stays (`SPEC-0121` v5 behaviour 5).
+    pub fn ask_remove_host(&mut self, cx: &mut Context<Self>) -> bool {
+        let Some(h) = self.selected_host().cloned() else {
+            return false;
+        };
+        match h.source {
+            HostSource::FerrisIdea => {
+                self.pending = Some(Pending::RemoveHost(h.alias));
+                self.error = None;
+            }
+            HostSource::SshConfig => {
+                self.error = Some(format!(
+                    "{} comes from ~/.ssh/config, which Ferris IDEA never changes; edit that file yourself",
+                    h.alias
+                ))
+            }
+        }
+        cx.notify();
+        true
+    }
+
+    /// Handles a key of the Add Host… form: Tab and ⇧Tab move between the fields, Enter adds,
+    /// Escape leaves the form.
+    fn press_form(&mut self, key: &str, cx: &mut Context<Self>) -> bool {
+        let Some(form) = &mut self.adding else {
+            return false;
+        };
+        let n = form.fields.len();
+        match key {
+            "tab" | "down" => form.at = (form.at + 1) % n,
+            "shift-tab" | "up" => form.at = (form.at + n - 1) % n,
+            "escape" => {
+                self.adding = None;
+            }
+            "enter" => {
+                if form.sent {
+                    return true;
+                }
+                let v: Vec<String> = form
+                    .fields
+                    .iter()
+                    .map(|e| e.read(cx).state.buffer.text().trim().to_owned())
+                    .collect();
+                let port = match v[2].as_str() {
+                    "" => None,
+                    p => match p.parse::<u16>() {
+                        Ok(p) if p > 0 => Some(p),
+                        _ => {
+                            form.error = Some("Port: a number from 1 to 65535".into());
+                            form.at = 2;
+                            cx.emit(RemoteEvent::FocusField);
+                            cx.notify();
+                            return true;
+                        }
+                    },
+                };
+                let some = |s: &str| (!s.is_empty()).then(|| s.to_owned());
+                form.sent = true;
+                form.error = None;
+                cx.emit(RemoteEvent::AddHost(OwnHost {
+                    alias: v[0].clone(),
+                    hostname: v[1].clone(),
+                    port,
+                    user: some(&v[3]),
+                    identity_file: some(&v[4]),
+                }));
+            }
+            _ => return false,
+        }
+        cx.emit(RemoteEvent::FocusField);
+        cx.notify();
+        true
+    }
+
+    /// Remote Development as a folder chooser only (`SPEC-0355` v3 behaviour 12e): choosing a
+    /// folder opens it as a remote project; files, the terminal and the backend are left out.
+    pub fn set_chooser_only(&mut self, cx: &mut Context<Self>) {
+        self.chooser_only = true;
+        self.set_project_mode(true, Vec::new(), cx);
+    }
+
+    /// Whether the window only chooses a folder.
+    pub fn chooser_only(&self) -> bool {
+        self.chooser_only
     }
 
     /// Remote Development (`SPEC-0317` v3 behaviour 1) with `recent` remote projects first, or
@@ -217,7 +457,7 @@ impl RemoteView {
     pub fn set_project_mode(
         &mut self,
         on: bool,
-        recent: Vec<idecraft_remote::RecentRemote>,
+        recent: Vec<ferris_idea_remote::RecentRemote>,
         cx: &mut Context<Self>,
     ) {
         self.project_mode = on;
@@ -318,7 +558,7 @@ impl RemoteView {
                 if path != "/" {
                     rows.push(Row::Up);
                 }
-                rows.extend(self.entries.iter().cloned().map(Row::Entry));
+                tree_rows(&mut rows, path, &self.entries, 0, &self.expanded);
                 rows
             }
         };
@@ -330,10 +570,23 @@ impl RemoteView {
     }
 
     /// Shows the configured hosts (and leaves a connected host).
+    /// The selected host stays selected when the list is read again (`SPEC-0121` v7 behaviour
+    /// 5a), as long as it is still there.
     pub fn show_hosts(&mut self, hosts: Vec<HostInfo>, cx: &mut Context<Self>) {
+        let was = match self.rows.get(self.selected) {
+            Some(Row::Host(h)) if self.place.is_none() => Some(h.alias.clone()),
+            _ => None,
+        };
         self.hosts = hosts;
         if self.place.is_none() {
             self.rebuild();
+            if let Some(i) = was.and_then(|alias| {
+                self.rows
+                    .iter()
+                    .position(|r| matches!(r, Row::Host(h) if h.alias == alias))
+            }) {
+                self.selected = i;
+            }
         }
         cx.notify();
     }
@@ -348,6 +601,7 @@ impl RemoteView {
         self.listed_for = None;
         self.pending = None;
         self.entries.clear();
+        self.expanded.clear();
         self.selected = 0;
         self.error = None;
         self.busy = None;
@@ -365,6 +619,16 @@ impl RemoteView {
         cx: &mut Context<Self>,
     ) {
         let same = self.place.as_ref().is_some_and(|(_, p)| *p == path);
+        let mut entries = entries;
+        ferris_idea_remote::sort_entries(&mut entries);
+        if same {
+            // F5: every folder open in the tree is read again too (behaviour 9).
+            for folder in self.expanded.keys() {
+                cx.emit(RemoteEvent::Expand(folder.clone()));
+            }
+        } else {
+            self.expanded.clear();
+        }
         self.set_field(&path, cx);
         self.place = Some((host, path));
         self.entries = entries;
@@ -374,17 +638,116 @@ impl RemoteView {
             self.selected = 0;
         }
         self.rebuild();
-        if let Some(name) = self.select_after.take() {
-            let before = self
-                .rows
-                .iter()
-                .take_while(|r| matches!(r, Row::Up | Row::OpenHere(_)))
-                .count();
-            if let Some(i) = entry_row(&self.entries, before, &name) {
-                self.selected = i;
-            }
+        if let Some(name) = self.select_after.take()
+            && let Some(i) = entry_row(&self.rows, &name)
+        {
+            self.selected = i;
         }
         cx.notify();
+    }
+
+    /// Shows the entries of `folder`, open in place in the tree (`SPEC-0253` v3 behaviour 9);
+    /// ignored when the folder was closed meanwhile.
+    pub fn show_children(
+        &mut self,
+        folder: String,
+        mut entries: Vec<RemoteEntry>,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(slot) = self.expanded.get_mut(&folder) else {
+            return;
+        };
+        ferris_idea_remote::sort_entries(&mut entries);
+        *slot = Some(entries);
+        let at = self.rows.get(self.selected).cloned();
+        self.rebuild();
+        if let Some(i) = at.and_then(|r| self.rows.iter().position(|x| *x == r)) {
+            self.selected = i;
+        }
+        cx.notify();
+    }
+
+    /// `folder` could not be read: it closes again and the error is shown.
+    pub fn show_children_error(&mut self, folder: String, error: String, cx: &mut Context<Self>) {
+        self.expanded.remove(&folder);
+        self.rebuild();
+        self.show_error(error, cx);
+    }
+
+    /// Folders open in place in the tree (for tests).
+    pub fn expanded(&self) -> Vec<String> {
+        self.expanded.keys().cloned().collect()
+    }
+
+    /// The letters typed to jump to a name (`SPEC-0253` v3 behaviour 9).
+    pub fn typed(&self) -> &str {
+        &self.typed
+    }
+
+    /// One typed character in the list (for tests too): selects the first row whose name starts
+    /// with the letters typed within [`TYPE_PAUSE`], without regard to case, else the first that
+    /// contains them; the selection stays when none matches.
+    pub fn type_char(&mut self, ch: &str, cx: &mut Context<Self>) {
+        let now = Instant::now();
+        if self
+            .typed_at
+            .is_none_or(|at| now.duration_since(at) > TYPE_PAUSE)
+        {
+            self.typed.clear();
+        }
+        self.typed.push_str(ch);
+        self.typed_at = Some(now);
+        let names: Vec<Option<String>> = self.rows.iter().map(row_name).collect();
+        if let Some(i) = jump_row(&names, &self.typed) {
+            self.selected = i;
+        }
+        cx.notify();
+    }
+
+    fn forget_typed(&mut self) {
+        self.typed.clear();
+        self.typed_at = None;
+    }
+
+    /// Opens the selected folder in place (→), or closes it (←) — on an entry inside an open
+    /// folder ← selects that folder. False when the key does nothing there.
+    fn toggle_selected(&mut self, open: bool, cx: &mut Context<Self>) -> bool {
+        let Some(Row::Entry(e, folder, depth)) = self.rows.get(self.selected).cloned() else {
+            return false;
+        };
+        let path = ferris_idea_remote::join(&folder, &e.name);
+        let is_open = self.expanded.contains_key(&path);
+        match (open, e.kind == EntryKind::Dir, is_open) {
+            (true, true, false) => {
+                self.expanded.insert(path.clone(), None);
+                cx.emit(RemoteEvent::Expand(path));
+            }
+            (true, true, true) => {
+                // Already open: → goes to its first entry.
+                if matches!(self.rows.get(self.selected + 1), Some(r) if row_depth(r) > depth) {
+                    self.selected += 1;
+                }
+                return true;
+            }
+            (false, true, true) => {
+                let inside = format!("{}/", path.trim_end_matches('/'));
+                self.expanded
+                    .retain(|k, _| *k != path && !k.starts_with(&inside));
+            }
+            (false, _, _) if depth > 0 => {
+                // Select the open folder this entry is in.
+                if let Some(i) = self.rows[..self.selected]
+                    .iter()
+                    .rposition(|r| row_depth(r) < depth && matches!(r, Row::Entry(..)))
+                {
+                    self.selected = i;
+                }
+                return true;
+            }
+            _ => return false,
+        }
+        self.rebuild();
+        true
     }
 
     /// Shows that something is going on.
@@ -412,9 +775,12 @@ impl RemoteView {
         self.focus.clone()
     }
 
-    /// Focus handle of the host/path field.
+    /// Focus handle of the host/path field, or of the Add Host… form's current field.
     pub fn field_focus(&self, cx: &gpui::App) -> FocusHandle {
-        self.field.read(cx).focus()
+        match &self.adding {
+            Some(f) => f.fields[f.at].read(cx).focus(),
+            None => self.field.read(cx).focus(),
+        }
     }
 
     /// Connected host and folder shown.
@@ -486,7 +852,7 @@ impl RemoteView {
         let text = text.trim();
         match &self.place {
             Some((_, dir)) if !text.starts_with('/') && !text.starts_with('~') => {
-                idecraft_remote::join(dir, text)
+                ferris_idea_remote::join(dir, text)
             }
             _ => text.to_owned(),
         }
@@ -495,6 +861,9 @@ impl RemoteView {
     /// Handles one key as the window does (for tests too): Enter connects, opens a folder or a
     /// file — or goes to the host or path typed in the field; Alt+↑ goes up; F5 reads again; Escape hides.
     pub fn press(&mut self, key: &str, cx: &mut Context<Self>) -> bool {
+        if self.adding.is_some() {
+            return self.press_form(key, cx);
+        }
         let n = self.rows.len();
         let typed = self.field_text(cx).trim().to_owned();
         if let Some(pending) = self.pending.clone() {
@@ -523,6 +892,7 @@ impl RemoteView {
                         Pending::Delete(path, entries) => {
                             cx.emit(RemoteEvent::Delete(path, entries > 0))
                         }
+                        Pending::RemoveHost(alias) => cx.emit(RemoteEvent::RemoveHost(alias)),
                     }
                     self.pending = None;
                     self.set_field(&current, cx);
@@ -541,13 +911,35 @@ impl RemoteView {
             cx.notify();
             return true;
         }
-        let selected_entry = match (self.rows.get(self.selected), &self.place) {
-            (Some(Row::Entry(e)), Some((_, dir))) => {
-                Some((idecraft_remote::join(dir, &e.name), e.name.clone()))
+        // Any key but a typed letter ends the name being typed (behaviour 9).
+        let typing = !self.typed.is_empty();
+        self.forget_typed();
+        if key == "escape" && typing {
+            cx.notify();
+            return true;
+        }
+        let selected_entry = match self.rows.get(self.selected) {
+            Some(Row::Entry(e, folder, _)) if self.place.is_some() => {
+                Some((ferris_idea_remote::join(folder, &e.name), e.name.clone()))
             }
             _ => None,
         };
+        if self.chooser_only
+            && matches!(
+                key,
+                "new-file" | "new-dir" | "rename" | "delete" | "add-host"
+            )
+        {
+            return false;
+        }
         match key {
+            "add-host" => {
+                if self.place.is_some() {
+                    return false;
+                }
+                self.open_add_host(cx);
+            }
+            "delete" if self.place.is_none() => return self.ask_remove_host(cx),
             "new-file" | "new-dir" => {
                 let Some((_, dir)) = &self.place else {
                     return false;
@@ -603,6 +995,11 @@ impl RemoteView {
             }
             "down" if n > 0 => self.selected = (self.selected + 1).min(n - 1),
             "up" => self.selected = self.selected.saturating_sub(1),
+            "right" | "left" => {
+                if !self.toggle_selected(key == "right", cx) {
+                    return false;
+                }
+            }
             "enter" => {
                 let current = self.place.as_ref().map(|(_, p)| p.clone());
                 // `?text` searches the host's project through the backend (SPEC-0158).
@@ -649,12 +1046,20 @@ impl RemoteView {
                             }
                         }
                         (Some(Row::Up), Some(dir)) => {
-                            cx.emit(RemoteEvent::Browse(idecraft_remote::parent(&dir)))
+                            cx.emit(RemoteEvent::Browse(ferris_idea_remote::parent(&dir)))
                         }
-                        (Some(Row::Entry(e)), Some(dir)) => {
-                            let path = idecraft_remote::join(&dir, &e.name);
+                        (Some(Row::Entry(e, folder, _)), Some(_)) => {
+                            let path = ferris_idea_remote::join(&folder, &e.name);
                             if e.kind == EntryKind::Dir {
                                 cx.emit(RemoteEvent::Browse(path));
+                            } else if self.chooser_only {
+                                self.show_error(
+                                    format!(
+                                        "{} is a file: choose a folder to open as a remote project",
+                                        e.name
+                                    ),
+                                    cx,
+                                );
                             } else {
                                 cx.emit(RemoteEvent::Open(path));
                             }
@@ -665,7 +1070,7 @@ impl RemoteView {
             }
             "up-dir" => match &self.place {
                 Some((_, dir)) if dir != "/" => {
-                    cx.emit(RemoteEvent::Browse(idecraft_remote::parent(dir)))
+                    cx.emit(RemoteEvent::Browse(ferris_idea_remote::parent(dir)))
                 }
                 _ => return false,
             },
@@ -695,9 +1100,37 @@ impl RemoteView {
     fn on_key(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let k = &event.keystroke;
         let m = &k.modifiers;
+        // The Add Host… form: Tab, ⇧Tab, ↑, ↓, Enter and Escape act on the form, every other key
+        // edits its field (`SPEC-0121` v5 behaviour 5).
+        if self.adding.is_some() {
+            let key = match k.key.as_str() {
+                "tab" if m.shift && !(m.platform || m.control || m.alt) => "shift-tab",
+                "tab" | "enter" | "escape" | "up" | "down"
+                    if !(m.platform || m.control || m.alt || m.shift) =>
+                {
+                    k.key.as_str()
+                }
+                _ => return,
+            };
+            let key = key.to_owned();
+            if self.press_form(&key, cx) {
+                cx.stop_propagation();
+            }
+            return;
+        }
         let in_field = self.field.read(cx).focus().is_focused(window);
         let plain = !(m.platform || m.control || m.alt || m.shift);
         if in_field && !(plain && matches!(k.key.as_str(), "enter" | "escape" | "up" | "down")) {
+            return;
+        }
+        // Typing in the list jumps to a name (`SPEC-0253` v3 behaviour 9).
+        if !in_field
+            && !(m.platform || m.control || m.alt)
+            && self.pending.is_none()
+            && let Some(ch) = k.key_char.as_deref().filter(|c| typed_char(c))
+        {
+            self.type_char(ch, cx);
+            cx.stop_propagation();
             return;
         }
         let Some(key) = command(&k.key, m, cfg!(target_os = "macos")) else {
@@ -707,6 +1140,8 @@ impl RemoteView {
         if matches!(
             key.as_str(),
             "up" | "down"
+                | "left"
+                | "right"
                 | "enter"
                 | "f5"
                 | "escape"
@@ -726,7 +1161,11 @@ impl Render for RemoteView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = Palette::current();
         let selected = self.selected;
-        let rows = self.rows.clone();
+        let rows = if self.adding.is_some() {
+            Vec::new()
+        } else {
+            self.rows.clone()
+        };
         let connected = self.place.clone();
         let field_focused = self.field.read(cx).focus().is_focused(window);
         let empty_field = self.field_text(cx).is_empty();
@@ -735,20 +1174,22 @@ impl Render for RemoteView {
         } else {
             "Host alias or user@host[:port], Enter connects"
         };
-        let help = keys(if self.project_mode && connected.is_some() {
+        let help = keys(if self.chooser_only && connected.is_some() {
+            "Go to the project folder, then Enter on its Open row · Escape goes back"
+        } else if self.project_mode && connected.is_some() {
             "Go to the project folder, then Enter on its Open row · Escape stops opening"
         } else if self.project_mode {
-            "Recent remote projects and hosts from ~/.ssh/config · Enter opens or connects"
+            "Recent remote projects, Ferris IDEA's hosts and ~/.ssh/config · Enter opens or connects"
         } else if connected.is_some() && self.backend.is_some() {
             "Enter opens · ⌘N file · ⇧⌘N folder · ⇧F6 rename · ⌘⌫ delete · ?text @symbol ! problems > run"
         } else if connected.is_some() {
             "Enter opens · ⌥↑ up · F5 reads again · ⌘N file · ⇧⌘N folder · ⇧F6 rename · ⌘⌫ delete"
         } else {
-            "Hosts from ~/.ssh/config · Enter connects with your SSH keys and agent"
+            "Ferris IDEA's hosts and ~/.ssh/config · Enter connects with your SSH keys and agent · ⌘⌫ removes one of Ferris IDEA's"
         });
         // Each button and row is annotated with its id, so window tests click it with real mouse
         // events (the semantic tree; nothing unless a consumer is active).
-        let button = |id: &'static str, label: &'static str| {
+        let button = |id: &'static str, label: &'static str, effects: &'static [Effect]| {
             div()
                 .id(id)
                 .relative()
@@ -761,16 +1202,128 @@ impl Render for RemoteView {
                 .border_color(c(p.separator))
                 .hover(|s| s.bg(c(p.tab_hover)))
                 .child(label)
-                .semantics(Semantics::new(Role::Button).name(label).test_id(id))
+                .semantics(
+                    Semantics::new(Role::Button)
+                        .name(label)
+                        .test_id(id)
+                        .action(AxAction::Click)
+                        .effects(effects),
+                )
         };
+        let form = self.adding.as_ref().map(|f| {
+            let hints = [
+                "a name to connect with, e.g. test-vm",
+                "name or address, e.g. 192.168.64.5",
+                "optional, 22",
+                "optional, your login name",
+                "optional, e.g. ~/.ssh/id_ed25519 (else your keys and agent)",
+            ];
+            div()
+                .id("remote-add-host-form")
+                .flex()
+                .flex_col()
+                .gap_1()
+                .px_2()
+                .py_1()
+                // The buttons and a refusal first, so a short tool window still shows them.
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_2()
+                        .child(button("remote-add-host-ok", "Add", &[Effect::Ssh]).on_click(cx.listener(
+                            |this, _, _, cx| {
+                                this.press_form("enter", cx);
+                            },
+                        )))
+                        .child(button("remote-add-host-cancel", "Cancel", &[Effect::None]).on_click(
+                            cx.listener(|this, _, _, cx| {
+                                this.press_form("escape", cx);
+                            }),
+                        ))
+                        .child(div().text_color(c(p.ui_muted)).child(keys(
+                            "Add a host to Ferris IDEA's list · Tab next field · Enter adds · Escape cancels",
+                        ))),
+                )
+                .when_some(f.error.clone(), |d, e| {
+                    d.child(div().text_color(rgb(p.console_ansi_text[1])).child(e))
+                })
+                .children(f.fields.iter().enumerate().map(|(i, field)| {
+                    let focused = field.read(cx).focus().is_focused(window);
+                    let value = field.read(cx).state.buffer.text();
+                    let empty = value.is_empty();
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_2()
+                        .child(
+                            div()
+                                .w(px(96.))
+                                .flex_none()
+                                .text_color(c(p.ui_muted))
+                                .child(ADD_HOST_FIELDS[i]),
+                        )
+                        .child(
+                            div()
+                                .id(("remote-add-host-field", i))
+                                .flex_1()
+                                .min_w_0()
+                                .h(px(24.))
+                                .px_2()
+                                .flex()
+                                .items_center()
+                                .rounded(px(4.))
+                                .border_1()
+                                .border_color(if focused { c(p.focus) } else { c(p.separator) })
+                                .relative()
+                                .child(div().flex_1().min_w_0().h(px(18.)).child(field.clone()))
+                                .when(empty, |d| {
+                                    d.child(
+                                        div()
+                                            .absolute()
+                                            .left(px(8.))
+                                            .text_color(c(p.ui_dim))
+                                            .child(hints[i]),
+                                    )
+                                })
+                                // Typing edits the form; Enter in it adds the host as Add
+                                // does (`ssh`, SPEC-0319 v7 behaviour 56).
+                                .semantics(
+                                    Semantics::new(Role::TextInput)
+                                        .name(ADD_HOST_FIELDS[i])
+                                        .value(value)
+                                        .focused(focused)
+                                        .test_id(format!("remote-add-host-field-{i}"))
+                                        .action(AxAction::Focus)
+                                        .effects(&[Effect::Ssh])
+                                        .handles_keys(&[
+                                            "tab",
+                                            "shift-tab",
+                                            "enter",
+                                            "escape",
+                                            "up",
+                                            "down",
+                                        ]),
+                                )
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    if let Some(f) = &mut this.adding {
+                                        f.at = i;
+                                    }
+                                    cx.emit(RemoteEvent::FocusField);
+                                })),
+                        )
+                }))
+        });
         let status = match (&self.busy, &self.error, &connected) {
+            _ if self.adding.is_some() => None,
             _ if self.pending.is_some() => {
                 self.pending.as_ref().map(|p| (pending_prompt(p), false))
             }
+            _ if !self.typed.is_empty() => Some((format!("Jump to: {}", self.typed), false)),
             (Some(b), _, _) => Some((b.clone(), false)),
             (None, Some(e), _) => Some((e.clone(), true)),
             (None, None, None) if rows.is_empty() => Some((
-                "No hosts in ~/.ssh/config: type user@host into the field".into(),
+                "No hosts yet: Add Host…, or type user@host into the field".into(),
                 false,
             )),
             (None, None, Some(_)) if rows.len() <= 1 => {
@@ -778,10 +1331,51 @@ impl Render for RemoteView {
             }
             _ => None,
         };
+        let panel_focused = self.focus.is_focused(window);
         div()
             .id("remote-panel")
             .track_focus(&self.focus)
             .capture_key_down(cx.listener(Self::on_key))
+            // Every key in the window may reach the host: Enter connects, opens or goes to a
+            // path, ⌘N, ⇧⌘N, ⇧F6 and ⌘⌫ make, rename and delete over SSH, ⌘⌫ removes one of
+            // Ferris IDEA's hosts (SPEC-0319 v7 behaviour 56).
+            .relative()
+            .semantics(
+                Semantics::new(Role::Group)
+                    .name(if self.project_mode {
+                        "Remote Development"
+                    } else {
+                        "Remote Host"
+                    })
+                    .test_id("remote-panel")
+                    .focused(panel_focused)
+                    .effects(&[Effect::Ssh])
+                    .handles_keys(if cfg!(target_os = "macos") {
+                        &[
+                            "enter",
+                            "escape",
+                            "tab",
+                            "f5",
+                            "alt-up",
+                            "cmd-n",
+                            "cmd-shift-n",
+                            "shift-f6",
+                            "cmd-backspace",
+                        ]
+                    } else {
+                        &[
+                            "enter",
+                            "escape",
+                            "tab",
+                            "f5",
+                            "alt-up",
+                            "ctrl-n",
+                            "ctrl-shift-n",
+                            "shift-f6",
+                            "ctrl-backspace",
+                        ]
+                    }),
+            )
             .size_full()
             .flex()
             .flex_col()
@@ -809,14 +1403,33 @@ impl Render for RemoteView {
                                 None => "not connected".into(),
                             }),
                     )
-                    .when(connected.is_some(), |d| {
+                    // Ferris IDEA's own hosts (SPEC-0121 v5 behaviour 5).
+                    .when(
+                        connected.is_none() && !self.chooser_only && self.adding.is_none(),
+                        |d| {
+                            d.child(
+                                button("remote-add-host", "Add Host…", &[Effect::None])
+                                    .on_click(cx.listener(|this, _, _, cx| this.open_add_host(cx))),
+                            )
+                            .child(
+                                button("remote-remove-host", "Remove Host", &[Effect::Ssh])
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.ask_remove_host(cx);
+                                    })),
+                            )
+                        },
+                    )
+                    .when(connected.is_some() && !self.chooser_only, |d| {
                         d.child(
-                            button("remote-terminal", "SSH Terminal").on_click(
-                                cx.listener(|_, _, _, cx| cx.emit(RemoteEvent::Terminal)),
-                            ),
+                            button(
+                                "remote-terminal",
+                                "SSH Terminal",
+                                &[Effect::Ssh, Effect::Run],
+                            )
+                            .on_click(cx.listener(|_, _, _, cx| cx.emit(RemoteEvent::Terminal))),
                         )
                         .child(
-                            button("remote-hosts", "Hosts")
+                            button("remote-hosts", "Hosts", &[Effect::None])
                                 .on_click(cx.listener(|_, _, _, cx| cx.emit(RemoteEvent::Hosts))),
                         )
                         .children(
@@ -827,13 +1440,15 @@ impl Render for RemoteView {
                                 ("remote-delete", "Delete", "delete"),
                             ]
                             .map(|(id, label, key)| {
-                                button(id, label).on_click(cx.listener(move |this, _, _, cx| {
-                                    this.press(key, cx);
-                                }))
+                                button(id, label, &[Effect::Ssh]).on_click(cx.listener(
+                                    move |this, _, _, cx| {
+                                        this.press(key, cx);
+                                    },
+                                ))
                             }),
                         )
                         .child(match &self.backend {
-                            // IDECraft's backend on the host (SPEC-0158 behaviour 4).
+                            // Ferris IDEA's backend on the host (SPEC-0158 behaviour 4).
                             Some((name, folder)) => div()
                                 .min_w_0()
                                 .flex_shrink()
@@ -843,11 +1458,13 @@ impl Render for RemoteView {
                                 .text_color(c(p.ui_muted))
                                 .child(format!("Backend: {name} in {folder}"))
                                 .into_any_element(),
-                            None => button("remote-backend", "Start Backend")
-                                .on_click(
-                                    cx.listener(|_, _, _, cx| cx.emit(RemoteEvent::StartBackend)),
-                                )
-                                .into_any_element(),
+                            None => button(
+                                "remote-backend",
+                                "Start Backend",
+                                &[Effect::Ssh, Effect::Run],
+                            )
+                            .on_click(cx.listener(|_, _, _, cx| cx.emit(RemoteEvent::StartBackend)))
+                            .into_any_element(),
                         })
                     })
                     .child(
@@ -900,6 +1517,20 @@ impl Render for RemoteView {
                                     .h(px(18.))
                                     .child(self.field.clone()),
                             )
+                            // Enter in the field connects to the host or goes to the path over
+                            // SSH (SPEC-0319 v7 behaviour 56).
+                            .semantics(
+                                Semantics::new(Role::TextInput)
+                                    .name(if connected.is_some() { "Path" } else { "Host" })
+                                    .value(self.field_text(cx))
+                                    .focused(field_focused)
+                                    .test_id("remote-field")
+                                    .action(AxAction::Focus)
+                                    .effects(&[Effect::Ssh])
+                                    // The window takes these from the field; the others edit
+                                    // it or go to the keymap.
+                                    .handles_keys(&["enter", "escape", "up", "down"]),
+                            )
                             .when(empty_field, |d| {
                                 d.child(
                                     div()
@@ -920,6 +1551,7 @@ impl Render for RemoteView {
                     .border_t_1()
                     .border_color(c(p.separator))
                     .px_1()
+                    .when_some(form, |d, f| d.child(f))
                     .when_some(status, |d, (text, bad)| {
                         d.child(
                             div()
@@ -933,7 +1565,18 @@ impl Render for RemoteView {
                     .children(rows.into_iter().enumerate().map(|(i, row)| {
                         let on = i == selected;
                         let dir = matches!(&row, Row::Up)
-                            || matches!(&row, Row::Entry(e) if e.kind == EntryKind::Dir);
+                            || matches!(&row, Row::Entry(e, _, _) if e.kind == EntryKind::Dir);
+                        let depth = row_depth(&row);
+                        // The triangle before a folder: open in place or close (behaviour 9).
+                        let triangle = match &row {
+                            Row::Entry(e, folder, _) if e.kind == EntryKind::Dir => {
+                                let open = self
+                                    .expanded
+                                    .contains_key(&ferris_idea_remote::join(folder, &e.name));
+                                Some(open)
+                            }
+                            _ => None,
+                        };
                         div()
                             .id(("remote-row", i))
                             .relative()
@@ -947,12 +1590,33 @@ impl Render for RemoteView {
                             .when(on, |d| d.bg(c(p.tree_selection)))
                             .when(!on, |d| d.hover(|s| s.bg(c(p.tree_hover))))
                             .when(dir, |d| d.font_weight(gpui::FontWeight::MEDIUM))
-                            .child(row_text(&row))
+                            .pl(px(8. + 16. * depth as f32))
+                            .child(
+                                div()
+                                    .id(("remote-row-toggle", i))
+                                    .w(px(14.))
+                                    .flex_none()
+                                    .text_color(c(p.ui_muted))
+                                    .when_some(triangle, |d, open| {
+                                        d.child(if open { "▾" } else { "▸" }).on_click(cx.listener(
+                                            move |this, _, _, cx| {
+                                                this.selected = i;
+                                                this.toggle_selected(!open, cx);
+                                                cx.stop_propagation();
+                                                cx.notify();
+                                            },
+                                        ))
+                                    }),
+                            )
+                            .child(row_label(&row))
                             .semantics(
                                 Semantics::new(Role::ListItem)
                                     .name(row_text(&row))
                                     .selected(on)
-                                    .test_id(format!("remote-row-{i}")),
+                                    .test_id(format!("remote-row-{i}"))
+                                    .action(AxAction::Click)
+                                    // A double click connects, browses or opens over SSH.
+                                    .effects(&[Effect::Ssh]),
                             )
                             .on_click(cx.listener(move |this, ev: &gpui::ClickEvent, _, cx| {
                                 this.selected = i;
@@ -993,9 +1657,95 @@ fn other_host(typed: &str) -> Option<Result<(String, String), String>> {
     })
 }
 
-fn entry_row(entries: &[RemoteEntry], before: usize, name: &str) -> Option<usize> {
-    let i = entries.iter().position(|e| e.name == name)?;
-    Some(i + before)
+/// Reads `folder` on `remote` and shows it open in place in `view` (`SPEC-0253` v3 behaviour
+/// 9), for whichever window owns the view.
+pub fn expand<T: 'static>(
+    remote: ferris_idea_remote::Remote,
+    view: Entity<RemoteView>,
+    folder: String,
+    cx: &mut Context<T>,
+) {
+    let path = folder.clone();
+    let task = cx
+        .background_executor()
+        .spawn(async move { remote.list(&path) });
+    cx.spawn(async move |_, cx| {
+        let result = task.await;
+        let _ = view.update(cx, |v, cx| match result {
+            Ok(entries) => v.show_children(folder, entries, cx),
+            Err(e) => v.show_children_error(folder, e.to_string(), cx),
+        });
+    })
+    .detach();
+}
+
+/// Row of entry `name` of the folder shown (depth 0; `SPEC-0253` behaviour 4).
+fn entry_row(rows: &[Row], name: &str) -> Option<usize> {
+    rows.iter()
+        .position(|r| matches!(r, Row::Entry(e, _, 0) if e.name == name))
+}
+
+/// The rows of `entries` of `folder` at `depth`, each open folder followed by its own rows
+/// (`SPEC-0253` v3 behaviour 9).
+fn tree_rows(
+    rows: &mut Vec<Row>,
+    folder: &str,
+    entries: &[RemoteEntry],
+    depth: usize,
+    expanded: &BTreeMap<String, Option<Vec<RemoteEntry>>>,
+) {
+    for e in entries {
+        rows.push(Row::Entry(e.clone(), folder.to_owned(), depth));
+        if e.kind != EntryKind::Dir || depth > 32 {
+            continue;
+        }
+        let path = ferris_idea_remote::join(folder, &e.name);
+        match expanded.get(&path) {
+            None => {}
+            Some(None) => rows.push(Row::Note("reading…".into(), depth + 1)),
+            Some(Some(inner)) if inner.is_empty() => {
+                rows.push(Row::Note("empty".into(), depth + 1))
+            }
+            Some(Some(inner)) => tree_rows(rows, &path, inner, depth + 1, expanded),
+        }
+    }
+}
+
+/// The name typing can jump to: an entry's or a host's name.
+fn row_name(r: &Row) -> Option<String> {
+    match r {
+        Row::Entry(e, _, _) => Some(e.name.clone()),
+        Row::Host(h) => Some(h.alias.clone()),
+        _ => None,
+    }
+}
+
+/// The first row whose name starts with `typed`, without regard to case, else the first whose
+/// name contains it (`SPEC-0253` v3 behaviour 9).
+fn jump_row(names: &[Option<String>], typed: &str) -> Option<usize> {
+    let typed = typed.to_lowercase();
+    if typed.is_empty() {
+        return None;
+    }
+    let lower: Vec<Option<String>> = names
+        .iter()
+        .map(|n| n.as_ref().map(|n| n.to_lowercase()))
+        .collect();
+    lower
+        .iter()
+        .position(|n| n.as_ref().is_some_and(|n| n.starts_with(&typed)))
+        .or_else(|| {
+            lower
+                .iter()
+                .position(|n| n.as_ref().is_some_and(|n| n.contains(&typed)))
+        })
+}
+
+/// Whether a key's text is a character typed to jump to a name: one visible character, no
+/// space or control character.
+fn typed_char(text: &str) -> bool {
+    let mut chars = text.chars();
+    matches!((chars.next(), chars.next()), (Some(c), None) if !c.is_control() && !c.is_whitespace())
 }
 
 /// Row whose text is `text`, else the first row starting with `text`.
@@ -1024,7 +1774,7 @@ fn command<'a>(key: &'a str, m: &gpui::Modifiers, macos: bool) -> Option<&'a str
 /// A shortcut of this dialog written for the platform: ⌘ is Ctrl and ⌥ is Alt outside macOS
 /// (`SPEC-0028` v8 behaviour 13).
 fn keys(text: &str) -> String {
-    idecraft_ui::keymap::local_keys(text, cfg!(target_os = "macos"))
+    ferris_idea_ui::keymap::local_keys(text, cfg!(target_os = "macos"))
 }
 
 #[cfg(test)]
@@ -1072,7 +1822,7 @@ mod tests {
             Some("down")
         );
         assert_eq!(
-            idecraft_ui::keymap::local_keys(
+            ferris_idea_ui::keymap::local_keys(
                 "Enter opens · ⌥↑ up · ⌘N file · ⇧⌘N folder · ⌘⌫ delete",
                 false
             ),
@@ -1102,14 +1852,26 @@ mod tests {
             user: Some("me".into()),
             hostname: Some("10.0.0.5".into()),
             port: Some(2222),
+            ..HostInfo::default()
         };
-        assert_eq!(row_text(&Row::Host(h)), "dev  me@10.0.0.5:2222");
+        assert_eq!(
+            row_text(&Row::Host(h.clone())),
+            "dev  me@10.0.0.5:2222  · ~/.ssh/config"
+        );
+        // SPEC-0121 v5 behaviour 5: every host row names its source.
+        let own = HostInfo {
+            source: HostSource::FerrisIdea,
+            port: Some(22),
+            ..h
+        };
+        assert_eq!(row_text(&Row::Host(own)), "dev  me@10.0.0.5  · Ferris IDEA");
         let e = RemoteEntry {
             name: "src".into(),
             kind: EntryKind::Dir,
             link: true,
         };
-        assert_eq!(row_text(&Row::Entry(e)), "src/  →");
+        assert_eq!(row_text(&Row::Entry(e.clone(), "/".into(), 0)), "src/  →");
+        assert_eq!(row_text(&Row::Entry(e, "/srv".into(), 2)), "    src/  →");
         assert_eq!(row_text(&Row::Up), "..");
         assert_eq!(
             row_text(&Row::Config("app".into(), "python3 app.py".into())),
@@ -1132,16 +1894,71 @@ mod tests {
             entry("made.txt", EntryKind::File),
             entry("notes.txt", EntryKind::File),
         ];
-        assert_eq!(entry_row(&entries, 1, "made.txt"), Some(2));
-        assert_eq!(entry_row(&entries, 0, "made.txt"), Some(1));
-        assert_eq!(entry_row(&entries, 1, "gone.txt"), None);
+        let mut rows = vec![Row::Up];
+        tree_rows(&mut rows, "/srv", &entries, 0, &BTreeMap::new());
+        assert_eq!(entry_row(&rows, "made.txt"), Some(2));
+        assert_eq!(entry_row(&rows, "gone.txt"), None);
         // Remote Development puts its Open row before "..".
-        assert_eq!(entry_row(&entries, 2, "made.txt"), Some(3));
+        let mut rows = vec![Row::OpenHere("/srv".into()), Row::Up];
+        tree_rows(&mut rows, "/srv", &entries, 0, &BTreeMap::new());
+        assert_eq!(entry_row(&rows, "made.txt"), Some(3));
+    }
+
+    /// SPEC-0253 v3 AK-7: open folders show their entries indented below them, a folder being
+    /// read says so, and an entry inside an open folder knows its own folder.
+    #[test]
+    fn open_folders_show_their_entries_in_place() {
+        let top = [
+            entry("alpha", EntryKind::Dir),
+            entry("Beta", EntryKind::Dir),
+        ];
+        let mut expanded = BTreeMap::new();
+        expanded.insert(
+            "/srv/alpha".to_owned(),
+            Some(vec![
+                entry("deep", EntryKind::Dir),
+                entry("in.txt", EntryKind::File),
+            ]),
+        );
+        expanded.insert("/srv/alpha/deep".to_owned(), None);
+        let mut rows = Vec::new();
+        tree_rows(&mut rows, "/srv", &top, 0, &expanded);
+        let texts: Vec<String> = rows.iter().map(row_text).collect();
+        assert_eq!(
+            texts,
+            ["alpha/", "  deep/", "    reading…", "  in.txt", "Beta/"]
+        );
+        assert!(
+            matches!(&rows[3], Row::Entry(e, folder, 1) if e.name == "in.txt" && folder == "/srv/alpha")
+        );
+    }
+
+    /// SPEC-0253 v3 AK-7: typing jumps to the first name starting with the letters, without
+    /// regard to case, else to the first containing them; nothing matches, nothing moves.
+    #[test]
+    fn typing_jumps_to_the_first_matching_name() {
+        let names: Vec<Option<String>> = [
+            None,
+            Some("alpha"),
+            Some("Beta"),
+            Some("Zeta.txt"),
+            Some("zz-beta"),
+        ]
+        .into_iter()
+        .map(|n| n.map(str::to_owned))
+        .collect();
+        assert_eq!(jump_row(&names, "zet"), Some(3));
+        assert_eq!(jump_row(&names, "BE"), Some(2));
+        assert_eq!(jump_row(&names, "eta.t"), Some(3));
+        assert_eq!(jump_row(&names, "q"), None);
+        assert_eq!(jump_row(&names, ""), None);
+        assert!(typed_char("z") && typed_char("Z") && typed_char(".") && typed_char("é"));
+        assert!(!typed_char(" ") && !typed_char("\r") && !typed_char("ab") && !typed_char(""));
     }
 
     #[test]
     fn remote_development_lists_recent_projects_and_opens_the_folder_shown() {
-        let recent = idecraft_remote::RecentRemote {
+        let recent = ferris_idea_remote::RecentRemote {
             host: "build".into(),
             folder: "/srv/app".into(),
         };

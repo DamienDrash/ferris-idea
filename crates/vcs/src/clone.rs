@@ -401,7 +401,7 @@ mod tests {
     /// SPEC-0094 v5 AK-11: only new folders in an existing one.
     #[test]
     fn a_clone_or_new_project_needs_a_new_folder() {
-        let dir = std::env::temp_dir().join(format!("idecraft-clone-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-clone-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         assert!(check_new_folder(&dir.join("fresh")).is_ok());
@@ -465,10 +465,10 @@ mod tests {
     /// git and leaves none either. Uses an unroutable address, no network.
     #[test]
     fn a_failed_or_cancelled_clone_leaves_nothing() {
-        let dir = std::env::temp_dir().join(format!("idecraft-clone2-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-clone2-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        let source = check_clone_url("https://idecraft-clone-test.invalid/a/b.git").unwrap();
+        let source = check_clone_url("https://ferris-idea-clone-test.invalid/a/b.git").unwrap();
         let target = dir.join("b");
         let failed = clone_repository(
             &source,

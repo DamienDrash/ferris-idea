@@ -14,7 +14,7 @@ impl SemanticSpans {
     /// Spans from the server's tokens; `line_start` gives the char offset of a line. Tokens without
     /// a colour key are left out.
     pub fn from_tokens(
-        tokens: &[idecraft_languages::semantic::SemanticToken],
+        tokens: &[ferris_idea_languages::semantic::SemanticToken],
         line_start: impl Fn(u64) -> Option<usize>,
     ) -> Self {
         let mut spans: Vec<(Range<usize>, &'static str)> = tokens
@@ -113,30 +113,30 @@ pub fn overlay<T: Clone>(
 pub fn retry_after(
     retries: &mut std::collections::HashMap<std::path::PathBuf, u32>,
     file: &std::path::Path,
-    error: Option<&idecraft_languages::lsp::LspError>,
+    error: Option<&ferris_idea_languages::lsp::LspError>,
 ) -> Option<std::time::Duration> {
     let Some(error) = error else {
         retries.remove(file);
         return None;
     };
-    if !idecraft_languages::semantic::worth_asking_again(error) {
+    if !ferris_idea_languages::semantic::worth_asking_again(error) {
         return None;
     }
     let attempt = retries.entry(file.to_path_buf()).or_insert(0);
     *attempt = attempt.saturating_add(1);
-    idecraft_languages::semantic::retry_delay(*attempt)
+    ferris_idea_languages::semantic::retry_delay(*attempt)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use idecraft_languages::semantic::SemanticToken;
+    use ferris_idea_languages::semantic::SemanticToken;
 
     /// SPEC-0290 AK-8 (v3): a file's failed questions are asked again after growing pauses, five
     /// times at most; an answer starts the count anew; a missing server is never asked again.
     #[test]
     fn a_starting_server_is_asked_again() {
-        use idecraft_languages::lsp::LspError;
+        use ferris_idea_languages::lsp::LspError;
         let mut retries = std::collections::HashMap::new();
         let file = std::path::Path::new("/p/Main.kt");
         let slow = LspError::Timeout("initialize".into(), 30);

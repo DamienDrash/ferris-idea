@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use idecraft_plugins::{
+use ferris_idea_plugins::{
     Access, ActionKind, EditorContext, FILE_AUDIT, FILE_NOT_READABLE, FILE_SECRET, FILE_TOO_LARGE,
     MAX_LOGGED, Permission, Plugin, PluginError, action_id, file_refusals, granted, install,
     installed, load_dir, openable, set_enabled, set_granted, uninstall,
@@ -15,14 +15,14 @@ const UPPER: &str = r#"
   (memory (export "memory") 2)
   (global $next (mut i32) (i32.const 4096))
   (data (i32.const 16) "{\"name\":\"Upper\",\"version\":\"1.0\",\"actions\":[{\"id\":\"upper\",\"title\":\"Upper Case\"},{\"id\":\"count\",\"title\":\"Count\",\"kind\":\"message\"},{\"id\":\"spin\",\"title\":\"Spin\"}]}")
-  (func (export "idecraft_alloc") (param $len i32) (result i32)
+  (func (export "ferris_idea_alloc") (param $len i32) (result i32)
     (local $at i32)
     (local.set $at (global.get $next))
     (global.set $next (i32.add (global.get $next) (local.get $len)))
     (local.get $at))
-  (func (export "idecraft_manifest") (result i64)
+  (func (export "ferris_idea_manifest") (result i64)
     (i64.or (i64.shl (i64.const 16) (i64.const 32)) (i64.const 157)))
-  (func (export "idecraft_run") (param $a i32) (param $al i32) (param $p i32) (param $l i32) (result i64)
+  (func (export "ferris_idea_run") (param $a i32) (param $al i32) (param $p i32) (param $l i32) (result i64)
     (local $i i32) (local $c i32)
     ;; the action's first letter: u(pper), c(ount), s(pin)
     (if (i32.eq (i32.load8_u (local.get $a)) (i32.const 115))
@@ -83,7 +83,7 @@ fn the_sandbox_stops_endless_and_refuses_imports() {
 
 #[test]
 fn a_folder_of_plugins_with_a_broken_one() {
-    let dir = std::env::temp_dir().join(format!("idecraft-plugins-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-plugins-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("upper.wasm"), wat::parse_str(UPPER).unwrap()).unwrap();
@@ -99,7 +99,8 @@ fn a_folder_of_plugins_with_a_broken_one() {
 /// SPEC-0126 AK-1: install from a file, disable, enable, replace, remove.
 #[test]
 fn managing_installed_plugins() {
-    let base = std::env::temp_dir().join(format!("idecraft-plugin-admin-{}", std::process::id()));
+    let base =
+        std::env::temp_dir().join(format!("ferris-idea-plugin-admin-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
     let (source, dir) = (base.join("download"), base.join("plugins"));
     std::fs::create_dir_all(&source).unwrap();
@@ -148,22 +149,22 @@ fn managing_installed_plugins() {
 /// SPEC-0156: a plugin with an `edit` action and actions that read the project through the host.
 const PROJECT: &str = r#"
 (module
-  (import "idecraft" "list_files" (func $list (result i64)))
-  (import "idecraft" "read_file" (func $read (param i32 i32) (result i64)))
+  (import "ferris-idea" "list_files" (func $list (result i64)))
+  (import "ferris-idea" "read_file" (func $read (param i32 i32) (result i64)))
   (memory (export "memory") 2)
   (global $next (mut i32) (i32.const 8192))
   (data (i32.const 16) "{\"name\":\"Project\",\"version\":\"1.0\",\"permissions\":[\"project-read\"],\"actions\":[{\"id\":\"wrap\",\"title\":\"Comment\",\"kind\":\"edit\"},{\"id\":\"readme\",\"title\":\"Readme\",\"kind\":\"message\"},{\"id\":\"list\",\"title\":\"List\",\"kind\":\"message\"},{\"id\":\"escape\",\"title\":\"Escape\",\"kind\":\"message\"}]}")
   (data (i32.const 1024) "{\"edits\":[{\"start\":0,\"end\":0,\"text\":\"// \"}],\"select\":[0,3],\"message\":\"commented\"}")
   (data (i32.const 2048) "README.md")
   (data (i32.const 2064) "../outside.txt")
-  (func (export "idecraft_alloc") (param $len i32) (result i32)
+  (func (export "ferris_idea_alloc") (param $len i32) (result i32)
     (local $at i32)
     (local.set $at (global.get $next))
     (global.set $next (i32.add (global.get $next) (local.get $len)))
     (local.get $at))
-  (func (export "idecraft_manifest") (result i64)
+  (func (export "ferris_idea_manifest") (result i64)
     (i64.or (i64.shl (i64.const 16) (i64.const 32)) (i64.const 269)))
-  (func (export "idecraft_run") (param $a i32) (param $al i32) (param $p i32) (param $l i32) (result i64)
+  (func (export "ferris_idea_run") (param $a i32) (param $al i32) (param $p i32) (param $l i32) (result i64)
     ;; w(rap), r(eadme), l(ist), e(scape)
     (if (i32.eq (i32.load8_u (local.get $a)) (i32.const 119))
       (then (return (i64.or (i64.shl (i64.const 1024) (i64.const 32)) (i64.const 81)))))
@@ -203,12 +204,12 @@ fn edit_actions_get_the_context_and_answer_with_edits() {
 #[test]
 fn project_access_needs_the_grant_and_stays_in_the_project() {
     let p = project_plugin();
-    let base = std::env::temp_dir().join(format!("idecraft-plugin-api-{}", std::process::id()));
+    let base = std::env::temp_dir().join(format!("ferris-idea-plugin-api-{}", std::process::id()));
     let root = base.join("project");
     std::fs::create_dir_all(&root).unwrap();
     std::fs::write(root.join("README.md"), "# Hello").unwrap();
     std::fs::write(base.join("outside.txt"), "secret").unwrap();
-    let fuel = idecraft_plugins::FUEL;
+    let fuel = ferris_idea_plugins::FUEL;
     let refused = Access {
         root: Some(root.clone()),
         project_read: false,
@@ -269,18 +270,18 @@ fn reader_plugin() -> Plugin {
     let wat = format!(
         r#"
 (module
-  (import "idecraft" "read_file" (func $read (param i32 i32) (result i64)))
+  (import "ferris-idea" "read_file" (func $read (param i32 i32) (result i64)))
   (memory (export "memory") 200)
   (global $next (mut i32) (i32.const 8192))
   (data (i32.const 16) "{data}")
-  (func (export "idecraft_alloc") (param $len i32) (result i32)
+  (func (export "ferris_idea_alloc") (param $len i32) (result i32)
     (local $at i32)
     (local.set $at (global.get $next))
     (global.set $next (i32.add (global.get $next) (local.get $len)))
     (local.get $at))
-  (func (export "idecraft_manifest") (result i64)
+  (func (export "ferris_idea_manifest") (result i64)
     (i64.or (i64.shl (i64.const 16) (i64.const 32)) (i64.const {len})))
-  (func (export "idecraft_run") (param $a i32) (param $al i32) (param $p i32) (param $l i32) (result i64)
+  (func (export "ferris_idea_run") (param $a i32) (param $al i32) (param $p i32) (param $l i32) (result i64)
     (local $i i32)
     ;; m(any)
     (if (i32.eq (i32.load8_u (local.get $a)) (i32.const 109))
@@ -302,7 +303,8 @@ fn reader_plugin() -> Plugin {
 /// A project with own sources and everything a plugin must not get, in a fresh folder: the
 /// folder above the project and the project.
 fn guarded_project(tag: &str) -> (std::path::PathBuf, std::path::PathBuf) {
-    let base = std::env::temp_dir().join(format!("idecraft-plugin-{tag}-{}", std::process::id()));
+    let base =
+        std::env::temp_dir().join(format!("ferris-idea-plugin-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
     let root = base.join("project");
     for (rel, text) in [
@@ -315,7 +317,10 @@ fn guarded_project(tag: &str) -> (std::path::PathBuf, std::path::PathBuf) {
             "project/.git/config",
             "[remote \"origin\"]\n\turl = https://user:CONTENT-GIT@example.com/x.git\n",
         ),
-        ("project/.idecraft/state.json", "{\"x\":\"CONTENT-IDE\"}\n"),
+        (
+            "project/.ferris-idea/state.json",
+            "{\"x\":\"CONTENT-IDE\"}\n",
+        ),
         ("project/node_modules/x.js", "CONTENT-DEP\n"),
         ("outside.txt", "CONTENT-OUTSIDE\n"),
         ("elsewhere/o.txt", "CONTENT-ELSEWHERE\n"),
@@ -334,7 +339,7 @@ fn read_file_takes_only_own_sources_and_logs_refusals() {
     let p = reader_plugin();
     let (base, root) = guarded_project("read");
     let dir = base.join("plugins");
-    let fuel = idecraft_plugins::FUEL;
+    let fuel = ferris_idea_plugins::FUEL;
     let access = Access {
         root: Some(root.clone()),
         project_read: true,
@@ -368,7 +373,7 @@ fn read_file_takes_only_own_sources_and_logs_refusals() {
             "version control or IDE data",
         ),
         (
-            ".idecraft/state.json".into(),
+            ".ferris-idea/state.json".into(),
             FILE_NOT_READABLE,
             "version control or IDE data",
         ),
@@ -454,7 +459,7 @@ fn read_file_takes_only_own_sources_and_logs_refusals() {
     // Too large: only for a file the plugin may read.
     std::fs::write(
         root.join("src/big.txt"),
-        vec![b'x'; idecraft_plugins::MAX_TEXT + 1],
+        vec![b'x'; ferris_idea_plugins::MAX_TEXT + 1],
     )
     .unwrap();
     assert_eq!(code("src/big.txt"), FILE_TOO_LARGE);
@@ -535,14 +540,14 @@ const TODO: &str = r#"
   (data (i32.const 16) "{\"name\":\"Todo\",\"version\":\"1.0\",\"actions\":[{\"id\":\"todo\",\"title\":\"TODO check\",\"kind\":\"inspect\",\"files\":[\"txt\"]},{\"id\":\"bad\",\"title\":\"Bad\",\"kind\":\"inspect\"}]}")
   (data (i32.const 1024) "{\"findings\":[{\"start\":0,\"end\":4,\"message\":\"TODO left\",\"fix\":{\"title\":\"Remove TODO\",\"edits\":[{\"start\":0,\"end\":5,\"text\":\"\"}]}}]}")
   (data (i32.const 2048) "{\"findings\":[{\"start\":0,\"end\":99999,\"message\":\"out\"}]}")
-  (func (export "idecraft_alloc") (param $len i32) (result i32)
+  (func (export "ferris_idea_alloc") (param $len i32) (result i32)
     (local $at i32)
     (local.set $at (global.get $next))
     (global.set $next (i32.add (global.get $next) (local.get $len)))
     (local.get $at))
-  (func (export "idecraft_manifest") (result i64)
+  (func (export "ferris_idea_manifest") (result i64)
     (i64.or (i64.shl (i64.const 16) (i64.const 32)) (i64.const 155)))
-  (func (export "idecraft_run") (param $a i32) (param $al i32) (param $p i32) (param $l i32) (result i64)
+  (func (export "ferris_idea_run") (param $a i32) (param $al i32) (param $p i32) (param $l i32) (result i64)
     ;; t(odo) or b(ad)
     (if (i32.eq (i32.load8_u (local.get $a)) (i32.const 98))
       (then (return (i64.or (i64.shl (i64.const 2048) (i64.const 32)) (i64.const 54)))))
@@ -552,7 +557,7 @@ const TODO: &str = r#"
 
 #[test]
 fn inspect_actions_report_checked_findings() {
-    use idecraft_plugins::{InspectContext, action_list};
+    use ferris_idea_plugins::{InspectContext, action_list};
     let plugin =
         Plugin::from_bytes(Path::new("todo.wasm"), &wat::parse_str(TODO).unwrap()).unwrap();
     let todo = &plugin.manifest.actions[0];
@@ -575,7 +580,7 @@ fn inspect_actions_report_checked_findings() {
     let found = plugin.run_inspect("todo", &ctx, Access::default()).unwrap();
     assert_eq!(found.len(), 1);
     assert_eq!((found[0].start, found[0].end), (0, 4));
-    assert_eq!(found[0].level, idecraft_plugins::FindingLevel::Warning);
+    assert_eq!(found[0].level, ferris_idea_plugins::FindingLevel::Warning);
     assert_eq!(found[0].fix.as_ref().unwrap().title, "Remove TODO");
     let err = plugin
         .run_inspect("bad", &ctx, Access::default())
@@ -593,7 +598,7 @@ fn inspect_actions_report_checked_findings() {
     );
 }
 
-/// The module above as bytes, for the window self-test (`cargo test -p idecraft-plugins --test
+/// The module above as bytes, for the window self-test (`cargo test -p ferris-idea-plugins --test
 /// runtime -- --ignored --nocapture print_todo_bytes`).
 #[test]
 #[ignore]
@@ -609,8 +614,8 @@ fn print_todo_bytes() {
 /// files `read_file` refuses; handing one over on purpose leaves a line in the log.
 #[test]
 fn guarded_files_are_what_read_file_refuses() {
-    use idecraft_core::NotOwn;
-    use idecraft_plugins::{Refusal, guarded, note_passed_on};
+    use ferris_idea_core::NotOwn;
+    use ferris_idea_plugins::{Refusal, guarded, note_passed_on};
     let (base, root) = guarded_project("guard");
     let dir = base.join("plugins");
     let log = dir.join(FILE_AUDIT);
@@ -630,7 +635,7 @@ fn guarded_files_are_what_read_file_refuses() {
         ),
         ("local.txt", Refusal::NotOwn(NotOwn::Ignored)),
         (".git/config", Refusal::Data),
-        (".idecraft/state.json", Refusal::Data),
+        (".ferris-idea/state.json", Refusal::Data),
         ("node_modules/x.js", Refusal::NotOwn(NotOwn::Dependencies)),
         ("src", Refusal::NotAFile),
     ] {

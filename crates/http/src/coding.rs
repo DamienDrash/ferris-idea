@@ -18,7 +18,7 @@ pub const RATIO_FLOOR: usize = 1024 * 1024;
 pub struct Decoded {
     /// The codings undone, in the order they were undone: the last one listed by the server first.
     pub codings: Vec<String>,
-    /// The codings that are still on [`Decoded::body`] because IDECraft does not decode them, in
+    /// The codings that are still on [`Decoded::body`] because Ferris IDEA does not decode them, in
     /// the order the server listed them.
     pub remaining: Vec<String>,
     /// The decoded bytes.
@@ -113,7 +113,7 @@ pub fn codings(headers: &[(String, String)]) -> Vec<String> {
 }
 
 /// Undoes the content codings of `body`. `None` when there is nothing to undo: no coding, an empty
-/// body, or a coding IDECraft does not decode as the last one applied.
+/// body, or a coding Ferris IDEA does not decode as the last one applied.
 pub fn decode(headers: &[(String, String)], body: &[u8]) -> Option<Decoded> {
     decode_within(headers, body, &LIMITS)
 }
@@ -152,7 +152,7 @@ fn decode_within(headers: &[(String, String)], body: &[u8], limits: &Limits) -> 
     })
 }
 
-/// A coding IDECraft decodes.
+/// A coding Ferris IDEA decodes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Kind {
     Gzip,

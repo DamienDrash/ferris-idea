@@ -26,7 +26,7 @@ pub struct Hints {
 impl Hints {
     /// Hints from the server's parameter hints; `line_start` gives the char offset of a line.
     pub fn from_hints(
-        hints: &[idecraft_languages::inlay::ParameterHint],
+        hints: &[ferris_idea_languages::inlay::ParameterHint],
         line_start: impl Fn(u64) -> Option<usize>,
     ) -> Self {
         let mut out: Vec<Hint> = hints
@@ -111,7 +111,7 @@ pub fn with_hints(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use idecraft_languages::inlay::ParameterHint;
+    use ferris_idea_languages::inlay::ParameterHint;
 
     fn hint(line: u64, character: u64, label: &str) -> ParameterHint {
         ParameterHint {

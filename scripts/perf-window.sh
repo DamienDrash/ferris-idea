@@ -1,5 +1,5 @@
 #!/bin/sh
-# Window part of the performance budgets (SPEC-0260): starts the release build of `idecraft ui` on
+# Window part of the performance budgets (SPEC-0260): starts the release build of `ferris-idea ui` on
 # an empty project and measures from outside, the way OBS-0002 measured the reference (wall clock,
 # `ps`, the public window list): time to the project window, time from the project window to idle
 # (below 5 % of one core for 10 s, from CPU-time deltas), resident memory when idle and after
@@ -8,16 +8,21 @@
 #
 #   perf-window.sh [idle_minutes]    default 10
 set -eu
+# Variables under the former name (IDECRAFT_*) still count while today's is not set. rebrand:keep
+for former in $(env | sed -n 's/^IDECRAFT_\([A-Za-z0-9_]*\)=.*/\1/p'); do # rebrand:keep
+  eval "[ -n \"\${FERRIS_IDEA_$former+x}\" ] || { FERRIS_IDEA_$former=\$IDECRAFT_$former; export FERRIS_IDEA_$former; }" # rebrand:keep
+done
+export FERRIS_IDEA_NO_TAKEOVER=1 # the programs this script starts never move the user's settings folder (SPEC-0356)
 export LC_ALL=C
 cd "$(dirname "$0")/.."
 IDLE_MIN="${1:-10}"
-BIN="${CARGO_TARGET_DIR:-target}/release/idecraft"
-BENCH_DIR="${IDECRAFT_BENCH_DIR:-$HOME/.cache/idecraft-bench}"
+BIN="${CARGO_TARGET_DIR:-target}/release/ferris-idea"
+BENCH_DIR="${FERRIS_IDEA_BENCH_DIR:-$HOME/.cache/ferris-idea-bench}"
 WINS="$BENCH_DIR/bin/windows"
 QUIET_CPU=5      # % of one core
 QUIET_SECS=10    # consecutive seconds below QUIET_CPU
 TIMEOUT=120      # s to wait for the window and for idle
-[ -x "$BIN" ] || { echo "error: $BIN missing (cargo build --release -p idecraft)" >&2; exit 1; }
+[ -x "$BIN" ] || { echo "error: $BIN missing (cargo build --release -p ferris-idea)" >&2; exit 1; }
 mkdir -p "$(dirname "$WINS")"
 [ -x "$WINS" ] || swiftc -O -o "$WINS" scripts/windows.swift
 
@@ -47,14 +52,14 @@ rss_mib() { ps -o rss= -p "$1" 2>/dev/null | awk '{ printf "%d\n", $1 / 1024 }';
 set -m
 T0=$(now_ms)
 # Trusted for this run, so no trust question waits for an answer (SPEC-0278 behaviour 10).
-IDECRAFT_TRUST_PROJECTS=all IDECRAFT_CONFIG_DIR="$work/config" "$BIN" ui "$work/empty" >"$work/out.log" 2>&1 &
+FERRIS_IDEA_TRUST_PROJECTS=all FERRIS_IDEA_CONFIG_DIR="$work/config" "$BIN" ui "$work/empty" >"$work/out.log" 2>&1 &
 pid=$!
 set +m
 t_win="" t_frame="" t_quiet="" quiet_since="" last_t="" last_cpu=""
 while :; do
   t=$(( $(now_ms) - T0 ))
   [ "$t" -le $((TIMEOUT * 1000)) ] || { echo "error: no project window and idle within $TIMEOUT s" >&2; exit 1; }
-  kill -0 "$pid" 2>/dev/null || { echo "error: idecraft ended early" >&2; cat "$work/out.log" >&2; exit 1; }
+  kill -0 "$pid" 2>/dev/null || { echo "error: ferris-idea ended early" >&2; cat "$work/out.log" >&2; exit 1; }
   set -- $("$WINS" "$pid")
   nwin=$1 size=$2
   [ -z "$t_win" ] && [ "$nwin" -gt 0 ] && t_win=$t

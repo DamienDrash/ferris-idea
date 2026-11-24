@@ -4,12 +4,12 @@
 
 use std::time::{Duration, Instant};
 
-use idecraft_session::frame::{Frame, read_frame};
-use idecraft_session::{Backend, BackendConfig, ClientSession, ErrorCode, Message, in_process};
+use ferris_idea_session::frame::{Frame, read_frame};
+use ferris_idea_session::{Backend, BackendConfig, ClientSession, ErrorCode, Message, in_process};
 use serde_json::json;
 
 fn scratch(tag: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("idecraft-uifam-{tag}-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-uifam-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("project")).unwrap();
     std::fs::canonicalize(dir).unwrap()
@@ -48,8 +48,8 @@ fn uisec8_a_backend_never_serves_the_ui_family() {
         audit.contains("ui.act") && audit.contains("denied"),
         "{audit}"
     );
-    assert!(idecraft_session::backend::is_ui_method("ui.find"));
-    assert!(!idecraft_session::backend::is_ui_method("uifind"));
+    assert!(ferris_idea_session::backend::is_ui_method("ui.find"));
+    assert!(!ferris_idea_session::backend::is_ui_method("uifind"));
 }
 
 /// The window answers `ui.snapshot` and `ui.act` from a backend with `denied` and notes it.
@@ -66,7 +66,7 @@ fn uisec8_the_window_refuses_ui_requests_of_a_backend() {
         let hello = Message::Response {
             id,
             result: Ok(
-                json!({"session": "ab", "client": "c1", "major": 1, "minor": idecraft_session::hello::MINOR, "token": "11".repeat(32)}),
+                json!({"session": "ab", "client": "c1", "major": 1, "minor": ferris_idea_session::hello::MINOR, "token": "11".repeat(32)}),
             ),
         };
         let mut w = server.writer;

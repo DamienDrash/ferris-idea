@@ -2,9 +2,9 @@
 
 use std::path::{Path, PathBuf};
 
-use idecraft_core::{fuzzy_match, rank};
+use ferris_idea_core::{fuzzy_match, rank};
 
-pub use idecraft_core::local_state::{LOCAL_STATE_IGNORE, refresh_local_state_ignore};
+pub use ferris_idea_core::local_state::{LOCAL_STATE_IGNORE, refresh_local_state_ignore};
 
 /// Most files remembered (behaviour 3).
 pub const RECENT_LIMIT: usize = 50;
@@ -41,10 +41,11 @@ pub struct RecentFiles {
 }
 
 impl RecentFiles {
-    /// Reads the list from `.idecraft/recent-files` (one workspace-relative path per line); missing
+    /// Reads the list from `.ferris-idea/recent-files` (one workspace-relative path per line); missing
     /// files are dropped.
     pub fn load(root: &Path) -> Self {
-        let text = std::fs::read_to_string(root.join(".idecraft/recent-files")).unwrap_or_default();
+        let text =
+            std::fs::read_to_string(root.join(".ferris-idea/recent-files")).unwrap_or_default();
         let files = text
             .lines()
             .map(|l| root.join(l))
@@ -63,7 +64,10 @@ impl RecentFiles {
             .map(|p| p.to_string_lossy().replace('\\', "/"))
             .collect();
         if refresh_local_state_ignore(root) {
-            let _ = std::fs::write(root.join(".idecraft/recent-files"), lines.join("\n") + "\n");
+            let _ = std::fs::write(
+                root.join(".ferris-idea/recent-files"),
+                lines.join("\n") + "\n",
+            );
         }
     }
 
@@ -129,7 +133,7 @@ mod tests {
 
     #[test]
     fn recent_order_filter_and_persistence() {
-        let dir = std::env::temp_dir().join(format!("idecraft-recent-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-recent-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         for f in ["a.rs", "b.rs", "notes.md"] {
@@ -153,7 +157,7 @@ mod tests {
         assert_eq!(names(r.matching("nt", None)), ["notes.md"]);
         r.save(&dir);
         assert_eq!(
-            std::fs::read_to_string(dir.join(".idecraft/.gitignore")).unwrap(),
+            std::fs::read_to_string(dir.join(".ferris-idea/.gitignore")).unwrap(),
             LOCAL_STATE_IGNORE
         );
         std::fs::remove_file(dir.join("b.rs")).unwrap();

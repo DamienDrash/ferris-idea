@@ -9,16 +9,16 @@
 
 #![cfg(target_os = "macos")]
 
+use ferris_idea_languages::context::{PlaceContext, UsageKind};
+use ferris_idea_languages::insight::{Signature, SignatureHelp};
+use ferris_idea_ui::tool_windows::ToolWindow;
+use ferris_idea_workbench::WorkbenchView;
+use ferris_idea_workbench::find_usages_model::{Hit, UsageTree};
+use ferris_idea_workbench::nav_model::Place;
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_languages::context::{PlaceContext, UsageKind};
-use idecraft_languages::insight::{Signature, SignatureHelp};
-use idecraft_ui::tool_windows::ToolWindow;
-use idecraft_workbench::WorkbenchView;
-use idecraft_workbench::find_usages_model::{Hit, UsageTree};
-use idecraft_workbench::nav_model::Place;
 
 fn workspace(tag: &str) -> std::path::PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-sixth-{tag}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-sixth-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src/inner")).unwrap();
     std::fs::write(root.join("src/inner/deep.js"), "let deep = 1;\n").unwrap();

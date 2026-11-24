@@ -132,7 +132,7 @@ pub fn scroll(file: Option<&std::path::Path>) -> Result<(), Box<dyn std::error::
                 ..Default::default()
             },
             |window, cx| {
-                idecraft_workbench::x11_wake::until_first_frame(window);
+                ferris_idea_workbench::x11_wake::until_first_frame(window);
                 cx.new(|_| ScrollView {
                     lines,
                     scroll: UniformListScrollHandle::new(),

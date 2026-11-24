@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use idecraft_core::{
+use ferris_idea_core::{
     COMPACT_AT, FileChange, LocalHistory, MAX_RECORDED_BYTES, MAX_REVISIONS_PER_FILE, RevisionKind,
 };
 
@@ -11,7 +11,8 @@ struct Dir(PathBuf);
 
 impl Dir {
     fn new(tag: &str) -> Self {
-        let p = std::env::temp_dir().join(format!("idecraft-history-{tag}-{}", std::process::id()));
+        let p =
+            std::env::temp_dir().join(format!("ferris-idea-history-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&p);
         std::fs::create_dir_all(&p).unwrap();
         Self(p)
@@ -147,7 +148,7 @@ fn pruning_damage_and_watcher_changes() {
     assert_eq!(h.object_count(), 2, "its content is removed");
 
     // A damaged line is skipped.
-    let log = d.root().join(".idecraft/history/revisions.jsonl");
+    let log = d.root().join(".ferris-idea/history/revisions.jsonl");
     let mut text = std::fs::read_to_string(&log).unwrap();
     text.insert_str(0, "{not json\n");
     std::fs::write(&log, text).unwrap();
@@ -171,7 +172,8 @@ fn pruning_damage_and_watcher_changes() {
 
 /// Lines of the log that belong to `path`.
 fn log_lines(d: &Dir, path: &str) -> usize {
-    let log = std::fs::read_to_string(d.root().join(".idecraft/history/revisions.jsonl")).unwrap();
+    let log =
+        std::fs::read_to_string(d.root().join(".ferris-idea/history/revisions.jsonl")).unwrap();
     let needle = format!("\"path\":\"{path}\"");
     log.lines().filter(|l| l.contains(&needle)).count()
 }
@@ -222,7 +224,7 @@ fn bounded_log_and_stable_ids() {
 fn logs_without_ids_number_their_lines() {
     let d = Dir::new("legacy");
     d.write("a.txt", "x");
-    let dir = d.root().join(".idecraft/history");
+    let dir = d.root().join(".ferris-idea/history");
     std::fs::create_dir_all(dir.join("objects")).unwrap();
     std::fs::write(
         dir.join("revisions.jsonl"),

@@ -56,10 +56,10 @@ pub fn lldb_dap() -> Option<Vec<String>> {
     (out.status.success() && !path.is_empty()).then(|| vec![path])
 }
 
-/// Delve (`SPEC-0039` v7 behaviour 11): `IDECRAFT_DLV`, else `dlv` on the PATH, else where
+/// Delve (`SPEC-0039` v7 behaviour 11): `FERRIS_IDEA_DLV`, else `dlv` on the PATH, else where
 /// `go install` puts it (`$GOBIN`, `$GOPATH/bin`, `~/go/bin`).
 pub fn delve_binary() -> Option<PathBuf> {
-    if let Some(p) = std::env::var_os("IDECRAFT_DLV").map(PathBuf::from) {
+    if let Some(p) = ferris_idea_core::product_var_os("FERRIS_IDEA_DLV").map(PathBuf::from) {
         return p.is_file().then_some(p);
     }
     let name = if cfg!(windows) { "dlv.exe" } else { "dlv" };
@@ -77,10 +77,10 @@ pub fn delve_binary() -> Option<PathBuf> {
     })
 }
 
-/// The DAP server script of js-debug (`dapDebugServer.js`): `IDECRAFT_JS_DEBUG`, else the newest
+/// The DAP server script of js-debug (`dapDebugServer.js`): `FERRIS_IDEA_JS_DEBUG`, else the newest
 /// `~/.local/opt/js-debug*/js-debug/src/dapDebugServer.js` (the release archive unpacked there).
 pub fn js_debug_server() -> Option<PathBuf> {
-    if let Some(p) = std::env::var_os("IDECRAFT_JS_DEBUG").map(PathBuf::from) {
+    if let Some(p) = ferris_idea_core::product_var_os("FERRIS_IDEA_JS_DEBUG").map(PathBuf::from) {
         return p.is_file().then_some(p);
     }
     let opt = PathBuf::from(std::env::var_os("HOME")?).join(".local/opt");
@@ -95,11 +95,12 @@ pub fn js_debug_server() -> Option<PathBuf> {
     found.pop()
 }
 
-/// The start script of kotlin-debug-adapter: `IDECRAFT_KOTLIN_DEBUG`, else the newest
+/// The start script of kotlin-debug-adapter: `FERRIS_IDEA_KOTLIN_DEBUG`, else the newest
 /// `kotlin-debug-adapter*` in `~/.local/opt` (`kotlin-debug.sh install` of the reference environment), else
 /// `kotlin-debug-adapter` on the PATH (`SPEC-0132` behaviour 3).
 pub fn kotlin_debug_adapter() -> Option<PathBuf> {
-    if let Some(p) = std::env::var_os("IDECRAFT_KOTLIN_DEBUG").map(PathBuf::from) {
+    if let Some(p) = ferris_idea_core::product_var_os("FERRIS_IDEA_KOTLIN_DEBUG").map(PathBuf::from)
+    {
         return p.is_file().then_some(p);
     }
     let opt = PathBuf::from(std::env::var_os("HOME")?).join(".local/opt");
@@ -121,10 +122,10 @@ pub fn kotlin_debug_adapter() -> Option<PathBuf> {
     found.pop().or_else(|| on_path("kotlin-debug-adapter"))
 }
 
-/// A Chrome or Chromium for debugging pages (`SPEC-0133` behaviour 2): `IDECRAFT_CHROME`, else the
+/// A Chrome or Chromium for debugging pages (`SPEC-0133` behaviour 2): `FERRIS_IDEA_CHROME`, else the
 /// usual install places of this system, else `google-chrome`/`chromium` on the PATH.
 pub fn chrome() -> Option<PathBuf> {
-    if let Some(p) = std::env::var_os("IDECRAFT_CHROME").map(PathBuf::from) {
+    if let Some(p) = ferris_idea_core::product_var_os("FERRIS_IDEA_CHROME").map(PathBuf::from) {
         return p.is_file().then_some(p);
     }
     let known = [
@@ -234,7 +235,7 @@ pub fn browser_launch(
 }
 
 /// js-debug's DAP server, started on a free local port; ends with the value, together with what it
-/// started (the browser of a page, the debugged program), and never outlives IDECraft
+/// started (the browser of a page, the debugged program), and never outlives Ferris IDEA
 /// (`SPEC-0263` v2 behaviour 3).
 pub struct JsDebugServer {
     child: std::process::Child,
@@ -299,7 +300,7 @@ impl JsDebugServer {
 
 impl Drop for JsDebugServer {
     fn drop(&mut self) {
-        // IDECraft ends it now, so the guard stands down first.
+        // Ferris IDEA ends it now, so the guard stands down first.
         drop(self.guard.take());
         crate::lifetime::end_tree(&mut self.child, std::time::Duration::from_secs(3));
     }

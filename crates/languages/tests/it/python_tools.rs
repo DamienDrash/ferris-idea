@@ -1,11 +1,11 @@
-//! SPEC-0329 AK-4: the real `ruff` and `black`. `IDECRAFT_TEST_PYTOOLS` names a folder that
+//! SPEC-0329 AK-4: the real `ruff` and `black`. `FERRIS_IDEA_TEST_PYTOOLS` names a folder that
 //! holds both (the `bin` folder of a virtual environment with `pip install ruff black`); without
 //! it they are looked up on `PATH`. Skipped when they are not installed.
 
 use std::path::{Path, PathBuf};
 
-use idecraft_languages::insight::Range;
-use idecraft_languages::python_tools::{
+use ferris_idea_languages::insight::Range;
+use ferris_idea_languages::python_tools::{
     PythonTool, ToolKind, ToolSearch, find, format, plan, ruff_imports,
 };
 
@@ -15,20 +15,23 @@ const FORMATTED: &str = "import os, sys\nfrom app.prices import Item\n\n\ndef me
 
 /// A scratch project and the tool of `kind`, or `None` (with a note) when it is not installed.
 fn project(name: &str, kind: ToolKind) -> Option<(PathBuf, PythonTool)> {
-    let dir =
-        std::env::temp_dir().join(format!("idecraft-pytools-it-{name}-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!(
+        "ferris-idea-pytools-it-{name}-{}",
+        std::process::id()
+    ));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("app")).unwrap();
     let dir = dir.canonicalize().unwrap();
     let search = ToolSearch {
         root: dir.clone(),
-        environment: std::env::var_os("IDECRAFT_TEST_PYTOOLS").map(PathBuf::from),
+        environment: ferris_idea_core::product_var_os("FERRIS_IDEA_TEST_PYTOOLS")
+            .map(PathBuf::from),
         path_var: std::env::var_os("PATH"),
         trusted: true,
     };
     let Some(tool) = find(&search, &[kind]) else {
         eprintln!(
-            "skipped: no {} (set IDECRAFT_TEST_PYTOOLS to a folder with ruff and black)",
+            "skipped: no {} (set FERRIS_IDEA_TEST_PYTOOLS to a folder with ruff and black)",
             kind.program()
         );
         let _ = std::fs::remove_dir_all(&dir);

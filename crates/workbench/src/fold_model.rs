@@ -165,7 +165,7 @@ impl Folds {
         Some(
             self.placeholder(start)
                 .or_else(|| self.look(start).map(|l| l.text.as_str()))
-                .unwrap_or(idecraft_languages::folding::ELLIPSIS),
+                .unwrap_or(ferris_idea_languages::folding::ELLIPSIS),
         )
     }
 
@@ -442,7 +442,7 @@ impl Folds {
     }
 }
 
-pub use idecraft_languages::folding::{Look, innermost_around, level_folds, levels};
+pub use ferris_idea_languages::folding::{Look, innermost_around, level_folds, levels};
 
 /// The block Fold Code Block folds (`SPEC-0083` v7 behaviour 15): of `blocks`, the code blocks
 /// around the caret from the innermost outwards, the first that spans more than one line and is

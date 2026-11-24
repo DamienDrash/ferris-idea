@@ -1,15 +1,15 @@
 //! "Report a problem with this database" (`SPEC-0301`): the report is built locally, shown as text
-//! the user edits, then copied or opened as a prefilled issue in the browser. IDECraft sends nothing
+//! the user edits, then copied or opened as a prefilled issue in the browser. Ferris IDEA sends nothing
 //! itself (ADR-0007).
 
+use ferris_idea_database::report::{
+    Report, ReportInput, ReportStep, build_report, destination, issue_url,
+};
+use ferris_idea_database::{ConnectionProfile, Connector};
 use gpui::{
     ClipboardItem, Context, Entity, EventEmitter, FocusHandle, KeyDownEvent, Window, div,
     prelude::*, px,
 };
-use idecraft_database::report::{
-    Report, ReportInput, ReportStep, build_report, destination, issue_url,
-};
-use idecraft_database::{ConnectionProfile, Connector};
 
 use crate::editor_view::EditorView;
 use crate::palette::Palette;
@@ -31,7 +31,7 @@ pub struct ReportDialog {
     statement: Option<String>,
     include_hosts: bool,
     include_statement: bool,
-    /// The setting `database.report_url` (empty: IDECraft's issue template, `off`: copy only).
+    /// The setting `database.report_url` (empty: Ferris IDEA's issue template, `off`: copy only).
     setting: String,
     text: Entity<EditorView>,
     note: Option<String>,
@@ -195,7 +195,7 @@ impl Render for ReportDialog {
                     .child(format!("Report a problem with {}", self.connector.name)),
             )
             .child(div().text_xs().text_color(c(p.ui_muted)).child(
-                "Nothing is sent by IDECraft. Check and edit the text; passwords, data and your user name are never in it.",
+                "Nothing is sent by Ferris IDEA. Check and edit the text; passwords, data and your user name are never in it.",
             ))
             .child(
                 div()

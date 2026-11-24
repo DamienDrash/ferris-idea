@@ -26,12 +26,12 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use ferris_idea_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
+use ferris_idea_workbench::settings_model::Page;
+use ferris_idea_workbench::{AiChatView, SettingsView, WorkbenchView, semantics};
 use gpui::{
     Entity, Keystroke, Modifiers, MouseButton, TestAppContext, VisualTestContext, point, px,
 };
-use idecraft_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
-use idecraft_workbench::settings_model::Page;
-use idecraft_workbench::{AiChatView, SettingsView, WorkbenchView, semantics};
 
 type Bench = Entity<WorkbenchView>;
 
@@ -208,22 +208,22 @@ fn harness() -> (PathBuf, PathBuf) {
     static DIRS: std::sync::OnceLock<(PathBuf, PathBuf)> = std::sync::OnceLock::new();
     DIRS.get_or_init(|| {
         let base = std::env::temp_dir()
-            .join(format!("idecraft-ai-handtests-{}", std::process::id()))
+            .join(format!("ferris-idea-ai-handtests-{}", std::process::id()))
             .canonicalize()
             .unwrap_or_else(|_| {
                 let p = std::env::temp_dir()
-                    .join(format!("idecraft-ai-handtests-{}", std::process::id()));
+                    .join(format!("ferris-idea-ai-handtests-{}", std::process::id()));
                 std::fs::create_dir_all(&p).unwrap();
                 p.canonicalize().unwrap()
             });
         let secrets = base.join("secrets");
         std::fs::create_dir_all(&secrets).unwrap();
         mode(&secrets, 0o700);
-        let secrets = idecraft_database::test_store::use_dir(secrets);
+        let secrets = ferris_idea_database::test_store::use_dir(secrets);
         let programs = base.join("bin");
         std::fs::create_dir_all(&programs).unwrap();
         write_programs(&programs);
-        let programs = idecraft_ai::subscription::use_test_programs(programs);
+        let programs = ferris_idea_ai::subscription::use_test_programs(programs);
         (secrets, programs)
     })
     .clone()
@@ -307,7 +307,7 @@ fn typed() -> String {
 
 fn workspace(tag: &str, files: &[(&str, &str)]) -> PathBuf {
     let root = std::env::temp_dir().join(format!(
-        "idecraft-ai-handtests-{tag}-{}",
+        "ferris-idea-ai-handtests-{tag}-{}",
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&root);
@@ -324,7 +324,7 @@ fn workspace(tag: &str, files: &[(&str, &str)]) -> PathBuf {
 /// written), starting with `settings`.
 fn window(
     root: &Path,
-    settings: idecraft_core::IdeSettings,
+    settings: ferris_idea_core::IdeSettings,
     cx: &mut TestAppContext,
 ) -> (Bench, &'static mut VisualTestContext) {
     harness();
@@ -346,8 +346,8 @@ fn window(
 }
 
 /// Settings with the assistant on, talking to `endpoint`.
-fn on(endpoint: &str) -> idecraft_core::IdeSettings {
-    let mut s = idecraft_core::IdeSettings::default();
+fn on(endpoint: &str) -> ferris_idea_core::IdeSettings {
+    let mut s = ferris_idea_core::IdeSettings::default();
     s.ai.enabled = true;
     s.ai.endpoint = endpoint.to_owned();
     s.ai.model = "fake-small".to_owned();
@@ -472,7 +472,7 @@ fn menu(bench: &Bench, cx: &mut VisualTestContext, id: &str) {
 /// field, types `question` and presses Enter.
 fn ask(bench: &Bench, cx: &mut VisualTestContext, question: &str) {
     if bench.read_with(cx, |b, _| b.ai_chat_view().is_none()) {
-        menu(bench, cx, "IDECraft.AiChat");
+        menu(bench, cx, "FerrisIDEA.AiChat");
     }
     click(cx, "ai-question");
     type_text(cx, question);
@@ -577,7 +577,7 @@ fn files_containing(dir: &Path, needle: &str) -> Vec<PathBuf> {
 
 /// What MCP's `ai_assistant` reads of the chat (chips and shared tabs), as JSON.
 fn chat_state(root: &Path) -> String {
-    serde_json::to_string(&idecraft_ai::live::Live::global().chat(root)).unwrap()
+    serde_json::to_string(&ferris_idea_ai::live::Live::global().chat(root)).unwrap()
 }
 
 fn answer_by_question(s: &Seen) -> String {
@@ -606,7 +606,7 @@ const CALC: &str = "fn add(a: i32, b: i32) -> i32 {\n    a + b\n}\n";
 fn hand_tests_64_and_69_endpoint_key_explain_and_errors(cx: &mut TestAppContext) {
     let fake = Fake::start(Some(KEY), answer_by_question);
     let root = workspace("explain", &[("src/calc.rs", CALC)]);
-    let (bench, cx) = window(&root, idecraft_core::IdeSettings::default(), cx);
+    let (bench, cx) = window(&root, ferris_idea_core::IdeSettings::default(), cx);
     let settings_file = root.join(".test-settings/settings.toml");
     let calc = root.join("src/calc.rs");
 
@@ -622,11 +622,11 @@ fn hand_tests_64_and_69_endpoint_key_explain_and_errors(cx: &mut TestAppContext)
         texts(&bench, cx)
     );
     keys(cx, "escape");
-    menu(&bench, cx, "IDECraft.AiExplainCode");
+    menu(&bench, cx, "FerrisIDEA.AiExplainCode");
     pause(cx, 300);
     keys(cx, "escape");
     assert!(bench.read_with(cx, |b, _| b.ai_chat_view().is_none()));
-    menu(&bench, cx, "IDECraft.AiAttachGitDiff");
+    menu(&bench, cx, "FerrisIDEA.AiAttachGitDiff");
     assert!(status(&bench, cx).contains("The AI Assistant is off"));
     assert!(fake.seen().is_empty(), "nothing was sent while off");
 
@@ -653,7 +653,7 @@ fn hand_tests_64_and_69_endpoint_key_explain_and_errors(cx: &mut TestAppContext)
         .endpoint
         .trim_start_matches("http://")
         .trim_end_matches("/v1");
-    let stored = harness().0.join("idecraft-ai").join(account);
+    let stored = harness().0.join("ferris-idea-ai").join(account);
     assert_eq!(
         std::fs::read_to_string(&stored).unwrap().trim_end(),
         KEY,
@@ -699,7 +699,7 @@ fn hand_tests_64_and_69_endpoint_key_explain_and_errors(cx: &mut TestAppContext)
     let before = fake.chats().len();
     open_at(&bench, cx, &calc, 0, 0);
     keys(cx, "cmd-a");
-    menu(&bench, cx, "IDECraft.AiChat");
+    menu(&bench, cx, "FerrisIDEA.AiChat");
     assert_eq!(chips(&bench, cx), ["src/calc.rs:1-4 · 3 lines"]);
     pause(cx, 200);
     assert_eq!(fake.chats().len(), before, "attaching sends nothing");
@@ -713,7 +713,7 @@ fn hand_tests_64_and_69_endpoint_key_explain_and_errors(cx: &mut TestAppContext)
     // Explain Code: the selection goes with the question, the answer appears.
     open_at(&bench, cx, &calc, 0, 0);
     keys(cx, "cmd-a");
-    menu(&bench, cx, "IDECraft.AiExplainCode");
+    menu(&bench, cx, "FerrisIDEA.AiExplainCode");
     until(cx, 10, "Explain Code is answered", |cx| {
         !busy(&bench, cx)
             && texts(&bench, cx)
@@ -1073,8 +1073,8 @@ fn hand_tests_83_and_88_streaming_escape_and_inline_completion(cx: &mut TestAppC
 // ---------------------------------------------------------------------------------------------
 
 /// The settings in effect.
-fn current(cx: &mut VisualTestContext) -> idecraft_core::IdeSettings {
-    cx.update(|_, cx| idecraft_workbench::appearance::ide_settings(cx))
+fn current(cx: &mut VisualTestContext) -> ferris_idea_core::IdeSettings {
+    cx.update(|_, cx| ferris_idea_workbench::appearance::ide_settings(cx))
 }
 
 /// Hand test 86 (SPEC-0160) with stand-ins of `claude`, `codex` and `gemini`: choosing Claude
@@ -1103,7 +1103,7 @@ fn hand_test_86_subscriptions_run_the_programs_without_tools(cx: &mut TestAppCon
     click(cx, "settings-ai-1");
     until(cx, 10, "the Claude Code sign-in is checked", |cx| {
         settings(&bench, cx).read_with(cx, |v, _| {
-            v.ai_login() == Some(idecraft_ai::subscription::Login::SignedIn)
+            v.ai_login() == Some(ferris_idea_ai::subscription::Login::SignedIn)
         })
     });
     assert_eq!(current(cx).ai.subscription, "claude");
@@ -1151,7 +1151,7 @@ fn hand_test_86_subscriptions_run_the_programs_without_tools(cx: &mut TestAppCon
         !cwd.starts_with(root.to_str().unwrap()),
         "not in the project: {cwd}"
     );
-    assert!(cwd.contains("idecraft-ai-"), "{cwd}");
+    assert!(cwd.contains("ferris-idea-ai-"), "{cwd}");
     assert!(
         !Path::new(&cwd).exists(),
         "the folder is removed afterwards"
@@ -1223,6 +1223,101 @@ fn hand_test_86_subscriptions_run_the_programs_without_tools(cx: &mut TestAppCon
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// Hand test 86, Terminal mode (SPEC-0160 v2 behaviours 6 and 7) with the stand-in `claude`: the
+/// Claude plan row switches Chat (the default) to Terminal; then a question with Claude chosen and
+/// no Anthropic API template sends nothing — Claude Code is not run, the endpoint beside it is not
+/// asked — and the chat says why with two actions: "Open Claude Code in the Terminal" types
+/// Claude Code into a new terminal tab of the project (never run by the assistant), "Use the
+/// Anthropic API…" opens the settings on the Anthropic template. Sign in opens Claude Code too.
+#[gpui::test]
+fn hand_test_86_claude_plan_in_the_terminal_sends_nothing_from_the_chat(cx: &mut TestAppContext) {
+    let fake = Fake::start(None, |_| "endpoint".into());
+    let root = workspace("claude-terminal", &[("src/lib.rs", "pub fn a() {}\n")]);
+    let mut s = on(&fake.endpoint);
+    s.ai.subscription = "claude".into();
+    // Terminals start the recorder, so no real program is ever run by a typed command.
+    s.terminal.shell = Some(harness().1.join("recorder").display().to_string());
+    let (bench, cx) = window(&root, s, cx);
+    let log_start = program_log().len();
+    assert_eq!(
+        current(cx).ai.claude_plan_mode,
+        ferris_idea_core::ClaudePlanMode::Chat,
+        "Chat is the default"
+    );
+
+    // The Claude plan row switches to Terminal.
+    bench.update_in(cx, |b, window, cx| b.open_settings(Page::Ai, window, cx));
+    draw(cx);
+    assert_eq!(node(cx, "settings-ai-7").1, "Chat");
+    click(cx, "settings-ai-7");
+    assert_eq!(node(cx, "settings-ai-7").1, "Terminal");
+    assert_eq!(
+        current(cx).ai.claude_plan_mode,
+        ferris_idea_core::ClaudePlanMode::Terminal
+    );
+    // Sign in opens Claude Code in a new terminal tab.
+    let typed_before = typed().len();
+    click(cx, "settings-ai-3");
+    until(cx, 10, "Claude Code is typed into a new terminal", |_| {
+        typed()[typed_before..].contains("/claude'")
+    });
+    assert!(bench.read_with(cx, |b, _| b.settings_dialog().is_none()));
+
+    // A question sends nothing and says why.
+    ask(&bench, cx, "Hi Terminal Claude");
+    until(
+        cx,
+        10,
+        "the chat says Claude's plan runs in the Terminal",
+        |cx| {
+            texts(&bench, cx).iter().any(|t| {
+                t.starts_with("Error: Claude with your Claude plan is set to run in the Terminal")
+            })
+        },
+    );
+    let t = texts(&bench, cx);
+    let error = t.iter().find(|t| t.starts_with("Error: ")).unwrap();
+    for part in ["Claude Code", "Anthropic API key", "Nothing was sent"] {
+        assert!(error.contains(part), "{part}: {error}");
+    }
+    assert!(!t.iter().any(|t| t.starts_with("AI:")), "no answer: {t:?}");
+    assert!(!busy(&bench, cx));
+    assert!(fake.seen().is_empty(), "no silent fallback to the endpoint");
+    assert!(
+        !program_log()[log_start..].contains("Hi Terminal Claude"),
+        "Claude Code is never run for an answer"
+    );
+
+    // Way on 1: Claude Code in a new terminal tab of the project.
+    let typed_before = typed().len();
+    click(cx, "ai-plan-terminal");
+    until(cx, 10, "Claude Code is typed into a new terminal", |_| {
+        typed()[typed_before..].contains("/claude'")
+    });
+
+    // Way on 2: Settings on the Anthropic API template; the plan's mode stays.
+    ask(&bench, cx, " again");
+    until(cx, 10, "the message is shown again", |cx| {
+        drawn(cx, "ai-plan-api")
+    });
+    click(cx, "ai-plan-api");
+    until(cx, 10, "Settings open on the Anthropic template", |cx| {
+        bench.read_with(cx, |b, _| b.settings_dialog().is_some())
+            && note(&bench, cx).starts_with("Anthropic: endpoint https://api.anthropic.com/v1")
+    });
+    assert_eq!(
+        current(cx).ai.claude_plan_mode,
+        ferris_idea_core::ClaudePlanMode::Terminal
+    );
+    keys(cx, "escape");
+    if bench.read_with(cx, |b, _| b.settings_dialog().is_some()) {
+        keys(cx, "escape");
+    }
+    assert!(fake.seen().is_empty());
+    assert!(!program_log()[log_start..].contains("Hi Terminal Claude"));
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 // ---------------------------------------------------------------------------------------------
 // Hand tests 213 and 214: terminal, Run, Problems and Git diff in the chat
 // ---------------------------------------------------------------------------------------------
@@ -1266,7 +1361,7 @@ fn last_question(s: &Seen) -> String {
 fn terminal_view(
     bench: &Bench,
     cx: &mut VisualTestContext,
-) -> Entity<idecraft_workbench::TerminalView> {
+) -> Entity<ferris_idea_workbench::TerminalView> {
     bench
         .read_with(cx, |b, _| b.terminal())
         .expect("a terminal tab is open")
@@ -1353,7 +1448,7 @@ fn hand_tests_213_and_214_terminal_run_problems_and_diff_in_the_chat(cx: &mut Te
         &[
             ("src/calc.rs", CALC),
             ("broken.json", "{\"a\": 1,, }\n"),
-            (".idecraft/run.toml", TAP_RUN),
+            (".ferris-idea/run.toml", TAP_RUN),
             (".gitignore", ".test-settings/\n"),
         ],
     );
@@ -1423,7 +1518,7 @@ fn hand_tests_213_and_214_terminal_run_problems_and_diff_in_the_chat(cx: &mut Te
     choose(cx, "Explain with AI");
     let v = chat(&bench, cx);
     let question = v.read_with(cx, |v, cx| v.question(cx));
-    assert_eq!(question, idecraft_ai::context::EXPLAIN_OUTPUT);
+    assert_eq!(question, ferris_idea_ai::context::EXPLAIN_OUTPUT);
     assert_eq!(chips(&bench, cx).len(), 1);
     pause(cx, 200);
     assert_eq!(fake.chats().len(), sent, "nothing is sent before Enter");
@@ -1466,7 +1561,7 @@ fn hand_tests_213_and_214_terminal_run_problems_and_diff_in_the_chat(cx: &mut Te
     let v = chat(&bench, cx);
     assert_eq!(
         v.read_with(cx, |v, cx| v.question(cx)),
-        idecraft_ai::context::EXPLAIN_TEST
+        ferris_idea_ai::context::EXPLAIN_TEST
     );
     keys(cx, "enter");
     until(cx, 10, "the failure is explained", |cx| {
@@ -1485,15 +1580,15 @@ fn hand_tests_213_and_214_terminal_run_problems_and_diff_in_the_chat(cx: &mut Te
     until(cx, 10, "the JSON file has a problem", |cx| {
         bench.read_with(cx, |b, cx| !b.problems_list(cx).is_empty())
     });
-    menu(&bench, cx, "IDECraft.AiAttachProblems");
+    menu(&bench, cx, "FerrisIDEA.AiAttachProblems");
     let c = chips(&bench, cx);
     assert!(
         c.iter().any(|c| c.starts_with("Problems broken.json")),
         "{c:?}"
     );
-    menu(&bench, cx, "IDECraft.AiAttachGitDiff");
+    menu(&bench, cx, "FerrisIDEA.AiAttachGitDiff");
     let c = chips(&bench, cx);
-    // The changed file and the untracked `.idecraft/.gitignore` the window wrote.
+    // The changed file and the untracked `.ferris-idea/.gitignore` the window wrote.
     let changed = std::process::Command::new("git")
         .args(["status", "--porcelain"])
         .current_dir(&root)
@@ -1573,7 +1668,7 @@ fn hand_tests_213_and_214_terminal_run_problems_and_diff_in_the_chat(cx: &mut Te
     }
     keys(cx, "escape");
     let sent = fake.chats().len();
-    menu(&bench, cx, "IDECraft.AiExplainTerminal");
+    menu(&bench, cx, "FerrisIDEA.AiExplainTerminal");
     assert!(status(&bench, cx).contains("The AI Assistant is off"));
     pause(cx, 200);
     assert_eq!(fake.chats().len(), sent);
@@ -1747,7 +1842,7 @@ fn chat_draws_markdown_code_actions_and_offers_the_file(cx: &mut TestAppContext)
     open_at(&bench, cx, &stats, 0, 0);
 
     // A3: the open file is offered, not sent; the chip starts as suggested.
-    menu(&bench, cx, "IDECraft.AiChat");
+    menu(&bench, cx, "FerrisIDEA.AiChat");
     assert!(
         chips(&bench, cx).is_empty(),
         "nothing attached without a selection"
@@ -1987,8 +2082,8 @@ fn chat_draws_markdown_code_actions_and_offers_the_file(cx: &mut TestAppContext)
     // A6: with the focus in the chat, Explain Code is available (the menu bar asks this) and
     // explains the open file.
     click(cx, "ai-question");
-    let explain = idecraft_workbench::menu_bar::IdeAction {
-        id: "IDECraft.AiExplainCode".into(),
+    let explain = ferris_idea_workbench::menu_bar::IdeAction {
+        id: "FerrisIDEA.AiExplainCode".into(),
     };
     let available = cx.update(|window, cx| window.is_action_available(&explain, cx));
     assert!(

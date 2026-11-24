@@ -1,6 +1,7 @@
 # SPEC-0136: Profiling Java with JDK Flight Recorder
 
-- **Version:** 2 · **Date:** 2026-11-15 (v2: AK-6, hand test 62 with real keys)
+- **Version:** 3 · **Date:** 2026-11-19 (v3: costs per line and frames outside the project, behaviour 7,
+  AK-7, OBS-0113 P1 and P3); 2026-11-15 (v2: AK-6, hand test 62 with real keys)
 - **Sources:** GEN (IDEs profile Java run configurations and show call tree, hot spots and flame
   graph with a jump to the source; F-083), STD (JDK Flight Recorder in OpenJDK 11+:
   `-XX:StartFlightRecording=filename=…,settings=profile` and, from JDK 17, event settings such as
@@ -20,7 +21,7 @@ already has: nothing to install, no agent to attach.
    `exec:java` gets them through `MAVEN_OPTS` (kept options first), because the main class runs in
    Maven's JVM. Other JVM launchers stay with SPEC-0120. [STD]
 2. **Recording:** one execution sample per millisecond and running thread into
-   `.idecraft/profiles/last.jfr`; the recorder's start-up lines stay out of the output. JDK 17 or
+   `.ferris-idea/profiles/last.jfr`; the recorder's start-up lines stay out of the output. JDK 17 or
    newer is needed; with an older JDK the JVM refuses the option and the error says so. [STD]
 3. **Reading:** the `jfr` tool of the same JDK (next to `java` following links, else `JAVA_HOME` of
    the configuration or environment, else the macOS default JDK, else `PATH`) prints the samples
@@ -35,6 +36,12 @@ already has: nothing to install, no agent to attach.
    SPEC-0120 behaviour 7. [GEN]
 6. **Window and MCP:** as SPEC-0120; the engine reads "JFR"; `profile_run` reports `jfr` and the
    rewritten command or the `MAVEN_OPTS` value. [ADR-0008]
+7. **Lines and project code (v3, OBS-0113):** every frame of a sample with a line adds the sample
+   to that line's total, once per sample; the innermost frame's line gets it as self cost
+   (SPEC-0120 v5 behaviour 10), so the editor shows a cost at the hot loop and at each line that
+   calls into it, not only at a method's busiest line. JDK and library frames report their
+   package path (`java/util/Objects.java`), which does not resolve inside the workspace, so they
+   are outside the project unless the project has that very file (SPEC-0120 v5 behaviour 11). [GEN]
 
 ## Acceptance criteria
 - **AK-1** Text of `jfr print`: tree per thread, recorder samples left out, nested class file,
@@ -55,6 +62,9 @@ already has: nothing to install, no agent to attach.
   messages in the output, `2` shows Hot Spots with `Rechen.teuer` first at `Rechen.java:6` and a time
   that fits its share (D37), Enter opens the file at that line. Not covered: the Maven configuration
   (needs the exec plugin from Maven Central), the comparison with the reference.
+- **AK-7 (v3)** Text of `jfr print` with a recursive method and a JDK frame: line costs per line
+  with the recursive line counted once and self cost at the innermost line; the JDK frame outside the
+  project, the project's method inside (`jfr::tests`); in the window, SPEC-0120 v5 AK-9.
 
 ## Out of scope
 Allocation, lock and I/O events, wall-clock (sleeping threads), Gradle `run` and other launchers
@@ -64,4 +74,7 @@ Maven repository and was not downloaded.
 
 ## Known deviations from the reference
 Profiles are recorded with the JDK's own Flight Recorder and read with its `jfr` tool instead of a
-bundled agent, so nothing is installed (IMP-0043 as for SPEC-0120). Not compared side by side.
+bundled agent, so nothing is installed (IMP-0043 as for SPEC-0120). Compared side by side in OBS-0113
+(Gradle project): views, hottest method and the jump to the source agree; the reference's costs next
+to the lines (P1) and its greyed frames outside the project (P3) are behaviour 7 since v3; its
+timeline, events and choice of CPU or total time (P2) stay out of scope (SPEC-0120 v5).

@@ -1,4 +1,4 @@
-//! The IDECraft log folder and its line logs, e.g. the keyboard diagnostics (`SPEC-0270`).
+//! The Ferris IDEA log folder and its line logs, e.g. the keyboard diagnostics (`SPEC-0270`).
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -9,23 +9,24 @@ pub const KEYBOARD_LOG: &str = "keyboard-diagnostics.log";
 /// A log grows to this size, then the older half is kept as `<name>.1` (behaviour 3).
 const MAX_LOG_BYTES: u64 = 1024 * 1024;
 
-/// The IDECraft log folder: `$IDECRAFT_LOG_DIR`, else `~/Library/Logs/IDECraft` on macOS,
-/// `%LOCALAPPDATA%\IDECraft\Logs` on Windows, `$XDG_STATE_HOME/idecraft/log` or
-/// `~/.local/state/idecraft/log` elsewhere.
+/// The Ferris IDEA log folder: `$FERRIS_IDEA_LOG_DIR`, else `~/Library/Logs/FerrisIDEA` on macOS,
+/// `%LOCALAPPDATA%\FerrisIDEA\Logs` on Windows, `$XDG_STATE_HOME/ferris-idea/log` or
+/// `~/.local/state/ferris-idea/log` elsewhere.
 pub fn log_dir() -> Option<PathBuf> {
-    if let Some(d) = std::env::var_os("IDECRAFT_LOG_DIR") {
+    if let Some(d) = crate::product_var_os("FERRIS_IDEA_LOG_DIR") {
         return Some(PathBuf::from(d));
     }
     if cfg!(target_os = "macos") {
-        return std::env::var_os("HOME").map(|h| PathBuf::from(h).join("Library/Logs/IDECraft"));
+        return std::env::var_os("HOME").map(|h| PathBuf::from(h).join("Library/Logs/FerrisIDEA"));
     }
     if cfg!(windows) {
-        return std::env::var_os("LOCALAPPDATA").map(|d| PathBuf::from(d).join("IDECraft\\Logs"));
+        return std::env::var_os("LOCALAPPDATA")
+            .map(|d| PathBuf::from(d).join("Ferris IDEA\\Logs"));
     }
     if let Some(d) = std::env::var_os("XDG_STATE_HOME") {
-        return Some(PathBuf::from(d).join("idecraft/log"));
+        return Some(PathBuf::from(d).join("ferris-idea/log"));
     }
-    std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/state/idecraft/log"))
+    std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/state/ferris-idea/log"))
 }
 
 /// The keyboard diagnostics log.
@@ -104,7 +105,7 @@ mod tests {
 
     #[test]
     fn appends_rotates_and_reads_the_tail() {
-        let dir = std::env::temp_dir().join(format!("idecraft-logs-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-logs-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let log = dir.join("sub").join(KEYBOARD_LOG);
         assert!(tail(&log, 3).is_empty());

@@ -1,6 +1,6 @@
 //! SPEC-0108 v4 AK-11 and the security tests of ADR-0025 for database SSH tunnels: a real `sshd`
-//! of the test (`idecraft_remote::testing::TestHost`, loopback only, its own keys) forwards to a
-//! local echo server and, when `IDECRAFT_TEST_PG` / `IDECRAFT_TEST_MYSQL` are set, to the reference
+//! of the test (`ferris_idea_remote::testing::TestHost`, loopback only, its own keys) forwards to a
+//! local echo server and, when `FERRIS_IDEA_TEST_PG` / `FERRIS_IDEA_TEST_MYSQL` are set, to the reference
 //! databases. Skipped where `sshd` or `ssh-keygen` are missing.
 
 use crate::common;
@@ -9,13 +9,14 @@ use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream, UdpSocket};
 use std::time::Duration;
 
-use idecraft_database::{
+use ferris_idea_database::{
     ConnectionProfile, OnError, Outcome, Session, SessionError, SshTunnel, Tunnel, TunnelError,
 };
-use idecraft_remote::testing::TestHost;
+use ferris_idea_remote::testing::TestHost;
 
 fn host(tag: &str) -> Option<TestHost> {
-    let dir = std::env::temp_dir().join(format!("idecraft-dbtunnel-{tag}-{}", std::process::id()));
+    let dir =
+        std::env::temp_dir().join(format!("ferris-idea-dbtunnel-{tag}-{}", std::process::id()));
     TestHost::start(&dir)
 }
 
@@ -127,7 +128,7 @@ async fn sessions_go_through_the_tunnel() {
     let Some(h) = host("db") else {
         return;
     };
-    for var in ["IDECRAFT_TEST_PG", "IDECRAFT_TEST_MYSQL"] {
+    for var in ["FERRIS_IDEA_TEST_PG", "FERRIS_IDEA_TEST_MYSQL"] {
         let Ok(url) = std::env::var(var) else {
             continue;
         };

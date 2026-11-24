@@ -19,6 +19,7 @@
 # Without --dry-run the checkout stays on the batch branch (the bundle is built from it); the last
 # lines say how to go back.
 set -eu
+export FERRIS_IDEA_NO_TAKEOVER=1 # the programs this script starts never move the user's settings folder (SPEC-0356)
 cd "$(dirname "$0")/.."
 
 usage() { echo "usage: $0 [--dry-run] [--selftest] BRANCH [BRANCH…]" >&2; exit 2; }
@@ -78,8 +79,8 @@ done
 
 # Where the changelog lines added against origin/main ended up.
 printf '\n== added changelog lines by section\n'
-git diff -U0 origin/main -- CHANGELOG.md >"${TMPDIR:-/tmp}/idecraft-batch-changelog.$$"
-python3 -I - "${TMPDIR:-/tmp}/idecraft-batch-changelog.$$" <<'PY' || true
+git diff -U0 origin/main -- CHANGELOG.md >"${TMPDIR:-/tmp}/ferris-idea-batch-changelog.$$"
+python3 -I - "${TMPDIR:-/tmp}/ferris-idea-batch-changelog.$$" <<'PY' || true
 import re, sys
 added = []
 for line in open(sys.argv[1], encoding='utf-8'):
@@ -108,7 +109,7 @@ twice = [(s, l) for (s, l), n in seen.items() if len(n) > 1]
 for s, l in twice:
     print(f'twice in {s}: {l[:110]}')
 PY
-rm -f "${TMPDIR:-/tmp}/idecraft-batch-changelog.$$"
+rm -f "${TMPDIR:-/tmp}/ferris-idea-batch-changelog.$$"
 
 # The merged branches and their tips, for the merges of the pull requests afterwards.
 report() {
@@ -132,14 +133,14 @@ printf '\n== scripts/check-docs.sh\n'
 scripts/check-docs.sh
 printf '\n== scripts/bundle-macos.sh\n'
 scripts/bundle-macos.sh
-app="${CARGO_TARGET_DIR:-target}/bundle/macos/IDECraft.app"
-binary="$app/Contents/MacOS/idecraft"
+app="${CARGO_TARGET_DIR:-target}/bundle/macos/FerrisIDEA.app"
+binary="$app/Contents/MacOS/ferris-idea"
 echo "bundle: $(pwd)/$app"
 
 rc=0
 if [ "$selftest" = 1 ]; then
   printf '\n== window self-test (watchdog 30 min)\n'
-  log=$(mktemp "${TMPDIR:-/tmp}/idecraft-batch-selftest.XXXXXX")
+  log=$(mktemp "${TMPDIR:-/tmp}/ferris-idea-batch-selftest.XXXXXX")
   "$binary" ui --selftest >"$log" 2>&1 &
   pid=$!
   (sleep 1800 && kill "$pid" 2>/dev/null && echo "error: the self-test timed out after 30 min" >&2) &
@@ -155,7 +156,7 @@ if [ "$selftest" = 1 ]; then
   [ "$rc" -eq 0 ] || echo "error: the self-test failed (exit $rc)${last:+; output in $log}" >&2
 else
   echo "self-test (takes over the screen, about 15 min):"
-  echo "  $app/Contents/MacOS/idecraft ui --selftest"
+  echo "  $app/Contents/MacOS/ferris-idea ui --selftest"
 fi
 
 report "$@"

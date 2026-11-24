@@ -289,7 +289,7 @@ fn sources_for(class: &str, links: &[Link]) -> Vec<Source> {
                 .and_then(|s| s.to_str())
                 .unwrap_or_default();
             // Beside the jar, or in another folder of the Gradle cache (SPEC-0149 v3 behaviour 11).
-            let archive = idecraft_core::jvmsources::sources_archive_for(&l.container)
+            let archive = ferris_idea_core::jvmsources::sources_archive_for(&l.container)
                 .unwrap_or_else(|| l.container.with_file_name(format!("{stem}-sources.jar")));
             Source::Zip(
                 archive,
@@ -926,7 +926,7 @@ mod tests {
     /// another folder of the Gradle cache, copied to the cache folder and its declaration found.
     #[test]
     fn library_source_from_archives() {
-        let dir = std::env::temp_dir().join(format!("idecraft-libsrc-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-libsrc-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let m2 = dir.join("m2/org/x/lib/1.0");
         std::fs::create_dir_all(&m2).unwrap();
@@ -1062,7 +1062,8 @@ mod tests {
     #[test]
     fn reads_zip_entries() {
         use std::io::Write;
-        let dir = std::env::temp_dir().join(format!("idecraft-javadoc-zip-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("ferris-idea-javadoc-zip-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let zip = dir.join("src.zip");
         // One deflated entry written by hand.

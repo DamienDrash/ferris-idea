@@ -8,12 +8,12 @@
   [`ADR-0026`](../adr/0026-session-protocol-window-and-serve.md), SPEC-0321, SPEC-0324 and the Project
   Owner's order of 2026-11-09 and decision of the same evening (Android only as an APK for now,
   remote mode only) (`GEN`). Apple Keychain and Android Keystore documentation (`DOC`, facts only). No
-  observation of the reference is needed: mobile apps are IDECraft's own scope.
+  observation of the reference is needed: mobile apps are Ferris IDEA's own scope.
 - **Feature matrix rows:** M17 (no reference counterpart)
 
 ## Purpose
 
-From a phone, pair with a machine running `idecraft serve --pair <folder>`, list the project's files
+From a phone, pair with a machine running `ferris-idea serve --pair <folder>`, list the project's files
 and read one, over the same encrypted channel and session protocol as the desktop window.
 
 ## Behaviour
@@ -23,7 +23,7 @@ and read one, over the same encrypted channel and session protocol as the deskto
 1. The address is `host:port`, `host` (port 47100), `[ipv6]:port` or any of these after `paired://`.
    Anything else is refused and named. `…@ssh` is refused with the reason: a phone has no `ssh`.
    [ADR-0029 §5]
-2. Pairing takes a code or an `idecraft-pair://` link. With a link, the host's key must equal the
+2. Pairing takes a code or an `ferris-idea-pair://` link. With a link, the host's key must equal the
    link's before any digits exist (SPEC-0324 behaviour 3). The six digits and the host's fingerprint
    are shown; only the user's confirmation, and then the host's, stores the pin. Declining stores
    nothing. [ADR-0025 §2]
@@ -47,7 +47,7 @@ and read one, over the same encrypted channel and session protocol as the deskto
 
 9. SwiftUI: pair, compare digits, open a project, browse folders, read a file. Blocking calls run off
    the main thread. The Keychain entry uses `kSecAttrAccessibleWhenUnlockedThisDeviceOnly` and is not
-   synchronized. A debug build only has a self-test driven by `IDECRAFT_SELFTEST_*`, which confirms
+   synchronized. A debug build only has a self-test driven by `FERRIS_IDEA_SELFTEST_*`, which confirms
    digits by itself and prints them so `scripts/mobile-selftest.py` can compare them with the host's;
    a release build contains none of it.
 
@@ -98,11 +98,11 @@ denial of service only), a way to learn the served folder without typing it.
 - **AK-7** Paths outside the project, folders, oversized files are refused; a streamed and a binary file read correctly.
 - **AK-8** A failing vault stops pairing and names its status.
 - **AK-9** Double pairing is refused, forgetting works, an unpaired host is named.
-- **AK-10** The debug app in an iOS simulator pairs with a real `idecraft-serve`, the digits match, the
+- **AK-10** The debug app in an iOS simulator pairs with a real `ferris-idea-serve`, the digits match, the
   Keychain items report accessibility `aku`, and it lists and reads a file.
 - **AK-11** A release build contains no self-test.
 - **AK-12** The Kotlin bindings compile; the debug and the release APK build for `arm64-v8a`.
-- **AK-13** The debug app in an Android emulator pairs with a real `idecraft-serve`, the digits match,
+- **AK-13** The debug app in an Android emulator pairs with a real `ferris-idea-serve`, the digits match,
   and it lists and reads a file.
 - **AK-14** After pairing, the Keystore key is AES-256-GCM, not exportable, the vault files hold no
   plaintext of their values, and the app does not allow backups.

@@ -4,7 +4,7 @@
 use std::ops::Range;
 use std::time::Duration;
 
-use idecraft_database::{Dialect, Outcome, Statement, split_statements};
+use ferris_idea_database::{Dialect, Outcome, Statement, split_statements};
 
 /// Most rows shown in the grid (behaviour 5).
 pub const MAX_ROWS: usize = 500;
@@ -455,7 +455,7 @@ mod tests {
         );
         assert_eq!(error_place("select 1", 0), None);
         assert_eq!(error_place("select 1", 9), None, "outside the statement");
-        let e = Outcome::Error(idecraft_database::DbError {
+        let e = Outcome::Error(ferris_idea_database::DbError {
             message: "ORA-00904: \"NOSUCH\": invalid identifier".into(),
             sqlstate: None,
             position: Some(8),
@@ -482,7 +482,7 @@ mod tests {
         assert_eq!(r.sets[1].1[0][0].as_deref(), Some("b"));
         assert_eq!(r.lines.len(), 2);
         assert!(!r.failed);
-        let failure = Outcome::Error(idecraft_database::DbError {
+        let failure = Outcome::Error(ferris_idea_database::DbError {
             message: "boom".into(),
             ..Default::default()
         });
@@ -529,7 +529,7 @@ mod tests {
             Some("The selection is not a whole statement and the caret is on no statement")
         );
     }
-    use idecraft_database::DbError;
+    use ferris_idea_database::DbError;
 
     const SQL: &str = "select 1;\nselect *\n  from t;   \n\nselect 3";
 

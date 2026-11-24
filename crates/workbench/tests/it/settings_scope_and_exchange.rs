@@ -8,15 +8,15 @@
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
+use ferris_idea_workbench::keymaps::UserKeymapFile;
+use ferris_idea_workbench::settings_model::Page;
+use ferris_idea_workbench::{WorkbenchView, semantics};
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
-use idecraft_workbench::keymaps::UserKeymapFile;
-use idecraft_workbench::settings_model::Page;
-use idecraft_workbench::{WorkbenchView, semantics};
 
 fn folder(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!(
-        "idecraft-settings-exchange-{tag}-{}",
+        "ferris-idea-settings-exchange-{tag}-{}",
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&dir);
@@ -43,17 +43,17 @@ fn status(bench: &Entity<WorkbenchView>, cx: &mut VisualTestContext) -> String {
     bench.read_with(cx, |b, _| b.status_note().unwrap_or_default().to_owned())
 }
 
-fn saved(file: &Path) -> idecraft_core::IdeSettings {
-    idecraft_core::load_ide_settings(file)
+fn saved(file: &Path) -> ferris_idea_core::IdeSettings {
+    ferris_idea_core::load_ide_settings(file)
 }
 
 fn set_protected(branches: &str, cx: &mut VisualTestContext) {
     let branches = branches.to_owned();
     cx.update(|_, cx| {
-        let mut s = idecraft_workbench::appearance::ide_settings(cx);
+        let mut s = ferris_idea_workbench::appearance::ide_settings(cx);
         s.vcs.protected_branches = branches;
         s.terminal.shell = Some("/bin/zsh".into());
-        idecraft_workbench::appearance::set_ide_settings(s, cx).unwrap();
+        ferris_idea_workbench::appearance::set_ide_settings(s, cx).unwrap();
     });
     cx.run_until_parked();
 }
@@ -69,8 +69,8 @@ fn pages_name_their_scope_and_settings_go_out_and_come_back(cx: &mut TestAppCont
     cx.update(|cx| {
         cx.set_global(IdeSettingsFile(file.clone()));
         cx.set_global(ThemeFile(settings.join("theme")));
-        cx.set_global(UserKeymapFile(settings.join("keymaps/IDECraft.toml")));
-        cx.set_global(CurrentIdeSettings(idecraft_core::IdeSettings::default()));
+        cx.set_global(UserKeymapFile(settings.join("keymaps/FerrisIDEA.toml")));
+        cx.set_global(CurrentIdeSettings(ferris_idea_core::IdeSettings::default()));
     });
     let at = root.clone();
     let window = cx.add_window(move |_, cx| WorkbenchView::new(&at, cx));
@@ -147,7 +147,7 @@ fn pages_name_their_scope_and_settings_go_out_and_come_back(cx: &mut TestAppCont
     cx.run_until_parked();
     assert!(bench.read_with(cx, |b, _| b.import_preview().is_none()));
     assert_eq!(saved(&file).vcs.protected_branches, "main, release/*");
-    let live = cx.update(|_, cx| idecraft_workbench::appearance::ide_settings(cx));
+    let live = cx.update(|_, cx| ferris_idea_workbench::appearance::ide_settings(cx));
     assert_eq!(live.vcs.protected_branches, "main, release/*");
     assert_eq!(
         live.terminal.shell.as_deref(),

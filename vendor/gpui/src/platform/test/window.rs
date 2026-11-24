@@ -1,3 +1,4 @@
+// Modified by Ferris IDEA: a prompt can be withdrawn (see ../../../FERRIS_IDEA.md).
 use crate::{
     AnyWindowHandle, AtlasKey, AtlasTextureId, AtlasTile, Bounds, DispatchEventResult, GpuSpecs,
     Pixels, PlatformAtlas, PlatformDisplay, PlatformInput, PlatformInputHandler, PlatformWindow,
@@ -180,6 +181,14 @@ impl PlatformWindow for TestWindow {
                 .expect("platform dropped")
                 .prompt(msg, detail, answers),
         )
+    }
+
+    fn withdraw_prompt(&self) {
+        // Ferris IDEA change (see ../../../FERRIS_IDEA.md): as on macOS, only the latest prompt while it
+        // is the one shown.
+        if let Some(platform) = self.0.lock().platform.upgrade() {
+            platform.withdraw_prompt();
+        }
     }
 
     fn activate(&self) {

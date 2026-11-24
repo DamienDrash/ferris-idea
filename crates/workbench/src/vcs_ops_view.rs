@@ -1,9 +1,9 @@
 //! The VCS operations popup (`Vcs.QuickListPopupAction`, `SPEC-0109`), the Push dialog and the
 //! Update Project dialog (`SPEC-0144`).
 
+use ferris_idea_core::UpdateMethod;
+use ferris_idea_vcs::{Outgoing, PushOptions};
 use gpui::{Context, EventEmitter, FocusHandle, KeyDownEvent, Window, div, prelude::*, px};
-use idecraft_core::UpdateMethod;
-use idecraft_vcs::{Outgoing, PushOptions};
 
 use crate::palette::Palette;
 use crate::vcs_ops_model::{OPERATIONS, operation_digit, operation_for_digit, push_creates_branch};
@@ -157,7 +157,7 @@ pub struct PushView {
     tags: bool,
     force_with_lease: bool,
     /// Force push and protected branches of Settings › Version Control (`SPEC-0150`).
-    vcs: idecraft_core::VcsSettings,
+    vcs: ferris_idea_core::VcsSettings,
     /// Why a force push was refused.
     refusal: Option<String>,
     /// The commit whose files are shown (v2 behaviour 7).
@@ -765,5 +765,5 @@ impl Render for UpdateView {
 /// A shortcut of this dialog written for the platform: ⌘ is Ctrl and ⌥ is Alt outside macOS
 /// (`SPEC-0028` v8 behaviour 13).
 fn keys(text: &str) -> String {
-    idecraft_ui::keymap::local_keys(text, cfg!(target_os = "macos"))
+    ferris_idea_ui::keymap::local_keys(text, cfg!(target_os = "macos"))
 }

@@ -1,5 +1,5 @@
-; IDECraft's colour roles for Python (SPEC-0027 v6), with the Python plugin's keys (`PY.*`, see
-; `idecraft_ui::theme::capture_key`). Placed before the grammar's own query: for the same node the
+; Ferris IDEA's colour roles for Python (SPEC-0027 v6), with the Python plugin's keys (`PY.*`, see
+; `ferris_idea_ui::theme::capture_key`). Placed before the grammar's own query: for the same node the
 ; earlier pattern wins. `self`/`cls` as first parameter get their role from `SyntaxDocument`.
 
 ; Decorators: the `@` and the decorator's name.

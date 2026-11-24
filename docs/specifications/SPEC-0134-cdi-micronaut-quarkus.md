@@ -38,7 +38,7 @@
 ## Purpose
 Extend the bean model of SPEC-0115 to the other dependency injection frameworks of the matrix row,
 so wiring and configuration mistakes in Jakarta EE, Quarkus and Micronaut projects show while
-typing. IDECraft's own model, built in a clean room from the rules above.
+typing. Ferris IDEA's own model, built in a clean room from the rules above.
 
 ## Behaviour
 1. **Frameworks:** the imports of the project's Java files name the frameworks: `io.quarkus.` →

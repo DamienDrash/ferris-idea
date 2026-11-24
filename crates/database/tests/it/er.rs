@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use idecraft_database::{
+use ferris_idea_database::{
     ConnectionProfile, Credentials, Session, er_model, er_model_with_views, introspect, to_mermaid,
     to_plantuml, view_definitions,
 };
@@ -22,7 +22,7 @@ fn golden(name: &str, actual: &str) {
 
 #[tokio::test]
 async fn sqlite_reference_er_model() {
-    let dir = std::env::temp_dir().join(format!("idecraft-er-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-er-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let sql =

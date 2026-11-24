@@ -4,21 +4,21 @@
 
 use std::time::Duration;
 
-use idecraft_languages::pool;
-use idecraft_languages::rename::apply_edits;
-use idecraft_languages::signature::plan_change_signature_in;
+use ferris_idea_languages::pool;
+use ferris_idea_languages::rename::apply_edits;
+use ferris_idea_languages::signature::plan_change_signature_in;
 
 #[tokio::test]
 async fn qualified_calls_of_an_overload_follow() {
-    if idecraft_languages::servers::resolve(idecraft_languages::LanguageId::Java).is_err() {
+    if ferris_idea_languages::servers::resolve(ferris_idea_languages::LanguageId::Java).is_err() {
         assert!(
-            std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+            ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
             "required tool missing: jdtls"
         );
         eprintln!("skipped: jdtls not installed");
         return;
     }
-    let root = std::env::temp_dir().join(format!("idecraft-java-sig-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-java-sig-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src/main/java/demo")).unwrap();
     let root = root.canonicalize().unwrap();

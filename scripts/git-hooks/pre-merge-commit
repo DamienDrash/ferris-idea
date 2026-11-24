@@ -1,0 +1,4 @@
+#!/bin/sh
+# A merge that completes by itself: git names the merged commits as GITHEAD_<sha> variables.
+# shellcheck disable=SC2046
+exec "$(dirname "$0")/no-main-merge.sh" $(env | sed -n 's/^GITHEAD_\([0-9a-f]\{40,64\}\)=.*/\1/p')

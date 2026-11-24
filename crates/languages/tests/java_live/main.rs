@@ -1,5 +1,5 @@
 //! The jdtls tests that ask one project many questions, through the language server pool as the
-//! window and `idecraft mcp` ask them: one jdtls per project instead of one per question. A test
+//! window and `ferris-idea mcp` ask them: one jdtls per project instead of one per question. A test
 //! program of its own beside `it` (ADR-0030 item 7), because the pool is switched on for the whole
 //! process (see `it/main.rs`). Each test stops its project's servers at the end, so the tests of
 //! this program do not see each other's servers. On the shared CI server a jdtls start took 15 to
@@ -16,10 +16,10 @@ mod server_case;
 
 /// Switches the language server pool on for this process.
 pub fn pooled() {
-    idecraft_languages::pool::enable();
+    ferris_idea_languages::pool::enable();
 }
 
 /// Stops the pool's servers of the workspace `root`.
 pub fn done(root: &Path) {
-    idecraft_languages::pool::restart_root(root);
+    ferris_idea_languages::pool::restart_root(root);
 }

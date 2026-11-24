@@ -1612,7 +1612,7 @@ fn rebuild_table(
     d: Dialect,
     group: usize,
 ) -> Vec<DdlStatement> {
-    let temp = format!("{}__idecraft_new", s.name);
+    let temp = format!("{}__ferris_idea_new", s.name);
     let common: Vec<String> = s
         .columns
         .iter()
@@ -2180,10 +2180,10 @@ mod tests {
             sql(&migration(&changed, &s, Dialect::Sqlite)),
             [
                 "PRAGMA foreign_keys = OFF",
-                "CREATE TABLE \"a__idecraft_new\" (\n    \"id\" bigint NOT NULL,\n    \"n\" text,\n    PRIMARY KEY (\"id\"),\n    FOREIGN KEY (\"n\") REFERENCES \"b\" (\"id\")\n)",
-                "INSERT INTO \"a__idecraft_new\" (\"id\", \"n\") SELECT \"id\", \"n\" FROM \"a\"",
+                "CREATE TABLE \"a__ferris_idea_new\" (\n    \"id\" bigint NOT NULL,\n    \"n\" text,\n    PRIMARY KEY (\"id\"),\n    FOREIGN KEY (\"n\") REFERENCES \"b\" (\"id\")\n)",
+                "INSERT INTO \"a__ferris_idea_new\" (\"id\", \"n\") SELECT \"id\", \"n\" FROM \"a\"",
                 "!DROP TABLE \"a\"",
-                "ALTER TABLE \"a__idecraft_new\" RENAME TO \"a\"",
+                "ALTER TABLE \"a__ferris_idea_new\" RENAME TO \"a\"",
                 "CREATE UNIQUE INDEX \"a_n_key\" ON \"a\" (\"n\")",
                 "PRAGMA foreign_keys = ON",
             ]
@@ -3090,7 +3090,7 @@ mod tests {
         assert!(drop_b.group.is_some());
         let rebuild: Vec<&DdlStatement> = lite
             .iter()
-            .filter(|s| s.sql.contains("c__idecraft_new") || s.sql == "DROP TABLE \"c\"")
+            .filter(|s| s.sql.contains("c__ferris_idea_new") || s.sql == "DROP TABLE \"c\"")
             .collect();
         assert!(!rebuild.is_empty());
         assert!(

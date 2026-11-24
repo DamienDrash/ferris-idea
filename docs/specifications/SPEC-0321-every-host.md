@@ -1,36 +1,44 @@
 # SPEC-0321: Every host
 
-- **Version:** 5 · **Date:** 2026-11-11 (v5: a used pairing code closes the pairing window however the confirmation ends, and each side still reads the other's `no` when its own answer can no longer be sent, behaviour 17, AK-13; v4, Project Owner's decisions of 2026-11-09 evening: the host confirms storing a paired device before the window pins it, behaviour 17, AK-21; the Secret Service on Linux, debug builds on Linux keep keys in files too, behaviour 20, AK-22; v3: debug builds on macOS keep keys in the file store; v2: a backend older than the window is refused when connecting, behaviour 5a)
+- **Version:** 6 · **Date:** 2026-11-18 (v6: `--help` and `-h` for every command, behaviour 1a, AK-23; off Unix nothing runs with less protection than on Unix, behaviour 8a, AK-24); 2026-11-11 (v5: a used pairing code closes the pairing window however the confirmation ends, and each side still reads the other's `no` when its own answer can no longer be sent, behaviour 17, AK-13; v4, Project Owner's decisions of 2026-11-09 evening: the host confirms storing a paired device before the window pins it, behaviour 17, AK-21; the Secret Service on Linux, debug builds on Linux keep keys in files too, behaviour 20, AK-22; v3: debug builds on macOS keep keys in the file store; v2: a backend older than the window is refused when connecting, behaviour 5a)
 - **Sources:** [`ADR-0025`](../adr/0025-network-security-for-remote-connections.md) (`GEN`, `STD`: Noise rev. 34, FIPS 203),
   [`ADR-0026`](../adr/0026-session-protocol-window-and-serve.md) (`GEN`),
   [`REMOTE_AND_MOBILE.md`](../architecture/REMOTE_AND_MOBILE.md) section M6.14 (`GEN`),
   SPEC-0317, SPEC-0318. Docker CLI, `kubectl` and `wsl.exe` command lines: public documentation of
   those tools (`DOC`, facts only). No observation of the reference is needed: remote hosts beyond
-  SSH are IDECraft's own scope.
+  SSH are Ferris IDEA's own scope.
 - **Feature matrix rows:** F-083
 
 ## Purpose
 
 A folder on any machine the user can reach opens as a remote project: over SSH on Linux, macOS and
 Windows; inside a Docker container or a Kubernetes pod; in a WSL distribution; or on a machine
-without SSH, by starting `idecraft serve --pair` there and pairing it with the window.
+without SSH, by starting `ferris-idea serve --pair` there and pairing it with the window.
 
 ## Behaviour
 
 ### Backend builds
 
-1. There is a headless backend program `idecraft-serve` (crate `crates/serve`) without any windowing
-   toolkit. `idecraft-serve serve …` and `idecraft-serve mcp <folder>` behave as `idecraft serve …`
-   and `idecraft mcp <folder>`; `idecraft-serve --version` starts with `idecraft <version>`. [GEN]
+1. There is a headless backend program `ferris-idea-serve` (crate `crates/serve`) without any windowing
+   toolkit. `ferris-idea-serve serve …` and `ferris-idea-serve mcp <folder>` behave as `ferris-idea serve …`
+   and `ferris-idea mcp <folder>`; `ferris-idea-serve --version` starts with `ferris-idea <version>`. [GEN]
+1a. **(v6) Help.** `--help` or `-h` prints the usage to standard output and exits with 0: alone for
+   the program (`ferris-idea`, `ferris-idea-serve`), after a command for that command (`ferris-idea serve
+   --help`, `ferris-idea device -h`, `ferris-idea trust --help`, `ferris-idea-serve mcp --help`, …). For
+   `serve`, whose arguments are options, it counts wherever it stands among them and nothing is
+   started. The usage of `serve` names every option with a short explanation. A wrong argument
+   still prints the error and the usage to standard error and exits with 2. Before v6 `ferris-idea
+   serve --help` ended with "unknown option --help" (exit 2, found by the Linux package smoke
+   test). [GEN]
 2. Targets: `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`, `x86_64-apple-darwin`,
    `aarch64-apple-darwin`, `x86_64-pc-windows-gnu`, `aarch64-pc-windows-gnullvm`. `scripts/build-backends.sh`
    builds them into `dist/backends/<target>/` and writes `dist/backends/SHA256SUMS`; the CI workflow
    has a job per target. The result table of the last run on real platforms is kept in
    the status file; a target that was only compiled is named as such. Windows builds leave out the
-   feature `mcp` (the host's `mcp.*` family and `idecraft-serve mcp`), because the database stack
+   feature `mcp` (the host's `mcp.*` family and `ferris-idea-serve mcp`), because the database stack
    below it does not build there yet; such a backend does not advertise that family. Linux builds
    compile OpenSSL in, so they need no `libssl` on the host. [GEN]
-3. Backends are looked up on the window's machine in this order: `IDECRAFT_BACKENDS_DIR`, the folder
+3. Backends are looked up on the window's machine in this order: `FERRIS_IDEA_BACKENDS_DIR`, the folder
    `backends` beside the program, `../Resources/backends` of a macOS bundle. When the host has the
    window's platform, the running program itself is used if no dedicated build exists. [GEN]
 
@@ -39,9 +47,9 @@ without SSH, by starting `idecraft serve --pair` there and pairing it with the w
 4. Before the backend runs, a minimal bootstrap finds the host's system and processor: `uname -sm`
    through a POSIX shell, else PowerShell (`$env:PROCESSOR_ARCHITECTURE`). No other host tool is
    assumed to detect it. [GEN]
-5. On a POSIX host the backend is installed below `~/.cache/idecraft/bin/` under a name that includes
+5. On a POSIX host the backend is installed below `~/.cache/ferris-idea/bin/` under a name that includes
    the version and the build (as SPEC-0317 does); on Windows as
-   `%LOCALAPPDATA%\idecraft\bin\idecraft-serve-<version>-<sha12>.exe`, with `<sha12>` the first 12
+   `%LOCALAPPDATA%\ferris-idea\bin\ferris-idea-serve-<version>-<sha12>.exe`, with `<sha12>` the first 12
    hex digits of the SHA-256 of the build. The SHA-256 is computed on the window's side and compared
    with what the host computes before the program is started (on Windows before it is moved into
    place). A mismatch deletes the copy and refuses; an existing installed file is checked the same way
@@ -51,11 +59,11 @@ without SSH, by starting `idecraft serve --pair` there and pairing it with the w
    matches. The window therefore compares what a backend serves, not what it is called: the answer
    to `session.hello` carries the backend's `minor` (ADR-0026 §4), and a backend whose `minor` is
    lower than the window's, or that names none, is refused while connecting, with its build, both
-   revisions and what to do (build the backends again or update IDECraft on the host). The session
+   revisions and what to do (build the backends again or update Ferris IDEA on the host). The session
    it had opened ends at once, so nothing stays on the host. A newer backend is accepted: it serves
    a superset. This also holds for paired hosts and for a new backend after a reconnection. [GEN]
 6. A platform without a build is refused and named with what to do ("no backend build for
-   FreeBSD amd64 in …; install `idecraft-serve` there and start it with `--pair`, or build it with
+   FreeBSD amd64 in …; install `ferris-idea-serve` there and start it with `--pair`, or build it with
    `scripts/build-backends.sh`"). Nothing is worked around. [GEN, ADR-0025 §8]
 7. After the bootstrap no host tool is used for project work: `fs.*`, `doc.*`, search, Git, terminals
    and runs are the backend's (SPEC-0317, SPEC-0318), so the host's shell no longer matters. The
@@ -64,6 +72,20 @@ without SSH, by starting `idecraft serve --pair` there and pairing it with the w
 8. On a Windows host the reattach socket does not exist (ADR-0025 §5 describes a Unix socket), so a
    broken SSH channel is recovered by starting a new backend and reconciling each document
    (SPEC-0317 behaviour for a lost backend). The window says so in the connection log. [GEN]
+8a. **(v6) Off Unix, fail closed.** Where Ferris IDEA protects a file, folder or listener with Unix
+   means (mode 0600/0700, an owner check, a Unix socket in a private folder), a build for another
+   system (Windows) has no equivalent yet. There the operation is refused with an error that says
+   it is not supported on this platform yet; it never runs with less protection. This covers: the
+   TLS key check of the WebSocket endpoint (SPEC-0325: a key whose readers cannot be checked is
+   refused), Chrome's debug profile folder (SPEC-0133), the reattach folder, its log and every
+   private file written through it (SPEC-0262), remote replicas and the stand-in folder of a remote
+   window (SPEC-0317), the recent remote projects list (SPEC-0317), the private helper files of the
+   SSH transport (`set_mode`), the MCP discovery file with its bearer token and its folder
+   (SPEC-0221; a client off Unix trusts no discovery file but its own process's), and the debug
+   adapters that would listen on a loopback port instead of a private Unix socket (SPEC-0322 v6).
+   Unix builds behave exactly as before. A Windows mechanism (owner-only access control lists,
+   named pipes) replaces a refusal only once it is at least as strong (the Windows port inventory,
+   `docs/architecture/WINDOWS_PORT.md`, proposed with ADR-0036). [GEN, rule 12]
 
 ### Transports
 
@@ -88,14 +110,14 @@ without SSH, by starting `idecraft serve --pair` there and pairing it with the w
 11. The `docker`, `podman` and `kubectl` channels rely on the access the user already has to that
     engine or cluster; they are local command channels (container runtime socket or the
     cluster's TLS API). No port is opened on either side and no credential passes through
-    IDECraft. WSL is a local channel of Windows. On another system a `wsl://` host is refused and
+    Ferris IDEA. WSL is a local channel of Windows. On another system a `wsl://` host is refused and
     names the reason. [GEN, ADR-0025]
 12. Container and pod names that go away, a missing engine program and refused access are
     named with their cause and what to do, like SSH refusals. [GEN, ADR-0025 §8]
 
-### Paired channel (`idecraft serve --pair`)
+### Paired channel (`ferris-idea serve --pair`)
 
-13. `idecraft serve --pair [<folder>] [--listen <addr>:<port>] [--allow-network]
+13. `ferris-idea serve --pair [<folder>] [--listen <addr>:<port>] [--allow-network]
     [--new-device] [--grant <rights>] [--key-file]` starts a listener. The default address is
     `127.0.0.1:47100`. A non-loopback address is refused unless `--allow-network` is also given,
     and then the start line says that the listener is reachable from the network. Without `--pair`
@@ -107,7 +129,7 @@ without SSH, by starting `idecraft serve --pair` there and pairing it with the w
     patterns; the responder tries `XKpsk3`, which decrypts only under its static key, and then
     `XXpsk3` only while a pairing window is open. Anything else closes the connection with no byte
     in reply. [ADR-0025 §1b, §1c, SEC-5, SEC-6, SEC-15]
-15. Implementation of `ADR-0025` §1b lives in the one crate `crates/pairing` (`idecraft-pairing`),
+15. Implementation of `ADR-0025` §1b lives in the one crate `crates/pairing` (`ferris-idea-pairing`),
     holding the Noise wrapper, the hybrid construction, the channel, the key store, the pairing
     flow and the listener. Its dependencies are `snow` 0.10 and `libcrux-ml-kem` pinned exactly,
     RustCrypto `ml-kem` as a dev-dependency only. [ADR-0025 §10]
@@ -150,7 +172,7 @@ without SSH, by starting `idecraft serve --pair` there and pairing it with the w
     the prompt or with `--grant`; rights are per device and are stored with it. A session on the paired
     channel has its device's rights (`not_granted` otherwise). The device name and fingerprint are the
     audit peer. The session of one device cannot be resumed by another. [ADR-0025 §4, SEC-4]
-19. **Revocation:** `idecraft serve --devices` lists the paired devices and `idecraft serve --revoke
+19. **Revocation:** `ferris-idea serve --devices` lists the paired devices and `ferris-idea serve --revoke
     <fingerprint>` revokes one: its key is removed, the fingerprint joins the revocation list and a
     running listener closes its sessions within one second. A revoked key cannot handshake, even
     if an old device list is restored. [ADR-0025 §4, SEC-3]
@@ -164,10 +186,10 @@ without SSH, by starting `idecraft serve --pair` there and pairing it with the w
     system keychain on macOS and Windows. On **Linux with a session bus** (v4) they are in the
     Secret Service of that bus (`oo7` over `zbus`, pure Rust, the release GPUI already uses):
     an encrypted Secret Service session only (no fallback to plain transfer), the `default`
-    collection only, nothing is unlocked or created by IDECraft; an unreachable service, a missing
+    collection only, nothing is unlocked or created by Ferris IDEA; an unreachable service, a missing
     default collection or a locked one refuses the start with what to do (unlock, log in, or
     `--key-file`), never a silent fallback to a file (ADR-0025 §3a). `--key-file` (the window:
-    `IDECRAFT_KEY_FILE=1`) stays the user's explicit choice of the file store on such a machine,
+    `FERRIS_IDEA_KEY_FILE=1`) stays the user's explicit choice of the file store on such a machine,
     and a key file that already exists is kept, so a host keeps its identity and paired devices do
     not see a changed key; the start line says which store holds the key and why. Linux without
     a session bus and other Unix systems use the file store of §3a with all the checks there:
@@ -224,8 +246,8 @@ without SSH, by starting `idecraft serve --pair` there and pairing it with the w
 
 ## Acceptance criteria
 
-- **AK-1** `idecraft-serve` depends on no windowing toolkit (`cargo tree`), and `--version` starts
-  with `idecraft <version>`.
+- **AK-1** `ferris-idea-serve` depends on no windowing toolkit (`cargo tree`), and `--version` starts
+  with `ferris-idea <version>`.
 - **AK-2** Given a fake host program for each route, the started command lines are those of
   behaviour 9; a part with a forbidden character or a leading `-` is refused; the bootstrap
   reads `uname` and PowerShell answers correctly and picks the build of behaviour 3; a missing build
@@ -285,6 +307,14 @@ without SSH, by starting `idecraft serve --pair` there and pairing it with the w
   reused, no key is in any file, a device's pin is stored and removed on revocation, a window's
   host pin is stored and forgotten, the folder is 0700. A keychain that cannot be read is an error
   and no new key replaces it; a debug build opens the file store with or without a session bus.
+
+- **AK-23** (v6, behaviour 1a) Unit tests: `serve --help`, `serve -h` and `serve --pair --help`
+  ask for the help and start nothing; the serve usage names every option the parser accepts; the
+  usage of each `ferris-idea` command is found by its name and the full usage is the list of all of
+  them. `ferris-idea serve --help` exits 0 with the usage on standard output (command-line test).
+- **AK-24** (v6, behaviour 8a) Each refusal off Unix is a `cfg(not(unix))` branch that returns the
+  error; `cargo check --target x86_64-pc-windows-gnu` passes for the crates without C code that it
+  touches (`core`, `debugger`, `session` where reached), and the Unix test suites are unchanged.
 
 ## Out of scope
 

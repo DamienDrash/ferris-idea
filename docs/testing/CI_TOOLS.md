@@ -8,7 +8,7 @@ provides and what happens to a test whose tool is missing.
 
 ## A missing tool fails the run
 
-The CI sets `IDECRAFT_REQUIRE_TOOLS=1`. A live test whose tool is missing then fails with
+The CI sets `FERRIS_IDEA_REQUIRE_TOOLS=1`. A live test whose tool is missing then fails with
 `required tool missing: …` instead of returning early as skipped. A gap shows as a red run, not as
 a green run that tested less.
 
@@ -57,12 +57,12 @@ tool is installed, for example on a developer machine or in the macOS window che
 | Tool | Why it is missing | Tests |
 |---|---|---|
 | Python `venv` (`ensurepip`) | The system package needs root | `python::real_virtual_environment`, `python::create_choose_and_install_in_a_real_environment` |
-| debugpy | Not installed | Python debugging in `idecraft-debugger` and `idecraft-mcp` |
+| debugpy | Not installed | Python debugging in `ferris-idea-debugger` and `ferris-idea-mcp` |
 | lldb-dap | Not installed | Native debugging (`lldb::…`, `attach::attach_to_a_native_process_by_id`) |
 | ruby-lsp, bundler, solargraph | Not installed | `ruby::…` |
 | lemminx, lua-language-server, marksman, metals, taplo, groovy-language-server, R | Not installed | `servers::…` |
 | Angular language server and its reference project | Not installed | `servers::angular_language_server` |
-| A Vue project with `node_modules` (`IDECRAFT_TEST_VUE`) | Not set up | `vue::vue_project_template_features` |
+| A Vue project with `node_modules` (`FERRIS_IDEA_TEST_VUE`) | Not set up | `vue::vue_project_template_features` |
 | dbus-daemon, gnome-keyring-daemon | The system packages need root | `secret_service::secret_service_on_a_private_bus` |
 
 ## Under load

@@ -1,5 +1,5 @@
 //! Processes started for a debug session end with it, together with what they started, and never
-//! outlive IDECraft, however it ended (`SPEC-0263` v2 behaviour 3).
+//! outlive Ferris IDEA, however it ended (`SPEC-0263` v2 behaviour 3).
 //!
 //! js-debug starts the browser of a page session in a session of its own, so ending the adapter's
 //! process group does not reach it: the adapter's direct children are noted and ended one by one,
@@ -173,7 +173,7 @@ pub fn end_tree(child: &mut Child, grace: Duration) {
 }
 
 /// The shell of an [`ExitGuard`]. `$1` is the guarded process, `$2` its command line. A line on
-/// the input means IDECraft ended the process itself; the end of the input means IDECraft is gone
+/// the input means Ferris IDEA ended the process itself; the end of the input means Ferris IDEA is gone
 /// (quit, crashed or killed), so the process and its direct children end, each only while it still
 /// runs the command line it had.
 const GUARD: &str = r#"read -r _ && exit 0
@@ -197,16 +197,16 @@ for k in $kids; do eval "c=\$c_$k"; [ "$(cmd "$k")" = "$c" ] && kill -KILL "$k" 
 exit 0
 "#;
 
-/// Ends a process and its direct children when IDECraft ends without ending them: a small shell
-/// in a process group of its own reads a pipe only IDECraft writes to, and the system closes that
-/// pipe however IDECraft ends. Dropping the guard tells the shell to leave everything alone.
+/// Ends a process and its direct children when Ferris IDEA ends without ending them: a small shell
+/// in a process group of its own reads a pipe only Ferris IDEA writes to, and the system closes that
+/// pipe however Ferris IDEA ends. Dropping the guard tells the shell to leave everything alone.
 pub struct ExitGuard {
     shell: Child,
 }
 
 impl ExitGuard {
     /// Guards process `pid`; `None` where no shell is available (then only a normal end of
-    /// IDECraft ends the process).
+    /// Ferris IDEA ends the process).
     pub fn watch(pid: u32) -> Option<Self> {
         if !cfg!(unix) {
             return None;
@@ -214,17 +214,17 @@ impl ExitGuard {
         let command = command_of(pid)?;
         let mut shell = Command::new("/bin/sh");
         shell
-            .args(["-c", GUARD, "idecraft-guard", &pid.to_string(), &command])
+            .args(["-c", GUARD, "ferris-idea-guard", &pid.to_string(), &command])
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
-        // A terminal's Ctrl-C to IDECraft does not reach the guard, which then still does its job.
+        // A terminal's Ctrl-C to Ferris IDEA does not reach the guard, which then still does its job.
         #[cfg(unix)]
         std::os::unix::process::CommandExt::process_group(&mut shell, 0);
         shell.spawn().ok().map(|shell| Self { shell })
     }
 
-    /// Closes the pipe as if IDECraft had ended, and waits for the shell (tests).
+    /// Closes the pipe as if Ferris IDEA had ended, and waits for the shell (tests).
     #[doc(hidden)]
     pub fn trip(mut self) {
         drop(self.shell.stdin.take());

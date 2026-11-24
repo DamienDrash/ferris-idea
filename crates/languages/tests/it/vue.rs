@@ -1,19 +1,19 @@
 //! SPEC-0141 v4 with the real Vue language server (standalone mode): diagnostics asked once are
 //! complete, hover at the start of a template name names the symbol, and — in a project with its
-//! `node_modules` (`IDECRAFT_TEST_VUE`, e.g. one made by `npm create vue@latest`) — hover and
+//! `node_modules` (`FERRIS_IDEA_TEST_VUE`, e.g. one made by `npm create vue@latest`) — hover and
 //! type errors in the template. Skipped when `vue-language-server` is not installed. Without the
 //! server pool; `vue_pool.rs` asks the same through the pool.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use idecraft_languages::{insight, lsp};
+use ferris_idea_languages::{insight, lsp};
 
 const WAIT: Duration = Duration::from_secs(120);
 
 fn skip(reason: &str) {
     assert!(
-        std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+        ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
         "required tool missing: {reason}"
     );
     eprintln!("skipped: {reason}");
@@ -29,7 +29,7 @@ const HELLO: &str = "<script setup lang=\"ts\">\ndefineProps<{\n  msg: string\n}
 
 /// A project like the generated one, without `node_modules`: a solution-style `tsconfig.json`.
 fn project(name: &str) -> PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-vue-{name}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-vue-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src/components")).unwrap();
     std::fs::write(
@@ -94,9 +94,9 @@ async fn vue_template_hover_names_the_prop() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
-/// The Vue project named by `IDECRAFT_TEST_VUE`, with its `node_modules`.
+/// The Vue project named by `FERRIS_IDEA_TEST_VUE`, with its `node_modules`.
 fn real_project() -> Option<PathBuf> {
-    let root = PathBuf::from(std::env::var_os("IDECRAFT_TEST_VUE")?);
+    let root = PathBuf::from(ferris_idea_core::product_var_os("FERRIS_IDEA_TEST_VUE")?);
     root.join("node_modules/vue/package.json")
         .is_file()
         .then(|| root.canonicalize().ok())
@@ -111,7 +111,7 @@ fn real_project() -> Option<PathBuf> {
 #[tokio::test]
 async fn vue_project_template_features() {
     let Some(source) = real_project() else {
-        skip("IDECRAFT_TEST_VUE does not name a Vue project with node_modules");
+        skip("FERRIS_IDEA_TEST_VUE does not name a Vue project with node_modules");
         return;
     };
     if !installed("vue-language-server") {

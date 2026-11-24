@@ -1,5 +1,5 @@
 #!/bin/sh
-# Window tests on the Mac: the workbench self-test (`idecraft ui --selftest`), the M3.4 GPUI
+# Window tests on the Mac: the workbench self-test (`ferris-idea ui --selftest`), the M3.4 GPUI
 # spike measurements of ADR-0003 (scroll, typing latency, two-window layout) and the window part of
 # the performance budgets (SPEC-0260: start, idle, memory; scripts/perf-window.sh). They open
 # windows and send keys, so they must never run while someone works at the Mac.
@@ -13,6 +13,11 @@
 #
 # macOS sends no frames to a locked screen, so a locked Mac skips (nightly) or fails (--force).
 set -eu
+# Variables under the former name (IDECRAFT_*) still count while today's is not set. rebrand:keep
+for former in $(env | sed -n 's/^IDECRAFT_\([A-Za-z0-9_]*\)=.*/\1/p'); do # rebrand:keep
+  eval "[ -n \"\${FERRIS_IDEA_$former+x}\" ] || { FERRIS_IDEA_$former=\$IDECRAFT_$former; export FERRIS_IDEA_$former; }" # rebrand:keep
+done
+export FERRIS_IDEA_NO_TAKEOVER=1 # the programs this script starts never move the user's settings folder (SPEC-0356)
 cd "$(dirname "$0")/.."
 
 mode="${1:-nightly}"
@@ -79,30 +84,30 @@ expect() {
   fi
 }
 
-cargo build -q -p idecraft
-cargo build -q --release -p idecraft -p idecraft-bench
-run selftest 900 "${CARGO_TARGET_DIR:-target}/debug/idecraft" ui --selftest
+cargo build -q -p ferris-idea
+cargo build -q --release -p ferris-idea -p ferris-idea-bench
+run selftest 900 "${CARGO_TARGET_DIR:-target}/debug/ferris-idea" ui --selftest
 expect selftest '.failed == []'
 # ADR-0003 criteria 1, 2 and 4 with release builds; 50 fps leaves room for a 60 Hz display.
-run spike-scroll 300 "${CARGO_TARGET_DIR:-target}/release/idecraft" spike-scroll
+run spike-scroll 300 "${CARGO_TARGET_DIR:-target}/release/ferris-idea" spike-scroll
 expect spike-scroll '.frames >= 900 and .fps >= 50'
-run spike-editor 300 "${CARGO_TARGET_DIR:-target}/release/idecraft" spike-editor
+run spike-editor 300 "${CARGO_TARGET_DIR:-target}/release/ferris-idea" spike-editor
 expect spike-editor '.keystrokes >= 200 and .latency_ms.p95 < 16'
-run spike-layout 300 "${CARGO_TARGET_DIR:-target}/release/idecraft" spike-layout .
+run spike-layout 300 "${CARGO_TARGET_DIR:-target}/release/ferris-idea" spike-layout .
 expect spike-layout '.frames >= 600 and .fps >= 50 and .table_rows == 100000'
 # SPEC-0260: start, idle and memory of the release build, and the budgets of every window metric
 # (typing latency from spike-editor); the result joins the history next to the headless runs.
 run perf-start $(( ${PERF_IDLE_MINUTES:-10} * 60 + 300 )) scripts/perf-window.sh "${PERF_IDLE_MINUTES:-10}"
 jq -c '{typing_frame_ms_p50: .latency_ms.p50, typing_frame_ms_p95: .latency_ms.p95,
         typing_frame_ms_p99: .latency_ms.p99}' "$out/spike-editor.json" >"$out/perf-typing.json" || true
-bench_dir="${IDECRAFT_BENCH_DIR:-$HOME/.cache/idecraft-bench}"
+bench_dir="${FERRIS_IDEA_BENCH_DIR:-$HOME/.cache/ferris-idea-bench}"
 mkdir -p "$bench_dir"
 jq -c -s --arg commit "$(git rev-parse --short HEAD)" --arg date "$(date +%Y-%m-%dT%H:%M:%S%z)" \
   --arg load "$(sysctl -n vm.loadavg | awk '{ print $2 }')" \
   '{date: $date, commit: $commit, load_avg: ($load | tonumber), mode: "window", metrics: add}' \
   "$out/perf-start.json" "$out/perf-typing.json" | tee -a "$bench_dir/history.jsonl" >"$out/perf.json" || true
 printf '\n== performance budgets (window)\n'
-"${CARGO_TARGET_DIR:-target}/release/idecraft-bench" check window "$out/perf.json" | tee "$out/perf-budgets.txt" || failed=1
+"${CARGO_TARGET_DIR:-target}/release/ferris-idea-bench" check window "$out/perf.json" | tee "$out/perf-budgets.txt" || failed=1
 
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
   {

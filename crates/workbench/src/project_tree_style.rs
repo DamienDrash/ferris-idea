@@ -1,17 +1,17 @@
 //! How the project tree draws the folders of Maven and Gradle modules (`SPEC-0048` v3 behaviour
 //! 10): an icon per role and a tint behind test and excluded folders.
 
-use idecraft_core::buildtools::FolderRole;
+use ferris_idea_core::buildtools::FolderRole;
 
 /// The icon of a folder with `role`.
 pub fn folder_role_icon(role: FolderRole) -> &'static str {
     match role {
         FolderRole::Module => "nodes/module",
-        FolderRole::Sources => "idecraft/sourceRoot",
-        FolderRole::Tests => "idecraft/testRoot",
-        FolderRole::Resources => "idecraft/resourcesRoot",
-        FolderRole::TestResources => "idecraft/testResourcesRoot",
-        FolderRole::Excluded => "idecraft/excludedRoot",
+        FolderRole::Sources => "ferris-idea/sourceRoot",
+        FolderRole::Tests => "ferris-idea/testRoot",
+        FolderRole::Resources => "ferris-idea/resourcesRoot",
+        FolderRole::TestResources => "ferris-idea/testResourcesRoot",
+        FolderRole::Excluded => "ferris-idea/excludedRoot",
     }
 }
 
@@ -43,7 +43,7 @@ mod tests {
             FolderRole::TestResources,
             FolderRole::Excluded,
         ] {
-            assert!(idecraft_ui::icons::svg(folder_role_icon(role), true).is_some());
+            assert!(ferris_idea_ui::icons::svg(folder_role_icon(role), true).is_some());
             assert_eq!(
                 folder_role_tint(role).is_some(),
                 matches!(

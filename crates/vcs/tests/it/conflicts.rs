@@ -1,11 +1,11 @@
 //! SPEC-0101 AK-10 (v6): real conflicts, stopped by a merge, a rebase and a cherry-pick, from the
-//! repositories `tests/fixtures/conflict-repos.sh` builds. What IDECraft lists is compared with the
+//! repositories `tests/fixtures/conflict-repos.sh` builds. What Ferris IDEA lists is compared with the
 //! index, what it writes with the `git` program's own view of the repository.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use idecraft_vcs::{Operation, Outcome, Repo, Resolution, Side, merge_model, merge_outcome};
+use ferris_idea_vcs::{Operation, Outcome, Repo, Resolution, Side, merge_model, merge_outcome};
 
 const OPERATIONS: [&str; 3] = ["merge", "rebase", "cherry-pick"];
 
@@ -14,8 +14,10 @@ struct Fixtures(PathBuf);
 
 impl Fixtures {
     fn new(tag: &str, cases: &[&str]) -> Option<Self> {
-        let dir =
-            std::env::temp_dir().join(format!("idecraft-conflicts-{tag}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "ferris-idea-conflicts-{tag}-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/conflict-repos.sh");
         let out = Command::new("bash")
@@ -130,7 +132,7 @@ fn sides_equal_the_index_stages() {
                 // No conflicted file ever counts as resolved before something was chosen.
                 let rebasing = operation == "rebase";
                 let merge = merge_model(c, rebasing);
-                assert!(idecraft_vcs::merge_open(c, rebasing, &merge) > 0);
+                assert!(ferris_idea_vcs::merge_open(c, rebasing, &merge) > 0);
                 assert_eq!(merge_outcome(c, rebasing, &merge), None);
             }
         }
@@ -374,8 +376,8 @@ fn resolving_everything_finishes_the_operation() {
     let merge = merge_model(&c, false);
     assert_eq!(
         merge.text(
-            &idecraft_vcs::Labels::default(),
-            idecraft_vcs::MarkerStyle::Merge
+            &ferris_idea_vcs::Labels::default(),
+            ferris_idea_vcs::MarkerStyle::Merge
         ),
         "first\r\n<<<<<<< ours\r\nsecond from main\r\n=======\r\nsecond from feature\r\n>>>>>>> \
          theirs\r\nthird\r\n"

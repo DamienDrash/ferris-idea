@@ -1,0 +1,6 @@
+#!/bin/sh
+# `git commit` concluding a merge (MERGE_HEAD holds the merged commits).
+merge_head="$(git rev-parse --git-dir)/MERGE_HEAD"
+[ -f "$merge_head" ] || exit 0
+# shellcheck disable=SC2046
+exec "$(dirname "$0")/no-main-merge.sh" $(cat "$merge_head")

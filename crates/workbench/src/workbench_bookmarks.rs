@@ -2,16 +2,16 @@
 //! marks in the editors' gutters, the popups and the Bookmarks tool window.
 //!
 //! The bookmarks, how their lines follow edits and their project file are
-//! [`idecraft_core::bookmarks`]; what the popups and the tree show is
+//! [`ferris_idea_core::bookmarks`]; what the popups and the tree show is
 //! [`crate::bookmarks_model`]; the views are [`crate::bookmarks_view`].
 
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Arc;
 
+use ferris_idea_core::bookmarks::{Change, LineEdit, Listed, MnemonicToggle, listed, relative};
+use ferris_idea_ui::tool_windows::ToolWindow;
 use gpui::{AppContext, Context, Entity, Window};
-use idecraft_core::bookmarks::{Change, LineEdit, Listed, MnemonicToggle, listed, relative};
-use idecraft_ui::tool_windows::ToolWindow;
 
 use super::WorkbenchView;
 use super::popups::Popup;
@@ -38,7 +38,7 @@ fn shortcut_of(action: &str) -> String {
     crate::keymaps::current()
         .shortcuts(action)
         .iter()
-        .find(|s| !matches!(s, idecraft_ui::keymap::Shortcut::Mouse { .. }))
+        .find(|s| !matches!(s, ferris_idea_ui::keymap::Shortcut::Mouse { .. }))
         .map(|s| s.display(cfg!(target_os = "macos")))
         .unwrap_or_default()
 }
@@ -79,7 +79,7 @@ impl WorkbenchView {
     }
 
     /// The project's bookmarks, newest first (checks).
-    pub fn bookmarks(&self) -> &idecraft_core::bookmarks::Bookmarks {
+    pub fn bookmarks(&self) -> &ferris_idea_core::bookmarks::Bookmarks {
         self.bookmark_store.bookmarks()
     }
 

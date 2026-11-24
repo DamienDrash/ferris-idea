@@ -16,7 +16,7 @@
 - **Feature matrix rows:** F-081
 
 ## Purpose
-Projects that keep their formatting rules in `.editorconfig` get them in IDECraft without
+Projects that keep their formatting rules in `.editorconfig` get them in Ferris IDEA without
 configuring anything, as in the reference with its bundled open EditorConfig plugin. The plugin's
 function is rebuilt from the public specification; no plugin code was read or ported.
 
@@ -35,7 +35,7 @@ function is rebuilt from the public specification; no plugin code was read or po
    draws none; without the property (or with `unset`) Code Style decides. A value that is neither a
    positive number nor `off` is listed as a problem and Code Style decides. Wrapping at that column
    is not done. [STD, OBS-0067]
-2b. **Changes reach open editors:** a `.editorconfig` that is saved in IDECraft, or created, changed
+2b. **Changes reach open editors:** a `.editorconfig` that is saved in Ferris IDEA, or created, changed
    or deleted by another program anywhere in the lookup chain of an open file, is read again for
    that file within the regular look at the disk (SPEC-0058 behaviour 10, every 2 seconds) and at
    once by Reload All from Disk (Synchronize). Indentation, tab width, the status bar's indent
@@ -77,17 +77,17 @@ function is rebuilt from the public specification; no plugin code was read or po
   `docs/research/PLAN-F081.md`.
 
 ## Out of scope
-`charset` other than UTF-8 (IDECraft reads and writes UTF-8; the property is reported, not
+`charset` other than UTF-8 (Ferris IDEA reads and writes UTF-8; the property is reported, not
 applied), the reference's
 IntelliJ-specific `ij_*` code style properties, wrapping at `max_line_length`, completion and highlighting inside `.editorconfig`
 files, showing which `.editorconfig` applies in the status bar.
 
 ## Known deviations from the reference
-- Compared byte for byte in OBS-0064, OBS-0065 and OBS-0067. IDECraft enforces `end_of_line`,
+- Compared byte for byte in OBS-0064, OBS-0065 and OBS-0067. Ferris IDEA enforces `end_of_line`,
   `trim_trailing_whitespace` and `insert_final_newline = false` as the specification says, while
   the reference does not (OBS-0064).
 - **Better than the reference (IMP-0413):** the reference keeps indenting with the old value after
   an `.editorconfig` changed on disk, also in a file closed and opened again, until everything is
   reloaded from disk by hand, and shows nothing about the stale state (OBS-0067 e17b–e17d).
-  IDECraft applies the change to open and newly opened files by itself (behaviour 2b).
+  Ferris IDEA applies the change to open and newly opened files by itself (behaviour 2b).
 - The right margin from `max_line_length` is drawn as in the reference (OBS-0067 e14).

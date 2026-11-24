@@ -1,0 +1,7 @@
+# Negative control: the file lands in the project's root.
+agent = "recorded"
+model = "none"
+
+[[call]]
+tool = "create_file"
+args = { dir = "", name = "notes.md", text = "# Notes\n", dry_run = false }

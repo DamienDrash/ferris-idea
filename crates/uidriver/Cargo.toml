@@ -1,6 +1,6 @@
 [package]
-name = "idecraft-uidriver"
-description = "UI driver of the IDECraft window: semantic tree in AccessKit's schema, locators, auto-waiting, actions, assertions, traces and the security rules of ADR-0027 (toolkit-free)"
+name = "ferris-idea-uidriver"
+description = "UI driver of the Ferris IDEA window: semantic tree in AccessKit's schema, locators, auto-waiting, actions, assertions, traces and the security rules of ADR-0027 (toolkit-free)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

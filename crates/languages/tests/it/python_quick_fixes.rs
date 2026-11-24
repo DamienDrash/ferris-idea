@@ -1,4 +1,4 @@
-//! SPEC-0098 v9 behaviours 17–19 (OBS-0034 part 14, Q1–Q3): IDECraft's own Python quick fixes
+//! SPEC-0098 v9 behaviours 17–19 (OBS-0034 part 14, Q1–Q3): Ferris IDEA's own Python quick fixes
 //! change nothing a program does, which `python3` checks: the original and the fixed program print
 //! the same; after "Create parameter" the function runs when the new argument is passed. Skipped
 //! without `python3`.
@@ -6,7 +6,7 @@
 use std::path::Path;
 use std::process::Command;
 
-use idecraft_languages::inspections::{fixes_at, inspect_text};
+use ferris_idea_languages::inspections::{fixes_at, inspect_text};
 
 fn python3() -> bool {
     Command::new("python3")
@@ -37,7 +37,7 @@ fn fixed(text: &str, needle: &str, title: &str) -> String {
         .into_iter()
         .find(|f| f.title == title)
         .unwrap_or_else(|| panic!("no {title:?} at {needle:?}"));
-    idecraft_languages::jvm::apply(text, &fix.edits)
+    ferris_idea_languages::jvm::apply(text, &fix.edits)
 }
 
 #[test]
@@ -115,11 +115,11 @@ fn the_places_of_the_observation_have_their_fixes() {
         titles("undefined_name"),
         ["Create parameter 'undefined_name'"]
     );
-    // Default level "no highlighting": IDECraft's own findings do not show in the editor.
+    // Default level "no highlighting": Ferris IDEA's own findings do not show in the editor.
     assert!(
         inspect_text(Path::new("probe.py"), probe)
             .iter()
             .filter(|f| f.id.starts_with("python.un"))
-            .all(|f| f.level == idecraft_languages::inspections::Level::Info)
+            .all(|f| f.level == ferris_idea_languages::inspections::Level::Info)
     );
 }

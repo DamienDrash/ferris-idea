@@ -1,13 +1,13 @@
 //! Colours and metrics of the views, read from the bundled theme and editor scheme (`SPEC-0060`).
-//! The views use the chosen theme, `IDECraft Dark` (the brand palette on the Islands layout,
+//! The views use the chosen theme, `Ferris IDEA Dark` (the brand palette on the Islands layout,
 //! ADR-0018) until another is chosen (`SPEC-0060` v5, v6).
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
-pub use idecraft_ui::theme::ThemeId;
-use idecraft_ui::theme::{ColorScheme, Rgba, TextStyle, UiTheme};
+pub use ferris_idea_ui::theme::ThemeId;
+use ferris_idea_ui::theme::{ColorScheme, Rgba, TextStyle, UiTheme};
 
 /// Colours the editor and workbench draw with. Editor colours are opaque `0xRRGGBB`; UI colours carry
 /// the theme's alpha.
@@ -67,7 +67,7 @@ pub struct Palette {
     /// `Tree.rowHeight`.
     pub tree_row_height: f32,
     /// Metrics of trees, tabs and menus for the theme (`SPEC-0154`).
-    pub metrics: idecraft_ui::metrics::ThemeMetrics,
+    pub metrics: ferris_idea_ui::metrics::ThemeMetrics,
     /// `EditorTabs.underlineColor`.
     pub tab_underline: Rgba,
     /// Toolbar buttons under the pointer (`MainToolbar.Dropdown.transparentHoverBackground`).
@@ -92,7 +92,7 @@ pub struct Palette {
     /// Border of popups (`Popup.borderColor`).
     pub popup_border: Rgba,
     /// Tooltip box, border, text and shortcut text (`ToolTip.*`, `SPEC-0294` behaviour 8).
-    pub tooltip: idecraft_ui::tooltip::TooltipColors,
+    pub tooltip: ferris_idea_ui::tooltip::TooltipColors,
     /// The theme's accent: primary buttons, checked boxes, the project avatar
     /// (`Button.default.startBackground`; `SPEC-0060` v6).
     pub accent: Rgba,
@@ -171,8 +171,8 @@ pub fn set_compact_mode(on: bool) {
 /// scheme (`Light` with plain method declarations, `SPEC-0060` v13 behaviour 19) is not offered
 /// apart from its theme.
 pub const EDITOR_SCHEMES: [(&str, ThemeId); 5] = [
-    ("IDECraft Dark", ThemeId::IdecraftDark),
-    ("IDECraft Light", ThemeId::IdecraftLight),
+    ("Ferris IDEA Dark", ThemeId::FerrisIdeaDark),
+    ("Ferris IDEA Light", ThemeId::FerrisIdeaLight),
     ("Islands Dark", ThemeId::IslandsDark),
     ("Dark", ThemeId::Dark),
     ("Light", ThemeId::Light),
@@ -251,7 +251,7 @@ impl ProjectGradient {
                 "RecentProject.Color{}.MainToolbarGradientStart",
                 i + 1
             ))?;
-            *slot = idecraft_ui::theme::mix(
+            *slot = ferris_idea_ui::theme::mix(
                 window.rgb,
                 c.rgb,
                 Self::SHARE * f32::from(c.alpha) / 255.0,
@@ -345,7 +345,7 @@ impl Palette {
     /// background, text and accent, so a light theme never gets a dark default, and is written to
     /// [`Palette::notes`] (`SPEC-0060` v10 behaviour 15).
     pub fn from_parts(theme: UiTheme, scheme: ColorScheme, compact: bool) -> Self {
-        use idecraft_ui::theme::{mix, readable};
+        use ferris_idea_ui::theme::{mix, readable};
         let text = scheme.attributes("TEXT");
         let dark = theme.dark;
         let mut notes: Vec<String> = theme.notes().to_vec();
@@ -501,8 +501,8 @@ impl Palette {
             window,
             island,
             // Compact islands take the theme's compact values (SPEC-0061 v4 behaviour 15a).
-            island_radius: idecraft_ui::metrics::IslandMetrics::of(&theme, compact).radius,
-            island_gap: idecraft_ui::metrics::IslandMetrics::of(&theme, compact).gap,
+            island_radius: ferris_idea_ui::metrics::IslandMetrics::of(&theme, compact).radius,
+            island_gap: ferris_idea_ui::metrics::IslandMetrics::of(&theme, compact).gap,
             ui_text,
             ui_muted: r.ui(&["StatusBar.Widget.foreground"], ui_text),
             ui_dim: r.ui(&["*.inactiveForeground"], tint(0.6)),
@@ -526,7 +526,7 @@ impl Palette {
             tree_selection_inactive: r.ui(&["Tree.selectionInactiveBackground"], tint(0.12)),
             tree_hover: r.ui(&["Tree.hoverBackground"], tint(0.08)),
             tree_row_height: theme.number_in("Tree.rowHeight", compact).unwrap_or(24.0),
-            metrics: idecraft_ui::metrics::ThemeMetrics::of_density(&theme, compact),
+            metrics: ferris_idea_ui::metrics::ThemeMetrics::of_density(&theme, compact),
             tab_underline: r.ui(&["EditorTabs.underlineColor"], accent),
             toolbar_hover: r.ui(
                 &[
@@ -541,9 +541,9 @@ impl Palette {
                 let background = r.ui(&["ToolTip.background", "Popup.background"], popup);
                 // Text of a tooltip without colours of its own: the text that reads on its box.
                 let readable_text =
-                    idecraft_ui::theme::contrast(ui_text.rgb, background.rgb) >= TEXT_CONTRAST;
+                    ferris_idea_ui::theme::contrast(ui_text.rgb, background.rgb) >= TEXT_CONTRAST;
                 let on_box = if readable_text { ui_text } else { island };
-                idecraft_ui::tooltip::TooltipColors {
+                ferris_idea_ui::tooltip::TooltipColors {
                     background,
                     border: r.ui(&["ToolTip.borderColor", "Popup.borderColor"], popup_border),
                     text: r.ui(&["ToolTip.foreground"], on_box),
@@ -736,7 +736,7 @@ mod tests {
         let names: Vec<&str> = EDITOR_SCHEMES.iter().map(|(n, _)| *n).collect();
         assert_eq!(
             names,
-            idecraft_core::EDITOR_SCHEMES,
+            ferris_idea_core::EDITOR_SCHEMES,
             "the names MCP accepts"
         );
         for (name, theme) in EDITOR_SCHEMES {
@@ -745,13 +745,17 @@ mod tests {
         }
         assert_eq!(scheme_of(""), None);
         assert_eq!(scheme_of("Solarized"), None);
-        let own = Palette::for_theme(ThemeId::IdecraftDark);
+        let own = Palette::for_theme(ThemeId::FerrisIdeaDark);
         assert!(std::ptr::eq(
-            Palette::for_parts(ThemeId::IdecraftDark, None, false),
+            Palette::for_parts(ThemeId::FerrisIdeaDark, None, false),
             own
         ));
         assert!(std::ptr::eq(
-            Palette::for_parts(ThemeId::IdecraftDark, Some(ThemeId::IdecraftDark), false),
+            Palette::for_parts(
+                ThemeId::FerrisIdeaDark,
+                Some(ThemeId::FerrisIdeaDark),
+                false
+            ),
             own
         ));
         // Islands Light's own scheme differs from `Light` in method declarations only
@@ -766,7 +770,7 @@ mod tests {
                 .key_style("METHOD_DECLARATION_ATTRIBUTES")
                 .foreground
         );
-        let mixed = Palette::for_parts(ThemeId::IdecraftDark, Some(ThemeId::Light), false);
+        let mixed = Palette::for_parts(ThemeId::FerrisIdeaDark, Some(ThemeId::Light), false);
         let light = Palette::for_theme(ThemeId::Light);
         assert_eq!(mixed.text, light.text, "the editors draw with the scheme");
         assert_eq!(mixed.caret_row, light.caret_row);
@@ -774,14 +778,14 @@ mod tests {
         assert_eq!(mixed.tree_selection, own.tree_selection);
         assert!(std::ptr::eq(
             mixed,
-            Palette::for_parts(ThemeId::IdecraftDark, Some(ThemeId::Light), false)
+            Palette::for_parts(ThemeId::FerrisIdeaDark, Some(ThemeId::Light), false)
         ));
     }
 
     /// Every text-and-background pair the views draw with a palette, with the contrast it must
     /// reach (`SPEC-0060` v10 behaviour 16): 4.5 for text, 3.0 for marks.
     fn pairs(p: &Palette) -> Vec<(String, u32, u32, f32)> {
-        use idecraft_ui::theme::over;
+        use ferris_idea_ui::theme::over;
         let island = p.island.rgb;
         let on = |c: Rgba, under: u32| over(c.rgb, c.alpha, under);
         let popup = on(p.popup, island);
@@ -900,7 +904,7 @@ mod tests {
         pairs(&p)
             .into_iter()
             .filter_map(|(what, fg, bg, min)| {
-                let ratio = idecraft_ui::theme::contrast(fg, bg);
+                let ratio = ferris_idea_ui::theme::contrast(fg, bg);
                 (ratio < min)
                     .then(|| format!("{what}: {fg:06x} on {bg:06x} is {ratio:.2} (< {min})"))
             })
@@ -908,15 +912,15 @@ mod tests {
     }
 
     /// SPEC-0060 v10 AK-15: prints the contrast of every pair of every bundled theme
-    /// (`cargo test -p idecraft-workbench contrast_table -- --nocapture`).
-    /// The brand themes, IDECraft's own, reach the limits in every pair. The reference's themes
+    /// (`cargo test -p ferris-idea-workbench contrast_table -- --nocapture`).
+    /// The brand themes, Ferris IDEA's own, reach the limits in every pair. The reference's themes
     /// are bundled unchanged (behaviour 1), so the pairs their files leave below the limit are
     /// listed here as they are; a pair that gets worse or a new one fails the test.
     #[test]
     fn contrast_table() {
         const KNOWN: [(ThemeId, &[&str]); 6] = [
-            (ThemeId::IdecraftDark, &[]),
-            (ThemeId::IdecraftLight, &[]),
+            (ThemeId::FerrisIdeaDark, &[]),
+            (ThemeId::FerrisIdeaLight, &[]),
             (
                 ThemeId::IslandsDark,
                 &[
@@ -969,7 +973,7 @@ mod tests {
     }
 
     fn is_light(rgb: u32) -> bool {
-        use idecraft_ui::theme::contrast;
+        use ferris_idea_ui::theme::contrast;
         contrast(rgb, 0x000000) > contrast(rgb, 0xffffff)
     }
 
@@ -979,7 +983,7 @@ mod tests {
     /// keeps a colour of the other kind.
     #[test]
     fn every_theme_colours_every_surface_in_its_kind() {
-        use idecraft_ui::theme::over;
+        use ferris_idea_ui::theme::over;
         for id in ThemeId::ALL {
             let p = Palette::bundled(id);
             assert_eq!(p.dark, id.is_dark(), "{id:?}");
@@ -1043,16 +1047,16 @@ mod tests {
             );
             // A terminal colour that reads is drawn as the scheme has it.
             for (raw, text) in p.console_ansi.into_iter().zip(p.console_ansi_text) {
-                let reads = idecraft_ui::theme::contrast(raw, p.console_background)
+                let reads = ferris_idea_ui::theme::contrast(raw, p.console_background)
                     >= TEXT_CONTRAST
-                    && idecraft_ui::theme::contrast(raw, island) >= TEXT_CONTRAST;
+                    && ferris_idea_ui::theme::contrast(raw, island) >= TEXT_CONTRAST;
                 assert_eq!(raw == text, reads, "{id:?}: {raw:06x} drawn as {text:06x}");
             }
         }
         // The two kinds differ in every surface, so a switch between them is visible everywhere.
         let (dark, light) = (
-            Palette::bundled(ThemeId::IdecraftDark),
-            Palette::bundled(ThemeId::IdecraftLight),
+            Palette::bundled(ThemeId::FerrisIdeaDark),
+            Palette::bundled(ThemeId::FerrisIdeaLight),
         );
         assert_ne!(dark.background, light.background);
         assert_ne!(dark.island, light.island);
@@ -1089,7 +1093,7 @@ mod tests {
     /// what it made up.
     #[test]
     fn a_broken_theme_still_gives_a_whole_palette_of_its_kind() {
-        use idecraft_ui::theme::{contrast, over, parse_schemes};
+        use ferris_idea_ui::theme::{contrast, over, parse_schemes};
         let theme = UiTheme::parse(
             r##"{"name": "Sparse", "dark": false,
                 "colors": {"paper": "#f4f1ea"},
@@ -1242,7 +1246,7 @@ mod tests {
             let theme = UiTheme::for_theme(id);
             let inactive = theme.color("EditorTabs.inactiveUnderlinedTabBackground");
             let border = theme.color("EditorTabs.inactiveUnderlinedTabBorderColor");
-            if p.metrics.tab_style == idecraft_ui::metrics::TabStyle::Pill {
+            if p.metrics.tab_style == ferris_idea_ui::metrics::TabStyle::Pill {
                 assert_eq!(Some(p.tab_selected_inactive), inactive, "{id:?}");
                 assert_eq!(Some(p.tab_selected_border_inactive), border, "{id:?}");
             } else {
@@ -1262,7 +1266,7 @@ mod tests {
     /// `selection-bg-inactive` (`gray-40`) otherwise. The other themes keep their colours.
     #[test]
     fn frame_islands_and_selection_come_from_the_open_theme() {
-        use idecraft_ui::theme::UiTheme;
+        use ferris_idea_ui::theme::UiTheme;
         let theme = UiTheme::for_theme(ThemeId::IslandsDark);
         for key in [
             "MainWindow.background",
@@ -1311,13 +1315,13 @@ mod tests {
         {
             assert_eq!(
                 g.colours[i],
-                idecraft_ui::theme::mix(0x26282c, centre, 0.85),
+                ferris_idea_ui::theme::mix(0x26282c, centre, 0.85),
                 "Color{}",
                 i + 1
             );
             // Dark and muted: never a bright accent.
             assert!(
-                idecraft_ui::theme::contrast(g.colours[i], 0x26282c) < 2.0,
+                ferris_idea_ui::theme::contrast(g.colours[i], 0x26282c) < 2.0,
                 "Color{}",
                 i + 1
             );
@@ -1329,8 +1333,8 @@ mod tests {
                 .is_some()
         );
         for id in [
-            ThemeId::IdecraftDark,
-            ThemeId::IdecraftLight,
+            ThemeId::FerrisIdeaDark,
+            ThemeId::FerrisIdeaLight,
             ThemeId::Dark,
             ThemeId::Light,
         ] {
@@ -1339,11 +1343,11 @@ mod tests {
         // Window, island, editor, focused and unfocused selection of the other themes.
         for (id, expected) in [
             (
-                ThemeId::IdecraftDark,
+                ThemeId::FerrisIdeaDark,
                 [0x3b4252, 0x2e3440, 0x2e3440, 0x3e5871, 0x434c5e],
             ),
             (
-                ThemeId::IdecraftLight,
+                ThemeId::FerrisIdeaLight,
                 [0xd8dee9, 0xeceff4, 0xeceff4, 0xc9d6e6, 0xd8dee9],
             ),
             (
@@ -1375,9 +1379,9 @@ mod tests {
 
     #[test]
     fn brand_palette_is_the_default_and_carries_the_accent() {
-        // Nothing chosen yet: the views draw with IDECraft Dark (SPEC-0060 v6).
+        // Nothing chosen yet: the views draw with Ferris IDEA Dark (SPEC-0060 v6).
         assert_eq!(current_theme(), ThemeId::DEFAULT);
-        let p = Palette::bundled(ThemeId::IdecraftDark);
+        let p = Palette::bundled(ThemeId::FerrisIdeaDark);
         assert!(p.dark);
         assert_eq!(p.background, 0x2e3440);
         assert_eq!(p.island.rgb, 0x2e3440);
@@ -1399,14 +1403,14 @@ mod tests {
         // The reference's accent where the reference's theme is chosen.
         assert_eq!(islands.accent.rgb, 0x3871e1);
         assert_eq!(islands.accent_text.rgb, 0xffffff);
-        let light = Palette::bundled(ThemeId::IdecraftLight);
+        let light = Palette::bundled(ThemeId::FerrisIdeaLight);
         assert!(!light.dark);
         assert_eq!(light.background, 0xeceff4);
         assert_eq!(light.accent.rgb, 0x4c6a91);
         for t in ThemeId::ALL {
             let p = Palette::bundled(t);
             assert!(
-                idecraft_ui::theme::contrast(p.accent_text.rgb, p.accent.rgb) >= 3.0,
+                ferris_idea_ui::theme::contrast(p.accent_text.rgb, p.accent.rgb) >= 3.0,
                 "{t:?}: marks on the accent"
             );
         }

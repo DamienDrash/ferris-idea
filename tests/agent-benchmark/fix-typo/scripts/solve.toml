@@ -1,0 +1,16 @@
+# A hand-written run: read the file, look at the change, then make it.
+agent = "recorded"
+model = "none"
+cost_cents = 0
+
+[[call]]
+tool = "read_file"
+args = { path = "greeting.txt" }
+
+[[call]]
+tool = "replace_text_in_file"
+args = { path = "greeting.txt", old_text = "wrold", new_text = "world" }
+
+[[call]]
+tool = "replace_text_in_file"
+args = { path = "greeting.txt", old_text = "wrold", new_text = "world", dry_run = false }

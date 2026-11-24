@@ -10,22 +10,22 @@
 
 use std::path::{Path, PathBuf};
 
-use gpui::TestAppContext;
-use idecraft_workbench::appearance::{
+use ferris_idea_workbench::appearance::{
     self, IdeSettingsFile, THEME_LOG, ThemeFile, ThemeLog, ide_settings, os_is_dark, os_theme,
     set_ide_settings, theme_for,
 };
-use idecraft_workbench::palette::{Palette, ThemeId, current_theme, set_current_theme};
+use ferris_idea_workbench::palette::{Palette, ThemeId, current_theme, set_current_theme};
+use gpui::TestAppContext;
 
 fn folder() -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("idecraft-theme-switch-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-theme-switch-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     dir
 }
 
 fn saved(dir: &Path) -> Option<String> {
-    idecraft_core::chosen_theme(&dir.join("settings.toml"), Some(&dir.join("theme")))
+    ferris_idea_core::chosen_theme(&dir.join("settings.toml"), Some(&dir.join("theme")))
 }
 
 /// What a start of the application does with the saved files.
@@ -43,7 +43,7 @@ fn themes_switch_at_once_and_survive_a_restart(cx: &mut TestAppContext) {
         cx.set_global(ThemeFile(dir.join("theme")));
         cx.set_global(ThemeLog(dir.join(THEME_LOG)));
         restart(cx);
-        assert_eq!(current_theme(), ThemeId::IdecraftDark, "a new install");
+        assert_eq!(current_theme(), ThemeId::FerrisIdeaDark, "a new install");
         assert_eq!(saved(&dir), None);
 
         // Every bundled theme: drawn with at once, saved, found again at the next start.
@@ -75,25 +75,25 @@ fn themes_switch_at_once_and_survive_a_restart(cx: &mut TestAppContext) {
         set_ide_settings(s, cx).unwrap();
         let of_kind = |dark: bool| {
             if dark {
-                ThemeId::IdecraftDark
+                ThemeId::FerrisIdeaDark
             } else {
-                ThemeId::IdecraftLight
+                ThemeId::FerrisIdeaLight
             }
         };
         assert_eq!(current_theme(), of_kind(dark));
         // Both appearances of the system have their theme.
         let s = ide_settings(cx);
-        assert_eq!(os_theme(&s, true), Some(ThemeId::IdecraftDark));
-        assert_eq!(os_theme(&s, false), Some(ThemeId::IdecraftLight));
+        assert_eq!(os_theme(&s, true), Some(ThemeId::FerrisIdeaDark));
+        assert_eq!(os_theme(&s, false), Some(ThemeId::FerrisIdeaLight));
 
         // A theme chosen while syncing becomes the theme of its kind; the other kind keeps its
         // own, and the theme chosen without syncing stays saved.
         appearance::choose_theme(ThemeId::IslandsDark, cx).unwrap();
         let s = ide_settings(cx);
         assert_eq!(s.appearance.dark_theme, "Islands Dark");
-        assert_eq!(s.appearance.light_theme, "IDECraft Light");
+        assert_eq!(s.appearance.light_theme, "Ferris IDEA Light");
         assert_eq!(os_theme(&s, true), Some(ThemeId::IslandsDark));
-        assert_eq!(os_theme(&s, false), Some(ThemeId::IdecraftLight));
+        assert_eq!(os_theme(&s, false), Some(ThemeId::FerrisIdeaLight));
         appearance::choose_theme(ThemeId::IslandsLight, cx).unwrap();
         let s = ide_settings(cx);
         assert_eq!(s.appearance.dark_theme, "Islands Dark", "kept");
@@ -121,8 +121,8 @@ fn themes_switch_at_once_and_survive_a_restart(cx: &mut TestAppContext) {
         let mut odd = s.clone();
         odd.appearance.dark_theme = "Solarized".into();
         odd.appearance.light_theme = String::new();
-        assert_eq!(os_theme(&odd, true), Some(ThemeId::IdecraftDark));
-        assert_eq!(os_theme(&odd, false), Some(ThemeId::IdecraftLight));
+        assert_eq!(os_theme(&odd, true), Some(ThemeId::FerrisIdeaDark));
+        assert_eq!(os_theme(&odd, false), Some(ThemeId::FerrisIdeaLight));
 
         // Sync with OS switched off: the theme chosen without it is shown again at once, the same
         // one the next start shows.

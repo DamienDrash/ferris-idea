@@ -6,8 +6,8 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use idecraft_languages::LanguageId;
-use idecraft_languages::js_imports::{organize_imports_in, summary};
+use ferris_idea_languages::LanguageId;
+use ferris_idea_languages::js_imports::{organize_imports_in, summary};
 
 const WAIT: Duration = Duration::from_secs(120);
 const UTIL: &str = "export const a = 1\nexport const b = 2\nexport const c = 3\n";
@@ -20,19 +20,22 @@ impl Drop for Project {
     }
 }
 
-/// A project with `src/util.ts`, when the server IDECraft starts for `language` is `program`.
+/// A project with `src/util.ts`, when the server Ferris IDEA starts for `language` is `program`.
 fn project(name: &str, language: LanguageId, program: &str) -> Option<Project> {
-    if !idecraft_languages::servers::resolve(language).is_ok_and(|r| r.candidate.program == program)
+    if !ferris_idea_languages::servers::resolve(language)
+        .is_ok_and(|r| r.candidate.program == program)
     {
         assert!(
-            std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+            ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
             "required tool missing: {program}"
         );
         eprintln!("skipped: {program} not installed");
         return None;
     }
-    let root =
-        std::env::temp_dir().join(format!("idecraft-jsimports-{name}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!(
+        "ferris-idea-jsimports-{name}-{}",
+        std::process::id()
+    ));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src")).unwrap();
     let root = root.canonicalize().unwrap();

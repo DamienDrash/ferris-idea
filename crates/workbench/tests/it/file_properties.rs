@@ -7,9 +7,9 @@
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_core::file_properties::{Charset, is_read_only};
+use ferris_idea_workbench::{EditorView, WorkbenchView};
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_core::file_properties::{Charset, is_read_only};
-use idecraft_workbench::{EditorView, WorkbenchView};
 
 /// A project with `files` (name, bytes) in a window; the first file is open.
 fn open(
@@ -23,7 +23,7 @@ fn open(
     &'static mut VisualTestContext,
 ) {
     let root = std::env::temp_dir().join(format!(
-        "idecraft-file-properties-window-{tag}-{}",
+        "ferris-idea-file-properties-window-{tag}-{}",
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&root);
@@ -352,14 +352,14 @@ fn the_editor_follows_the_read_only_attribute(cx: &mut TestAppContext) {
     // A file that is read-only when it is opened: its editor is read-only from the start, and
     // follows a change made elsewhere when it looks at the disk.
     let locked = root.join("locked.txt");
-    idecraft_core::file_properties::set_read_only(&root, &locked, true, false).unwrap();
+    ferris_idea_core::file_properties::set_read_only(&root, &locked, true, false).unwrap();
     bench.update_in(cx, |b, window, cx| b.open(&locked, window, cx));
     cx.run_until_parked();
     let locked_editor = bench
         .read_with(cx, |b, _| b.active_editor_entity())
         .unwrap();
     assert!(locked_editor.read_with(cx, |e, _| e.is_read_only()));
-    idecraft_core::file_properties::set_read_only(&root, &locked, false, false).unwrap();
+    ferris_idea_core::file_properties::set_read_only(&root, &locked, false, false).unwrap();
     locked_editor.update(cx, |e, cx| e.check_disk(cx));
     assert!(!locked_editor.read_with(cx, |e, _| e.is_read_only()));
 }

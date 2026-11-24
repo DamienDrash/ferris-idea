@@ -1,5 +1,5 @@
 [package]
-name = "idecraft-workbench"
+name = "ferris-idea-workbench"
 description = "Desktop views on GPUI (ADR-0003): the editor view first"
 version.workspace = true
 edition.workspace = true
@@ -9,31 +9,35 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
-idecraft-ai.workspace = true
-idecraft-core.workspace = true
-idecraft-containers.workspace = true
-idecraft-database.workspace = true
-idecraft-nosql.workspace = true
-idecraft-debugger.workspace = true
+ferris-idea-ai.workspace = true
+# Claude Code connects to the window as its IDE (SPEC-0358).
+ferris-idea-claude-link.workspace = true
+ferris-idea-core.workspace = true
+ferris-idea-containers.workspace = true
+ferris-idea-database.workspace = true
+ferris-idea-nosql.workspace = true
+ferris-idea-debugger.workspace = true
 # The semantic tree and the UI driver (ADR-0027, SPEC-0319).
-idecraft-uidriver.workspace = true
+ferris-idea-uidriver.workspace = true
 serde.workspace = true
 serde_json = "1"
 regex = "1"
+# Messages of the Docker event watcher and followed logs to the window (SPEC-0119 v5).
+async-channel = "2"
 # Time zone rules for commit dates (SPEC-0086 v6 behaviour 2a); already in the tree through gix.
 jiff = "0.2"
-idecraft-editor.workspace = true
-idecraft-formats.workspace = true
-idecraft-http.workspace = true
-idecraft-languages.workspace = true
-idecraft-plugins.workspace = true
-idecraft-profiler.workspace = true
-idecraft-remote.workspace = true
-idecraft-session.workspace = true
-idecraft-terminal.workspace = true
-idecraft-vcs.workspace = true
+ferris-idea-editor.workspace = true
+ferris-idea-formats.workspace = true
+ferris-idea-http.workspace = true
+ferris-idea-languages.workspace = true
+ferris-idea-plugins.workspace = true
+ferris-idea-profiler.workspace = true
+ferris-idea-remote.workspace = true
+ferris-idea-session.workspace = true
+ferris-idea-terminal.workspace = true
+ferris-idea-vcs.workspace = true
 tokio = { workspace = true, features = ["rt"] }
-idecraft-ui = { workspace = true, features = ["view"] }
+ferris-idea-ui = { workspace = true, features = ["view"] }
 
 # UI toolkit (ADR-0003), same features as the app.
 [target.'cfg(target_os = "macos")'.dependencies]
@@ -49,8 +53,12 @@ workspace = true
 
 # Window-free tests of views with the GPUI test platform (window check of #485, D1).
 [dev-dependencies]
+# The SSH test host runs inside the test process (`ferris_idea_remote::testing`, feature `test-host`).
+ferris-idea-remote = { workspace = true, features = ["test-host"] }
 duckdb.workspace = true
 wat = "1"
+# known_hosts lines of the room link window test (SPEC-0323 v7).
+base64 = "0.22"
 
 [target.'cfg(target_os = "macos")'.dev-dependencies]
 gpui = { version = "0.2.2", default-features = false, features = ["font-kit", "runtime_shaders", "test-support"] }

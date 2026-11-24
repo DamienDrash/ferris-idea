@@ -2,9 +2,9 @@
 //! tool window and the Git diff (`SPEC-0138`, `SPEC-0313`): chips, Explain with AI, sharing a
 //! terminal tab, and typing a suggested command into a terminal without running it.
 
+use ferris_idea_ai::Attachment;
+use ferris_idea_ai::context::{self as ai_context, Source};
 use gpui::{App, AppContext, Context, Entity, Window};
-use idecraft_ai::Attachment;
-use idecraft_ai::context::{self as ai_context, Source};
 
 use super::WorkbenchView;
 use crate::TerminalView;
@@ -59,6 +59,20 @@ impl WorkbenchView {
                 }
                 crate::AiChatEvent::Apply(preview) => this.ai_apply(chat, preview, window, cx),
                 crate::AiChatEvent::Attach(kind) => this.ai_attach_kind(chat, *kind, window, cx),
+                crate::AiChatEvent::OpenFile(path) => {
+                    // A file of the workspace the agent's turn changed (`SPEC-0357` behaviour 11).
+                    if path.starts_with(&this.root) {
+                        this.open(path, window, cx);
+                    }
+                }
+                // SPEC-0160 v2 behaviour 6: the ways on with Claude's plan in the Terminal.
+                crate::AiChatEvent::UseAnthropicApi => {
+                    this.open_settings(crate::settings_model::Page::Ai, window, cx);
+                    if let Some(v) = this.settings_dialog() {
+                        v.update(cx, |v, cx| v.use_anthropic_api(cx));
+                    }
+                }
+                crate::AiChatEvent::OpenClaudeCode => this.open_claude_code_terminal(window, cx),
                 crate::AiChatEvent::OpenLink(url) => {
                     // Only addresses the person confirmed, and only http and https (behaviour 7).
                     if crate::ai_markdown::openable(url) {

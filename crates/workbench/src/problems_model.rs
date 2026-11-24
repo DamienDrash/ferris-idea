@@ -22,7 +22,7 @@ pub struct Located {
     pub severity: Severity,
     /// Message.
     pub message: String,
-    /// The IDECraft inspection that found it; `None` for language servers and tools.
+    /// The Ferris IDEA inspection that found it; `None` for language servers and tools.
     pub inspection: Option<&'static str>,
 }
 
@@ -141,7 +141,7 @@ pub fn rows_with(problems: &[Located], scope: Scope, options: &ViewOptions) -> V
         let mut names: Vec<(&'static str, &'static str)> = grouped
             .iter()
             .filter_map(|p| p.inspection)
-            .map(|id| (idecraft_languages::inspections::name_of(id), id))
+            .map(|id| (ferris_idea_languages::inspections::name_of(id), id))
             .collect();
         names.sort();
         names.dedup();
@@ -306,10 +306,10 @@ impl InspectScope {
     /// (`SPEC-0098` v4 behaviour 10).
     pub fn tab_for(&self, only: Option<&str>) -> String {
         match only {
-            Some(id) => match idecraft_languages::inspections::known_id(id) {
+            Some(id) => match ferris_idea_languages::inspections::known_id(id) {
                 Some(id) => format!(
                     "Inspection: {}",
-                    idecraft_languages::inspections::name_of(id)
+                    ferris_idea_languages::inspections::name_of(id)
                 ),
                 None => format!("Inspection: {id}"),
             },
@@ -398,7 +398,7 @@ pub fn inspection_tree(found: &[Located], folded: &BTreeSet<String>) -> Vec<Tree
     let mut ids: Vec<(&'static str, &'static str)> = found
         .iter()
         .filter_map(|p| p.inspection)
-        .map(|id| (idecraft_languages::inspections::name_of(id), id))
+        .map(|id| (ferris_idea_languages::inspections::name_of(id), id))
         .collect();
     ids.sort();
     ids.dedup();
@@ -458,7 +458,8 @@ pub const PREVIEW_RADIUS: usize = 5;
 
 /// The preview of the problem on 0-based `line` of `text`.
 pub fn preview(text: &str, line: usize) -> Preview {
-    let (first, lines) = idecraft_languages::inspections::preview_lines(text, line, PREVIEW_RADIUS);
+    let (first, lines) =
+        ferris_idea_languages::inspections::preview_lines(text, line, PREVIEW_RADIUS);
     Preview {
         first,
         line: line.min(first + lines.len().saturating_sub(1)),

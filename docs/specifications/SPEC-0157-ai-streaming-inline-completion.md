@@ -41,7 +41,7 @@ without leaving the editor.
 
 ## Acceptance criteria
 - **AK-1** Streaming piece by piece, stopping, event parsing across chunk borders; inline
-  completion request with `<CURSOR>` and the prompt, cleaning (`idecraft-ai` tests against the
+  completion request with `<CURSOR>` and the prompt, cleaning (`ferris-idea-ai` tests against the
   fake endpoint, which now streams).
 - **AK-2** MCP: `inline_completion` false and `streaming` true by default (`ide_settings_tools`).
 - **AK-3** Window self-test: chat requests are streamed; with inline completion on, a space after

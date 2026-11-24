@@ -1,4 +1,4 @@
-//! Version control integration for IDECraft (Git first).
+//! Version control integration for Ferris IDEA (Git first).
 //!
 //! Implements `SPEC-0032` (Git status, history and changes of a file; v3 the summary of a
 //! repository and the repositories below a folder),
@@ -8,10 +8,11 @@
 //! (one change of a file, changed words, unified rows), `SPEC-0055` (remotes, fetch, pull, push), `SPEC-0230`
 //! (commit hooks) and `SPEC-0231` (smart checkout) with
 //! `gix` for repository access, the `git` executable for network operations
-//! and `similar` for line diffs.
+//! and `similar` for line diffs; `SPEC-0340` (change sets of agents, [`change_set`]).
 
 mod authors;
 mod branch_ops;
+pub mod change_set;
 mod clone;
 mod diff;
 mod git;

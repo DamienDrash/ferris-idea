@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
-use idecraft_host::HostOptions;
-use idecraft_session::{
+use ferris_idea_host::HostOptions;
+use ferris_idea_session::{
     Backend, BackendConfig, ClientSession, ErrorCode, Right, RpcError, Transport, in_process,
 };
 use serde_json::{Value, json};
@@ -46,7 +46,7 @@ fn host(dir: &Path, rights: Vec<Right>) -> Host {
         rights,
         ..BackendConfig::default()
     });
-    idecraft_host::bind(
+    ferris_idea_host::bind(
         &backend,
         HostOptions {
             language_servers: false,
@@ -416,7 +416,7 @@ fn search_filters_by_context_and_previews_on_the_host() {
     h.session
         .edit(
             "a.rs",
-            &[idecraft_session::Op {
+            &[ferris_idea_session::Op {
                 at: 0,
                 delete: 0,
                 insert: "// unsaved first line\n".into(),

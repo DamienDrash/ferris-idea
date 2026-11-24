@@ -1,5 +1,5 @@
 [package]
-name = "idecraft-mcp"
+name = "ferris-idea-mcp"
 description = "Model Context Protocol server exposing IDE capabilities to LLM agents"
 version.workspace = true
 edition.workspace = true
@@ -10,26 +10,32 @@ publish.workspace = true
 
 [dependencies]
 regex = "1"
-idecraft-core.workspace = true
-idecraft-containers.workspace = true
-idecraft-editor.workspace = true
-idecraft-languages.workspace = true
-idecraft-plugins.workspace = true
-idecraft-profiler.workspace = true
-idecraft-remote.workspace = true
-idecraft-web.workspace = true
-idecraft-session.workspace = true
-idecraft-ui.workspace = true
-idecraft-debugger.workspace = true
-idecraft-http.workspace = true
-idecraft-terminal.workspace = true
-idecraft-vcs.workspace = true
-idecraft-ai.workspace = true
-idecraft-database.workspace = true
-idecraft-formats.workspace = true
-idecraft-nosql.workspace = true
+ferris-idea-core.workspace = true
+ferris-idea-containers.workspace = true
+ferris-idea-editor.workspace = true
+ferris-idea-languages.workspace = true
+ferris-idea-plugins.workspace = true
+ferris-idea-profiler.workspace = true
+ferris-idea-remote.workspace = true
+ferris-idea-web.workspace = true
+ferris-idea-session.workspace = true
+ferris-idea-ui.workspace = true
+ferris-idea-debugger.workspace = true
+ferris-idea-http.workspace = true
+ferris-idea-terminal.workspace = true
+ferris-idea-vcs.workspace = true
+ferris-idea-ai.workspace = true
+# The state of the Claude Code link (SPEC-0358).
+ferris-idea-claude-link.workspace = true
+ferris-idea-database.workspace = true
+ferris-idea-formats.workspace = true
+ferris-idea-nosql.workspace = true
 # The UI driver's types and rules (ADR-0027, SPEC-0319).
-idecraft-uidriver.workspace = true
+ferris-idea-uidriver.workspace = true
+ferris-idea-sandbox.workspace = true
+# The internal vault for agents (ADR-0033, SPEC-0353).
+ferris-idea-vault.workspace = true
+zeroize = "1"
 rmcp = { version = "3.9", features = ["server", "macros", "transport-io", "transport-streamable-http-server"] }
 # Streamable HTTP for the running window (SPEC-0221).
 bytes = "1"
@@ -41,11 +47,15 @@ tokio-util = { workspace = true }
 tower-service = "0.3"
 serde = { workspace = true }
 serde_json = "1"
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std", "io-util", "net", "time", "sync"] }
+# The agent benchmark's task and script files (SPEC-0345).
+toml.workspace = true
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std", "io-util", "net", "time", "sync", "process"] }
 
 [dev-dependencies]
+# The SSH test host runs inside the test process (`ferris_idea_remote::testing`, feature `test-host`).
+ferris-idea-remote = { workspace = true, features = ["test-host"] }
 wat = "1"
-idecraft-host.workspace = true
+ferris-idea-host.workspace = true
 duckdb.workspace = true
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-util"] }
 

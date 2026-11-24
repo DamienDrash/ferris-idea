@@ -5,12 +5,12 @@
   to the reference platform's JVM plugins. Plugins must not weaken the workspace protections of
   ADR-0007/SPEC-0053: a cloned project must not run code by bringing plugins, and a plugin must not
   read files, open connections or hang the IDE.
-- **Decision:** New crate `idecraft-plugins` on `wasmi` (MIT/Apache-2.0, a pure-Rust interpreter;
-  `wat` for tests). A plugin is one `.wasm` module in the user's IDECraft settings folder
-  (`plugins/`, or `IDECRAFT_PLUGINS`); workspaces cannot install plugins. The module imports nothing
+- **Decision:** New crate `ferris-idea-plugins` on `wasmi` (MIT/Apache-2.0, a pure-Rust interpreter;
+  `wat` for tests). A plugin is one `.wasm` module in the user's Ferris IDEA settings folder
+  (`plugins/`, or `FERRIS_IDEA_PLUGINS`); workspaces cannot install plugins. The module imports nothing
   — there are no host functions, so it has no files, network, clock or randomness — and exports
-  `memory`, `idecraft_alloc`, `idecraft_manifest` (JSON: name, version, description, actions) and
-  `idecraft_run` (action id and input text in, output text out). Every call runs in a fresh instance
+  `memory`, `ferris_idea_alloc`, `ferris_idea_manifest` (JSON: name, version, description, actions) and
+  `ferris_idea_run` (action id and input text in, output text out). Every call runs in a fresh instance
   with an instruction budget (fuel) and a memory limit. First capability: actions that replace the
   selection or show a message, offered in Search Everywhere and to agents (`plugins`,
   `run_plugin_action`).
@@ -19,7 +19,7 @@
   of this ABI, each with the same sandbox rules. An interpreter is slower than a JIT; the fuel budget
   keeps that bounded. Plugins of the reference platform keep needing a port (F-081, ADR-0006).
 - **Amendment 2026-11-03 (SPEC-0156):** the ABI gains two reviewed host functions of module
-  `idecraft`, `list_files` and `read_file`, which answer only for the open project's files (relative
+  `ferris-idea`, `list_files` and `read_file`, which answer only for the open project's files (relative
   paths, no `..`, links resolved inside the project, 4 MiB at most) and only when the manifest asks
   for `project-read` and the user granted it in Settings › Plugins (kept in `plugins/permissions.json`,
   withdrawn on removal). Plugins never write files; `edit` actions return edits that the IDE applies
@@ -31,7 +31,7 @@
 - **Amendment 2026-11-03 (SPEC-0210, SPEC-0211):** further extension points without new host
   functions: action kinds `complete` (completion items) and `status` (status bar text) with a fifth of
   the budget, `panel` (rows of the Plugins tool window), and declarative `file_types` in the manifest
-  (highlighting and line comments done by IDECraft, no plugin code runs). The sandbox model is
+  (highlighting and line comments done by Ferris IDEA, no plugin code runs). The sandbox model is
   unchanged. Run configuration types stay out: starting programs would need a new, reviewed
   capability and is an open decision. Installing and updating show a review of contributions and
   permissions first; an update never grants a permission the old version did not ask for.
@@ -40,7 +40,7 @@
   that asks for the permission `suggest-commands` (granted by the user at install or later in
   Settings › Plugins) may declare `run-config` actions that answer suggested commands as data —
   program, argument list, folder relative to the project, optional environment and a name. The
-  plugin itself still starts nothing and gets no new host function. IDECraft checks each suggestion
+  plugin itself still starts nothing and gets no new host function. Ferris IDEA checks each suggestion
   (no command interpreters, no `..`, no loader variables, no control characters, limits), shows the
   exact program, arguments and folder in the Run dialog and starts it only after the user confirms,
   as an argument list without a shell and without variable expansion. "Always allow in this

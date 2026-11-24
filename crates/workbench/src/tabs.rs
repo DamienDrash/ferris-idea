@@ -4,7 +4,7 @@
 
 use std::path::{Path, PathBuf};
 
-use idecraft_core::{ActivateOnClose, EditorTabSettings, TabLimitRule};
+use ferris_idea_core::{ActivateOnClose, EditorTabSettings, TabLimitRule};
 use serde::{Deserialize, Serialize};
 
 /// Most tabs kept open by default (v9 behaviour 16; before v9 a fixed 10).
@@ -946,7 +946,7 @@ mod tests {
                 workbench.contains(&format!("\"{}\"", item.action))
                     || workbench.contains(&format!("{} =>", item.action))
                     || CloseScope::of_action(&item.action).is_some()
-                    || item.action.starts_with("IDECraft.Copy")
+                    || item.action.starts_with("FerrisIDEA.Copy")
                     || item.action.starts_with("Run")
                     || item.action.starts_with("Debug")
                     || matches!(

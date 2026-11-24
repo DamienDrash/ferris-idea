@@ -10,16 +10,16 @@
 
 use std::path::{Path, PathBuf};
 
-use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_workbench::WorkbenchView;
-use idecraft_workbench::appearance::{
+use ferris_idea_workbench::WorkbenchView;
+use ferris_idea_workbench::appearance::{
     self, IdeSettingsFile, THEME_LOG, ThemeFile, ThemeLog, ide_settings, set_ide_settings,
 };
-use idecraft_workbench::fonts::editor_font_size;
+use ferris_idea_workbench::fonts::editor_font_size;
+use gpui::{Entity, TestAppContext, VisualTestContext, px};
 
 fn folder(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!(
-        "idecraft-font-size-actions-{tag}-{}",
+        "ferris-idea-font-size-actions-{tag}-{}",
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&dir);
@@ -36,7 +36,7 @@ fn keys(cx: &mut VisualTestContext, keystrokes: &str) {
 fn sizes(cx: &mut VisualTestContext, file: &Path) -> (f32, f32, Option<f32>) {
     let saved = file
         .exists()
-        .then(|| idecraft_core::load_ide_settings(file).editor.font_size);
+        .then(|| ferris_idea_core::load_ide_settings(file).editor.font_size);
     (
         cx.update(|_, cx| ide_settings(cx).editor.font_size),
         editor_font_size(),

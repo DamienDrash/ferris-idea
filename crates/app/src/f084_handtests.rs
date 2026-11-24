@@ -2,8 +2,8 @@
 //! in PARITY.md: the steps of hand tests 202, 203, 204 and 206 in a window of GPUI's test platform
 //! with the window's own MCP server over HTTP (`mcp_http`: the same bridge, questions and quit
 //! step as the app), found through its discovery file in a settings folder of the test's own.
-//! A scripted MCP client over HTTP (`idecraft_mcp::client`, client name `claude-code`) takes the
-//! place of Claude Code; `idecraft quit` runs as the command does (`quit_with`) with a scripted
+//! A scripted MCP client over HTTP (`ferris_idea_mcp::client`, client name `claude-code`) takes the
+//! place of Claude Code; `ferris-idea quit` runs as the command does (`quit_with`) with a scripted
 //! terminal. The questions the window asks are the platform's alerts, answered with the button a
 //! user presses; the project tree gets real key events. The grant file, the recent projects and
 //! the settings are the test's own: the user's files are never read or written.
@@ -13,7 +13,7 @@
 //! is called by the test. What needs eyes stays in the hand tests: the system alert on the
 //! screen and its keys (Return, Escape, Space) on a real keyboard, VoiceOver reading it, a real
 //! terminal, Claude Code itself, the window going away. Step 8 of 202, step 6 of 204 and step 5 of
-//! 206 run the `idecraft` program itself (`tests/it/f084_handtests.rs`).
+//! 206 run the `ferris-idea` program itself (`tests/it/f084_handtests.rs`).
 //!
 //! `SPEC-0053` v8 behaviours 2, 3, 6–9 (hand test 202), `SPEC-0012` v3 behaviours 1, 9, 11 (202
 //! step 7), `SPEC-0261` v9 behaviours 6–8, 11–13 (203, 204), `SPEC-0281` v2 behaviour 6 (206).
@@ -22,11 +22,11 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+use ferris_idea_mcp::client::Client;
+use ferris_idea_workbench::WorkbenchView;
+use ferris_idea_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
+use ferris_idea_workbench::project_windows::QuitsInHarness;
 use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext, point, px};
-use idecraft_mcp::client::Client;
-use idecraft_workbench::WorkbenchView;
-use idecraft_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
-use idecraft_workbench::project_windows::QuitsInHarness;
 use serde_json::{Value, json};
 
 type Bench = Entity<WorkbenchView>;
@@ -37,11 +37,11 @@ static WINDOWS: Mutex<()> = Mutex::new(());
 
 /// A project folder with `src/` and the files given, and the settings folder beside it.
 fn project(tag: &str, files: &[(&str, &str)]) -> (PathBuf, PathBuf) {
-    let base = std::env::temp_dir().join(format!("idecraft-f084-{tag}-{}", std::process::id()));
+    let base = std::env::temp_dir().join(format!("ferris-idea-f084-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
     let root = base.join(format!("handtest-{tag}"));
     std::fs::create_dir_all(root.join("src")).unwrap();
-    std::fs::create_dir_all(root.join(".idecraft")).unwrap();
+    std::fs::create_dir_all(root.join(".ferris-idea")).unwrap();
     for (path, text) in files {
         let at = root.join(path);
         std::fs::create_dir_all(at.parent().unwrap()).unwrap();
@@ -66,17 +66,17 @@ struct Window {
 /// the window's MCP server over HTTP (`mcp.http` switched on, as the user does in Settings › AI
 /// Assistant; it is off by default, SPEC-0221 v3) with the discovery and grant files in `settings`.
 fn window(root: &Path, settings: &Path, cx: &mut TestAppContext) -> Window {
-    idecraft_workbench::hit_targets::enable();
+    ferris_idea_workbench::hit_targets::enable();
     cx.executor().allow_parking();
     let quits = QuitsInHarness::default();
     let settings = settings.to_path_buf();
     cx.update(|cx| {
         cx.set_global(IdeSettingsFile(settings.join("ide-settings.toml")));
         cx.set_global(ThemeFile(settings.join("theme")));
-        let mut ide = idecraft_core::IdeSettings::default();
+        let mut ide = ferris_idea_core::IdeSettings::default();
         ide.mcp.http = true;
         cx.set_global(CurrentIdeSettings(ide));
-        cx.set_global(idecraft_workbench::project_windows::RecentProjectsFile(
+        cx.set_global(ferris_idea_workbench::project_windows::RecentProjectsFile(
             settings.join("recent-projects"),
         ));
         cx.set_global(quits.clone());
@@ -86,7 +86,9 @@ fn window(root: &Path, settings: &Path, cx: &mut TestAppContext) -> Window {
     let handle = cx.add_window(move |_, cx| WorkbenchView::new(&at, cx));
     let bench = handle.root(cx).unwrap();
     let shown = root.to_path_buf();
-    cx.update(|cx| idecraft_workbench::project_windows::register_window(&shown, handle.into(), cx));
+    cx.update(|cx| {
+        ferris_idea_workbench::project_windows::register_window(&shown, handle.into(), cx)
+    });
     let cx = VisualTestContext::from_window(handle.into(), cx).into_mut();
     cx.simulate_resize(gpui::size(px(1372.), px(860.)));
     cx.run_until_parked();
@@ -119,7 +121,7 @@ fn until(
 /// A client of the window's MCP server over HTTP, found through the discovery file, with a new
 /// MCP session, named as Claude Code names itself.
 fn agent(settings: &Path, name: &str) -> Client {
-    let found = idecraft_mcp::client::running_windows(settings);
+    let found = ferris_idea_mcp::client::running_windows(settings);
     assert_eq!(found.len(), 1, "one window serves MCP over HTTP: {found:?}");
     assert_eq!(found[0].pid, std::process::id());
     Client::connect(&found[0], name).unwrap()
@@ -203,7 +205,7 @@ fn hand_test_202_the_window_asks_http_clients_for_a_right(cx: &mut TestAppContex
     let (root, settings) = project("202", &[]);
     // 1. The grant file names other rights and another folder, but neither `write` nor
     // `vcs-write` for this workspace.
-    let grants = settings.join(idecraft_core::GRANT_FILE);
+    let grants = settings.join(ferris_idea_core::GRANT_FILE);
     let before = "# Rechte für Agenten, von Hand\n[[workspace]]\npath = \"/somewhere/else\"\nallow = [\"write\", \"vcs-write\"]\n\n[[workspace]]\npath = \"ROOT\"\nallow = [\"run\"]\n"
         .replace("ROOT", &root.display().to_string());
     std::fs::write(&grants, &before).unwrap();
@@ -214,7 +216,7 @@ fn hand_test_202_the_window_asks_http_clients_for_a_right(cx: &mut TestAppContex
         .arg("create table t (v int); insert into t values (1), (2);")
         .status()
         .is_ok_and(|s| s.success());
-    idecraft_core::trust::trust_for_process(&root);
+    ferris_idea_core::trust::trust_for_process(&root);
 
     // 2. The window serves MCP over HTTP; the client finds URL and token in the discovery file.
     let w = window(&root, &settings, cx);
@@ -342,7 +344,7 @@ fn hand_test_202_the_window_asks_http_clients_for_a_right(cx: &mut TestAppContex
         eprintln!("note: hand test 202 step 7 skipped: no sqlite3 to make the database");
         return;
     }
-    let connections = root.join(".idecraft/connections.toml");
+    let connections = root.join(".ferris-idea/connections.toml");
     std::fs::write(
         &connections,
         format!(
@@ -413,7 +415,7 @@ fn hand_test_202_the_window_asks_http_clients_for_a_right(cx: &mut TestAppContex
 /// the window counts it as running.
 fn start_sleeper(w: &mut Window, root: &Path) {
     std::fs::write(
-        root.join(".idecraft/run.toml"),
+        root.join(".ferris-idea/run.toml"),
         "[[run]]\nname = \"sleeper\"\ncommand = [\"sleep\", \"600\"]\n",
     )
     .unwrap();
@@ -450,19 +452,19 @@ fn hand_test_203_quit_ide_with_an_unsaved_file(cx: &mut TestAppContext) {
     struct EndRuns;
     impl Drop for EndRuns {
         fn drop(&mut self) {
-            idecraft_core::end_all_runs(Duration::from_millis(200));
+            ferris_idea_core::end_all_runs(Duration::from_millis(200));
         }
     }
     let _runs = EndRuns;
     let (root, settings) = project("203", &[("src/notes.txt", "saved\n")]);
-    idecraft_core::trust::trust_for_process(&root);
+    ferris_idea_core::trust::trust_for_process(&root);
     let mut w = window(&root, &settings, cx);
     let file = root.join("src/notes.txt");
 
     // 1. A running configuration and an unsaved change. In this order: Run saves the modified
     // files before it starts (`SPEC-0087` v5 behaviour 3a), so a change made first is saved.
     start_sleeper(&mut w, &root);
-    assert_eq!(idecraft_core::live_runs(), 1);
+    assert_eq!(ferris_idea_core::live_runs(), 1);
     edit(&mut w, &file, "typed ");
 
     // 2. quit_ide without arguments: nothing quits, no question; the result names the file, the
@@ -482,7 +484,7 @@ fn hand_test_203_quit_ide_with_an_unsaved_file(cx: &mut TestAppContext) {
         strings(&listed["options"]),
         ["save_all", "discard", "cancel"]
     );
-    assert_eq!(w.quits.0.get(), 0, "IDECraft stays open");
+    assert_eq!(w.quits.0.get(), 0, "Ferris IDEA stays open");
 
     // 3. pending=discard asks for `quit`; Deny keeps everything.
     let call = start(client, "quit_ide", json!({"pending": "discard"}));
@@ -506,10 +508,10 @@ fn hand_test_203_quit_ide_with_an_unsaved_file(cx: &mut TestAppContext) {
     answer(w.cx, "Deny");
     let (_, denied) = finish(w.cx, call);
     assert!(denied.expect_err("denied").starts_with("denied:"));
-    assert_eq!(w.quits.0.get(), 0, "IDECraft stays open after Deny");
-    assert_eq!(idecraft_core::live_runs(), 1, "the run goes on");
+    assert_eq!(w.quits.0.get(), 0, "Ferris IDEA stays open after Deny");
+    assert_eq!(ferris_idea_core::live_runs(), 1, "the run goes on");
 
-    // 4. A new session, the same call, Allow Once: IDECraft quits without a further question.
+    // 4. A new session, the same call, Allow Once: Ferris IDEA quits without a further question.
     let call = start(
         agent(&settings, "claude-code"),
         "quit_ide",
@@ -526,14 +528,17 @@ fn hand_test_203_quit_ide_with_an_unsaved_file(cx: &mut TestAppContext) {
     until(w.cx, "the quit is decided", |_| w.quits.0.get() == 1);
     assert_eq!(read(&file), "saved\n", "the change is discarded");
     // What the app does when the platform quits (crates/app/src/workbench.rs): the window's run
-    // is one of the programs that end with IDECraft.
-    assert_eq!(idecraft_core::end_all_runs(Duration::from_millis(500)), 1);
+    // is one of the programs that end with Ferris IDEA.
     assert_eq!(
-        idecraft_core::live_runs(),
+        ferris_idea_core::end_all_runs(Duration::from_millis(500)),
+        1
+    );
+    assert_eq!(
+        ferris_idea_core::live_runs(),
         0,
         "the run configuration is ended"
     );
-    let log = read(&root.join(idecraft_core::AGENT_LOG));
+    let log = read(&root.join(ferris_idea_core::AGENT_LOG));
     assert!(
         log.lines().any(|l| l.contains("\"tool\":\"quit_ide\"")),
         "the agent log has the call: {log}"
@@ -565,12 +570,12 @@ fn hand_test_203_quit_ide_with_nothing_pending(cx: &mut TestAppContext) {
     drop(w);
 }
 
-/// `idecraft quit` with `args`, run as the command runs it, with the settings folder of the test
+/// `ferris-idea quit` with `args`, run as the command runs it, with the settings folder of the test
 /// and a terminal that answers `typed` (`None`: standard input is no terminal); on a thread of its
 /// own. Its exit status, standard output and standard error.
 type Quit = std::thread::JoinHandle<(u8, String, String)>;
 
-fn idecraft_quit(settings: &Path, args: &[&str], typed: Option<&str>) -> Quit {
+fn ferris_idea_quit(settings: &Path, args: &[&str], typed: Option<&str>) -> Quit {
     let settings = settings.to_path_buf();
     let args: Vec<String> = args.iter().map(|a| (*a).to_owned()).collect();
     let typed = typed.map(str::to_owned);
@@ -595,14 +600,14 @@ fn idecraft_quit(settings: &Path, args: &[&str], typed: Option<&str>) -> Quit {
     })
 }
 
-/// Waits for `idecraft quit`, answering each question the window shows with Allow Once; the
+/// Waits for `ferris-idea quit`, answering each question the window shows with Allow Once; the
 /// questions asked, as message and detail.
 fn allow_each(
     cx: &mut VisualTestContext,
     quit: Quit,
 ) -> ((u8, String, String), Vec<(String, String)>) {
     let mut asked = Vec::new();
-    until(cx, "idecraft quit ends", |cx| {
+    until(cx, "ferris-idea quit ends", |cx| {
         if let Some(q) = cx.pending_prompt() {
             asked.push(q);
             cx.simulate_prompt_answer("Allow Once");
@@ -612,24 +617,24 @@ fn allow_each(
     (quit.join().unwrap(), asked)
 }
 
-/// Hand test 204 steps 1–5 (`SPEC-0261` v9 behaviours 7, 8, 11 and 12): `idecraft quit` with
-/// nothing pending asks for `quit` as client `idecraft-cli` and quits; with an unsaved file it
+/// Hand test 204 steps 1–5 (`SPEC-0261` v9 behaviours 7, 8, 11 and 12): `ferris-idea quit` with
+/// nothing pending asks for `quit` as client `ferris-idea-cli` and quits; with an unsaved file it
 /// lists it and asks on the terminal, `c` cancels; `s` asks for `quit` and `write`, saves and
 /// quits; without a terminal it names the flags and exits with 2; `--discard` quits without
 /// saving.
 #[gpui::test]
-fn hand_test_204_idecraft_quit_in_the_terminal(cx: &mut TestAppContext) {
+fn hand_test_204_ferris_idea_quit_in_the_terminal(cx: &mut TestAppContext) {
     let _one = WINDOWS.lock().unwrap_or_else(|e| e.into_inner());
     let (root, settings) = project("204", &[("src/notes.txt", "saved\n")]);
     let mut w = window(&root, &settings, cx);
     let file = root.join("src/notes.txt");
     let pid = std::process::id();
-    let client = format!("\"idecraft-cli {}\"", version());
+    let client = format!("\"ferris-idea-cli {}\"", version());
 
-    // 1. Nothing changed: one question for `quit`, then "IDECraft (pid …) quit" and status 0.
-    let ((code, out, err), asked) = allow_each(w.cx, idecraft_quit(&settings, &[], Some("")));
+    // 1. Nothing changed: one question for `quit`, then "Ferris IDEA (pid …) quit" and status 0.
+    let ((code, out, err), asked) = allow_each(w.cx, ferris_idea_quit(&settings, &[], Some("")));
     assert_eq!(code, 0, "{out}{err}");
-    assert_eq!(out, format!("IDECraft (pid {pid}) quit\n"));
+    assert_eq!(out, format!("Ferris IDEA (pid {pid}) quit\n"));
     assert_eq!(asked.len(), 1, "{asked:?}");
     assert!(
         asked[0].0.contains(&client) && asked[0].0.contains("the right \"quit\""),
@@ -639,22 +644,22 @@ fn hand_test_204_idecraft_quit_in_the_terminal(cx: &mut TestAppContext) {
 
     // 2. An unsaved file: listed, the terminal asks; `c` cancels, nothing is asked in the window.
     edit(&mut w, &file, "typed ");
-    let ((code, out, err), asked) = allow_each(w.cx, idecraft_quit(&settings, &[], Some("c\n")));
+    let ((code, out, err), asked) = allow_each(w.cx, ferris_idea_quit(&settings, &[], Some("c\n")));
     assert_eq!(code, 1, "{out}{err}");
     assert_eq!(
         out,
-        "Unsaved files:\n  src/notes.txt\n[s]ave all and quit, [d]iscard and quit, [c]ancel? Cancelled; IDECraft keeps running\n"
+        "Unsaved files:\n  src/notes.txt\n[s]ave all and quit, [d]iscard and quit, [c]ancel? Cancelled; Ferris IDEA keeps running\n"
     );
     assert!(asked.is_empty(), "{asked:?}");
-    assert_eq!(w.quits.0.get(), 1, "IDECraft keeps running");
+    assert_eq!(w.quits.0.get(), 1, "Ferris IDEA keeps running");
     assert_eq!(read(&file), "saved\n");
 
-    // 3. `s`: questions for `quit` and `write`, both naming idecraft-cli; saved, then quit.
-    let ((code, out, err), asked) = allow_each(w.cx, idecraft_quit(&settings, &[], Some("s\n")));
+    // 3. `s`: questions for `quit` and `write`, both naming ferris-idea-cli; saved, then quit.
+    let ((code, out, err), asked) = allow_each(w.cx, ferris_idea_quit(&settings, &[], Some("s\n")));
     assert_eq!(code, 0, "{out}{err}");
     assert!(
         out.ends_with(&format!(
-            "[s]ave all and quit, [d]iscard and quit, [c]ancel? IDECraft (pid {pid}) quit\nSaved:\n  src/notes.txt\n"
+            "[s]ave all and quit, [d]iscard and quit, [c]ancel? Ferris IDEA (pid {pid}) quit\nSaved:\n  src/notes.txt\n"
         )),
         "{out}"
     );
@@ -675,7 +680,7 @@ fn hand_test_204_idecraft_quit_in_the_terminal(cx: &mut TestAppContext) {
 
     // 4. Changed again, standard input no terminal: listed, the flags named, status 2.
     edit(&mut w, &file, "more ");
-    let ((code, out, err), asked) = allow_each(w.cx, idecraft_quit(&settings, &[], None));
+    let ((code, out, err), asked) = allow_each(w.cx, ferris_idea_quit(&settings, &[], None));
     assert_eq!(code, 2, "{out}{err}");
     assert_eq!(out, "Unsaved files:\n  src/notes.txt\n");
     assert!(
@@ -683,13 +688,13 @@ fn hand_test_204_idecraft_quit_in_the_terminal(cx: &mut TestAppContext) {
         "{err}"
     );
     assert!(asked.is_empty(), "{asked:?}");
-    assert_eq!(w.quits.0.get(), 2, "IDECraft keeps running");
+    assert_eq!(w.quits.0.get(), 2, "Ferris IDEA keeps running");
 
-    // 5. --discard: one question for `quit`; IDECraft quits, the change is discarded.
+    // 5. --discard: one question for `quit`; Ferris IDEA quits, the change is discarded.
     let ((code, out, err), asked) =
-        allow_each(w.cx, idecraft_quit(&settings, &["--discard"], None));
+        allow_each(w.cx, ferris_idea_quit(&settings, &["--discard"], None));
     assert_eq!(code, 0, "{out}{err}");
-    assert_eq!(out, format!("IDECraft (pid {pid}) quit\n"));
+    assert_eq!(out, format!("Ferris IDEA (pid {pid}) quit\n"));
     assert_eq!(asked.len(), 1, "{asked:?}");
     assert!(asked[0].0.contains("the right \"quit\""), "{asked:?}");
     until(w.cx, "the quit is decided", |_| w.quits.0.get() == 3);
@@ -700,7 +705,7 @@ fn hand_test_204_idecraft_quit_in_the_terminal(cx: &mut TestAppContext) {
 /// The middle of the project tree row named `name` as it was last drawn.
 fn row(cx: &mut VisualTestContext, name: &str) -> gpui::Point<gpui::Pixels> {
     cx.run_until_parked();
-    let r = idecraft_workbench::hit_targets::get(&format!("tree-{name}"))
+    let r = ferris_idea_workbench::hit_targets::get(&format!("tree-{name}"))
         .unwrap_or_else(|| panic!("the row {name} is drawn"));
     point(px(r.x + r.w / 2.), px(r.y + r.h / 2.))
 }
@@ -710,9 +715,10 @@ fn row(cx: &mut VisualTestContext, name: &str) -> gpui::Point<gpui::Pixels> {
 fn semantic_nodes(cx: &mut VisualTestContext) -> Vec<(String, String, String)> {
     cx.update(|window, cx| {
         window.draw(cx).clear();
-        let tree =
-            idecraft_workbench::semantics::tree(idecraft_workbench::semantics::window_id(window))
-                .expect("the frame has a semantic tree");
+        let tree = ferris_idea_workbench::semantics::tree(
+            ferris_idea_workbench::semantics::window_id(window),
+        )
+        .expect("the frame has a semantic tree");
         tree.iter()
             .map(|n| {
                 (
@@ -727,13 +733,13 @@ fn semantic_nodes(cx: &mut VisualTestContext) -> Vec<(String, String, String)> {
 
 /// Hand test 206 steps 1–4 (`SPEC-0281` v2 behaviour 6, `SPEC-0275` behaviour 6): Delete in the
 /// project tree — from the context menu and with ⌦ — asks in the platform's alert, not in a
-/// question drawn by IDECraft: message "Delete file "…"?", detail "Deleted files stay in Local
+/// question drawn by Ferris IDEA: message "Delete file "…"?", detail "Deleted files stay in Local
 /// History.", buttons Delete and Cancel. While it is shown, the window's semantic tree holds no
 /// drawn copy of the question, so what a screen reader reads is the system alert alone. Cancel
 /// keeps the file; Delete deletes it and closes its tab; a folder's question names what it holds.
 #[gpui::test]
 fn hand_test_206_delete_asks_in_the_native_alert(cx: &mut TestAppContext) {
-    use idecraft_workbench::semantics::{Consumer, set_consumer};
+    use ferris_idea_workbench::semantics::{Consumer, set_consumer};
     let _one = WINDOWS.lock().unwrap_or_else(|e| e.into_inner());
     let (root, settings) = project(
         "206",

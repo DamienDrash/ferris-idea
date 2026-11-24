@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Entitlements of FerrisIDEA.app when it is signed with an identity and the hardened runtime
+  (SPEC-0282 v3 behaviour 4a). Only resource-access entitlements; no code-signing exception
+  (no allow-jit, no unsigned executable memory, no disable-library-validation, no DYLD
+  variables): plugins run in an interpreter (wasmi), the binary links only system libraries.
+
+  Each entry matches a usage description in Info.plist. The hardened runtime refuses these
+  resources before macOS asks the user, and programs started in Ferris IDEA's terminal or run
+  configurations count as Ferris IDEA for the system's privacy checks. Without the entries a
+  test that records audio, a program that uses the camera or a script that controls another
+  app would fail silently. macOS still asks the user once per resource.
+-->
+<plist version="1.0">
+<dict>
+  <!-- NSAppleEventsUsageDescription: osascript and the like, started from the terminal. -->
+  <key>com.apple.security.automation.apple-events</key>
+  <true/>
+  <!-- NSMicrophoneUsageDescription: programs started in the terminal or a run configuration. -->
+  <key>com.apple.security.device.audio-input</key>
+  <true/>
+  <!-- NSCameraUsageDescription: programs started in the terminal or a run configuration. -->
+  <key>com.apple.security.device.camera</key>
+  <true/>
+</dict>
+</plist>

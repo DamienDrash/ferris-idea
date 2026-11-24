@@ -1,10 +1,14 @@
 # SPEC-0212: Resource bundle editor
 
-- **Version:** 2 · **Date:** 2026-11-15 (v2: the hand test's steps in a window test, AK-5; v1: 2026-11-03)
+- **Version:** 3 · **Date:** 2026-11-18 (v3: the Project tree groups a bundle's files under one
+  node, which opens this editor, behaviour 7 — OBS-0091 P3); 2026-11-15 (v2: the hand test's steps in a window test, AK-5; v1: 2026-11-03)
 - **Sources:** GEN (IDEs with the open Properties plugin edit a resource bundle in one view: the keys
   of all its files in a list, and for the selected key one value per locale; keys missing in a
   locale are marked; F-081), STD (`.properties` format of `java.util.Properties`, file naming of
-  `java.util.ResourceBundle`), SPEC-0155, SPEC-0163, ADR-0008
+  `java.util.ResourceBundle`), SPEC-0155, SPEC-0163, ADR-0008; v3: OBS-0091 (the reference's
+  Project tree shows `messages.properties` and `messages_de.properties` under one node "Resource
+  Bundle 'messages'"; a double click or Jump to Source only expands it there, because its basic
+  installation has no bundle editor), SPEC-0061 (Project tree), SPEC-0275 (tree keys)
 - **Feature matrix rows:** F-081
 
 ## Purpose
@@ -33,6 +37,19 @@ Translate and maintain a resource bundle in one place instead of opening each lo
 6. **MCP:** `resource_bundle` (SPEC-0163) gets `set` (`key`, `locale`, `value`) and `remove` (`key`)
    that write the same way and return the bundle afterwards. [ADR-0008]
 
+7. **v3 – Bundles in the Project tree:** in a folder that holds `<base>.properties` and at least
+   one `<base>_<locale>.properties` (SPEC-0163 behaviour 3), the tree shows one node "Resource
+   Bundle '<base>'" with the properties icon in place of those files, sorted among the files by
+   that name; it is collapsed at first and expands to the bundle's files, the base file first,
+   then the locales in name order. Other files of the folder, and `.properties` files without a
+   partner, stay as they are. Double click, Enter, → and ← expand and collapse it as a folder, as
+   in the reference. Jump to Source (F4, ⌘↓) on it, and "Open Resource Bundle Editor" (Find
+   Action, Code menu) while the tree has the focus and the node is selected, open this editor for
+   the bundle. The node cannot be renamed, moved or deleted (its files can); revealing a file of a
+   bundle (Select Opened File, autoscroll) expands the node and selects the file. MCP
+   `project_tree` lists the node with `kind` `bundle`, the base file as its `path` and its files
+   as its rows when expanded. [OBS, GEN]
+
 ## Acceptance criteria
 - **AK-1** Model: keys in order with missing locales, a value set in place keeping the rest of the
   file, continuation lines replaced, a new key appended, escaping with and without non-ASCII text,
@@ -44,17 +61,27 @@ Translate and maintain a resource bundle in one place instead of opening each lo
 - **AK-4** Hand test (round 4, no. 152): edit a bundle of three locales in the dialog and compare
   with the reference's bundle editor.
 
-- **AK-5 (v2)** Hand test 152, IDECraft's side, in a window of the test harness
+- **AK-5 (v2)** Hand test 152, Ferris IDEA's side, in a window of the test harness
   (`crates/workbench/tests/it/open_plugin_handtests.rs`: `hand_test_152_resource_bundle_editor`):
   the editor lists the keys of three files with the missing one marked; a value typed with an
   umlaut and Enter add one line to the open German file, escaped as the file is ASCII; a new key
   goes into the default file only; Delete twice removes it again. AK-4, next to the reference,
   follows `docs/research/PLAN-F081.md`.
 
+- **AK-6 (v3)** Tree: a folder with `messages.properties`, `messages_de.properties`,
+  `messages_fr.properties` and `single.properties` shows "Resource Bundle 'messages'" and
+  `single.properties`; expanding lists the three files in order; revealing `messages_de.properties`
+  selects it under the node; F4 on the node names the base file (`project_tree::tests::
+  resource_bundles_are_one_node`). Window test (`f081_properties_grammar::
+  bundle_node_in_the_project_tree`): the node is shown, a double click expands it, F4 opens the
+  dialog "Resource Bundle 'messages'".
+
 ## Out of scope
 Renaming a key across the bundle and its usages, adding a locale, sorting, the reference's
 "unused property" inspection, XML property files.
 
 ## Known deviations from the reference
+v3: Jump to Source on the bundle node opens the bundle editor; in the reference's basic
+installation, which has no bundle editor, it only expands the node (OBS-0091).
 Only the edited property's lines change and the file's convention for non-ASCII text is kept, so a
 translation does not rewrite or re-escape the whole file (IMP-0091).

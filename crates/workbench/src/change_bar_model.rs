@@ -2,7 +2,7 @@
 //! which change a click hits, the neighbouring changes, the HEAD text shown and the words the status
 //! bar uses after an action.
 
-use idecraft_vcs::{LineChange, LineChangeKind};
+use ferris_idea_vcs::{LineChange, LineChangeKind};
 
 /// Most HEAD lines the bar shows (behaviour 6).
 pub const OLD_LINES_SHOWN: usize = 12;
@@ -89,7 +89,7 @@ pub fn describe(change: &LineChange) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use idecraft_vcs::line_changes;
+    use ferris_idea_vcs::line_changes;
 
     // SPEC-0064 v3 AK-5.
     #[test]

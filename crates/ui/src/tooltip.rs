@@ -265,7 +265,7 @@ pub const DATABASE_TOOLBAR: &[Control] = &[
     c("database-refresh", "Refresh").action("Refresh"),
     // SPEC-0089 v5 behaviour 11.
     c("database-ddl", "Show DDL")
-        .action("IDECraft.Database.ShowDdl")
+        .action("FerrisIDEA.Database.ShowDdl")
         .detail("The selected table or view as SQL in a read-only tab"),
     // SPEC-0089 v5 behaviour 10.
     c("database-speed-search", "Speed Search")
@@ -739,7 +739,12 @@ pub fn dismiss_all() {
     EPOCH.fetch_add(1, Ordering::Relaxed);
 }
 
-static SUPPRESSED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+thread_local! {
+    // Per thread like the shown tooltip: the windows draw on one thread, and window tests running
+    // side by side each on their own thread do not hold back each other's tooltips.
+    static SUPPRESSED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static HELD: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
 
 /// While `on`, no tooltip draws: a menu is open, and a tooltip of the control under the pointer
 /// would lie over it (`SPEC-0294` v2 behaviour 11, OBS-0022 re-check of L28).
@@ -747,23 +752,21 @@ static SUPPRESSED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool
 /// The window sets it at the start of every frame, which also ends the holds of the last frame
 /// (see [`hold_this_frame`]).
 pub fn set_suppressed(on: bool) {
-    SUPPRESSED.store(on, Ordering::Relaxed);
-    HELD.store(false, Ordering::Relaxed);
+    SUPPRESSED.with(|s| s.set(on));
+    HELD.with(|h| h.set(false));
 }
-
-static HELD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// Holds tooltips back for the frame being drawn: a view inside the window draws a menu of its
 /// own (the Run window's ⋮ menu), which the window's flag does not know about (`SPEC-0294` v4
 /// behaviour 11). Views call it from `render` while their menu is open; tooltips draw after the
 /// views of the frame.
 pub fn hold_this_frame() {
-    HELD.store(true, Ordering::Relaxed);
+    HELD.with(|h| h.set(true));
 }
 
 /// Whether tooltips are held back at the moment (a menu is open).
 pub fn suppressed() -> bool {
-    SUPPRESSED.load(Ordering::Relaxed) || HELD.load(Ordering::Relaxed)
+    SUPPRESSED.with(std::cell::Cell::get) || HELD.with(std::cell::Cell::get)
 }
 
 /// Changes with every [`dismiss_all`]; a tooltip made before the change draws nothing.
@@ -880,10 +883,14 @@ pub mod view {
 
     impl Render for TooltipView {
         fn render(&mut self, window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+            // gpui lays a tooltip out before it decides whether its control is still under the
+            // pointer, and paints it only then: it counts as shown once painted in this frame
+            // (the canvas below), so one hidden on leaving its control is not reported as shown
+            // (`SPEC-0294` v6 behaviour 13).
+            clear_shown(self.id);
             // A key was pressed since it appeared: it stays hidden (behaviour 6).
             // … and none draws over an open menu (behaviour 11).
             if epoch() != self.epoch || super::suppressed() {
-                clear_shown(self.id);
                 return div().into_any_element();
             }
             let k = self.colors;
@@ -946,7 +953,7 @@ pub mod view {
                                         window: size,
                                     })
                                 },
-                                |_, _, _, _| {},
+                                |_, _, window, _| follow_the_pointer(window),
                             )
                             .absolute()
                             .top_0()
@@ -956,6 +963,25 @@ pub mod view {
                 )
                 .into_any_element()
         }
+    }
+
+    /// While a tooltip is drawn, every pointer move draws a new frame, in which gpui hides the
+    /// tooltip once its control is no longer under the pointer; and the pointer leaving the
+    /// window hides it (`SPEC-0294` v6 behaviour 13). gpui checks this only when a frame is drawn,
+    /// and a control without a hover style — the active editor tab — draws none when the pointer
+    /// leaves it; leaving the window does not move the pointer gpui knows (OBS-0096 TT1).
+    fn follow_the_pointer(window: &mut Window) {
+        window.on_mouse_event(|_: &gpui::MouseMoveEvent, phase, window, _| {
+            if phase == gpui::DispatchPhase::Bubble {
+                window.refresh();
+            }
+        });
+        window.on_mouse_event(|_: &gpui::MouseExitEvent, phase, window, _| {
+            if phase == gpui::DispatchPhase::Bubble {
+                super::dismiss_all();
+                window.refresh();
+            }
+        });
     }
 
     impl Drop for TooltipView {

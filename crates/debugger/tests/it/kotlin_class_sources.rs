@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use idecraft_debugger::{
+use ferris_idea_debugger::{
     Breakpoint, DapClient, DapError, DebugSession, Event, SourceBreakpoint, read_message,
     write_message,
 };
@@ -140,7 +140,7 @@ const ZOO: &str = "package zoo\n\nabstract class Animal(val name: String) {\n   
 
 /// A folder with `text` as the file `relative`.
 fn file(test: &str, relative: &str, text: &str) -> (PathBuf, PathBuf) {
-    let dir = std::env::temp_dir().join(format!("idecraft-{test}-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-{test}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let path = dir.join(relative);
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -425,7 +425,7 @@ fn a_stop_the_adapter_did_not_report_is_found() {
 #[test]
 fn a_thread_at_another_line_is_no_lost_stop_and_is_asked_for_once() {
     let (dir, zoo) = file("ktsources-running", "src/main/kotlin/zoo/Animals.kt", ZOO);
-    // Suspended at line 8, where no breakpoint is: not a stop IDECraft may invent.
+    // Suspended at line 8, where no breakpoint is: not a stop Ferris IDEA may invent.
     let (address, log) = fake_adapter(Fake {
         lost: Lost::Stop(zoo.clone(), 8),
         ..Fake::default()

@@ -1,7 +1,10 @@
 # SPEC-0116: More dialects — MariaDB and SQL Server
 
-- **Version:** 8 · **Date:** 2026-11-17 (v8: SQL Server's procedures, functions and triggers in the catalog with
-  their definitions, behaviour 5, AK-12 — OBS-0083 L5); 2026-11-16 (v7: the CA file is the only trust anchor — IDECraft reads the
+- **Version:** 10 · **Date:** 2026-11-23 (v10: SQL Server decimals keep their scale, scale 0 without a
+  point, behaviour 16, AK-14 — OBS-0120 X3); 2026-11-19 (v9: the SSL modes of SQL Server are checked against a TDS 7 handshake
+  stood up in the test process, so `require`, `verify-ca` and `verify-full` are shown to work on macOS
+  and Linux without the SQL Server VM; no change of behaviour, AK-13 — F-060); 2026-11-17 (v8: SQL Server's procedures, functions and triggers in the catalog with
+  their definitions, behaviour 5, AK-12 — OBS-0083 L5); 2026-11-16 (v7: the CA file is the only trust anchor — Ferris IDEA reads the
   server's certificate chain from the handshake and checks it against the file before the login
   leaves, behaviour 15, AK-11 — SPEC-0016 v4, IMP-0426); 2026-11-16 (v6: TLS with SQL Server works on macOS — the records of a
   handshake flight go to the server as one pre-login message; the server's TLS version is checked; a CA
@@ -21,7 +24,8 @@
   `network.tlscert`, `network.tlskey`, `network.tlsprotocols`), SPEC-0016 v3; v7: STD (TLS 1.2
   Certificate message, RFC 5246; X.509 certification paths, RFC 5280), OSS (the driver's
   documentation: a CA file adds to the system's trust store and no setting removes the system's
-  roots), SPEC-0016 v4, IMP-0426
+  roots), SPEC-0016 v4, IMP-0426; v9: STD (MS-TDS pre-login option table, `LOGIN7` packet type,
+  `DONE` token)
 - **Feature matrix rows:** F-060
 
 ## Purpose
@@ -85,9 +89,9 @@ SQLite: connect, run scripts, browse, complete, edit results, compare schemas, e
 9. **MCP:** `split_sql_statements` and `save_connection` accept `mariadb` and `sqlserver`; all other
    database tools follow the connection's dialect. [ADR-0008]
 10. **v3 – Test level in the dialog:** under the system's name the connection dialog says how far
-    IDECraft vouches for it (SPEC-0300 behaviour 4): for a supported system "Tested with" and the
-    version of its definition; for a Beta system that IDECraft has not tested it against a
-    server; for a user's or imported definition that it is not IDECraft's. The definition's own
+    Ferris IDEA vouches for it (SPEC-0300 behaviour 4): for a supported system "Tested with" and the
+    version of its definition; for a Beta system that Ferris IDEA has not tested it against a
+    server; for a user's or imported definition that it is not Ferris IDEA's. The definition's own
     note follows. The definitions of SQL Server and Oracle say that their live tests run only on a
     machine where that server is started. [GEN, SPEC-0300]
 11. **v3 – Sequences:** the catalog lists the sequences of the current schema also on MariaDB
@@ -106,11 +110,11 @@ SQLite: connect, run scripts, browse, complete, edit results, compare schemas, e
     | Db2, SAP ASE and other ODBC systems | not connectable: the dialog says so, Test Connection names the missing route | — | — | — | — |
 
     Where a cell says "unit", a refusal of the server reaches the user as the server's message
-    (SPEC-0164 behaviour 7); IDECraft claims nothing more. [GEN]
+    (SPEC-0164 behaviour 7); Ferris IDEA claims nothing more. [GEN]
 13. **v5 – Encryption of a SQL Server connection:** Test Connection says whether the connection
     is encrypted (SPEC-0108 v3). SQL Server tells this only to a login with the right to see the
     server's connections (`sys.dm_exec_connections`); an ordinary login gets no answer there, and
-    `CONNECTIONPROPERTY('encrypt_option')` answers it with `NULL`. Then IDECraft names what its
+    `CONNECTIONPROPERTY('encrypt_option')` answers it with `NULL`. Then Ferris IDEA names what its
     driver agreed with the server: encrypted for `require`, `verify-ca` and `verify-full`, and for
     `prefer` unless it fell back (v6: on the loopback only); not encrypted for `disable`. The
     server's own answer wins where it gives one. [DOC, SPEC-0016]
@@ -120,11 +124,11 @@ SQLite: connect, run scripts, browse, complete, edit results, compare schemas, e
     marked as the end of the message. SQL Server takes one message per flight and closed the
     connection after the client's second flight (key exchange, cipher change, finished as three
     messages), so no TLS came about on macOS: `require` failed with "connection closed", `prefer`
-    fell back to plain text. IDECraft now collects the records of a flight and sends them as one
+    fell back to plain text. Ferris IDEA now collects the records of a flight and sends them as one
     pre-login message when the client next waits for the server, split into packets of at most 4096
     bytes with only the last marked as the end. Messages without TLS records and everything after
     the handshake pass unchanged. [STD, GEN]
-15. **v6 – TLS version and CA file:** before the handshake goes on, IDECraft reads the protocol
+15. **v6 – TLS version and CA file:** before the handshake goes on, Ferris IDEA reads the protocol
     version the server chose in its ServerHello; below TLS 1.2 the connection ends before any login
     data is sent, with an error naming the version and that TLS 1.2 or newer must be enabled on the
     server (SPEC-0016 v2 behaviour 9; the driver itself would accept TLS 1.0). A SQL Server profile
@@ -135,9 +139,9 @@ SQLite: connect, run scripts, browse, complete, edit results, compare schemas, e
     field for SQL Server on its SSH/SSL page, without the tunnel and client certificate fields.
     [STD, DOC]
     **v7 – The CA file alone (IMP-0426):** the driver offers no way to leave the system's roots out
-    and builds its TLS connection itself, so IDECraft checks the anchor in the same place where it
+    and builds its TLS connection itself, so Ferris IDEA checks the anchor in the same place where it
     checks the version: in TLS 1.2 the server sends its certificate chain in the clear, inside the
-    pre-login packets of its first flight. IDECraft reads the Certificate message there and checks
+    pre-login packets of its first flight. Ferris IDEA reads the Certificate message there and checks
     the chain against the CA file alone — the server's certificate must lead, through the
     intermediates it sent, to a certificate of the file (signature, validity period, CA rights,
     server use), or be a certificate of the file itself. A chain that does not passes no further:
@@ -145,9 +149,13 @@ SQLite: connect, run scripts, browse, complete, edit results, compare schemas, e
     not issued by a certificate in it. When the handshake is over and no chain could be read (TLS
     1.3 encrypts it), the login is held back and the connection ends with an error that says so
     and how to allow TLS 1.2 on the server (`mssql-conf set network.tlsprotocols 1.2`). SQL Server
-    uses TLS 1.3 only for TDS 8, which IDECraft does not speak. The host name stays the driver's
+    uses TLS 1.3 only for TDS 8, which Ferris IDEA does not speak. The host name stays the driver's
     check, as before. Without a CA file nothing changes: the system's roots are the anchor.
     [STD, OSS, rule 12]
+16. **v10 – Decimals keep their scale (OBS-0120 X3):** a SQL Server `DECIMAL`/`NUMERIC` value shows
+    exactly the digits of its scale after the point and, for scale 0, no point: `SCOPE_IDENTITY()`
+    (a `DECIMAL(38,0)`) is `4`, not `4.0`; a `DECIMAL(9,3)` holding 1.5 is `1.500`; 0.05 keeps its
+    zero. PostgreSQL, MySQL and MariaDB already send decimals as text with their scale. [STD]
 
 ## Acceptance criteria
 - **AK-1** URLs, `GO` and brackets in splitting and completion, quoting, literals, edit SQL,
@@ -158,7 +166,7 @@ SQLite: connect, run scripts, browse, complete, edit results, compare schemas, e
 - **AK-2** Against the reference MariaDB 12.3 (`db.sh install-mariadb` of the reference environment):
   counts, errors and read-only, introspection with the foreign keys MariaDB creates from inline
   references, editing with rollback, DDL round trip, plans with measured values and rollback
-  (`crates/database/tests/{mariadb,introspect,edit,ddl,plan}.rs`, `IDECRAFT_TEST_MARIADB`).
+  (`crates/database/tests/{mariadb,introspect,edit,ddl,plan}.rs`, `FERRIS_IDEA_TEST_MARIADB`).
 - **AK-3** MCP: splitting T-SQL and MariaDB scripts, profiles for both (`crates/mcp/tests/it/protocol.rs`:
   `more_dialects_tools`).
 - **AK-4** Window self-test: the connection dialog tests a SQL Server profile against a closed port
@@ -172,7 +180,7 @@ SQLite: connect, run scripts, browse, complete, edit results, compare schemas, e
   queries are covered by `introspect::tests::sequence_queries_per_dialect` only.
 - **AK-8 (v4, AK-5 without a screen)** In a window of the test harness with keys against the SQL
   Server of the reference environment (`crates/workbench/tests/it/sqlserver_retest.rs`
-  `hand_test_43_sql_server`; skipped without `IDECRAFT_TEST_SQLSERVER`): Test Connection names SQL
+  `hand_test_43_sql_server`; skipped without `FERRIS_IDEA_TEST_SQLSERVER`): Test Connection names SQL
   Server; the tree lists the tables and their `PK__…` keys; a script with a `GO` line runs as two
   batches, the second's error with its code 207; a changed cell is submitted ("1 change(s)
   committed") and read back; Explain Plan shows costs and the key's index under its whole name, as
@@ -181,9 +189,9 @@ SQLite: connect, run scripts, browse, complete, edit results, compare schemas, e
   measured rows.
 - **AK-9 (v5, behaviours 3 and 13)** Live against the SQL Server of the reference environment
   (`crates/database/tests/it/dialect_steps_live.rs::sql_server_steps`, skipped without
-  `IDECRAFT_TEST_SQLSERVER`): a script with three `GO` batches gives five outcomes, the third
+  `FERRIS_IDEA_TEST_SQLSERVER`): a script with three `GO` batches gives five outcomes, the third
   batch's error with code 207 at its line; Test Connection names SQL Server 16, its version and the
-  encryption for the ordinary login `idecraft`; the key is listed under the name `sys.indexes`
+  encryption for the ordinary login `ferris-idea`; the key is listed under the name `sys.indexes`
   has, a cell is changed and read back, Explain Plan names the key's index with costs, Explain
   Analyze measures one row; `EXEC` of a procedure with two `SELECT`s gives both result sets; a
   variable is read in its batch, `TRY … CATCH` answers from `CATCH`; two schemas of the database
@@ -214,6 +222,22 @@ SQLite: connect, run scripts, browse, complete, edit results, compare schemas, e
   `routines_and_triggers`): a procedure, a function and a trigger `AFTER INSERT, UPDATE` are listed
   with kind, table and `AFTER INSERT OR UPDATE`; the function's definition starts with its
   `CREATE FUNCTION`. Unit: `schema_objects::tests` (queries and definition statements).
+- **AK-13 (v9, behaviours 2, 14, 15)** Integration, on every platform the tests run on, macOS
+  included, without a SQL Server: a stand-in server in the test process answers the pre-login with
+  encryption on, speaks TLS 1.2 inside pre-login packets and, like SQL Server, closes the connection
+  when a client message ends before the client's flight does; after the handshake it reads the
+  login from inside TLS and ends it with `DONE`. Its CA and its certificate for `localhost` are made
+  by the test. `require` to `127.0.0.1`, `verify-full` and `verify-ca` to `localhost` with the CA
+  file connect encrypted, and the login arrived inside TLS; `verify-full` without the CA file and
+  `verify-full` to `127.0.0.1` with it fail as TLS errors of their mode; a CA file that did not sign
+  the certificate fails in `verify-full` and `verify-ca` naming the file; in none of the failures
+  does the login reach the server (`crates/database/tests/it/tds_handshake.rs`
+  `sql_server_ssl_modes_against_a_local_handshake`). With the records of a flight sent one message
+  each (behaviour 14 undone) the test fails on macOS at `require`.
+
+- **AK-14 (v10, behaviour 16)** Unit `sqlserver::tests::decimals_keep_their_scale`; live
+  (`tests/it/dialect_numbers_live.rs` `numbers_in_edited_cells_and_their_scale`): `DECIMAL(38,0)` 4 is
+  `4`, `DECIMAL(8,2)` reads `0.05`, `-0.50`, `4.00` on SQL Server, PostgreSQL, MySQL and MariaDB.
 
 ## Out of scope
 Oracle (no pure-Rust driver without the proprietary client libraries), Windows and Azure AD
@@ -223,8 +247,9 @@ MariaDB system-versioned tables and sequences in the catalog; v6: TDS 8 ("strict
 pre-login, which needs a certificate configured on the server), client certificates for SQL Server.
 
 ## Known deviations from the reference
-Read-only SQL Server profiles are enforced by IDECraft, not by the server. The live SQL Server path
+Read-only SQL Server profiles are enforced by Ferris IDEA, not by the server. The live SQL Server path
 is tested where the VM of the reference environment runs (AK-8, AK-9; last run 2026-11-16), else by
-unit tests of every generated statement and parser. Not compared side by side yet. Errors point
+unit tests of every generated statement and parser; v9: the TLS of the SSL modes also against the
+stand-in handshake of AK-13, which runs everywhere. Not compared side by side yet. Errors point
 into the statement where the server names a line or the text it stopped at (IMP-0008). v7: a CA
 file is the only trust anchor of a SQL Server connection, as for the other dialects (IMP-0426).

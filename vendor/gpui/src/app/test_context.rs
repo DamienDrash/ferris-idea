@@ -1,4 +1,4 @@
-// Modified by IDECraft: adds pending_prompt_focused_answer (see ../../IDECRAFT.md).
+// Modified by Ferris IDEA: adds pending_prompt_focused_answer (see ../../FERRIS_IDEA.md).
 use crate::{
     Action, AnyView, AnyWindowHandle, App, AppCell, AppContext, AsyncApp, AvailableSpace,
     BackgroundExecutor, BorrowAppContext, Bounds, Capslock, ClipboardItem, DrawPhase, Drawable,
@@ -322,7 +322,7 @@ impl TestAppContext {
         self.test_platform.pending_prompt()
     }
 
-    /// IDECraft change (see ../../IDECRAFT.md): the label of the pending prompt's answer that holds
+    /// Ferris IDEA change (see ../../FERRIS_IDEA.md): the label of the pending prompt's answer that holds
     /// the keyboard focus, the one Space presses with macOS keyboard navigation on
     /// (`crate::prompt_focused_answer`).
     pub fn pending_prompt_focused_answer(&self) -> Option<String> {

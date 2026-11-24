@@ -11,7 +11,7 @@
 //! the current frame, as the platform would deliver them. Nothing goes to the X server or the
 //! compositor: no XTEST, no event sent through the X server, no virtual pointer, so no other client
 //! and no other window can receive them (UISEC-9). The hook is
-//! `Window::dispatch_in_process_pointer_input` of the vendored gpui (`vendor/gpui/IDECRAFT.md`),
+//! `Window::dispatch_in_process_pointer_input` of the vendored gpui (`vendor/gpui/FERRIS_IDEA.md`),
 //! called in this file only.
 
 /// The kind of click.
@@ -160,7 +160,6 @@ pub fn post(window: &mut gpui::Window, cx: &mut gpui::App, x: f32, y: f32, click
 /// moves there, then each press and release with its click count (a double click is a press and
 /// release with count 1, then with count 2). A Control-click carries Control on its events and
 /// ends with a move without it, as releasing the key would leave the window's modifiers.
-#[cfg_attr(target_os = "macos", allow(dead_code))]
 pub fn pointer_inputs(x: f32, y: f32, click: Option<Click>) -> Vec<gpui::PlatformInput> {
     use gpui::{
         Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PlatformInput, point,
@@ -209,6 +208,29 @@ pub fn pointer_inputs(x: f32, y: f32, click: Option<Click>) -> Vec<gpui::Platfor
         events.push(rest(Modifiers::default()));
     }
     events
+}
+
+/// The window level of the UI driver for pointer actions (`SPEC-0319` v7 behaviour 16b), on every
+/// platform: the toolkit events of a click (or, with `None`, the pointer coming to rest) at `x`,
+/// `y` handed to `window`'s own input handler once the current frame is done, marked as
+/// synthesised so they never count as the user's input. Nothing reaches the system's event queue,
+/// the display server or another application.
+pub fn deliver_in_process(
+    window: &mut gpui::Window,
+    cx: &mut gpui::App,
+    x: f32,
+    y: f32,
+    click: Option<Click>,
+) {
+    let events = pointer_inputs(x, y, click);
+    window.defer(cx, move |window, cx| {
+        ferris_idea_workbench::semantics::synthesizing(|| {
+            for event in events {
+                window.dispatch_in_process_pointer_input(event, cx);
+            }
+        });
+        window.refresh();
+    });
 }
 
 /// Hands `events` to `window`'s input handler once the current frame is done (a click inside a
@@ -354,7 +376,7 @@ mod tests {
         ));
     }
 
-    /// UISEC-9 on Linux, live on an X server (`xvfb-run cargo test -p idecraft --bin idecraft
+    /// UISEC-9 on Linux, live on an X server (`xvfb-run cargo test -p ferris-idea --bin ferris-idea
     /// native_click`); returns early without an X11 session. A gpui window of this process gets the
     /// clicks `post` delivers, while an observer with its own X connection — a window under the
     /// whole screen that takes button and motion events, and the raw input of every device on the
@@ -380,7 +402,7 @@ mod tests {
         };
         use x11rb::wrapper::ConnectionExt as _;
 
-        if !idecraft_workbench::x11_wake::uses_x11(
+        if !ferris_idea_workbench::x11_wake::uses_x11(
             std::env::var_os("DISPLAY").as_deref(),
             std::env::var_os("WAYLAND_DISPLAY").as_deref(),
         ) {
@@ -465,7 +487,7 @@ mod tests {
                     ..WindowOptions::default()
                 },
                 move |window, cx| {
-                    idecraft_workbench::x11_wake::until_first_frame(window);
+                    ferris_idea_workbench::x11_wake::until_first_frame(window);
                     window.on_next_frame(|window, cx| {
                         assert!(post(window, cx, 50., 50., Click::Left(2)));
                         assert!(post(window, cx, 60., 60., Click::Right));

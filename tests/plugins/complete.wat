@@ -1,6 +1,6 @@
 (module
   ;; Completion sample (SPEC-0210 behaviour 1): `complete` items for `.txt` and `.conf` files.
-  ;; Built with `IDECRAFT_BLESS=1 cargo test -p idecraft-plugins --test samples` into the `.wasm`
+  ;; Built with `FERRIS_IDEA_BLESS=1 cargo test -p ferris-idea-plugins --test samples` into the `.wasm`
   ;; next to this file; install that file in Settings › Plugins (SPEC-0126, SPEC-0211).
   (memory (export "memory") 2)
   (global $next (mut i32) (i32.const 32768))
@@ -21,7 +21,7 @@
       (i64.shl (i64.extend_i32_u (local.get $p)) (i64.const 32))
       (i64.extend_i32_u (call $len (local.get $p)))))
   ;; Memory for the host to write into; grows the memory as needed.
-  (func (export "idecraft_alloc") (param $len i32) (result i32)
+  (func (export "ferris_idea_alloc") (param $len i32) (result i32)
     (local $at i32)
     (local.set $at (global.get $next))
     (global.set $next (i32.add (global.get $next) (local.get $len)))
@@ -31,9 +31,9 @@
         (if (i32.eq (memory.grow (i32.const 1)) (i32.const -1)) (then unreachable))
         (br $grow)))
     (local.get $at))
-  (func (export "idecraft_manifest") (result i64)
+  (func (export "ferris_idea_manifest") (result i64)
     (call $pack (i32.const 1024)))
   ;; Every run answers the same JSON.
-  (func (export "idecraft_run") (param $a i32) (param $al i32) (param $p i32) (param $l i32) (result i64)
+  (func (export "ferris_idea_run") (param $a i32) (param $al i32) (param $p i32) (param $l i32) (result i64)
     (call $pack (i32.const 8192)))
 )

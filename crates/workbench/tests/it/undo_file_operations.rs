@@ -10,15 +10,15 @@
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_core::file_ops::NewKind;
+use ferris_idea_workbench::WorkbenchView;
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_core::file_ops::NewKind;
-use idecraft_workbench::WorkbenchView;
 
 type Bench = Entity<WorkbenchView>;
 
 fn workspace(tag: &str, files: &[(&str, &str)], folders: &[&str]) -> PathBuf {
     let root = std::env::temp_dir().join(format!(
-        "idecraft-undo-file-operations-{tag}-{}",
+        "ferris-idea-undo-file-operations-{tag}-{}",
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&root);
@@ -36,7 +36,7 @@ fn workspace(tag: &str, files: &[(&str, &str)], folders: &[&str]) -> PathBuf {
 
 fn window(root: &Path, cx: &mut TestAppContext) -> (Bench, &'static mut VisualTestContext) {
     // The Delete question is drawn in the window, as in the window self-test.
-    cx.update(|cx| cx.set_global(idecraft_workbench::dialogs::DrawnConfirmations));
+    cx.update(|cx| cx.set_global(ferris_idea_workbench::dialogs::DrawnConfirmations));
     let at = root.to_path_buf();
     let window = cx.add_window(move |_, cx| WorkbenchView::new(&at, cx));
     let bench = window.root(cx).unwrap();
@@ -395,7 +395,7 @@ fn rename_move_and_delete_are_undone_from_the_tree(cx: &mut TestAppContext) {
 
 /// `SPEC-0275` v16 AK-36 (behaviour 40): a new file that was edited is not taken out of the
 /// project — refused while its editor has unsaved changes, and refused after the save because
-/// the file is no longer what New left.
+/// the file is no longer what New left; since v22 (behaviour 38) without a question first.
 #[gpui::test]
 fn a_changed_file_is_not_taken_back(cx: &mut TestAppContext) {
     let root = workspace("changed", &[("a.txt", "one\n")], &[]);
@@ -409,7 +409,8 @@ fn a_changed_file_is_not_taken_back(cx: &mut TestAppContext) {
 
     focus_tree(&bench, cx);
     undo(&bench, cx);
-    key(cx, "enter");
+    // A step that would be refused asks nothing (v22 behaviour 38).
+    assert_eq!(question(&bench, cx), None);
     assert_eq!(
         status(&bench, cx),
         "Undo refused: save n.txt first; it has unsaved changes"
@@ -423,7 +424,8 @@ fn a_changed_file_is_not_taken_back(cx: &mut TestAppContext) {
     assert_eq!(read(&root, "n.txt"), "hello");
     focus_tree(&bench, cx);
     undo(&bench, cx);
-    key(cx, "enter");
+    // A step that would be refused asks nothing (v22 behaviour 38).
+    assert_eq!(question(&bench, cx), None);
     assert_eq!(
         status(&bench, cx),
         "Undo refused: n.txt was changed since the operation; nothing was touched"

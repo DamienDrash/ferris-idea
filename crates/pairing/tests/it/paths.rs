@@ -8,12 +8,12 @@ use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use idecraft_pairing::{
+use ferris_idea_pairing::{
     ChildPipe, Console, Identity, Limits, ListenOptions, PairError, Side, Store, Timing,
     connect_known, connect_known_on, fingerprint, listen, parse_link, start_pairing,
     start_pairing_on, start_pairing_with_link,
 };
-use idecraft_session::{Backend, BackendConfig, ClientSession, Connection, ErrorCode, Right};
+use ferris_idea_session::{Backend, BackendConfig, ClientSession, Connection, ErrorCode, Right};
 use serde_json::{Value, json};
 
 struct TestConsole {
@@ -39,7 +39,7 @@ struct Host {
     project: std::path::PathBuf,
     state: std::path::PathBuf,
     console: Arc<TestConsole>,
-    running: idecraft_pairing::Running,
+    running: ferris_idea_pairing::Running,
     backend: Backend,
     addr: SocketAddr,
 }
@@ -66,7 +66,7 @@ fn timing() -> Timing {
     }
 }
 
-fn host(setup: Setup) -> Result<Host, idecraft_pairing::ListenError> {
+fn host(setup: Setup) -> Result<Host, ferris_idea_pairing::ListenError> {
     let (dir, root) = scratch();
     let project = root.join("project");
     std::fs::create_dir(&project).unwrap();
@@ -189,7 +189,7 @@ fn ak1_a_non_loopback_address_pairs_edits_and_resumes() {
             fixed_folder: true,
             grant: vec![Right::View],
         }),
-        Err(idecraft_pairing::ListenError::NotLoopback(_))
+        Err(ferris_idea_pairing::ListenError::NotLoopback(_))
     ));
     let h = host(Setup {
         addr,
@@ -207,7 +207,7 @@ fn ak1_a_non_loopback_address_pairs_edits_and_resumes() {
     s.open_doc("a.txt").unwrap();
     s.edit(
         "a.txt",
-        &[idecraft_session::Op {
+        &[ferris_idea_session::Op {
             at: 0,
             delete: 0,
             insert: "lan ".into(),
@@ -265,7 +265,7 @@ fn ak3_a_qr_link_pairs_and_a_wrong_key_is_refused() {
         let lines = h.console.lines.lock().unwrap();
         let line = lines
             .iter()
-            .find(|l| l.contains("idecraft-pair://"))
+            .find(|l| l.contains("ferris-idea-pair://"))
             .unwrap();
         line.rsplit("Pairing link: ").next().unwrap().to_owned()
     };
@@ -296,7 +296,7 @@ fn ak3_a_qr_link_pairs_and_a_wrong_key_is_refused() {
         let lines = h2.console.lines.lock().unwrap();
         lines
             .iter()
-            .find(|l| l.contains("idecraft-pair://"))
+            .find(|l| l.contains("ferris-idea-pair://"))
             .unwrap()
             .rsplit("Pairing link: ")
             .next()
@@ -422,7 +422,7 @@ fn ak6_every_device_request_is_logged() {
     c.call("doc.open", json!({"path": "a.txt"}), Duration::from_secs(5))
         .unwrap();
 
-    let lines = idecraft_pairing::audit::read_log(&h.state, Some(&fp), 100);
+    let lines = ferris_idea_pairing::audit::read_log(&h.state, Some(&fp), 100);
     let methods: Vec<&str> = lines.iter().filter_map(|l| l["method"].as_str()).collect();
     assert!(methods.contains(&"fs.read"), "{methods:?}");
     assert!(methods.contains(&"fs.write"), "{methods:?}");
@@ -448,7 +448,7 @@ fn ak6_doc_edit_is_coalesced() {
     for _ in 0..5 {
         s.edit(
             "a.txt",
-            &[idecraft_session::Op {
+            &[ferris_idea_session::Op {
                 at: 0,
                 delete: 0,
                 insert: "x".into(),

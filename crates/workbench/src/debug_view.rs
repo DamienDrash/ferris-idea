@@ -5,12 +5,12 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::time::Duration;
 
+use ferris_idea_debugger::extras::{self, Renderer, VarFilters};
+use ferris_idea_debugger::{Frame, Lang, ThreadInfo, Variable, ViewAs};
 use gpui::{
     Context, Entity, EventEmitter, FocusHandle, KeyDownEvent, Window, div, font, prelude::*, px,
     rgb,
 };
-use idecraft_debugger::extras::{self, Renderer, VarFilters};
-use idecraft_debugger::{Frame, Lang, ThreadInfo, Variable, ViewAs};
 
 use crate::debug_model::{Command, Controller, FrameRow, Launch, Update, VarTree};
 use crate::editor_view::EditorView;
@@ -47,7 +47,7 @@ pub enum DebugViewEvent {
     RemoveBreakpoint(PathBuf, usize),
     /// The breakpoints of this file as the session placed them, bound or not (`SPEC-0127` v5
     /// behaviour 14).
-    Placed(PathBuf, Vec<idecraft_debugger::Breakpoint>),
+    Placed(PathBuf, Vec<ferris_idea_debugger::Breakpoint>),
     /// Watch the field with this data breakpoint id (`SPEC-0146` v3).
     AddFieldWatch(String),
     /// Open the file a console line names (as written there) at this 1-based line (`SPEC-0091`
@@ -132,6 +132,9 @@ pub struct DebugView {
     results: Vec<(String, Result<String, String>)>,
     /// The expression Quick Evaluate Expression waits for (`SPEC-0091` v19 behaviour 44).
     quick: Option<String>,
+    /// The evaluated expressions for ↑ and ↓ in the field, kept across sessions (`SPEC-0091` v21
+    /// behaviour 46).
+    history: crate::debug_model::EvalHistory,
     /// Watch expressions, kept across sessions, and their last values (v5 behaviour 11).
     watches: Vec<(String, Option<Result<String, String>>)>,
     /// Threads of the paused program and the one shown (v5 behaviour 12).
@@ -142,7 +145,7 @@ pub struct DebugView {
     /// While Set Value is on: the variable's container (0 for the frame's locals) and name.
     setting: Option<(i64, String)>,
     /// The fields of the shown frame's object, for the editor's values (v8 behaviour 13).
-    fields: Vec<idecraft_debugger::Variable>,
+    fields: Vec<ferris_idea_debugger::Variable>,
     /// The workspace folder: frames with a source outside it are library frames (v10 behaviour 15).
     workspace: PathBuf,
     /// The project's files are on a host (`SPEC-0322` v5 behaviour 14).
@@ -227,6 +230,7 @@ impl DebugView {
             focus: cx.focus_handle(),
             expression,
             results: Vec::new(),
+            history: Default::default(),
             quick: None,
             watches: Vec::new(),
             threads: Vec::new(),
@@ -296,7 +300,7 @@ impl DebugView {
 
     /// Sets the workspace folder, for telling project frames from library frames.
     pub fn set_workspace(&mut self, root: PathBuf) {
-        self.renderers = idecraft_debugger::saved::load_renderers(&root);
+        self.renderers = ferris_idea_debugger::saved::load_renderers(&root);
         self.workspace = root;
     }
 
@@ -784,6 +788,7 @@ impl DebugView {
         let frame = self.frames.get(self.frame).map(|f| f.id);
         // A code fragment of several statements (v12 behaviour 36).
         if self.fragment || expression.contains('\n') {
+            self.history.push(expression);
             return match (&self.controller, frame, &self.state) {
                 (Some(c), Some(frame), DebugState::Paused(_)) => {
                     c.send(Command::Fragment(expression.to_owned(), frame));
@@ -812,6 +817,7 @@ impl DebugView {
             }
             return sent;
         }
+        self.history.push(expression);
         match (&self.controller, frame, &self.state) {
             (Some(c), Some(frame), DebugState::Paused(_)) => {
                 c.send(Command::Evaluate(expression.to_owned(), frame));
@@ -866,6 +872,11 @@ impl DebugView {
             self.watches.remove(i);
             cx.notify();
         }
+    }
+
+    /// The expressions of the field's history, newest first (`SPEC-0091` v21 behaviour 46).
+    pub fn eval_history(&self) -> Vec<String> {
+        self.history.items().to_vec()
     }
 
     /// Watches as `expression = value`, `expression: error` or the bare expression before a value.
@@ -1024,6 +1035,30 @@ impl DebugView {
             cx.stop_propagation();
             return;
         }
+        // ↑ and ↓ go through the evaluated expressions (v21 behaviour 46).
+        let plain =
+            !(k.modifiers.shift || k.modifiers.platform || k.modifiers.control || k.modifiers.alt);
+        if plain
+            && !self.fragment
+            && matches!(k.key.as_str(), "up" | "down")
+            && self.marking.is_none()
+            && self.setting.is_none()
+            && self.field_mode.is_none()
+        {
+            let current = self.expression.read(cx).state.buffer.text();
+            let text = if k.key == "up" {
+                self.history.older(&current)
+            } else {
+                self.history.newer()
+            };
+            if let Some(text) = text {
+                self.expression.update(cx, |f, cx| f.set_text(&text, cx));
+            }
+            cx.stop_propagation();
+            cx.notify();
+            return;
+        }
+        self.history.stop_browsing();
         // Any other key may change the text: completions are asked for once the field has it.
         self.ask_later(cx);
     }
@@ -1212,17 +1247,17 @@ impl DebugView {
                     }
                 }
                 self.console.push_str(
-                    "[IDECraft] Code changed: Reload Changed Classes loads it into the program\n",
+                    "[Ferris IDEA] Code changed: Reload Changed Classes loads it into the program\n",
                 );
             }
             Update::Reloaded(result) => {
                 self.code_changed.clear();
                 let line = match result {
                     Ok(classes) if classes.is_empty() => {
-                        "[IDECraft] Reload Changed Classes: no class changed".to_owned()
+                        "[Ferris IDEA] Reload Changed Classes: no class changed".to_owned()
                     }
                     Ok(classes) => format!(
-                        "[IDECraft] Reloaded {} {}: {}",
+                        "[Ferris IDEA] Reloaded {} {}: {}",
                         classes.len(),
                         if classes.len() == 1 {
                             "class"
@@ -1231,7 +1266,7 @@ impl DebugView {
                         },
                         classes.join(", ")
                     ),
-                    Err(e) => format!("[IDECraft] Reload Changed Classes failed: {e}"),
+                    Err(e) => format!("[Ferris IDEA] Reload Changed Classes failed: {e}"),
                 };
                 self.console.push_str(&line);
                 self.console.push('\n');
@@ -1240,7 +1275,7 @@ impl DebugView {
                 Ok(id) => cx.emit(DebugViewEvent::AddFieldWatch(id)),
                 Err(e) => self
                     .console
-                    .push_str(&format!("[IDECraft] Field Watchpoint: {e}\n")),
+                    .push_str(&format!("[Ferris IDEA] Field Watchpoint: {e}\n")),
             },
             // Only for the frame still shown (v8 behaviour 13).
             Update::Fields(object) => {
@@ -1362,7 +1397,7 @@ impl DebugView {
     /// A toolbar button with its declared tooltip (`SPEC-0194` v4 behaviour 11, `SPEC-0294`).
     fn tool(
         &self,
-        control: &'static idecraft_ui::tooltip::Control,
+        control: &'static ferris_idea_ui::tooltip::Control,
         key: &'static str,
         enabled: bool,
         command: Command,
@@ -1385,7 +1420,7 @@ impl DebugView {
     /// A toolbar button that asks the workbench to run `action` (`SPEC-0194` v3 behaviour 6).
     fn action_tool(
         &self,
-        control: &'static idecraft_ui::tooltip::Control,
+        control: &'static ferris_idea_ui::tooltip::Control,
         key: &'static str,
         enabled: bool,
         pressed: bool,
@@ -1621,7 +1656,7 @@ impl DebugView {
         let errors = self.changed_with_errors(cx);
         if ok && !errors.is_empty() {
             self.console.push_str(&format!(
-                "[IDECraft] Reload Changed Classes: fix the errors first: {}\n",
+                "[Ferris IDEA] Reload Changed Classes: fix the errors first: {}\n",
                 errors.join(", ")
             ));
             cx.notify();
@@ -1810,7 +1845,7 @@ impl DebugView {
             });
         }
         if !self.workspace.as_os_str().is_empty() {
-            idecraft_debugger::saved::save_renderers(&self.workspace, &self.renderers);
+            ferris_idea_debugger::saved::save_renderers(&self.workspace, &self.renderers);
         }
         self.rerender(cx);
     }
@@ -2062,7 +2097,7 @@ impl Render for DebugView {
         let body = match self.tab {
             // The console with its side bar and input line (v12 behaviour 38).
             Tab::Console => {
-                let side = |control: &'static idecraft_ui::tooltip::Control,
+                let side = |control: &'static ferris_idea_ui::tooltip::Control,
                             key: &'static str,
                             on: bool,
                             cx: &mut Context<Self>,
@@ -2582,7 +2617,7 @@ impl Render for DebugView {
                                             .rounded(px(4.))
                                             .when(fragment, |d| d.bg(c(p.tree_selection)))
                                             .hover(|s| s.bg(c(p.tree_hover)))
-                                            .child(icon("idecraft/structure"))
+                                            .child(icon("ferris-idea/structure"))
                                             .on_click(cx.listener(
                                                 |this, _: &gpui::ClickEvent, _, cx| {
                                                     this.toggle_fragment(cx)
@@ -2802,7 +2837,7 @@ impl Render for DebugView {
                     // 18); SPEC-0194 v3 behaviour 6.
                     .child(self.action_tool(
                         declared!(DEBUG_TOOLBAR, "debug-rerun"),
-                        "idecraft/debugRerun",
+                        "ferris-idea/debugRerun",
                         tools.rerun,
                         false,
                         "Rerun",
@@ -2817,7 +2852,7 @@ impl Render for DebugView {
                     ))
                     .child(self.tool(
                         declared!(DEBUG_TOOLBAR, "debug-pause"),
-                        "idecraft/debugPause",
+                        "ferris-idea/debugPause",
                         tools.pause,
                         Command::Pause,
                         cx,
@@ -2853,7 +2888,7 @@ impl Render for DebugView {
                     ))
                     .child(self.action_tool(
                         declared!(DEBUG_TOOLBAR, "debug-run-to-cursor"),
-                        "idecraft/debugRunToCursor",
+                        "ferris-idea/debugRunToCursor",
                         tools.paused,
                         false,
                         "RunToCursor",
@@ -2862,7 +2897,7 @@ impl Render for DebugView {
                     .child(div().w(px(8.)))
                     .child(self.action_tool(
                         declared!(DEBUG_TOOLBAR, "debug-view-breakpoints"),
-                        "idecraft/debugViewBreakpoints",
+                        "ferris-idea/debugViewBreakpoints",
                         true,
                         false,
                         "ViewBreakpoints",
@@ -2870,7 +2905,7 @@ impl Render for DebugView {
                     ))
                     .child(self.action_tool(
                         declared!(DEBUG_TOOLBAR, "debug-mute-breakpoints"),
-                        "idecraft/debugMuteBreakpoints",
+                        "ferris-idea/debugMuteBreakpoints",
                         true,
                         self.muted,
                         "XDebugger.MuteBreakpoints",
@@ -3049,10 +3084,10 @@ fn thread_icon(t: &ThreadInfo, stopped: bool) -> &'static str {
     if stopped {
         "breakpoints/breakpoint"
     } else if t.suspended {
-        "idecraft/debugPause"
+        "ferris-idea/debugPause"
     } else {
         match t.state.as_str() {
-            "WAIT" | "SLEEPING" => "idecraft/history",
+            "WAIT" | "SLEEPING" => "ferris-idea/history",
             "MONITOR" => "status/warning",
             "RUNNING" => "run/run",
             _ => "status/info",

@@ -4,8 +4,8 @@
 
 use std::time::Duration;
 
-use idecraft_host::HostOptions;
-use idecraft_session::{
+use ferris_idea_host::HostOptions;
+use ferris_idea_session::{
     Backend, BackendConfig, ClientSession, ErrorCode, Right, Transport, in_process,
 };
 use serde_json::json;
@@ -21,21 +21,21 @@ fn connect(b: &Backend) -> Transport {
 fn an_untrusted_host_project_runs_nothing_until_it_is_trusted() {
     let dir = std::env::temp_dir().join(format!("idc-host-trust-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(dir.join("p/.idecraft")).unwrap();
+    std::fs::create_dir_all(dir.join("p/.ferris-idea")).unwrap();
     let dir = std::fs::canonicalize(dir).unwrap();
     std::fs::write(
-        dir.join("p/.idecraft/run.toml"),
+        dir.join("p/.ferris-idea/run.toml"),
         "[[run]]\nname = \"hello\"\ncommand = [\"sh\", \"-c\", \"echo hi\"]\n",
     )
     .unwrap();
-    idecraft_core::trust::enforce();
+    ferris_idea_core::trust::enforce();
     let backend = Backend::new(BackendConfig {
         state_dir: Some(dir.join("state")),
         rights: Right::ALL.to_vec(),
         ..BackendConfig::default()
     });
     let trust_file = dir.join("settings/trusted-locations.toml");
-    idecraft_host::bind(
+    ferris_idea_host::bind(
         &backend,
         HostOptions {
             language_servers: false,
@@ -105,13 +105,13 @@ fn git_processes_stay_off_for_an_untrusted_project() {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
     }
-    idecraft_core::trust::enforce();
+    ferris_idea_core::trust::enforce();
     let backend = Backend::new(BackendConfig {
         state_dir: Some(dir.join("state")),
         rights: Right::ALL.to_vec(),
         ..BackendConfig::default()
     });
-    idecraft_host::bind(
+    ferris_idea_host::bind(
         &backend,
         HostOptions {
             language_servers: false,
@@ -178,13 +178,13 @@ fn an_untrusted_project_refuses_a_debug_launch_not_an_attach() {
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("p")).unwrap();
     let dir = std::fs::canonicalize(dir).unwrap();
-    idecraft_core::trust::enforce();
+    ferris_idea_core::trust::enforce();
     let backend = Backend::new(BackendConfig {
         state_dir: Some(dir.join("state")),
         rights: Right::ALL.to_vec(),
         ..BackendConfig::default()
     });
-    idecraft_host::bind(
+    ferris_idea_host::bind(
         &backend,
         HostOptions {
             language_servers: false,

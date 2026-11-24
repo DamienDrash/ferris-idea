@@ -1,6 +1,6 @@
 //! Retest of hand test 68 of F-060 (Oracle through the Instant Client, `SPEC-0142`) in a window of
 //! the test harness, with keys, without the screen and without the keychain, against the Oracle
-//! Free of the reference environment (`IDECRAFT_TEST_ORACLE` with its password file; skipped
+//! Free of the reference environment (`FERRIS_IDEA_TEST_ORACLE` with its password file; skipped
 //! without): Test Connection names the version and the encryption, the tree shows the table with
 //! its key and index, a script with a table, a PL/SQL block, `COMMIT` and `ROLLBACK` runs, an error
 //! names `ORA-…` and its place, Explain Plan shows a tree, and the same connection read-only refuses
@@ -10,8 +10,8 @@
 
 use std::path::Path;
 
+use ferris_idea_workbench::WorkbenchView;
 use gpui::{Entity, VisualTestContext};
-use idecraft_workbench::WorkbenchView;
 
 use crate::db_refactor_retest::{open_with, reference, until, window};
 
@@ -51,8 +51,8 @@ fn set_text(bench: &Entity<WorkbenchView>, cx: &mut VisualTestContext, sql: &str
 /// Hand test 68 (SPEC-0142).
 #[gpui::test]
 fn hand_test_68_oracle_through_the_instant_client(cx: &mut gpui::TestAppContext) {
-    let Some((mut profile, secret)) = reference("IDECRAFT_TEST_ORACLE", "ora") else {
-        eprintln!("skipped: IDECRAFT_TEST_ORACLE or its password file is not set");
+    let Some((mut profile, secret)) = reference("FERRIS_IDEA_TEST_ORACLE", "ora") else {
+        eprintln!("skipped: FERRIS_IDEA_TEST_ORACLE or its password file is not set");
         return;
     };
     // Consoles of this connection start in manual commit, so COMMIT and ROLLBACK decide.
@@ -61,11 +61,12 @@ fn hand_test_68_oracle_through_the_instant_client(cx: &mut gpui::TestAppContext)
     read_only.id = "ora_ro".into();
     read_only.name = "ora_ro".into();
     read_only.read_only = true;
-    let root = std::env::temp_dir().join(format!("idecraft-dbdialect-68-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-dbdialect-68-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     let root = root.canonicalize().unwrap();
-    idecraft_database::save_profiles(&root, &[profile.clone(), read_only]).unwrap();
+    ferris_idea_database::save_profiles(&root, &[profile.clone(), read_only]).unwrap();
     let file = root.join("ora.sql");
     std::fs::write(&file, "select 1 from dual;\n").unwrap();
     let (bench, cx) = window(&root, cx);
@@ -180,7 +181,7 @@ fn hand_test_68_oracle_through_the_instant_client(cx: &mut gpui::TestAppContext)
     let editor = bench
         .read_with(cx, |b, _| b.active_editor_entity())
         .unwrap();
-    let _ = idecraft_database::bind_file(&root, &file, Some("ora_ro"));
+    let _ = ferris_idea_database::bind_file(&root, &file, Some("ora_ro"));
     for refused in [
         format!("insert into {table} values (3, 'c');\n"),
         format!("begin\n  delete from {table};\nend;\n/\n"),
@@ -212,9 +213,10 @@ fn consoles_of_a_connection_without_auto_commit_start_in_manual(cx: &mut gpui::T
         eprintln!("skipped: no sqlite3 program");
         return;
     }
-    let root = std::env::temp_dir().join(format!("idecraft-dbdialect-tx-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-dbdialect-tx-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir_all(root.join(".idecraft")).unwrap();
+    std::fs::create_dir_all(root.join(".ferris-idea")).unwrap();
     let root = root.canonicalize().unwrap();
     let db = root.join("shop.db");
     assert!(
@@ -226,7 +228,7 @@ fn consoles_of_a_connection_without_auto_commit_start_in_manual(cx: &mut gpui::T
             .success()
     );
     std::fs::write(
-        root.join(".idecraft/connections.toml"),
+        root.join(".ferris-idea/connections.toml"),
         format!(
             "[[connection]]\nid = \"shop\"\nname = \"shop\"\ndialect = \"sqlite\"\npath = \"{db}\"\n\n\
              [connection.options]\nauto_commit = false\n\n\
@@ -273,7 +275,7 @@ fn consoles_of_a_connection_without_auto_commit_start_in_manual(cx: &mut gpui::T
         bench.read_with(cx, |b, _| b.console_transaction()),
         (true, 1)
     );
-    idecraft_database::bind_file(&root, &file, Some("shop_ro")).unwrap();
+    ferris_idea_database::bind_file(&root, &file, Some("shop_ro")).unwrap();
     set_text(&bench, cx, "insert into t values (4);\n");
     run_all(&bench, cx);
     let out = output(&bench, cx);

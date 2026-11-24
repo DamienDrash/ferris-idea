@@ -22,9 +22,9 @@ schema a script belongs to, offers its names, flags mistakes in place, runs exac
 says how long it took.
 
 ## Behaviour
-1. **Data source of a file:** a `.sql` file under `.idecraft/consoles/<connection id>/` belongs to that
+1. **Data source of a file:** a `.sql` file under `.ferris-idea/consoles/<connection id>/` belongs to that
    connection. Any `.sql` file can be bound to a connection; bindings are kept in
-   `.idecraft/sql-files.toml` (`[files]` table, path relative to the workspace → connection id) and win
+   `.ferris-idea/sql-files.toml` (`[files]` table, path relative to the workspace → connection id) and win
    over the folder. A file without a binding uses the connection of SPEC-0093 behaviour 2 (selected in the
    Database window, else the only profile). A binding to a connection that no longer exists is ignored.
    **v2:** when such a file is run, it is bound to the connection it ran on, so it keeps its data source
@@ -42,7 +42,7 @@ says how long it took.
    `Sql.ChooseDataSource` (Search Everywhere), opens a popup of the workspace's connections with the
    dialect; choosing one binds the file (behaviour 1) and reads that connection's schema for completion and
    inspections. [GEN]
-3a. **v5 – The dialect of the text (OBS-0068 L12):** for a file not bound yet, IDECraft looks for marks
+3a. **v5 – The dialect of the text (OBS-0068 L12):** for a file not bound yet, Ferris IDEA looks for marks
    only one dialect family uses (MySQL's `DELIMITER` and backticks, PostgreSQL's dollar quotes and `::`,
    SQL Server's `GO` lines and `NVARCHAR`, Oracle's `/` lines and `VARCHAR2`, SQLite's `AUTOINCREMENT`
    and `PRAGMA`; comment lines do not count, a tie says nothing). When one family is clear, the popup's
@@ -118,7 +118,7 @@ says how long it took.
 - **AK-2** Live against the reference databases (PostgreSQL, MySQL, SQLite): the default schema of a new
   console is `public` / the profile's database / `main`; counting the rows of an unsafe `DELETE`
   (integration tests, `db.sh` of the reference environment).
-- **AK-3** In a real window (`idecraft ui --selftest`) with the workspace's SQLite connection:
+- **AK-3** In a real window (`ferris-idea ui --selftest`) with the workspace's SQLite connection:
   `Console.Open` opens a console bound to it with the schema in the toolbar; ⌘⏎ in a two-statement script
   shows the choice popup, Enter runs the statement at the caret and a timing note appears on its last line;
   "Whole script" runs both; `delete from orders` shows the inline warning text and on ⌘⏎ the confirmation
@@ -162,7 +162,7 @@ says how long it took.
 ## Out of scope
 Several consoles' result tabs at once (the Services window shows the last run, SPEC-0093), choosing a
 schema other than the default per console, transaction controls, cancelling a running statement, query
-parameters, run history, customising the choice popup (the reference offers this; IDECraft always asks).
+parameters, run history, customising the choice popup (the reference offers this; Ferris IDEA always asks).
 
 ## Known deviations from the reference
 - A new console starts in the data source's default schema instead of without one (IMP-0060).
@@ -173,5 +173,5 @@ parameters, run history, customising the choice popup (the reference offers this
 - The unsafe-change warning text is shown inline, the confirmation names the table and row count, and
   "don't ask again" is limited to one connection for the session instead of switching the check off for
   good (IMP-0062).
-- Consoles are ordinary files in the workspace (`.idecraft/consoles/`), so they can be versioned or
+- Consoles are ordinary files in the workspace (`.ferris-idea/consoles/`), so they can be versioned or
   searched like other files.

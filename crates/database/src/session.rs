@@ -123,7 +123,7 @@ fn checks(builder: &mut native_tls::TlsConnectorBuilder, mode: SslMode) {
 
 /// Reads a private key or PKCS#12 file after checking that only its owner can read it
 /// (`SPEC-0016` v2 behaviour 11), the way libpq refuses such keys; encrypted keys are refused
-/// because IDECraft never asks for a passphrase.
+/// because Ferris IDEA never asks for a passphrase.
 pub(crate) fn read_private(path: &Path) -> Result<Vec<u8>, String> {
     let shown = path.display();
     #[cfg(unix)]
@@ -140,7 +140,7 @@ pub(crate) fn read_private(path: &Path) -> Result<Vec<u8>, String> {
     let bytes = std::fs::read(path).map_err(|e| format!("{shown}: {e}"))?;
     if String::from_utf8_lossy(&bytes).contains("ENCRYPTED") {
         return Err(format!(
-            "{shown} is protected by a passphrase, which IDECraft does not ask for; use a key \
+            "{shown} is protected by a passphrase, which Ferris IDEA does not ask for; use a key \
              without passphrase kept with mode 600"
         ));
     }
@@ -439,7 +439,7 @@ impl Session {
                         port,
                         limit,
                         &extra,
-                        idecraft_remote::SSH_PROGRAM,
+                        ferris_idea_remote::SSH_PROGRAM,
                     )
                 })
                 .await
@@ -730,7 +730,7 @@ mod tests {
     use super::*;
 
     fn dir(tag: &str) -> std::path::PathBuf {
-        let d = std::env::temp_dir().join(format!("idecraft-tls-{tag}-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("ferris-idea-tls-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
@@ -869,7 +869,7 @@ mod tests {
                 "-days",
                 "1",
                 "-subj",
-                "/CN=idecraft-test-ca",
+                "/CN=ferris-idea-test-ca",
                 "-keyout",
             ])
             .arg(d.join("ca.key"))

@@ -5,15 +5,15 @@
 
 use std::process::Command;
 
-use idecraft_languages::actions::{Refactoring, plan_code_action_in, refactoring_targets};
-use idecraft_languages::insight::Range;
-use idecraft_languages::python_constant::extract_constant;
-use idecraft_languages::python_extract::{
+use ferris_idea_languages::actions::{Refactoring, plan_code_action_in, refactoring_targets};
+use ferris_idea_languages::insight::Range;
+use ferris_idea_languages::python_constant::extract_constant;
+use ferris_idea_languages::python_extract::{
     EXTRACT_CONSTANT, EXTRACT_METHOD, EXTRACT_VARIABLE, INLINE_VARIABLE, extract_method,
     extract_variable,
 };
-use idecraft_languages::python_inline::inline_variable;
-use idecraft_languages::rename::apply_edits;
+use ferris_idea_languages::python_inline::inline_variable;
+use ferris_idea_languages::rename::apply_edits;
 
 /// The source without the selection marks `«` and `»`, and the selection.
 fn marked(source: &str) -> (String, Range) {
@@ -317,7 +317,7 @@ fn extracted_programs_behave_the_same() {
         let (expected, _, ok) = run(&text);
         assert!(ok, "{name}: the original fails");
         let (got, stderr, ok) = run(&after);
-        if std::env::var_os("IDECRAFT_SHOW_EXTRACT").is_some() {
+        if ferris_idea_core::product_var_os("FERRIS_IDEA_SHOW_EXTRACT").is_some() {
             println!("=== {name}\n{after}");
         }
         assert!(ok, "{name}: the result fails:\n{after}\n{stderr}");
@@ -364,7 +364,8 @@ const PRICES: &str = "class Item:\n    def __init__(self, price, qty):\n        
 #[tokio::test(flavor = "multi_thread")]
 async fn through_the_refactoring_entry_points() {
     let wait = std::time::Duration::from_secs(60);
-    let root = std::env::temp_dir().join(format!("idecraft-python-extract-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-python-extract-{}", std::process::id()));
     std::fs::create_dir_all(&root).unwrap();
     let file = root.join("prices.py");
     // The file on disk is older than the editor's text.
@@ -407,7 +408,7 @@ async fn through_the_refactoring_entry_points() {
         after.contains("        qty = self.price * self.qty\n        return qty\n"),
         "{after}"
     );
-    let name = idecraft_languages::actions::introduced_name(PRICES, &after).unwrap();
+    let name = ferris_idea_languages::actions::introduced_name(PRICES, &after).unwrap();
     assert_eq!(
         (name.name.as_str(), name.line, name.character),
         ("qty", 6, 8)
@@ -476,9 +477,13 @@ async fn through_the_refactoring_entry_points() {
     .await
     .unwrap();
     assert!(found.is_empty());
-    let message =
-        idecraft_languages::actions::own_refusal(&file, Some(PRICES), &part, Refactoring::Variable)
-            .unwrap();
+    let message = ferris_idea_languages::actions::own_refusal(
+        &file,
+        Some(PRICES),
+        &part,
+        Refactoring::Variable,
+    )
+    .unwrap();
     assert_eq!(
         message,
         "Cannot extract `self.price *` into a variable: the selection is not one complete expression."
@@ -489,7 +494,7 @@ async fn through_the_refactoring_entry_points() {
     assert!(err.to_string().contains(&message), "{err}");
     // Other languages and other refactorings have no own message.
     assert!(
-        idecraft_languages::actions::own_refusal(
+        ferris_idea_languages::actions::own_refusal(
             &root.join("a.rs"),
             Some("fn main() {}"),
             &part,
@@ -586,19 +591,20 @@ const MODEL: &str = "from dataclasses import dataclass\n\n\n@dataclass\nclass It
 /// runs. Skipped without pyright or basedpyright.
 #[tokio::test(flavor = "multi_thread")]
 async fn types_from_the_language_server() {
-    let server = idecraft_languages::servers::resolve(idecraft_languages::LanguageId::Python);
+    let server = ferris_idea_languages::servers::resolve(ferris_idea_languages::LanguageId::Python);
     if !server
-        .is_ok_and(|s| idecraft_languages::python_server::is_python_server(s.candidate.program))
+        .is_ok_and(|s| ferris_idea_languages::python_server::is_python_server(s.candidate.program))
     {
         assert!(
-            std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+            ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
             "required tool missing: pyright-langserver"
         );
         eprintln!("skipped: no pyright or basedpyright installed");
         return;
     }
     let wait = std::time::Duration::from_secs(120);
-    let root = std::env::temp_dir().join(format!("idecraft-python-types-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-python-types-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("app")).unwrap();
     let root = root.canonicalize().unwrap();
@@ -860,7 +866,7 @@ fn inlined_and_constant_programs_behave_the_same() {
         let (expected, _, ok) = run(&text);
         assert!(ok, "{name}: the original fails");
         let (got, stderr, ok) = run(&after);
-        if std::env::var_os("IDECRAFT_SHOW_EXTRACT").is_some() {
+        if ferris_idea_core::product_var_os("FERRIS_IDEA_SHOW_EXTRACT").is_some() {
             println!("=== {name}\n{after}");
         }
         assert!(ok, "{name}: the result fails:\n{after}\n{stderr}");
@@ -1029,7 +1035,8 @@ fn refused_inlines_and_constants_would_change_the_output() {
 async fn inline_and_constant_through_the_entry_points() {
     const PROBE: &str = "def describe(item, factor=1):\n    \"\"\"Return a label for an item.\"\"\"\n    value = item.total() * factor\n    unused = 3\n    return f\"{item.name}: {value}\" + str(60 * 60)\n";
     let wait = std::time::Duration::from_secs(60);
-    let root = std::env::temp_dir().join(format!("idecraft-python-inline-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-python-inline-{}", std::process::id()));
     std::fs::create_dir_all(&root).unwrap();
     let file = root.join("probe.py");
     // The file on disk is older than the editor's text.
@@ -1092,7 +1099,7 @@ async fn inline_and_constant_through_the_entry_points() {
     .await
     .unwrap();
     assert!(found.is_empty(), "{found:?}");
-    let message = idecraft_languages::actions::own_refusal(
+    let message = ferris_idea_languages::actions::own_refusal(
         &file,
         Some(PROBE),
         &on_function,
@@ -1140,10 +1147,10 @@ async fn inline_and_constant_through_the_entry_points() {
             && after.ends_with(" + str(CONSTANT)\n"),
         "{after}"
     );
-    assert!(idecraft_languages::actions::introduces_name(
+    assert!(ferris_idea_languages::actions::introduces_name(
         EXTRACT_CONSTANT
     ));
-    let name = idecraft_languages::actions::introduced_name(PROBE, &after).unwrap();
+    let name = ferris_idea_languages::actions::introduced_name(PROBE, &after).unwrap();
     assert_eq!(
         (name.name.as_str(), name.line, name.character),
         ("CONSTANT", 0, 0)
@@ -1174,9 +1181,13 @@ async fn inline_and_constant_through_the_entry_points() {
     .await
     .unwrap();
     assert!(found.is_empty(), "{found:?}");
-    let message =
-        idecraft_languages::actions::own_refusal(&file, Some(PROBE), &local, Refactoring::Constant)
-            .unwrap();
+    let message = ferris_idea_languages::actions::own_refusal(
+        &file,
+        Some(PROBE),
+        &local,
+        Refactoring::Constant,
+    )
+    .unwrap();
     assert!(
         message.starts_with("Cannot extract `item.total() * factor` into a constant: it "),
         "{message}"

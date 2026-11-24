@@ -10,7 +10,7 @@
   unknown types to text needs per-type code, and the PostgreSQL error position is not exposed in a
   portable way.
 - **Decision:** One native, permissively licensed driver per database, each behind the same session
-  interface in `idecraft-database` (connect from a SPEC-0008 profile, run a script into SPEC-0007
+  interface in `ferris-idea-database` (connect from a SPEC-0008 profile, run a script into SPEC-0007
   outcomes). PostgreSQL first with `tokio-postgres` 0.7 (MIT OR Apache-2.0): its simple query protocol
   returns every value as text and its errors carry SQLSTATE and position. MySQL (`mysql_async`) and
   SQLite (`rusqlite`) follow with the same interface.

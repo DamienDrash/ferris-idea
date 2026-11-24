@@ -6,12 +6,12 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use idecraft_core::Workspace;
-use idecraft_mcp::IdeServer;
-use idecraft_mcp::window::{UiCall, UiCallKind, Window};
-use idecraft_uidriver::engine::{Engine, Keys};
-use idecraft_uidriver::trace::AuditFacts;
-use idecraft_uidriver::{
+use ferris_idea_core::Workspace;
+use ferris_idea_mcp::IdeServer;
+use ferris_idea_mcp::window::{UiCall, UiCallKind, Window};
+use ferris_idea_uidriver::engine::{Engine, Keys};
+use ferris_idea_uidriver::trace::AuditFacts;
+use ferris_idea_uidriver::{
     AxAction, Effect, KeyPress, Rect, Reply, Role, Semantics, Tree, TreeBuilder,
 };
 use rmcp::ServiceExt;
@@ -144,18 +144,21 @@ struct DriverWindow {
 impl Window for DriverWindow {
     fn ask(
         &self,
-        _request: idecraft_mcp::window::PermissionRequest,
-        reply: tokio::sync::oneshot::Sender<idecraft_mcp::window::PermissionAnswer>,
+        _request: ferris_idea_mcp::window::PermissionRequest,
+        reply: tokio::sync::oneshot::Sender<ferris_idea_mcp::window::PermissionAnswer>,
     ) {
         // Nobody answers: the call is refused as not granted.
         drop(reply);
     }
-    fn pending_work(&self, reply: tokio::sync::oneshot::Sender<idecraft_mcp::window::PendingWork>) {
+    fn pending_work(
+        &self,
+        reply: tokio::sync::oneshot::Sender<ferris_idea_mcp::window::PendingWork>,
+    ) {
         drop(reply);
     }
     fn quit(
         &self,
-        _mode: idecraft_mcp::window::QuitMode,
+        _mode: ferris_idea_mcp::window::QuitMode,
         reply: tokio::sync::oneshot::Sender<Result<(), String>>,
     ) {
         drop(reply);
@@ -191,9 +194,9 @@ impl Window for DriverWindow {
                     )));
                     return;
                 }
-                UiCallKind::Screenshot => {
-                    let _ = reply.send(answer(Err(idecraft_uidriver::UiError::new(
-                        idecraft_uidriver::ErrorCode::Unsupported,
+                UiCallKind::Screenshot { .. } => {
+                    let _ = reply.send(answer(Err(ferris_idea_uidriver::UiError::new(
+                        ferris_idea_uidriver::ErrorCode::Unsupported,
                         "unsupported: no frame read-back",
                         "",
                     ))));
@@ -221,7 +224,7 @@ impl Window for DriverWindow {
                 *delivered.lock().unwrap() += out
                     .commands
                     .iter()
-                    .filter(|c| matches!(c, idecraft_uidriver::Command::Deliver { .. }))
+                    .filter(|c| matches!(c, ferris_idea_uidriver::Command::Deliver { .. }))
                     .count();
                 if let Some(d) = out.done.into_iter().find(|d| d.op == id) {
                     let _ = reply.send(d.reply);
@@ -237,7 +240,7 @@ impl Window for DriverWindow {
 fn temp_workspace() -> PathBuf {
     static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-    let root = std::env::temp_dir().join(format!("idecraft-mcp-ui-{}-{n}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-mcp-ui-{}-{n}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     root
@@ -248,18 +251,18 @@ fn settings_file(root: &Path) -> PathBuf {
 }
 
 fn set_external(root: &Path, on: bool) {
-    let mut s = idecraft_core::load_ide_settings(&settings_file(root));
+    let mut s = ferris_idea_core::load_ide_settings(&settings_file(root));
     s.ui.driver.external = on;
-    idecraft_core::save_ide_settings(&settings_file(root), &s).unwrap();
+    ferris_idea_core::save_ide_settings(&settings_file(root), &s).unwrap();
 }
 
 async fn connect(
-    grants: &[idecraft_core::Grant],
+    grants: &[ferris_idea_core::Grant],
     window: Option<Arc<DriverWindow>>,
 ) -> (Client, PathBuf) {
     let root = temp_workspace();
     let (client_io, server_io) = tokio::io::duplex(256 * 1024);
-    let permissions = idecraft_core::AgentPermissions {
+    let permissions = ferris_idea_core::AgentPermissions {
         allow: grants.iter().copied().collect(),
         file: Some(root.with_extension("agent-permissions.toml")),
         problem: None,
@@ -307,13 +310,17 @@ fn all_tools() -> Vec<(&'static str, Value)> {
         ),
         ("ui_screenshot", json!({})),
         ("ui_trace", json!({"command": "start"})),
+        (
+            "ui_command",
+            json!({"command": "open_file", "path": "src/main.rs"}),
+        ),
     ]
 }
 
 /// The lines the UI driver writes itself, without the line every changing call gets
 /// (`SPEC-0053` v7 behaviour 11, `"call":true`).
 fn log_of(root: &Path) -> String {
-    std::fs::read_to_string(root.join(".idecraft/agent-log.jsonl"))
+    std::fs::read_to_string(root.join(".ferris-idea/agent-log.jsonl"))
         .unwrap_or_default()
         .lines()
         .filter(|l| !l.contains("\"call\":true"))
@@ -326,7 +333,10 @@ fn log_of(root: &Path) -> String {
 #[tokio::test]
 async fn uisec1_off_by_default() {
     let window = Arc::new(DriverWindow::default());
-    let all = [idecraft_core::Grant::Ui, idecraft_core::Grant::VcsWrite];
+    let all = [
+        ferris_idea_core::Grant::Ui,
+        ferris_idea_core::Grant::VcsWrite,
+    ];
     let (mut client, root) = connect(&all, Some(window.clone())).await;
     for (tool, args) in all_tools() {
         let e = error(&client.call(tool, args).await);
@@ -360,7 +370,10 @@ async fn uisec1_off_by_default() {
 #[tokio::test]
 async fn uisec2_the_setting_is_not_writable_by_agents() {
     let (mut client, root) = connect(
-        &[idecraft_core::Grant::Ui, idecraft_core::Grant::Settings],
+        &[
+            ferris_idea_core::Grant::Ui,
+            ferris_idea_core::Grant::Settings,
+        ],
         None,
     )
     .await;
@@ -370,13 +383,11 @@ async fn uisec2_the_setting_is_not_writable_by_agents() {
                 .call("set_ide_settings", json!({key: true, "dry_run": false}))
                 .await,
         );
-        assert!(
-            e.starts_with("invalid:") && e.contains("ui.driver.external"),
-            "{e}"
-        );
+        // Refused as an argument the tool does not declare (SPEC-0006 v59 behaviour 21).
+        assert!(e.contains(&format!("no argument `{key}`")), "{e}");
     }
     assert!(
-        !idecraft_core::load_ide_settings(&settings_file(&root))
+        !ferris_idea_core::load_ide_settings(&settings_file(&root))
             .ui
             .driver
             .external
@@ -408,7 +419,7 @@ async fn uisec3_missing_rights_over_mcp() {
     );
     assert!(e.starts_with("not_granted:") && e.contains("`ui`"), "{e}");
     assert!(window.calls.lock().unwrap().is_empty());
-    let (mut client, root) = connect(&[idecraft_core::Grant::Ui], Some(window.clone())).await;
+    let (mut client, root) = connect(&[ferris_idea_core::Grant::Ui], Some(window.clone())).await;
     set_external(&root, true);
     let e = error(
         &client
@@ -435,7 +446,7 @@ async fn uisec3_missing_rights_over_mcp() {
 #[tokio::test]
 async fn ak8_press_find_expect_over_mcp() {
     let window = Arc::new(DriverWindow::default());
-    let (mut client, root) = connect(&[idecraft_core::Grant::Ui], Some(window.clone())).await;
+    let (mut client, root) = connect(&[ferris_idea_core::Grant::Ui], Some(window.clone())).await;
     set_external(&root, true);
     let r = ok(&client
         .call("ui_act", json!({"action": "press", "keys": "cmd-0"}))
@@ -499,7 +510,7 @@ async fn ak8_press_find_expect_over_mcp() {
 async fn uisec6_and_13_no_secret_and_no_typed_text_leaves() {
     const TYPED: &str = "the-KNOWN-typed-text";
     let window = Arc::new(DriverWindow::default());
-    let (mut client, root) = connect(&[idecraft_core::Grant::Ui], Some(window.clone())).await;
+    let (mut client, root) = connect(&[ferris_idea_core::Grant::Ui], Some(window.clone())).await;
     set_external(&root, true);
     let snap = client.call("ui_snapshot", json!({"format": "json"})).await;
     let find = client
@@ -536,17 +547,17 @@ async fn uisec6_and_13_no_secret_and_no_typed_text_leaves() {
 #[tokio::test]
 async fn uisec10_stop_switches_driving_off() {
     let window = Arc::new(DriverWindow::default());
-    let (mut client, root) = connect(&[idecraft_core::Grant::Ui], Some(window.clone())).await;
+    let (mut client, root) = connect(&[ferris_idea_core::Grant::Ui], Some(window.clone())).await;
     set_external(&root, true);
     ok(&client
         .call("ui_find", json!({"locator": "id=commit-button"}))
         .await);
-    let before = idecraft_uidriver::security::stop_generation();
+    let before = ferris_idea_uidriver::security::stop_generation();
     let stop = ok(&client.call("ui_driver_stop", json!({})).await);
     assert_eq!(stop["external"], false);
-    assert!(idecraft_uidriver::security::stop_generation() > before);
+    assert!(ferris_idea_uidriver::security::stop_generation() > before);
     assert!(
-        !idecraft_core::load_ide_settings(&settings_file(&root))
+        !ferris_idea_core::load_ide_settings(&settings_file(&root))
             .ui
             .driver
             .external
@@ -558,4 +569,73 @@ async fn uisec10_stop_switches_driving_off() {
     );
     assert!(e.starts_with("unavailable:"), "{e}");
     assert!(log_of(&root).contains("ui_driver_stop"));
+}
+
+/// SPEC-0319 v7, UISEC-16 and UISEC-17 at the MCP server: a command passes the switch and the
+/// right `ui` first; an action off the allow list and a reserved Settings page are refused before
+/// the window hears of them; every call is logged with its target and never typed text; the
+/// window gets the command with the client's rights.
+#[tokio::test]
+async fn v7_commands_are_checked_before_the_window_and_logged() {
+    let window = Arc::new(DriverWindow::default());
+    let (mut client, root) = connect(&[], Some(window.clone())).await;
+    set_external(&root, true);
+    let e = error(&client.call("ui_command", json!({"command": "popup"})).await);
+    assert!(e.starts_with("not_granted") && e.contains("ui"), "{e}");
+
+    let (mut client, root) = connect(&[ferris_idea_core::Grant::Ui], Some(window.clone())).await;
+    set_external(&root, true);
+    for (args, code) in [
+        (
+            json!({"command": "invoke", "action": "SafeDelete"}),
+            "reserved",
+        ),
+        (json!({"command": "invoke", "action": "$Paste"}), "reserved"),
+        (
+            json!({"command": "invoke", "action": "Vcs.Push"}),
+            "reserved",
+        ),
+        (
+            json!({"command": "settings", "page": "ai-assistant"}),
+            "reserved",
+        ),
+        (json!({"command": "choose"}), "invalid"),
+        (json!({"command": "dance"}), "invalid"),
+    ] {
+        let e = error(&client.call("ui_command", args.clone()).await);
+        assert!(e.starts_with(code), "{args}: {e}");
+    }
+    assert!(
+        !window
+            .calls
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|(_, k)| k.starts_with("Command")),
+        "refused before the window"
+    );
+    // A command the window carries out (the stand-in answers `{}`).
+    ok(&client
+        .call(
+            "ui_command",
+            json!({"command": "type_text", "text": "hunter2-TYPED"}),
+        )
+        .await);
+    let calls = window.calls.lock().unwrap().clone();
+    assert!(
+        calls.iter().any(|(w, k)| w.file_name() == root.file_name()
+            && k.contains("TypeText")
+            && k.contains("\"ui\"")),
+        "{calls:?}"
+    );
+    let log = log_of(&root);
+    assert!(log.contains("invoke SafeDelete"), "{log}");
+    assert!(log.contains("settings ai-assistant"), "{log}");
+    assert!(log.contains("\"typed_length\":13"), "{log}");
+    let full =
+        std::fs::read_to_string(root.join(".ferris-idea/agent-log.jsonl")).unwrap_or_default();
+    assert!(
+        !full.contains("hunter2-TYPED"),
+        "typed text never in the log"
+    );
 }

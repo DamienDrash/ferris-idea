@@ -41,7 +41,7 @@ See all problems of a file, or of everything open, in one list and jump to each.
    are not open (SPEC-0090), under file headings as before. Empty, it says that no errors were found
    and offers a link that runs Inspect Code (SPEC-0098). [OBS-0019]
 8. **Toolbar (v3):** a narrow column of toggle buttons left of the File tab's list: **Group by
-   inspection** (problems of IDECraft's inspections under a heading per inspection with its count,
+   inspection** (problems of Ferris IDEA's inspections under a heading per inspection with its count,
    headings sorted by name, their problems listed below them; language-server problems stay
    ungrouped at the top),
    **Sort by name** (by message instead of severity), **Show warnings** and **Show weak warnings**
@@ -64,7 +64,7 @@ See all problems of a file, or of everything open, in one list and jump to each.
 ## Acceptance criteria
 - **AK-1** Ordering in both tabs, file headings with counts, stepping over headings with wrap-around,
   the summary texts (unit test `problems_model::tests`).
-- **AK-2** In a real window (`idecraft ui --selftest`, with clangd): with a C file that has errors, ⌘6
+- **AK-2** In a real window (`ferris-idea ui --selftest`, with clangd): with a C file that has errors, ⌘6
   lists them, and Down and Enter put the caret on the first one.
 - **AK-3** By hand: look next to the reference, several files, live updates while typing.
 - **AK-4 (v3)** File heading and tab count, severity order, grouping by inspection, sorting by name,
@@ -83,8 +83,8 @@ Editing inside the preview, grouping by severity, the "Server-Side Analysis",
 "Vulnerable Dependencies", "Qodana" and "Security Analysis" tabs.
 
 ## Known deviations from the reference
-v3: compared side by side in OBS-0019. The reference starts the inspection groups folded; IDECraft
+v3: compared side by side in OBS-0019. The reference starts the inspection groups folded; Ferris IDEA
 lists their problems at once. Project Errors holds what the language servers published;
 a server that only analyses open documents contributes nothing for closed files. v4: the reference's
-preview is an editor; IDECraft's preview is read-only and a click opens the real editor, so there is
+preview is an editor; Ferris IDEA's preview is read-only and a click opens the real editor, so there is
 one place to edit a file.

@@ -1,6 +1,6 @@
 //! Connection profiles (`SPEC-0008`).
 //!
-//! Profiles are plain data shared through `.idecraft/connections.toml`. They
+//! Profiles are plain data shared through `.ferris-idea/connections.toml`. They
 //! never hold passwords; a profile may point at a keychain entry instead. The
 //! user name belongs to the profile so it survives any restart.
 
@@ -16,7 +16,7 @@ use crate::Dialect;
 use crate::permission::{Permission, default_permissions};
 
 /// Workspace-relative location of the profile file.
-pub const PROFILE_FILE: &str = ".idecraft/connections.toml";
+pub const PROFILE_FILE: &str = ".ferris-idea/connections.toml";
 
 /// Transport security requested for a server connection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -57,7 +57,7 @@ pub struct SecretRef {
     pub account: String,
 }
 
-/// An SSH tunnel to reach the database server (`SPEC-0108` v4 behaviour 8): IDECraft runs the
+/// An SSH tunnel to reach the database server (`SPEC-0108` v4 behaviour 8): Ferris IDEA runs the
 /// system `ssh` in batch mode with strict host key checking and forwards a port on `127.0.0.1` to
 /// the profile's host and port as the SSH host sees them. No password or passphrase is kept or
 /// asked for: keys, the SSH agent and `~/.ssh/config` apply.
@@ -124,7 +124,7 @@ pub struct ConnectionOptions {
     #[serde(skip, default = "yes")]
     pub startup_allowed: bool,
     /// The workspace folder the profile was read from: a relative database file is found from
-    /// there, not from the folder IDECraft happened to be started in (`SPEC-0008` v5 behaviour
+    /// there, not from the folder Ferris IDEA happened to be started in (`SPEC-0008` v5 behaviour
     /// 16). Never written, and no part of what makes two profiles equal.
     #[serde(skip)]
     pub base: Option<PathBuf>,
@@ -422,14 +422,14 @@ impl ConnectionProfile {
             Some(ssh) => format!("{} via ssh {}", self.to_url(), ssh.host),
             None => self.to_url(),
         };
-        idecraft_core::connection_target(&shown, &parts)
+        ferris_idea_core::connection_target(&shown, &parts)
     }
 }
 
 /// The target line of a connection that is no [`ConnectionProfile`] (a store, `SPEC-0310`):
 /// `shown` and a digest of `parts`, as [`ConnectionProfile::agent_target`] builds it.
 pub fn target_line(shown: &str, parts: &[String]) -> String {
-    idecraft_core::connection_target(shown, parts)
+    ferris_idea_core::connection_target(shown, parts)
 }
 
 fn is_default_permissions(set: &BTreeSet<Permission>) -> bool {
@@ -539,7 +539,7 @@ impl ConnectionProfile {
                     .ok_or_else(|| ProfileError::Url(format!("unsupported scheme `{other}`")))?;
                 let dialect = connector.family.dialect().ok_or_else(|| {
                     ProfileError::Url(format!(
-                        "{} needs the ODBC route, which IDECraft does not have yet",
+                        "{} needs the ODBC route, which Ferris IDEA does not have yet",
                         connector.name
                     ))
                 })?;
@@ -816,7 +816,7 @@ pub fn validate_all(profiles: &[ConnectionProfile]) -> Result<(), ProfileError> 
 #[serde(deny_unknown_fields)]
 struct ProfileFile {
     /// The envelope (`SPEC-0303` behaviour 16), checked separately.
-    #[serde(default, rename = "idecraft", skip_serializing)]
+    #[serde(default, rename = "ferris-idea", skip_serializing)]
     _envelope: Option<toml::Table>,
     #[serde(default, rename = "connection")]
     connections: Vec<ConnectionProfile>,
@@ -830,20 +830,21 @@ pub fn load_profiles(root: &Path) -> Result<Vec<ConnectionProfile>, ProfileError
         Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
         Err(source) => return Err(ProfileError::Io { path, source }),
     };
-    if let Err(p) = idecraft_core::format::project_format(&text, "connections") {
+    if let Err(p) = ferris_idea_core::format::project_format(&text, "connections") {
         return Err(ProfileError::Parse {
             path,
-            message: idecraft_core::format::problems_text(&p),
+            message: ferris_idea_core::format::problems_text(&p),
         });
     }
-    let mut file: ProfileFile = toml::from_str(&text).map_err(|e| ProfileError::Parse {
-        path: path.clone(),
-        message: e.message().to_owned(),
-    })?;
+    let mut file: ProfileFile =
+        ferris_idea_core::format::from_str_adopting(&text).map_err(|e| ProfileError::Parse {
+            path: path.clone(),
+            message: e.message().to_owned(),
+        })?;
     validate_all(&file.connections)?;
     // A startup script is code of the project: it runs only when the project is trusted
     // (SPEC-0278 safe mode, SPEC-0108 v4 behaviour 10).
-    let trusted = idecraft_core::trust::allows_project_code(root);
+    let trusted = ferris_idea_core::trust::allows_project_code(root);
     for p in &mut file.connections {
         p.options.startup_allowed = trusted;
         p.options.base = Some(root.to_path_buf());
@@ -855,8 +856,8 @@ pub fn load_profiles(root: &Path) -> Result<Vec<ConnectionProfile>, ProfileError
 pub fn save_profiles(root: &Path, profiles: &[ConnectionProfile]) -> Result<(), ProfileError> {
     validate_all(profiles)?;
     let path = root.join(PROFILE_FILE);
-    let text = idecraft_core::format::write(
-        &idecraft_core::format::Envelope::current("connections"),
+    let text = ferris_idea_core::format::write(
+        &ferris_idea_core::format::Envelope::current("connections"),
         &ProfileFile {
             _envelope: None,
             connections: profiles.to_vec(),
@@ -870,7 +871,7 @@ pub fn save_profiles(root: &Path, profiles: &[ConnectionProfile]) -> Result<(), 
         path: path.clone(),
         source,
     };
-    idecraft_core::format::prepare_write(&path, "connections").map_err(io_err)?;
+    ferris_idea_core::format::prepare_write(&path, "connections").map_err(io_err)?;
     if let Some(dir) = path.parent() {
         fs::create_dir_all(dir).map_err(io_err)?;
     }
@@ -998,7 +999,7 @@ mod tests {
     impl TempDir {
         fn new(tag: &str) -> Self {
             let path = std::env::temp_dir()
-                .join(format!("idecraft-profiles-{tag}-{}", std::process::id()));
+                .join(format!("ferris-idea-profiles-{tag}-{}", std::process::id()));
             let _ = fs::remove_dir_all(&path);
             fs::create_dir_all(&path).unwrap();
             Self(path)
@@ -1014,7 +1015,7 @@ mod tests {
     fn pg() -> ConnectionProfile {
         ConnectionProfile::from_url(
             "ref-pg-local",
-            "postgresql://idecraft@127.0.0.1:54329/inventory?sslmode=disable",
+            "postgresql://ferris-idea@127.0.0.1:54329/inventory?sslmode=disable",
         )
         .unwrap()
     }
@@ -1024,7 +1025,7 @@ mod tests {
         let p = pg();
         assert_eq!(p.id, "ref-pg-local");
         assert_eq!(p.dialect, Dialect::PostgreSql);
-        assert_eq!(p.user.as_deref(), Some("idecraft"));
+        assert_eq!(p.user.as_deref(), Some("ferris-idea"));
         assert_eq!(p.host.as_deref(), Some("127.0.0.1"));
         assert_eq!(p.port, Some(54329));
         assert_eq!(p.database.as_deref(), Some("inventory"));
@@ -1098,7 +1099,7 @@ mod tests {
     #[test]
     fn urls_round_trip() {
         for url in [
-            "postgresql://idecraft@127.0.0.1:54329/inventory?sslmode=disable",
+            "postgresql://ferris-idea@127.0.0.1:54329/inventory?sslmode=disable",
             "postgresql://us%40er@[::1]:5433/my%20db?sslmode=verify-full",
             "mysql://root@localhost/inventory",
             "mysql://root@db.example:3307/inv?ssl-mode=REQUIRED",
@@ -1116,7 +1117,7 @@ mod tests {
         let mut p = pg();
         p.read_only = true;
         p.secret = Some(SecretRef {
-            service: "idecraft".into(),
+            service: "ferris-idea".into(),
             account: "ref-pg-local".into(),
         });
         let s = ConnectionProfile::from_url("ref-sqlite", "sqlite:/tmp/inv.sqlite").unwrap();
@@ -1125,7 +1126,7 @@ mod tests {
         assert_eq!(load_profiles(&dir.0).unwrap(), [p, s]);
         let text = fs::read_to_string(dir.0.join(PROFILE_FILE)).unwrap();
         assert!(!text.contains("password"));
-        let leftovers: Vec<_> = fs::read_dir(dir.0.join(".idecraft"))
+        let leftovers: Vec<_> = fs::read_dir(dir.0.join(".ferris-idea"))
             .unwrap()
             .map(|e| e.unwrap().file_name())
             .collect();
@@ -1232,7 +1233,7 @@ mod tests {
         assert!(blocked.is_default());
         assert_eq!(
             p.to_url(),
-            "postgresql://idecraft@127.0.0.1:54329/inventory?sslmode=verify-ca"
+            "postgresql://ferris-idea@127.0.0.1:54329/inventory?sslmode=verify-ca"
         );
     }
 

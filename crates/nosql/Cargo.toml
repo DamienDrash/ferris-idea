@@ -1,5 +1,5 @@
 [package]
-name = "idecraft-nosql"
+name = "ferris-idea-nosql"
 description = "Non-relational data sources: MongoDB and Redis sessions, browser tree, consoles, views (ADR-0022)"
 version.workspace = true
 edition.workspace = true
@@ -9,7 +9,8 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
-idecraft-database.workspace = true
+ferris-idea-core.workspace = true
+ferris-idea-database.workspace = true
 # Default features: rustls TLS with the webpki root certificates (CDLA-Permissive-2.0, allowed by
 # the project owner on 2026-11-05, PO-STATUS question 23).
 mongodb = "3.10"

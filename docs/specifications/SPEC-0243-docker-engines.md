@@ -16,7 +16,7 @@ Work with the Docker engine of a local VM (Lima, Colima, …) or of another mach
 and switch between engines without leaving the IDE.
 
 ## Behaviour
-1. **Engines:** IDECraft lists engines in this order, each address once: `DOCKER_HOST`; the Docker
+1. **Engines:** Ferris IDEA lists engines in this order, each address once: `DOCKER_HOST`; the Docker
    CLI's current context; the local sockets of SPEC-0119 that exist, plus every Lima instance's
    forwarded socket; the other Docker CLI contexts. Each engine has a name (`DOCKER_HOST`, the
    context name, or the tool the socket belongs to) and its address. [STD]
@@ -31,7 +31,7 @@ and switch between engines without leaving the IDE.
    agent are used as on the command line. A host without a post-quantum key exchange is refused
    with SPEC-0121's message, a local `ssh` without one before any connection. Shell, logs, Compose
    (SPEC-0242) and all other actions work the same. **v3:** the command line comes from the start
-   point `idecraft_remote::SshCommand`; a `ProxyJump` to the engine's host goes through IDECraft's
+   point `ferris_idea_remote::SshCommand`; a `ProxyJump` to the engine's host goes through Ferris IDEA's
    hop stand-in with the same options, a `ProxyCommand` of the user's own is refused unless allowed
    (SPEC-0121 v4 behaviour 1a). [STD, ADR-0025]
 4. **Plain TCP:** a `tcp://` engine on another machine than this one is used, but its heading warns
@@ -48,7 +48,7 @@ and switch between engines without leaving the IDE.
 - **AK-2** Against the fake Engine API reached through a fake `ssh` that runs a local bridge: version,
   lists and logs over `ssh://` (`crates/containers/tests/containers.rs`).
 - **AK-3** Live: the Lima engine through its socket and the same engine over `ssh://` with Lima's ssh
-  configuration (`IDECRAFT_TEST_DOCKER`, `IDECRAFT_TEST_DOCKER_SSH`) give the same containers
+  configuration (`FERRIS_IDEA_TEST_DOCKER`, `FERRIS_IDEA_TEST_DOCKER_SSH`) give the same containers
   (`crates/containers/tests/live.rs`).
 - **AK-4** MCP: engines in `docker_status`, an unknown engine refused (`crates/mcp/tests/it/protocol.rs`:
   `container_tools`).

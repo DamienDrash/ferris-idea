@@ -1,7 +1,7 @@
 //! Workspace model (`SPEC-0001`).
 //!
 //! A workspace is a directory the user opens. It owns an optional settings
-//! file at `.idecraft/settings.toml` and exposes the project files below its
+//! file at `.ferris-idea/settings.toml` and exposes the project files below its
 //! root, skipping version-control metadata and common build output.
 
 use std::fs;
@@ -15,14 +15,14 @@ pub const EXCLUDED_DIRS: &[&str] = &[
     ".git",
     ".hg",
     ".svn",
-    ".idecraft",
+    ".ferris-idea",
     "target",
     "node_modules",
     "__pycache__",
 ];
 
 /// Relative location of the workspace settings file.
-pub const SETTINGS_FILE: &str = ".idecraft/settings.toml";
+pub const SETTINGS_FILE: &str = ".ferris-idea/settings.toml";
 
 /// Errors raised while opening or reading a workspace.
 #[derive(Debug, thiserror::Error)]
@@ -61,6 +61,9 @@ impl Workspace {
         if !canonical.is_dir() {
             return Err(WorkspaceError::NotADirectory(canonical));
         }
+        // The project folder of the product's former name moves once, before anything reads or
+        // writes the project's IDE state (`SPEC-0356` behaviour 2).
+        crate::takeover::take_over_project_folder(&canonical);
         Ok(Self { root: canonical })
     }
 
@@ -109,9 +112,9 @@ impl Workspace {
 
     /// Like [`Workspace::files`], but also the files in excluded folders such as `node_modules`,
     /// `target` and `__pycache__` (Search Everywhere's non-project items, `SPEC-0067` v5
-    /// behaviour 13); only the version-control and IDECraft folders stay out.
+    /// behaviour 13); only the version-control and Ferris IDEA folders stay out.
     pub fn all_files(&self) -> Result<Vec<PathBuf>, WorkspaceError> {
-        self.list(&[".git", ".hg", ".svn", ".idecraft"], &|_| false)
+        self.list(&[".git", ".hg", ".svn", ".ferris-idea"], &|_| false)
     }
 
     fn list(
@@ -154,6 +157,17 @@ impl Workspace {
     }
 }
 
+/// The SHA-256 digest of `data` as lowercase hex: what a profile keeps of each source file it has
+/// line costs for, so that costs show only next to the text they were measured on (`SPEC-0120` v5
+/// behaviour 10).
+pub fn sha256_hex(data: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(data)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -163,7 +177,7 @@ mod tests {
     impl TempDir {
         fn new(tag: &str) -> Self {
             let path =
-                std::env::temp_dir().join(format!("idecraft-ws-{tag}-{}", std::process::id()));
+                std::env::temp_dir().join(format!("ferris-idea-ws-{tag}-{}", std::process::id()));
             let _ = fs::remove_dir_all(&path);
             fs::create_dir_all(&path).unwrap();
             Self(path)
@@ -254,7 +268,7 @@ mod tests {
             !ws.files()
                 .unwrap()
                 .iter()
-                .any(|p| p.starts_with(".idecraft"))
+                .any(|p| p.starts_with(".ferris-idea"))
         );
     }
 
@@ -263,5 +277,13 @@ mod tests {
         let dir = TempDir::new("nosettings");
         let ws = Workspace::open(&dir.0).unwrap();
         assert!(!ws.load_settings(&mut LayeredConfig::new()).unwrap());
+    }
+
+    #[test]
+    fn sha256_of_the_standard_vector() {
+        assert_eq!(
+            sha256_hex(b"abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
     }
 }

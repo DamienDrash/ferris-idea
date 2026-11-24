@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::model::{Profile, ProfileNode, Unit};
 use crate::perf::{PERF_FIELDS, PERF_MISSING, PERF_RECORD, PERF_REFUSED, PERF_SCRIPT};
-use crate::run::{Engine, Kind, LAST, ProfilePlan, ProfileRun, SAMPLE, SAMPLE_REFUSED, on_path};
+use crate::run::{Engine, Kind, ProfilePlan, ProfileRun, SAMPLE, SAMPLE_REFUSED};
 use crate::{parse_perf_script, parse_sample};
 
 /// The macOS heap reader.
@@ -163,6 +163,7 @@ pub fn parse_heap(text: &str) -> Profile {
         total,
         roots,
         notes,
+        lines: Vec::new(),
     }
 }
 
@@ -178,7 +179,7 @@ pub fn attach_plan(pid: u32, seconds: u64, kind: Kind) -> Result<ProfilePlan, St
                 .to_vec(),
         ),
         Kind::Cpu if cfg!(target_os = "linux") => {
-            if !on_path("perf") {
+            if !crate::run::perf_runs() {
                 return Err(PERF_MISSING.into());
             }
             let mut c: Vec<String> = vec!["perf".into()];
@@ -259,7 +260,7 @@ pub fn attach(pid: u32, seconds: u64, kind: Kind, dir: &Path) -> Result<ProfileR
         }
     };
     profile.notes.push(format!("attached to process {pid}"));
-    let run = ProfileRun {
+    let mut run = ProfileRun {
         plan: ProfilePlan {
             command: vec![format!("pid {pid}: {}", process.command)],
             ..plan
@@ -272,9 +273,10 @@ pub fn attach(pid: u32, seconds: u64, kind: Kind, dir: &Path) -> Result<ProfileR
         kind,
         exit_unknown: true,
         attached: Some(pid),
+        sources: Default::default(),
+        marked: false,
     };
-    let json = serde_json::to_string(&run).map_err(|e| e.to_string())?;
-    fs::write(dir.join(LAST), json).map_err(|e| e.to_string())?;
+    crate::run::store(dir, &mut run)?;
     Ok(run)
 }
 
@@ -307,7 +309,7 @@ mod tests {
     #[test]
     fn ps_lines_are_listed_newest_first_without_ourselves() {
         let list = parse_ps(
-            "  101 /bin/zsh -l\n  205 ./busy 7\n   99 /Applications/IntelliJ IDEA.app/Contents/MacOS/idea\n  300 idecraft ui\n",
+            "  101 /bin/zsh -l\n  205 ./busy 7\n   99 /Applications/IntelliJ IDEA.app/Contents/MacOS/idea\n  300 ferris-idea ui\n",
             300,
         );
         let pids: Vec<u32> = list.iter().map(|p| p.pid).collect();

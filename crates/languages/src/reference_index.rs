@@ -1,5 +1,5 @@
 //! The project-wide reference index of Java names and the global inspection
-//! `java.unused-declaration` (`SPEC-0316`): declarations and name uses per file from IDECraft's
+//! `java.unused-declaration` (`SPEC-0316`): declarations and name uses per file from Ferris IDEA's
 //! own syntax trees, refreshed incrementally by modification time and size, kept in memory and in
 //! the user cache folder. `SPEC-0316` v3 behaviour 8 / `SPEC-0098` v12 behaviour 26: the editor's
 //! step for one file's unsaved text against the totals kept with the in-memory index.
@@ -1256,7 +1256,7 @@ fn library_supertype(ty: &str, types: &HashMap<&str, Vec<&[String]>>) -> bool {
 }
 
 /// The file naming the API folders of a library (v3 behaviour 4).
-pub const ENTRY_POINTS_FILE: &str = ".idecraft/entry-points.toml";
+pub const ENTRY_POINTS_FILE: &str = ".ferris-idea/entry-points.toml";
 
 /// The API folders of the project at `root`, relative to it, from [`ENTRY_POINTS_FILE`]
 /// (`api = ["lib/src/main/java"]`; v3 behaviour 4): none without the file or with an unreadable
@@ -1326,7 +1326,7 @@ pub fn cache_file(root: &Path) -> Option<PathBuf> {
     let digest = Sha256::digest(root.to_string_lossy().as_bytes());
     let hex: String = digest[..12].iter().map(|b| format!("{b:02x}")).collect();
     Some(
-        idecraft_core::user_cache_dir()?
+        ferris_idea_core::user_cache_dir()?
             .join(CACHE_DIR)
             .join(format!("{hex}.json")),
     )
@@ -1408,7 +1408,7 @@ pub fn is_ready(root: &Path) -> bool {
 /// Virtual environments, installed dependencies and build output are not read: a use there must
 /// not keep a declaration "used".
 pub fn project_files(root: &Path) -> Vec<PathBuf> {
-    idecraft_core::OwnSources::new(root).sources_and_ignored()
+    ferris_idea_core::OwnSources::new(root).sources_and_ignored()
 }
 
 /// Runs `f` on the refreshed index of the project at `root` over its `files` (relative): from
@@ -1580,6 +1580,7 @@ pub(crate) fn editor_unused(
                 edits: Vec::new(),
                 learn: None,
                 keep: None,
+                bundle_key: None,
                 action: Some(SAFE_DELETE),
             }),
         };
@@ -1664,6 +1665,8 @@ pub fn unused_findings(root: &Path, all: &[PathBuf], scope: &[PathBuf]) -> Vec<P
                 level: Level::Warning,
                 message,
                 fix: None,
+                kind: None,
+                replacement: None,
             });
         }
     }
@@ -1676,7 +1679,7 @@ mod tests {
 
     fn project(files: &[(&str, &str)]) -> (PathBuf, Vec<PathBuf>) {
         let dir = std::env::temp_dir().join(format!(
-            "idecraft-refindex-{}-{:?}",
+            "ferris-idea-refindex-{}-{:?}",
             std::process::id(),
             std::thread::current().id()
         ));
@@ -1838,7 +1841,7 @@ mod tests {
             "Port:open",
         ];
         assert_eq!(unused_names(&index), all);
-        std::fs::create_dir_all(dir.join(".idecraft")).unwrap();
+        std::fs::create_dir_all(dir.join(".ferris-idea")).unwrap();
         let config = dir.join(ENTRY_POINTS_FILE);
         std::fs::write(&config, "api = [\"lib/src/\"]\n").unwrap();
         assert_eq!(api_folders(&dir), [PathBuf::from("lib/src")]);

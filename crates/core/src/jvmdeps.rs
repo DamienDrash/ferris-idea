@@ -1,6 +1,6 @@
 //! Transitive dependencies of Maven and Gradle modules (`SPEC-0149`): the build tool resolves
 //! them (`mvn dependency:tree`, `gradle dependencies`), the output is kept in
-//! `.idecraft/deps/` until the build file changes, and read into a [`DepNode`] tree.
+//! `.ferris-idea/deps/` until the build file changes, and read into a [`DepNode`] tree.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -271,7 +271,7 @@ pub fn cache_file(root: &Path, m: &Module) -> Option<PathBuf> {
         m.dir.replace(['/', '\\'], "_")
     };
     Some(
-        root.join(".idecraft/deps")
+        root.join(".ferris-idea/deps")
             .join(format!("{key}.{tool}.txt")),
     )
 }
@@ -639,14 +639,14 @@ compileClasspath - Compile classpath for source set 'main'.\n\
 
     #[test]
     fn resolutions_go_stale_with_the_build_file() {
-        let dir = std::env::temp_dir().join(format!("idecraft-jvmdeps-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-jvmdeps-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("sub")).unwrap();
         std::fs::write(dir.join("sub/pom.xml"), "<project/>").unwrap();
         let mut m = Module::new(ModuleKind::Maven, "sub".into(), "sub");
         m.dir = "sub".into();
         let cache = cache_file(&dir, &m).unwrap();
-        assert!(cache.ends_with(".idecraft/deps/sub.maven.txt"));
+        assert!(cache.ends_with(".ferris-idea/deps/sub.maven.txt"));
         assert!(!is_resolved(&dir, &m));
         std::thread::sleep(Duration::from_millis(20));
         std::fs::create_dir_all(cache.parent().unwrap()).unwrap();

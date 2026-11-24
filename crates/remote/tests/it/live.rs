@@ -7,12 +7,12 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use idecraft_remote::inprocess::InProcessProject;
-use idecraft_remote::{ConnState, DocSync, Follow, LiveProject, Restored, Synced, Timing};
-use idecraft_session::{ErrorCode, Op, TextOp};
+use ferris_idea_remote::inprocess::InProcessProject;
+use ferris_idea_remote::{ConnState, DocSync, Follow, LiveProject, Restored, Synced, Timing};
+use ferris_idea_session::{ErrorCode, Op, TextOp};
 
 fn scratch(tag: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("idecraft-live-{tag}-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-live-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("project")).unwrap();
     std::fs::canonicalize(dir).unwrap()
@@ -172,7 +172,7 @@ fn concurrent_changes_meet_the_editor_without_moving_its_text() {
     assert!(!e.sync.modified);
     // A second client (an agent) edits while the editor types something else that the session
     // has not seen yet: both changes stay, in both texts.
-    let mut agent = idecraft_session::ClientSession::open(
+    let mut agent = ferris_idea_session::ClientSession::open(
         second,
         &dir.join("project").display().to_string(),
         "agent",
@@ -278,7 +278,7 @@ fn a_restarted_host_gets_a_new_backend_and_the_text_stays() {
         std::fs::read_to_string(dir.join("project/theirs.txt")).unwrap(),
         "mine theirs\n"
     );
-    let history = idecraft_core::LocalHistory::open(&dir.join("project")).unwrap();
+    let history = ferris_idea_core::LocalHistory::open(&dir.join("project")).unwrap();
     assert!(!history.revisions("theirs.txt").is_empty());
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -497,7 +497,7 @@ struct Frames {
     editor: Editor,
     follow: Follow,
     editor_rev: u64,
-    states: std::collections::HashMap<String, idecraft_remote::DocState>,
+    states: std::collections::HashMap<String, ferris_idea_remote::DocState>,
     /// The last revision for which another request took the session between the look at the
     /// documents' states and the meeting (the frame loop's unlucky moment).
     held_at: u64,

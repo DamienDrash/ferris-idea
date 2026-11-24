@@ -1,10 +1,11 @@
-//! Run configurations of the reference IDE's project files as IDECraft run configurations
+//! Run configurations of the reference IDE's project files as Ferris IDEA run configurations
 //! (`SPEC-0049` v3 behaviour 13), read only: nothing here starts a process.
 //!
 //! Sources, in order: `.idea/runConfigurations/*.xml` and `ProjectRunConfigurationManager` of an
 //! `.ipr` (shared), then the `RunManager` component of `workspace.xml` or the `.iws` (personal).
 //! Format knowledge of the open run configuration types (Application, JUnit, Gradle, Maven,
-//! Python, Shell Script) of the open platform `JetBrains/intellij-community`; no code.
+//! Python, Shell Script) of the open platform `JetBrains/intellij-community`; no code. HTTP
+//! Request (`SPEC-0049` v5, assumption A1): not in the open sources; keys as named there.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -12,9 +13,9 @@ use std::path::Path;
 use serde::Serialize;
 
 use crate::ideaproject::{Element, IdeaModule, IdeaProject, SourceKind, resolve};
-use crate::run::{RunConfig, RunKind};
+use crate::run::{HttpRun, RunConfig, RunKind};
 
-/// One configuration of the reference IDE and what IDECraft made of it (behaviours 13, 16).
+/// One configuration of the reference IDE and what Ferris IDEA made of it (behaviours 13, 16).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct IdeaRun {
     /// Name.
@@ -39,6 +40,9 @@ pub struct IdeaRun {
     /// Names of its environment variables; the values are never listed (behaviour 16).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub env: Vec<String>,
+    /// The requests it sends, when it is an HTTP request configuration (`SPEC-0049` v5).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub http: Option<HttpRun>,
     /// Why it was not translated.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
@@ -82,6 +86,7 @@ pub(crate) fn read_runs(
                 command: Vec::new(),
                 cwd: None,
                 env: Vec::new(),
+                http: None,
                 reason: None,
                 config: None,
             };
@@ -101,15 +106,17 @@ pub(crate) fn read_runs(
                         folder,
                         allow_multiple: false,
                         before_launch: Vec::new(),
-                        // Texts are used as written; only Python needs the interpreter IDECraft
+                        // Texts are used as written; only Python needs the interpreter Ferris IDEA
                         // resolves (SPEC-0050), which a verbatim configuration skips.
                         verbatim: type_id != "PythonConfigurationType",
+                        http: t.http.take(),
                     };
                     config.env.extend(t.env);
                     run.kind = Some(config.kind);
                     run.command = config.command.clone();
                     run.cwd = config.cwd.clone();
                     run.env = config.env.keys().cloned().collect();
+                    run.http = config.http.clone();
                     run.config = Some(config);
                 }
                 Err(reason) => {
@@ -199,6 +206,7 @@ struct Translated {
     report: Option<&'static str>,
     report_file: Option<String>,
     env: BTreeMap<String, String>,
+    http: Option<HttpRun>,
 }
 
 impl Translated {
@@ -210,6 +218,7 @@ impl Translated {
             report: None,
             report_file: None,
             env: BTreeMap::new(),
+            http: None,
         }
     }
 }
@@ -466,13 +475,67 @@ fn translate(
             Ok(Translated::run(command, dir))
         }
         "CompoundRunConfigurationType" => {
-            Err("a compound configuration; IDECraft runs one configuration after the other with `before`".into())
+            Err("a compound configuration; Ferris IDEA runs one configuration after the other with `before`".into())
         }
+        HTTP_REQUEST => http_request(root, c),
         "js.build_tools.npm" => Err(
-            "an npm configuration; its format is not part of the open sources, so it is not translated (use the npm scripts IDECraft detects from package.json)".into(),
+            "an npm configuration; its format is not part of the open sources, so it is not translated (use the npm scripts Ferris IDEA detects from package.json)".into(),
         ),
-        other => Err(format!("the type {other} has no IDECraft counterpart")),
+        other => Err(format!("the type {other} has no Ferris IDEA counterpart")),
     }
+}
+
+/// The reference's type id of HTTP request configurations (`SPEC-0049` v5, assumption A1).
+const HTTP_REQUEST: &str = "HttpClient.HttpRequestRunConfigurationType";
+
+/// The `runType` of a configuration that sends every request of its file (assumption A1).
+const RUN_ALL: &str = "Run all requests in file";
+
+/// A key of an HTTP request configuration: the attribute, else an `option` of that name.
+fn key<'a>(c: &'a Element, name: &str) -> Option<&'a str> {
+    c.attr(name)
+        .or_else(|| option(c, name))
+        .filter(|v| !v.trim().is_empty())
+}
+
+/// An HTTP request configuration (`SPEC-0049` v5 behaviour 13): file, request by name, or all
+/// requests, and environment. A request given by its position alone is not translated.
+fn http_request(root: &Path, c: &Element) -> Result<Translated, String> {
+    let Some(path) = key(c, "path") else {
+        return Err("it names no request file".into());
+    };
+    let file = resolve(path, ".");
+    if !in_project(&file) {
+        return Err(format!("its request file {path} lies outside the project"));
+    }
+    let lower = file.to_ascii_lowercase();
+    if !(lower.ends_with(".http") || lower.ends_with(".rest")) {
+        return Err(format!("its request file {file} is no .http or .rest file"));
+    }
+    let request = if key(c, "runType") == Some(RUN_ALL) {
+        None
+    } else if let Some(name) = key(c, "requestIdentifier") {
+        Some(name.to_owned())
+    } else {
+        // Without a name only the single request of a file is certain.
+        let count = std::fs::read_to_string(root.join(&file))
+            .map(|text| ferris_idea_http::parse(&text).requests.len())
+            .unwrap_or(0);
+        if count != 1 || key(c, "index").is_some_and(|i| i != "0" && i != "1") {
+            return Err(
+                "it names its request by position only, which is not translated (how the reference counts positions is not known)".into(),
+            );
+        }
+        None
+    };
+    let mut t = Translated::run(Vec::new(), ".".to_owned());
+    t.cwd = None;
+    t.http = Some(HttpRun {
+        file,
+        request,
+        environment: key(c, "environment").map(str::to_owned),
+    });
+    Ok(t)
 }
 
 fn join(dir: &str, rel: &str) -> String {
@@ -671,7 +734,7 @@ fn junit(
         ),
         (Build::None, _) => {
             return Err(
-                "JUnit in a module without a Maven or Gradle build; IDECraft runs tests through the build tool"
+                "JUnit in a module without a Maven or Gradle build; Ferris IDEA runs tests through the build tool"
                     .into(),
             );
         }
@@ -683,6 +746,7 @@ fn junit(
         report: Some("junit"),
         report_file: Some(join(module_dir, report_file)),
         env: BTreeMap::new(),
+        http: None,
     })
 }
 

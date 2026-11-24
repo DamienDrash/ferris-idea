@@ -1,6 +1,6 @@
 # SPEC-0077: Quick Documentation from the editor
 
-- **Version:** 8 · **Date:** 2026-11-16 (v8: External Documentation, behaviour 7, AK-13; eleventh package of docs/research/KEYMAP_COVERAGE.md); 2026-11-14 (v7: Type Info (`ExpressionTypeInfo`), the type of the expression at the caret
+- **Version:** 10 · **Date:** 2026-11-18 (v10: character references such as `&lt;` are shown as their characters, behaviour 2, AK-15; OBS-0097 HC5; v9: `_` and `__` emphasis lose their markers, an embedded image (`data:`) is left out, behaviour 2, AK-14; OBS-0087 W2); 2026-11-16 (v8: External Documentation, behaviour 7, AK-13; eleventh package of docs/research/KEYMAP_COVERAGE.md); 2026-11-14 (v7: Type Info (`ExpressionTypeInfo`), the type of the expression at the caret
   from the language server's hover, behaviour 6, AK-12; seventh package of docs/research/KEYMAP_COVERAGE.md; v2: links show their text, repeated documentation once; hand test Nr. 110;
   v3: links whose target holds unbalanced parentheses, labelled sections, inline code; OBS-0012;
   v4: single-star emphasis removed, OBS-0016; v5: jdtls signature as code with one parameter per line,
@@ -20,7 +20,7 @@ Read a symbol's signature and documentation comment without leaving the place yo
 ## Behaviour
 1. **Start:** `QuickJavaDoc` asks the active file's language server for the hover of the symbol at the
    caret. The server receives the editor's current text, so symbols that exist only in unsaved text are
-   documented. IDECraft asks for Markdown and accepts plain text. With no answer the status bar says "No
+   documented. Ferris IDEA asks for Markdown and accepts plain text. With no answer the status bar says "No
    documentation found."; a failure is shown there too. An answer that arrives after the caret moved or
    another file became active is dropped. [GEN, OSS, STD]
 2. **Popup:** the documentation appears below the caret, at most 360 px high with scrolling, in blocks:
@@ -30,6 +30,24 @@ Read a symbol's signature and documentation comment without leaving the place yo
    **Emphasis (v4):** single `*` emphasis markers are removed like `**` (jdtls ends its hover with
    `Source: *[project](file://…)*`, shown with the stars before, OBS-0016 Nr. 4); a `*` with a space
    on both sides stays. [OBS-0016]
+   **Underscore emphasis (v9):** `_text_` and `__text__` lose their markers as `*` does, by the
+   CommonMark rule for `_`: a marker opens only where no letter or digit stands before it and
+   text follows it, and closes only where text stands before it and no letter or digit follows
+   it, on the same line and outside inline code; a marker without its partner stays. So
+   `snake_case`, a lone `_` and `__init__` in inline code keep their underscores. Before v9 the
+   CSS server's sentence on browser support (`_Widely available across major browsers …_`) was
+   shown with an underscore at either end beside the completion list (OBS-0087 W2). An image
+   whose target is embedded data (`![Baseline icon](data:image/svg+xml;…)`) is left out with its
+   text, since the popup draws no images. [STD: CommonMark emphasis; OBS-0087]
+   **Character references (v10):** outside inline code and code blocks, a character reference
+   stands for its character: the numeric forms `&#60;` and `&#x3C;` and the names `lt`, `gt`,
+   `amp`, `quot`, `apos`, `nbsp`, `ndash`, `mdash`, `hellip`, `laquo`, `raquo`, `copy`, `reg`,
+   `trade`, `times`, `middot`, `rarr` and `larr`. A `&` without a closing `;`, or with an unknown
+   name, stays as written; inside backticks the reference is kept as written. Before v10 the CSS
+   server's syntax line beside the completion list read `&lt;color&gt;` (OBS-0097 HC5); it now
+   reads `<color>`. This applies everywhere these blocks are drawn: the popup, the panel beside
+   the completion list and the other places that show a server's Markdown. [STD: CommonMark
+   entity and numeric character references; OBS-0097]
    **Links and repeats (v2):** a Markdown link or image shows only its text (`[greeter.rb](file://…)`
    becomes `greeter.rb`); a second link to the same target (addresses compared with repeated `/`
    collapsed) is left out with the `|` or `,` before it, and a paragraph or code block already shown
@@ -46,7 +64,7 @@ Read a symbol's signature and documentation comment without leaving the place yo
      item. Indented lines without a bullet continue the item before them. Abbreviated javadoc labels
      are written out: `Impl Spec` → "Implementation Requirements", `Impl Note` → "Implementation
      Note", `API Note` → "API Note", `See` → "See Also". [GEN (the standard javadoc labels); OBS-0012:
-     IDECraft showed the raw bullets]
+     Ferris IDEA showed the raw bullets]
    - Text between backticks in paragraphs is drawn in the accent colour on a faint background instead
      of losing its marking. [GEN; OBS-0012]
    **Signature, parameters and source (v5):** jdtls starts its hover with the declaration as a
@@ -76,20 +94,20 @@ Read a symbol's signature and documentation comment without leaving the place yo
    saved file. [ADR-0008]
 5. **On mouse hover (v6):** when the pointer rests half a second on a word (letters, digits, `_`,
    `$`) of a file that has a language, in the text and not in the gutter, with no problem under it,
-   IDECraft asks the language server for the hover there, on the editor's current text (a remote
+   Ferris IDEA asks the language server for the hover there, on the editor's current text (a remote
    document's from its host, SPEC-0318). The answer opens the same popup as behaviour 2, below the
    start of that word. Moving the pointer off the word closes it, unless the pointer moves into the
    popup; leaving the popup closes it. An answer that arrives after the pointer left the word, or
    after the text changed, is dropped. No answer shows nothing (no status message: the pointer only
    passed by). A popup opened by a key (F1, the problem popup by ⌘F1) stays until closed as before;
    a problem under the pointer shows the problem popup (SPEC-0078 v2 behaviour 5) instead. Keys
-   close the hover popup as in behaviour 3. Before v6 IDECraft showed documentation only by key, so
+   close the hover popup as in behaviour 3. Before v6 Ferris IDEA showed documentation only by key, so
    resting the mouse on a symbol showed nothing (hand test Nr. 67, Vue). [GEN, DOC]
 6. **Type Info (v7):** `ExpressionTypeInfo` (⌃⇧P in the bundled macOS keymap, Ctrl+Shift+P in
    the default one; View › Type Info, SPEC-0124 v14 behaviour 16) shows the type of the
    expression at the caret: one line of code in the popup of behaviour 2, below the caret,
    closed as behaviour 3 says.
-   - **Where it asks.** IDECraft asks the language server for the hover at the caret, with a
+   - **Where it asks.** Ferris IDEA asks the language server for the hover at the caret, with a
      selection at the selection's start, on the editor's current text (a remote document's
      from its host, SPEC-0318). An answer that arrives after another file became active or
      after the text changed is dropped.
@@ -126,7 +144,7 @@ Read a symbol's signature and documentation comment without leaving the place yo
   (integration test with clangd).
 - **AK-2** Markdown to blocks: headings, paragraphs, code, rules, escapes, unclosed code (unit tests of
   `doc_model`).
-- **AK-3** In a real window (`idecraft ui --selftest`, with clangd): F1 on a function's name shows its
+- **AK-3** In a real window (`ferris-idea ui --selftest`, with clangd): F1 on a function's name shows its
   signature as code; Escape closes the popup and the caret stays.
 - **AK-4** Use by hand: long documentation scrolls, other languages, links and lists.
 - **AK-5 (v2)** Links, a repeated link target and a repeated paragraph (unit tests
@@ -170,6 +188,14 @@ Read a symbol's signature and documentation comment without leaving the place yo
   brackets, no other scheme); window test `eleventh_package_keymap.rs`:
   `find_usages_asks_for_the_scope` (the message without a link, macOS).
 
+- **AK-14 (v9, behaviour 2)** Unit test `doc_model::tests::underscore_emphasis_is_removed`:
+  `_Widely available (Baseline since 2015)_` loses both underscores, `__bold__` both pairs,
+  `snake_case`, `a _ b` and an unclosed `_x` keep theirs, inline code keeps its underscores,
+  and an embedded `data:` image is left out while an image with an address keeps its text.
+- **AK-15 (v10, behaviour 2)** Unit test `doc_model::tests::character_references_are_decoded`:
+  `&lt;color&gt;`, `&#60;`, `&#x3E;`, `&amp;` and `&mdash;` are decoded in text and headings, a
+  lone `&`, an unknown name and `&lt` without `;` stay, inline code keeps `&lt;` as written.
+
 ## Out of scope
 A setting to switch documentation on hover off or change its delay, the documentation tool window,
 links that open other symbols, rendered
@@ -181,10 +207,10 @@ v7: widening the expression on a second press of Type Info, the types of several
 type of a selection that the server does not answer for at its first character.
 
 ## Known deviations from the reference
-The reference renders its own documentation for its languages; IDECraft shows what the language server
+The reference renders its own documentation for its languages; Ferris IDEA shows what the language server
 sends, so content depends on the server. Lists other than javadoc tag sections are shown as plain text, links as their text (not clickable,
 also `jdt://` links). Inline code keeps the proportional font, marked by colour and background.
 - **External Documentation (v8):** the reference opens the address of the library's
-  documentation that is set up for the SDK or library. IDECraft has no such setting and takes
+  documentation that is set up for the SDK or library. Ferris IDEA has no such setting and takes
   the first https link of the server's documentation; a server that gives no link (jdtls gives
   `jdt:` links) leads to the message.

@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use idecraft_core::WorkspaceSearch;
+use ferris_idea_core::WorkspaceSearch;
 
 /// One row of the result list.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -128,7 +128,7 @@ impl ResultList {
 /// (`SPEC-0066` v2 behaviour 7).
 pub fn plan_replacements(
     text: &str,
-    finder: &idecraft_core::Finder,
+    finder: &ferris_idea_core::Finder,
     replacement: &str,
     only: Option<usize>,
 ) -> Vec<(std::ops::Range<usize>, String)> {
@@ -148,7 +148,7 @@ pub fn plan_replacements(
 pub fn write_planned(
     root: &std::path::Path,
     file: &PlannedFile,
-    history: Option<&mut idecraft_core::LocalHistory>,
+    history: Option<&mut ferris_idea_core::LocalHistory>,
 ) -> std::io::Result<bool> {
     let path = root.join(&file.path);
     if file.edits.is_empty() || std::fs::read_to_string(&path).ok().as_deref() != Some(&file.text) {
@@ -183,16 +183,16 @@ pub fn apply_edits(text: &str, edits: &[(std::ops::Range<usize>, String)]) -> St
 /// The files of `files` (relative to the project at `root`) a replacement may change, and those it
 /// must leave with the reason (`SPEC-0029` v2 behaviour 9, `SPEC-0066` v4 behaviour 15): a file
 /// that is not the project's own only with `include_non_project`; version control data,
-/// IDECraft's data and files behind a symbolic link never.
+/// Ferris IDEA's data and files behind a symbolic link never.
 pub fn split_replaceable(
     root: &std::path::Path,
     files: Vec<PathBuf>,
     include_non_project: bool,
-) -> (Vec<PathBuf>, Vec<(PathBuf, idecraft_core::NotOwn)>) {
-    let own = idecraft_core::OwnSources::new(root);
+) -> (Vec<PathBuf>, Vec<(PathBuf, ferris_idea_core::NotOwn)>) {
+    let own = ferris_idea_core::OwnSources::new(root);
     let (mut change, mut leave) = (Vec::new(), Vec::new());
     for file in files {
-        match idecraft_core::not_replaceable(&own, &file, include_non_project) {
+        match ferris_idea_core::not_replaceable(&own, &file, include_non_project) {
             Some(why) => leave.push((file, why)),
             None => change.push(file),
         }
@@ -202,7 +202,7 @@ pub fn split_replaceable(
 
 /// The status text for the files a replacement left unchanged: `2 files not changed: not the
 /// project's own sources (in a virtual environment)`; `None` for none.
-pub fn left_unchanged_line(left: &[(PathBuf, idecraft_core::NotOwn)]) -> Option<String> {
+pub fn left_unchanged_line(left: &[(PathBuf, ferris_idea_core::NotOwn)]) -> Option<String> {
     let (_, first) = left.first()?;
     let files = if left.len() == 1 {
         "1 file".to_owned()
@@ -234,11 +234,11 @@ pub enum Scope {
 impl Scope {
     /// The place for the search (`SPEC-0029` v2 behaviour 8): a named folder and the open files
     /// are searched whatever they are.
-    pub fn place(&self) -> idecraft_core::SearchPlace {
+    pub fn place(&self) -> ferris_idea_core::SearchPlace {
         match self {
-            Scope::Project => idecraft_core::SearchPlace::Project,
-            Scope::Directory(dir) => idecraft_core::SearchPlace::Directory(dir.clone()),
-            Scope::OpenFiles(files) => idecraft_core::SearchPlace::Files(files.clone()),
+            Scope::Project => ferris_idea_core::SearchPlace::Project,
+            Scope::Directory(dir) => ferris_idea_core::SearchPlace::Directory(dir.clone()),
+            Scope::OpenFiles(files) => ferris_idea_core::SearchPlace::Files(files.clone()),
         }
     }
 
@@ -256,12 +256,12 @@ impl Scope {
 /// literals, `SPEC-0066` v3 behaviour 11). The one place the filter is applied, for the result
 /// list and for a replacement alike.
 fn keep_context(
-    context: idecraft_languages::syntax::SearchContext,
+    context: ferris_idea_languages::syntax::SearchContext,
     path: &std::path::Path,
     text: &str,
-    matches: &mut Vec<idecraft_core::Match>,
+    matches: &mut Vec<ferris_idea_core::Match>,
 ) {
-    if context == idecraft_languages::syntax::SearchContext::Anywhere {
+    if context == ferris_idea_languages::syntax::SearchContext::Anywhere {
         return;
     }
     let ranges: Vec<std::ops::Range<usize>> = matches.iter().map(|m| m.start..m.end).collect();
@@ -275,10 +275,10 @@ pub fn narrow(
     search: &mut WorkspaceSearch,
     root: &std::path::Path,
     scope: &Scope,
-    context: idecraft_languages::syntax::SearchContext,
+    context: ferris_idea_languages::syntax::SearchContext,
 ) {
     search.files.retain(|f| scope.contains(&f.path));
-    if context == idecraft_languages::syntax::SearchContext::Anywhere {
+    if context == ferris_idea_languages::syntax::SearchContext::Anywhere {
         return;
     }
     for f in &mut search.files {
@@ -295,13 +295,13 @@ pub fn narrow(
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchRequest {
     /// Pattern and options.
-    pub query: idecraft_core::Query,
+    pub query: ferris_idea_core::Query,
     /// File mask as typed, empty for all files.
     pub mask: String,
     /// Project, Directory or Open Files.
     pub scope: Scope,
     /// The comments/strings filter.
-    pub context: idecraft_languages::syntax::SearchContext,
+    pub context: ferris_idea_languages::syntax::SearchContext,
     /// Also libraries and ignored files (`SPEC-0066` v4 behaviour 15).
     pub include_non_project: bool,
 }
@@ -313,7 +313,7 @@ pub struct ReplacementPlan {
     /// Files to change, sorted by path; none without edits.
     pub files: Vec<PlannedFile>,
     /// Files with matches that must not be changed, with the reason (`SPEC-0029` v2 behaviour 9).
-    pub left: Vec<(PathBuf, idecraft_core::NotOwn)>,
+    pub left: Vec<(PathBuf, ferris_idea_core::NotOwn)>,
     /// Replace of one match: the match is no longer where the list showed it.
     pub gone: bool,
 }
@@ -337,18 +337,19 @@ impl SearchRequest {
     /// from disk.
     pub fn list(
         &self,
-        workspace: &idecraft_core::Workspace,
+        workspace: &ferris_idea_core::Workspace,
         max_matches: usize,
-    ) -> Result<WorkspaceSearch, idecraft_core::SearchError> {
+    ) -> Result<WorkspaceSearch, ferris_idea_core::SearchError> {
         let mask = self.mask.trim();
         // Only the project's own sources unless a place is named or the toggle is on
         // (SPEC-0066 v4 behaviours 14 and 15).
-        let within = idecraft_core::SearchScope {
+        let within = ferris_idea_core::SearchScope {
             mask: (!mask.is_empty()).then(|| mask.to_owned()),
             place: self.scope.place(),
             include_non_project: self.include_non_project,
         };
-        let mut found = idecraft_core::search_scope(workspace, &self.query, &within, max_matches)?;
+        let mut found =
+            ferris_idea_core::search_scope(workspace, &self.query, &within, max_matches)?;
         narrow(&mut found, workspace.root(), &self.scope, self.context);
         Ok(found)
     }
@@ -359,15 +360,15 @@ impl SearchRequest {
     /// the list (`SPEC-0066` v7 behaviour 19).
     pub fn list_with(
         &self,
-        workspace: &idecraft_core::Workspace,
+        workspace: &ferris_idea_core::Workspace,
         max_matches: usize,
         unsaved: &[(PathBuf, String)],
-    ) -> Result<WorkspaceSearch, idecraft_core::SearchError> {
+    ) -> Result<WorkspaceSearch, ferris_idea_core::SearchError> {
         let mut found = self.list(workspace, max_matches)?;
         if unsaved.is_empty() {
             return Ok(found);
         }
-        let finder = idecraft_core::Finder::new(&self.query)?;
+        let finder = ferris_idea_core::Finder::new(&self.query)?;
         for file in &mut found.files {
             if let Some((_, text)) = unsaved.iter().find(|(path, _)| *path == file.path) {
                 let mut matches = finder.find(text);
@@ -386,12 +387,12 @@ impl SearchRequest {
     /// matches are found again in that text with the same filter. Nothing is written here.
     pub fn plan_replacement(
         &self,
-        workspace: &idecraft_core::Workspace,
+        workspace: &ferris_idea_core::Workspace,
         replacement: &str,
         only: Option<&(PathBuf, std::ops::Range<usize>)>,
         open_text: &dyn Fn(&std::path::Path) -> Option<String>,
-    ) -> Result<ReplacementPlan, idecraft_core::SearchError> {
-        let finder = idecraft_core::Finder::new(&self.query)?;
+    ) -> Result<ReplacementPlan, ferris_idea_core::SearchError> {
+        let finder = ferris_idea_core::Finder::new(&self.query)?;
         let listed = self.list(workspace, usize::MAX)?;
         let files: Vec<PathBuf> = listed
             .files
@@ -444,7 +445,7 @@ impl SearchRequest {
 pub fn replaced_line(
     count: usize,
     changed: usize,
-    left: &[(PathBuf, idecraft_core::NotOwn)],
+    left: &[(PathBuf, ferris_idea_core::NotOwn)],
     failed: &[String],
     gone: bool,
 ) -> String {
@@ -472,30 +473,31 @@ pub fn replaced_line(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use idecraft_core::{FileMatches, Match};
+    use ferris_idea_core::{FileMatches, Match};
 
     /// SPEC-0066 v3 AK-5: scope and comment filter narrow a search.
     #[test]
     fn scope_and_context_narrow_the_results() {
-        let root = std::env::temp_dir().join(format!("idecraft-fif-scope-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("ferris-idea-fif-scope-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("a")).unwrap();
         std::fs::create_dir_all(root.join("b")).unwrap();
         std::fs::write(root.join("a/A.java"), "// total\nlong total;\n").unwrap();
         std::fs::write(root.join("b/B.java"), "long total;\n").unwrap();
-        let ws = idecraft_core::Workspace::open(&root).unwrap();
-        let query = idecraft_core::Query {
+        let ws = ferris_idea_core::Workspace::open(&root).unwrap();
+        let query = ferris_idea_core::Query {
             pattern: "total".into(),
             ..Default::default()
         };
-        let search = idecraft_core::search_workspace(&ws, &query, None, 100).unwrap();
+        let search = ferris_idea_core::search_workspace(&ws, &query, None, 100).unwrap();
         assert_eq!(search.files.len(), 2);
         let mut s = search.clone();
         narrow(
             &mut s,
             ws.root(),
             &Scope::Directory("a".into()),
-            idecraft_languages::syntax::SearchContext::Anywhere,
+            ferris_idea_languages::syntax::SearchContext::Anywhere,
         );
         assert_eq!(s.files.len(), 1);
         assert_eq!(s.files[0].matches.len(), 2);
@@ -504,7 +506,7 @@ mod tests {
             &mut s,
             ws.root(),
             &Scope::Project,
-            idecraft_languages::syntax::SearchContext::ExceptComments,
+            ferris_idea_languages::syntax::SearchContext::ExceptComments,
         );
         assert_eq!(s.files.iter().map(|f| f.matches.len()).sum::<usize>(), 2);
         let mut s = search;
@@ -512,7 +514,7 @@ mod tests {
             &mut s,
             ws.root(),
             &Scope::OpenFiles(vec!["b/B.java".into()]),
-            idecraft_languages::syntax::SearchContext::Anywhere,
+            ferris_idea_languages::syntax::SearchContext::Anywhere,
         );
         assert_eq!(s.files.len(), 1);
         let _ = std::fs::remove_dir_all(root);
@@ -522,24 +524,26 @@ mod tests {
     /// before the replacement.
     #[test]
     fn replace_on_disk_keeps_the_old_text_in_the_local_history() {
-        let root =
-            std::env::temp_dir().join(format!("idecraft-replace-history-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!(
+            "ferris-idea-replace-history-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         let old = "void report(int total) {\n    print(total, twice(total));\n}\n";
         std::fs::write(root.join("util.cpp"), old).unwrap();
-        let ws = idecraft_core::Workspace::open(&root).unwrap();
+        let ws = ferris_idea_core::Workspace::open(&root).unwrap();
         let plan = request("total", Scope::Project)
             .plan_replacement(&ws, "sum", None, &|_| None)
             .unwrap();
         assert_eq!(plan.files.len(), 1);
         assert_eq!(plan.files[0].edits.len(), 3);
-        let mut history = idecraft_core::LocalHistory::open(&root).unwrap();
+        let mut history = ferris_idea_core::LocalHistory::open(&root).unwrap();
         assert!(write_planned(&root, &plan.files[0], Some(&mut history)).unwrap());
         let new = std::fs::read_to_string(root.join("util.cpp")).unwrap();
         assert_eq!(new, old.replace("total", "sum"));
         // What the history view lists, oldest first: the old text, then the new one.
-        let history = idecraft_core::LocalHistory::open(&root).unwrap();
+        let history = ferris_idea_core::LocalHistory::open(&root).unwrap();
         let revisions = crate::history_model::shown(history.revisions("util.cpp"));
         let texts: Vec<String> = revisions
             .iter()
@@ -564,34 +568,35 @@ mod tests {
 
     fn request(pattern: &str, scope: Scope) -> SearchRequest {
         SearchRequest {
-            query: idecraft_core::Query {
+            query: ferris_idea_core::Query {
                 pattern: pattern.into(),
                 ..Default::default()
             },
             mask: String::new(),
             scope,
-            context: idecraft_languages::syntax::SearchContext::Anywhere,
+            context: ferris_idea_languages::syntax::SearchContext::Anywhere,
             include_non_project: false,
         }
     }
 
     /// A project folder with `files`, fresh.
-    fn project(name: &str, files: &[(&str, &str)]) -> (PathBuf, idecraft_core::Workspace) {
-        let root = std::env::temp_dir().join(format!("idecraft-fif-{name}-{}", std::process::id()));
+    fn project(name: &str, files: &[(&str, &str)]) -> (PathBuf, ferris_idea_core::Workspace) {
+        let root =
+            std::env::temp_dir().join(format!("ferris-idea-fif-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         for (file, text) in files {
             let path = root.join(file);
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(path, text).unwrap();
         }
-        let ws = idecraft_core::Workspace::open(&root).unwrap();
+        let ws = ferris_idea_core::Workspace::open(&root).unwrap();
         (root, ws)
     }
 
     /// Plans and writes Replace All of `request` as the window does for closed files; returns
     /// the status line.
     fn replace_all(
-        ws: &idecraft_core::Workspace,
+        ws: &ferris_idea_core::Workspace,
         request: &SearchRequest,
         replacement: &str,
     ) -> String {
@@ -693,7 +698,7 @@ mod tests {
     /// of one match and in the text of an open editor.
     #[test]
     fn replace_all_keeps_what_the_filter_leaves_out() {
-        use idecraft_languages::syntax::SearchContext;
+        use ferris_idea_languages::syntax::SearchContext;
         let text = "// total\nlong total;\nString s = \"total\";\n";
         let (root, ws) = project("replace-filter", &[("a/A.java", text), ("b/B.java", text)]);
         let mut code = request("total", Scope::Directory("a".into()));
@@ -766,7 +771,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(root);
     }
 
-    /// SPEC-0066 v7 AK-9 (behaviour 19): a listed file open with unsaved changes shows the
+    /// SPEC-0066 v7 AK-11 (behaviour 19): a listed file open with unsaved changes shows the
     /// matches of its editor's text; after the editor's text was replaced it leaves the list.
     #[test]
     fn the_list_shows_the_matches_of_unsaved_editors() {
@@ -896,7 +901,7 @@ mod tests {
     /// replacement stays in the project's own sources unless told otherwise.
     #[test]
     fn not_searched_line_and_replacements_in_the_own_sources() {
-        let root = std::env::temp_dir().join(format!("idecraft-fif-own-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("ferris-idea-fif-own-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         for (file, text) in [
             ("app.py", "total = 1\n"),
@@ -907,35 +912,35 @@ mod tests {
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(path, text).unwrap();
         }
-        let ws = idecraft_core::Workspace::open(&root).unwrap();
-        let query = |pattern: &str| idecraft_core::Query {
+        let ws = ferris_idea_core::Workspace::open(&root).unwrap();
+        let query = |pattern: &str| ferris_idea_core::Query {
             pattern: pattern.into(),
             ..Default::default()
         };
         let line = "2 folders not searched (libraries and ignored files)";
-        let found = idecraft_core::search_workspace(&ws, &query("total"), None, 100).unwrap();
+        let found = ferris_idea_core::search_workspace(&ws, &query("total"), None, 100).unwrap();
         let list = ResultList::from_search(&found);
         assert_eq!(list.summary(), "1 match in 1 file");
         assert_eq!(list.not_searched.as_deref(), Some(line));
-        let nothing = idecraft_core::search_workspace(&ws, &query("absent"), None, 100).unwrap();
+        let nothing = ferris_idea_core::search_workspace(&ws, &query("absent"), None, 100).unwrap();
         let list = ResultList::from_search(&nothing);
         assert!(list.rows.is_empty());
         assert_eq!(list.not_searched.as_deref(), Some(line));
         // The Directory scope names a place: it is searched, and nothing is left out.
-        let scope = idecraft_core::SearchScope {
+        let scope = ferris_idea_core::SearchScope {
             place: Scope::Directory(".venv/lib".into()).place(),
             ..Default::default()
         };
-        let venv = idecraft_core::search_scope(&ws, &query("total"), &scope, 100).unwrap();
+        let venv = ferris_idea_core::search_scope(&ws, &query("total"), &scope, 100).unwrap();
         let list = ResultList::from_search(&venv);
         assert_eq!(list.summary(), "1 match in 1 file");
         assert_eq!(list.not_searched, None);
         // The open files are searched whatever they are.
-        let scope = idecraft_core::SearchScope {
+        let scope = ferris_idea_core::SearchScope {
             place: Scope::OpenFiles(vec!["node_modules/y.js".into()]).place(),
             ..Default::default()
         };
-        let open = idecraft_core::search_scope(&ws, &query("total"), &scope, 100).unwrap();
+        let open = ferris_idea_core::search_scope(&ws, &query("total"), &scope, 100).unwrap();
         assert_eq!(open.files.len(), 1);
 
         // Replacing: what the Directory scope found is left alone without the option.
@@ -968,7 +973,7 @@ mod tests {
     #[test]
     fn replacements_all_one_and_with_groups() {
         let q = |pattern: &str, regex: bool| {
-            idecraft_core::Finder::new(&idecraft_core::Query {
+            ferris_idea_core::Finder::new(&ferris_idea_core::Query {
                 pattern: pattern.into(),
                 regex,
                 match_case: true,

@@ -73,21 +73,21 @@ pub fn source_roots(root: &Path) -> Vec<String> {
 }
 
 /// File in a workspace data folder recording the source roots it was created with.
-const ROOTS_STAMP: &str = "idecraft-source-roots";
+const ROOTS_STAMP: &str = "ferris-idea-source-roots";
 
 /// The jdtls workspace data folder of the project `root` (`SPEC-0042` v9 behaviour 18):
-/// `jdtls/<hash of the canonical path>` in IDECraft's user cache folder; in the system's temporary
+/// `jdtls/<hash of the canonical path>` in Ferris IDEA's user cache folder; in the system's temporary
 /// folder for a project inside it or without a user cache folder.
 pub fn workspace_data_dir(root: &Path) -> PathBuf {
     let temp = std::env::temp_dir();
-    let temp_base = temp.join("idecraft");
+    let temp_base = temp.join("ferris-idea");
     let in_temp = [temp.clone(), temp.canonicalize().unwrap_or(temp)]
         .iter()
         .any(|t| root.starts_with(t));
     let base = if in_temp {
         temp_base
     } else {
-        idecraft_core::user_cache_dir().unwrap_or(temp_base)
+        ferris_idea_core::user_cache_dir().unwrap_or(temp_base)
     }
     .join("jdtls");
     workspace_data_dir_in(&base, root)
@@ -230,7 +230,7 @@ mod tests {
         static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
         let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let dir =
-            std::env::temp_dir().join(format!("idecraft-java-roots-{}-{n}", std::process::id()));
+            std::env::temp_dir().join(format!("ferris-idea-java-roots-{}-{n}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         for (path, text) in files {

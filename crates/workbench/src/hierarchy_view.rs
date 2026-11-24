@@ -5,11 +5,11 @@
 use std::collections::HashSet;
 use std::ops::Range;
 
+use ferris_idea_languages::insight::{CallDirection, CallNode};
+use ferris_idea_languages::java_structure::TypeDirection;
 use gpui::{
     Context, EventEmitter, FocusHandle, KeyDownEvent, Window, div, prelude::*, px, uniform_list,
 };
-use idecraft_languages::insight::{CallDirection, CallNode};
-use idecraft_languages::java_structure::TypeDirection;
 
 use crate::hierarchy_model::{
     NodePath, Row, initially_expanded, node, root_expanded, row_detail, row_label, rows, sorted,
@@ -355,7 +355,7 @@ impl HierarchyView {
     /// A toolbar button with its declared tooltip (behaviour 10).
     fn tool(
         &self,
-        control: &'static idecraft_ui::tooltip::Control,
+        control: &'static ferris_idea_ui::tooltip::Control,
         glyph: &'static str,
         on: bool,
         cx: &mut Context<Self>,
@@ -463,7 +463,7 @@ impl Render for HierarchyView {
                                         .child(mark),
                                 )
                             })
-                            .child(icon(idecraft_ui::icons::symbol_icon(&n.kind)))
+                            .child(icon(ferris_idea_ui::icons::symbol_icon(&n.kind)))
                             .child(div().flex_none().child(row_label(&n.name).to_owned()))
                             .when(n.recursive, |d| {
                                 d.child(div().text_color(c(p.ui_dim)).child("(recursive)"))

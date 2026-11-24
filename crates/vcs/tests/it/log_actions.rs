@@ -4,7 +4,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use idecraft_vcs::{CommitAction, Repo, ResetMode, commit_actions};
+use ferris_idea_vcs::{CommitAction, Repo, ResetMode, commit_actions};
 
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
@@ -23,7 +23,8 @@ fn git(dir: &Path, args: &[&str]) -> String {
 /// A repository with three commits on `main` (`first`, `second`, `third`), the first two pushed
 /// to a bare `origin`, and a branch `side` with a commit of its own.
 fn repo(tag: &str) -> PathBuf {
-    let base = std::env::temp_dir().join(format!("idecraft-logact-{tag}-{}", std::process::id()));
+    let base =
+        std::env::temp_dir().join(format!("ferris-idea-logact-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
     std::fs::create_dir_all(&base).unwrap();
     let base = base.canonicalize().unwrap();
@@ -102,14 +103,14 @@ fn hard_reset_keeps_local_changes_in_a_stash() {
     write(&dir, "a.txt", "one\ntwo\nlocal\n");
     let done = r.reset_to("HEAD~1", ResetMode::Hard).unwrap();
     assert!(done.ok, "{}", done.output);
-    assert!(done.output.contains("IDECraft: before hard reset"));
+    assert!(done.output.contains("Ferris IDEA: before hard reset"));
     assert_eq!(rev(&dir, "HEAD"), rev(&dir, "origin/main"));
     assert_eq!(
         std::fs::read_to_string(dir.join("a.txt")).unwrap(),
         "one\ntwo\n"
     );
     let list = git(&dir, &["stash", "list"]);
-    assert!(list.contains("IDECraft: before hard reset"), "{list}");
+    assert!(list.contains("Ferris IDEA: before hard reset"), "{list}");
     // A soft reset keeps the undone change staged.
     git(&dir, &["reset", "-q", "--hard", "side"]);
     let soft = r.reset_to("HEAD~1", ResetMode::Soft).unwrap();
@@ -216,7 +217,7 @@ fn a_different_committer_is_reported() {
 #[test]
 fn revision_files_compare_fixup_and_push_up_to() {
     // SPEC-0086 v8 AK-26, SPEC-0068 v6 AK-12.
-    use idecraft_vcs::PushOptions;
+    use ferris_idea_vcs::PushOptions;
     let dir = repo("v8");
     let r = Repo::discover(&dir).unwrap();
     let second = rev(&dir, "HEAD~1");
@@ -255,7 +256,7 @@ fn revision_files_compare_fixup_and_push_up_to() {
                 up_to: Some(third.clone()),
                 ..PushOptions::default()
             },
-            idecraft_vcs::REMOTE_TIMEOUT,
+            ferris_idea_vcs::REMOTE_TIMEOUT,
         )
         .unwrap();
     assert!(pushed.ok, "{}", pushed.messages);
@@ -276,7 +277,7 @@ fn revision_files_compare_fixup_and_push_up_to() {
                 branch: Some("side".into()),
                 ..PushOptions::default()
             },
-            idecraft_vcs::REMOTE_TIMEOUT,
+            ferris_idea_vcs::REMOTE_TIMEOUT,
         )
         .unwrap();
     assert!(pushed.ok, "{}", pushed.messages);

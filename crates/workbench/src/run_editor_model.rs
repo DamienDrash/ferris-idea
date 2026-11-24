@@ -5,7 +5,7 @@
 
 use std::collections::BTreeMap;
 
-use idecraft_core::{
+use ferris_idea_core::{
     BeforeTask, RunConfig, RunEntry, RunField, RunKind, RunTemplate, TypeTemplate, config_problems,
     folder_name_problem, free_name, join_command_line, split_command_line, template_problems,
 };
@@ -179,6 +179,9 @@ pub struct RunForm {
     /// Before-launch tasks other than configurations, one per line: `build`,
     /// `tool [cwd=<folder>] <command line>`, `browser <URL>` (v2 behaviour 13).
     pub tasks: String,
+    /// The requests an HTTP request configuration sends (kept as they are; the form does not show
+    /// them, `SPEC-0047` v6 behaviour 17).
+    pub http: Option<ferris_idea_core::HttpRun>,
 }
 
 impl RunForm {
@@ -198,6 +201,7 @@ impl RunForm {
             folder: c.folder.clone().unwrap_or_default(),
             allow_multiple: c.allow_multiple,
             tasks: tasks_text(&c.before_launch),
+            http: c.http.clone(),
         }
     }
 
@@ -235,6 +239,7 @@ impl RunForm {
             allow_multiple: self.allow_multiple,
             before_launch,
             verbatim: false,
+            http: self.http.clone(),
         })
     }
 
@@ -920,7 +925,24 @@ mod tests {
             allow_multiple: false,
             before_launch: Vec::new(),
             verbatim: false,
+            http: None,
         }
+    }
+
+    /// SPEC-0047 v6 behaviour 17: editing an HTTP request configuration keeps what it sends.
+    #[test]
+    fn the_form_keeps_the_requests_of_an_http_configuration() {
+        let mut c = config("api", &[]);
+        c.http = Some(ferris_idea_core::HttpRun {
+            file: "api.http".into(),
+            request: Some("Liste".into()),
+            environment: Some("local".into()),
+        });
+        let mut form = RunForm::of(&c);
+        form.folder = "HTTP".into();
+        let back = form.config().unwrap();
+        assert_eq!(back.http, c.http);
+        assert!(form.problems(&[]).is_empty(), "{:?}", form.problems(&[]));
     }
 
     #[test]

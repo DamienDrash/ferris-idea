@@ -9,8 +9,8 @@
 
 use std::path::Path;
 
-use idecraft_session::{Backend, Call, ErrorCode, Right, RpcError};
-use idecraft_vcs::{
+use ferris_idea_session::{Backend, Call, ErrorCode, Right, RpcError};
+use ferris_idea_vcs::{
     CommitAction, OpOutcome, PushOptions, REMOTE_TIMEOUT, Repo, ResetMode, StashOptions, TodoEntry,
     valid_branch_name,
 };
@@ -21,13 +21,14 @@ use crate::{add, backend_of, invalid, text};
 
 /// `Denied` with the trust message unless the host project's code may run (behaviour 39).
 fn need_trust(call: &Call) -> Result<(), RpcError> {
-    if idecraft_core::trust::allows_project_code(&call.root) {
+    if ferris_idea_core::trust::allows_project_code(&call.root) {
         Ok(())
     } else {
-        Err(
-            RpcError::new(ErrorCode::Denied, idecraft_core::trust::refusal(&call.root))
-                .hint("trust the host project with run.trust (the window's trust banner)"),
+        Err(RpcError::new(
+            ErrorCode::Denied,
+            ferris_idea_core::trust::refusal(&call.root),
         )
+        .hint("trust the host project with run.trust (the window's trust banner)"))
     }
 }
 
@@ -143,7 +144,7 @@ fn ref_name<'a>(params: &'a Value, key: &str) -> Result<Option<&'a str>, RpcErro
 /// A project-relative path from the window as the repository names it; refused when it leaves the
 /// project (SEC-14).
 fn repo_path(call: &Call, key: &str, prefix: &str) -> Result<String, RpcError> {
-    let doc = idecraft_session::paths::check_relative(text(&call.params, key)?)?;
+    let doc = ferris_idea_session::paths::check_relative(text(&call.params, key)?)?;
     crate::resolve(&call.root, &doc)?;
     Ok(to_repo(prefix, &doc))
 }
@@ -175,7 +176,7 @@ fn opened(call: &Call) -> Result<(Repo, String, Backend), RpcError> {
 
 fn op(
     call: &Call,
-    done: Result<OpOutcome, idecraft_vcs::GitError>,
+    done: Result<OpOutcome, ferris_idea_vcs::GitError>,
     prefix: &str,
 ) -> Result<Value, RpcError> {
     finish(done.map_err(git_error)?, prefix, &call.root)
@@ -328,7 +329,7 @@ fn rollback_and_stash(backend: &Backend) {
                 .iter()
                 .map(|p| {
                     let p = p.as_str().ok_or_else(|| invalid("`paths` holds no text"))?;
-                    let doc = idecraft_session::paths::check_relative(p)?;
+                    let doc = ferris_idea_session::paths::check_relative(p)?;
                     crate::resolve(&call.root, &doc)?;
                     Ok(to_repo(&prefix, &doc))
                 })
@@ -539,7 +540,7 @@ fn log_actions(backend: &Backend) {
         false,
         |call| {
             let b = backend_of(call)?;
-            let doc = idecraft_session::paths::check_relative(text(&call.params, "path")?)?;
+            let doc = ferris_idea_session::paths::check_relative(text(&call.params, "path")?)?;
             let file = crate::resolve(&call.root, &doc)?;
             // The document's own text first; a saved file only up to the search limit.
             if let Some(d) = b.document(&doc) {

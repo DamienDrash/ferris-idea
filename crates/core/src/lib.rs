@@ -5,14 +5,22 @@
 //! matcher of `SPEC-0031` (search everywhere) from `docs/specifications/`.
 
 pub mod advanced_settings;
+pub mod agent_control;
+pub mod agent_detect;
+pub mod agent_host;
+pub mod agent_turns;
+pub mod agent_watch;
 mod appearance;
 pub mod bookmarks;
 mod branch_favorites;
+pub mod build_errors;
 pub mod buildtasks;
 pub mod buildtools;
 pub mod changelists;
+pub mod check_gates;
 pub mod commit_messages;
 mod config;
+pub mod context_pack;
 pub mod depanalysis;
 mod deptree;
 pub mod editorconfig;
@@ -23,19 +31,23 @@ pub mod format;
 mod fuzzy;
 mod history;
 mod ide_settings;
+mod ideadatasources;
 mod ideaproject;
 mod idearun;
+pub mod indent_detect;
 mod java;
 pub mod jvmdeps;
 pub mod jvmsources;
 mod lifecycle;
 pub mod local_state;
 pub mod logs;
+pub mod memory;
 mod node;
 pub mod notifications;
 mod own_sources;
 mod permissions;
 mod project;
+pub mod project_code_style;
 pub mod project_root;
 mod python;
 mod python_index;
@@ -46,14 +58,19 @@ mod ruby;
 mod run;
 mod run_context;
 mod run_edit;
+mod run_http;
 mod run_tasks;
+pub mod scheduler;
 mod search;
+pub mod session_history;
 pub mod shell_env;
 pub mod source_roots;
 pub mod spawn;
+pub mod takeover;
 mod test_history;
 mod test_rerun;
 mod testreport;
+pub mod tickets;
 pub mod trust;
 mod watch;
 mod workspace;
@@ -73,25 +90,30 @@ pub use history::{
     MAX_REVISIONS_PER_FILE, Revision, RevisionKind,
 };
 pub use ide_settings::{
-    ActivateOnClose, AiSettings, AppearanceSettings, CODE_STYLE_LANGUAGES, CloseButtonPlace,
-    CodeStyleSettings, DEFAULT_FONT, DatabaseSettings, EDITOR_SCHEMES, EditorSettings,
-    EditorTabSettings, FONT_SIZES, FoldingArrows, GitSettings, GitSshSettings, IdeSettings,
-    IndentStyle, LINE_SPACINGS, McpSettings, NotificationSettings, ProjectViewSettings,
-    SshSettings, SystemSettings, TAB_LIMITS, TabLimitRule, TabPlacement, TabRows, TerminalSettings,
-    UiDriverSettings, UiSettings, UpdateMethod, VcsSettings, font_size_step, ide_settings_file,
-    load_ide_settings, on_save, save_edits, save_ide_settings,
+    ActivateOnClose, AiSettings, AppearanceSettings, CODE_STYLE_LANGUAGES, ClaudePlanMode,
+    CloseButtonPlace, CodeStyleSettings, DEFAULT_FONT, DatabaseSettings, EDITOR_SCHEMES,
+    EditorSettings, EditorTabSettings, FONT_SIZES, FoldingArrows, GitSettings, GitSshSettings,
+    GrammarScope, GrammarSettings, IdeSettings, IndentStyle, IntentionSettings, LINE_SPACINGS,
+    McpSettings, NotificationSettings, ProjectViewSettings, SshSettings, SystemSettings,
+    TAB_LIMITS, TabLimitRule, TabPlacement, TabRows, TerminalSettings, UiDriverSettings,
+    UiSettings, UpdateMethod, VcsSettings, font_size_step, ide_settings_file, load_ide_settings,
+    on_save, save_edits, save_ide_settings,
 };
+pub use ideadatasources::{IdeaDataSource, read_idea_data_sources};
 pub use ideaproject::{
-    ContentRoot, IDEA_DIR, IdeaDependency, IdeaFacet, IdeaFolder, IdeaLibrary, IdeaModule,
-    IdeaProject, ModuleSdk, SourceFolder, SourceKind, VcsMapping,
-    folder_roles as idea_folder_roles, idea_run_configs, read_idea_project,
+    ContentRoot, IDEA_DIR, IdeaCodeStyle, IdeaDependency, IdeaFacet, IdeaFolder, IdeaLanguageStyle,
+    IdeaLibrary, IdeaModule, IdeaProject, ModuleSdk, SourceFolder, SourceKind, VcsMapping,
+    folder_roles as idea_folder_roles, idea_read_only_refusal, idea_run_configs, read_idea_project,
+    startable_run_configs,
 };
 pub use idearun::IdeaRun;
 pub use java::{
     JavaEnvironment, JavaRequirement, JavaSearch, Jdk, find_jdks, java_environment, java_feature,
     java_requirements,
 };
-pub use lifecycle::{QUIT_DEADLINE, arm_quit_deadline, write_atomic};
+pub use lifecycle::{
+    QUIT_DEADLINE, SIGNAL_DEADLINE, arm_quit_deadline, arm_signal_deadline, write_atomic,
+};
 pub use node::{
     NodeEnvironment, NodeRuntime, NodeSearch, NodeUnsatisfied, PackageManager, PackageScript,
     find_node_runtimes, node_environment, package_manager_of, package_script_config,
@@ -130,21 +152,23 @@ pub use python_manage::{
     venv_base, venv_command, venv_python, workspace_python,
 };
 pub use recent::{
-    RECENT_PROJECTS_LIMIT, load_recent_projects, recent_projects_file, remember_project,
+    RECENT_PROJECTS_LIMIT, RecentEntry, forget_project, load_recent_entries, load_recent_projects,
+    recent_projects_file, remember_project,
 };
 pub use ruby::{
     Bundle, RubyEnvironment, RubyRequest, RubyRuntime, RubySearch, find_ruby_runtimes, read_bundle,
     ruby_environment, ruby_version_matches,
 };
 pub use run::{
-    DEFAULT_TIMEOUT_SECS, PlannedRun, RUN_FILE, RunConfig, RunConfigs, RunEvent, RunHandle,
-    RunKind, RunOutcome, STOP_GRACE, add_detected, append_run_config, effective_command,
+    DEFAULT_TIMEOUT_SECS, HttpRun, PlannedRun, RUN_FILE, RunConfig, RunConfigs, RunEvent,
+    RunHandle, RunKind, RunOutcome, STOP_GRACE, add_detected, append_run_config, effective_command,
     end_all_runs, expand_vars, launch_command, live_runs, load_run_configs, parse_run_configs,
-    run_config, run_one, run_plan, start_host_run, start_run,
+    run_config, run_config_until, run_one, run_one_until, run_plan, sends_http, start_host_run,
+    start_run,
 };
 pub use run_context::{
-    context_config, is_js_test_file, js_test_config, js_test_pattern, single_test_config,
-    test_method_config,
+    JavaModule, context_config, context_config_in, is_js_test_file, java_module,
+    java_module_command, js_test_config, js_test_pattern, single_test_config, test_method_config,
 };
 pub use run_edit::{
     MAX_TEMPORARY, RunEditOp, RunEntry, RunField, RunTemplate, RunTemplates, TypeTemplate,
@@ -164,6 +188,7 @@ pub use search::{
     SearchScope, WorkspaceSearch, left_out_line, matches_mask, not_replaceable, not_searched_line,
     search_candidates, search_scope, search_workspace, searchable_text,
 };
+pub use takeover::{product_var, product_var_os};
 pub use test_history::{
     HISTORY_LENGTH, HistoryEntry, history_dir, history_file, load_history, record_history,
     tree_only,
@@ -176,4 +201,4 @@ pub use testreport::{
 pub use watch::{
     FileChange, FileState, Snapshot, WATCH_INTERVAL, WatchHandle, diff, settle, watch,
 };
-pub use workspace::{EXCLUDED_DIRS, Workspace, WorkspaceError};
+pub use workspace::{EXCLUDED_DIRS, Workspace, WorkspaceError, sha256_hex};

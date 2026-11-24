@@ -38,5 +38,5 @@ Renaming files together with symbols, rename in comments and strings, conflict d
 server reports, undo (the editor's undo covers open files later), other LSP refactorings (code actions).
 
 ## Known deviations from the reference
-Java and Kotlin renames in the reference come from its own analysis; IDECraft relies on the language
+Java and Kotlin renames in the reference come from its own analysis; Ferris IDEA relies on the language
 server of each language. Not yet compared side by side.

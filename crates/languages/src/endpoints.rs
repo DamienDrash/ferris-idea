@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use idecraft_core::hump_match;
+use ferris_idea_core::hump_match;
 use serde::Serialize;
 
 /// Whether a row is a route the application serves or one it calls (`SPEC-0103` v4 behaviour 7).
@@ -737,7 +737,7 @@ pub fn endpoints(root: &Path, files: &[PathBuf]) -> Vec<Endpoint> {
 /// sources are scanned — no virtual environment, no installed dependencies, no build output,
 /// nothing Git ignores — and of those the files [`endpoints`] takes.
 pub fn project_endpoints(root: &Path) -> Vec<Endpoint> {
-    endpoints(root, &idecraft_core::OwnSources::new(root).files())
+    endpoints(root, &ferris_idea_core::OwnSources::new(root).files())
 }
 
 /// The port the application listens on by its framework's default or its configuration
@@ -937,7 +937,7 @@ mod tests {
     #[test]
     fn only_the_projects_own_sources_are_scanned() {
         let dir =
-            std::env::temp_dir().join(format!("idecraft-endpoints-own-{}", std::process::id()));
+            std::env::temp_dir().join(format!("ferris-idea-endpoints-own-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let route = |path: &str| {
             format!(
@@ -966,7 +966,7 @@ mod tests {
             |list: Vec<Endpoint>| -> Vec<String> { list.into_iter().map(|e| e.path).collect() };
         assert_eq!(paths(project_endpoints(&dir)), ["/own"]);
         // The plain workspace list finds the routes of the environment and of the ignored file too.
-        let every = idecraft_core::Workspace::open(&dir)
+        let every = ferris_idea_core::Workspace::open(&dir)
             .unwrap()
             .files()
             .unwrap();
@@ -1050,7 +1050,8 @@ public class ItemController {
 
     #[test]
     fn ports_from_configuration_or_defaults() {
-        let root = std::env::temp_dir().join(format!("idecraft-endpoints-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("ferris-idea-endpoints-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("src/main/resources")).unwrap();
         assert_eq!(default_port(&root, "Spring"), 8080);
@@ -1245,7 +1246,7 @@ public class ProductController {
     #[test]
     fn application_path_and_quarkus_port() {
         let root =
-            std::env::temp_dir().join(format!("idecraft-endpoints-app-{}", std::process::id()));
+            std::env::temp_dir().join(format!("ferris-idea-endpoints-app-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let write = |file: &str, text: &str| {
             let path = root.join(file);
@@ -1451,8 +1452,10 @@ public class ProductController {
     // limit.
     #[test]
     fn search_of_an_empty_project_and_of_many_endpoints() {
-        let dir =
-            std::env::temp_dir().join(format!("idecraft-endpoints-search-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "ferris-idea-endpoints-search-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("notes.txt"), "no routes\n").unwrap();

@@ -811,7 +811,7 @@ pub fn refactoring_notes(what: &Refactoring, dialect: Dialect) -> Vec<RefactorNo
     } else {
         notes.push(RefactorNote {
             text: "Views, triggers and routines stored in the database that use the old name are \
-                   not rewritten by IDECraft"
+                   not rewritten by Ferris IDEA"
                 .into(),
             data_loss: false,
         });

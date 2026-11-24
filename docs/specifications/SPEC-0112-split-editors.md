@@ -63,7 +63,7 @@ Look at two places of one file, or at two files, side by side while editing.
     again adds the then active file as a tab of the second group" of behaviour 1). The main group
     is the one files open in (behaviour 2); when it empties while other groups exist, the next
     group in reading order takes its place and its tabs become the main group's. A divider's ratio
-    stays between 10 % and 90 %. The layout is kept with the tabs in `.idecraft/editor-tabs.json`
+    stays between 10 % and 90 %. The layout is kept with the tabs in `.ferris-idea/editor-tabs.json`
     (SPEC-0059 v9.1 behaviour 22e).
 
 ## Acceptance criteria

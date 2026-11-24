@@ -1,6 +1,7 @@
 # SPEC-0193: One undo step for a refactoring across files
 
-- **Version:** 6 · **Date:** 2026-11-17 (v6: MCP `redo_refactoring`, and redo takes the group undone last; found by driving undo and redo headless for F-011, OBS-0075; v5: an agent's refactoring over MCP is an undo group of the window, SPEC-0220 v4; v4, 2026-11-10: ⌘Z of a refactoring in one editor says what it took back, window run of hand test Nr. 210; v3: a refused group stays locked instead of a single-file undo, OBS-0030, IMP-0393; v2: the refactoring is named in each file's local history, open files keep their saved state there; hand test Nr. 123, D46)
+- **Version:** 8 · **Date:** 2026-11-18 (v8: ⌘Z and ⇧⌘Z in the Project tree ask before they take a group that moved files, behaviour 12 — joined with SPEC-0275 v22 in the integration of 2026-11-18); 2026-11-18 (v7: Move is a group, also undone from the Project tree;
+  window check A12 V2); 2026-11-17 (v6: MCP `redo_refactoring`, and redo takes the group undone last; found by driving undo and redo headless for F-011, OBS-0075; v5: an agent's refactoring over MCP is an undo group of the window, SPEC-0220 v4; v4, 2026-11-10: ⌘Z of a refactoring in one editor says what it took back, window run of hand test Nr. 210; v3: a refused group stays locked instead of a single-file undo, OBS-0030, IMP-0393; v2: the refactoring is named in each file's local history, open files keep their saved state there; hand test Nr. 123, D46)
 - **Sources:** GEN (IDEs undo a refactoring that changed several files with one Undo, in every file it
   touched, and refuse when one of those files was changed afterwards; refactorings leave a named entry in
   the local history; F-072, F-073), SPEC-0003 (grouped undo in a buffer), SPEC-0040, SPEC-0041 v2,
@@ -81,9 +82,24 @@ the files it changed, and without silently losing edits made afterwards.
     one undone last first. Before v6 an agent could undo but not redo, and the redo of files on
     disk took the newest undone group, which fails its check when an older undone group touched
     the same file and then dropped it. The groups live as long as the MCP server: a one-shot
-    `idecraft call` keeps none, so its "nothing to undo" ("nothing to redo") says so and points to
+    `ferris-idea call` keeps none, so its "nothing to undo" ("nothing to redo") says so and points to
     `local_history` and `restore_local_revision`, where each refactoring is labelled (behaviour 2).
     [GEN, ADR-0008]
+
+12. **Move (v7, window check A12 V2).** Move (F6, SPEC-0114 v5 behaviour 10) is a group named
+    "Move <file> to <folder>" whose parts are the moved file and every file whose references it
+    updated; the file's move is part of the group as a file renamed with it (as for a Java class,
+    SPEC-0148 v2 behaviour 6), so undo puts the earlier texts back and moves the file back, redo
+    moves it and writes the new texts; a target folder that is missing again is made. ⌘Z in an
+    editor of the group works as in behaviour 3. A group that moved files is also taken by ⌘Z
+    (⇧⌘Z) while the Project tree has the focus, in its order with the tree's own file operations
+    (SPEC-0275 v16 behaviour 38): undo takes the group when no file operation was made after it,
+    else that operation first; redo takes it when the tree has nothing to redo that was undone
+    after it. From the tree it is asked about first, as the tree's file operations are (v8; SPEC-0275 v22 behaviour 49 — the reference asks, OBS-0088 U1), then taken with the checks,
+    refusals and messages of behaviours 3 to 5 ("Undone: Move Inventory.java to
+    src/main/java/lab/stock (2 files)"; "Cannot undo Move …: … changed since. …"). Before v7 the
+    move was no group and neither ⌘Z in the editor nor in the tree ("Nothing to undo in the
+    project tree") took it back. [GEN]
 
 ## Acceptance criteria
 - **AK-1** Group bookkeeping (unit tests): the group of an editor step is found for undo, an undone
@@ -92,16 +108,17 @@ the files it changed, and without silently losing edits made afterwards.
   them changed since; redo writes the new text again (unit tests on a temporary folder); the local
   history has the group's label.
 - **AK-3** MCP (protocol test with clangd): after `apply_code_action`, `undo_refactoring` restores the
-  file; the next call refuses the rename before it because Change Signature changed `calc.c` since and
-  names it; then nothing is left to undo.
-- **AK-4** In a real window (`idecraft ui --selftest`, with clangd): renaming a function used in an open
+  file; (v7) the next call moves the header `move_file` moved back with its include; the next refuses
+  the rename before them because Change Signature changed `calc.c` since and names it; then nothing
+  is left to undo.
+- **AK-4** In a real window (`ferris-idea ui --selftest`, with clangd): renaming a function used in an open
   and a closed file, then one ⌘Z in the open file, brings both files back.
 - **AK-6 (v2)** With the real local history: a written file lists "<name>" then "Saved", an open
   file "Before <name>"; a label on a file names the revision before it (unit tests
   `history_model::tests::refactorings_show_in_a_files_history`,
   `history_model::tests::refactoring_labels_name_their_revision`).
 - **AK-8 (v4)** Message (unit test `actions::tests::status_messages_follow_the_last_action`); in a
-  real window (`idecraft ui --selftest`, `refactor_name_steps`): ⌘Z after an extraction and its
+  real window (`ferris-idea ui --selftest`, `refactor_name_steps`): ⌘Z after an extraction and its
   rename says "Undone: Rename placeholder to d", then "Undone: Extract …". Not run yet.
 - **AK-9 (v5)** In a window of the test harness: an agent's change of two open files and one file
   on disk, applied as the window applies MCP's request (`WorkbenchView::edit_documents_in`) under the
@@ -120,12 +137,19 @@ the files it changed, and without silently losing edits made afterwards.
   `undo_group::tests::redo_takes_the_group_undone_last`): two groups of one file, both undone, are
   redone oldest first.
 
+- **AK-11 (v7)** The group moves the file into a new folder and back; the tree takes a group
+  that moved files only while no file operation came after it, and redoes it after the tree's
+  later redos (unit test `undo_group::tests::a_moved_file_goes_back_and_the_tree_takes_its_group_in_order`);
+  in a window of the test harness, Move of an open Java file and its reference in another file is
+  undone and redone by ⌘Z/⇧⌘Z in the editor and in the Project tree, and refused after the other
+  file changed on disk (`crates/workbench/tests/it/move_undo_a12.rs`).
+
 ## Out of scope
-Undoing Move (it renames a file; SPEC-0114 undoes nothing yet), SQL refactorings applied to a database
+SQL refactorings applied to a database
 (they run DDL, which local undo cannot take back), undo groups for Replace in Files (SPEC-0066), a
 confirmation dialog before a global undo, undo across IDE restarts.
 
 ## Known deviations from the reference
 Compared side by side in OBS-0030. The reference asks in a modal dialog before undoing or redoing a
-refactoring in other files and shows a modal error on each refused attempt; IDECraft undoes and redoes
+refactoring in other files and shows a modal error on each refused attempt; Ferris IDEA undoes and redoes
 directly and refuses in the status bar (IMP-0393). Both keep the refactoring locked after a refusal.

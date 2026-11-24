@@ -11,9 +11,9 @@ use rmcp::schemars;
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
-use idecraft_uidriver::engine::{DEFAULT_MAX_NODES, DEFAULT_TIMEOUT, Op, Request, Target};
-use idecraft_uidriver::trace::audit_entry;
-use idecraft_uidriver::{Actor, ErrorCode, Grants, Locator, Reply, StopSource, UiError};
+use ferris_idea_uidriver::engine::{DEFAULT_MAX_NODES, DEFAULT_TIMEOUT, Op, Request, Target};
+use ferris_idea_uidriver::trace::audit_entry;
+use ferris_idea_uidriver::{Actor, ErrorCode, Grants, Locator, Reply, StopSource, UiError};
 
 use crate::IdeServer;
 use crate::window::{UiCall, UiCallKind};
@@ -131,6 +131,38 @@ pub struct UiExpectArgs {
 pub struct UiScreenshotArgs {
     /// Only this element (locator).
     pub locator: Option<Value>,
+    /// Only this region `{x, y, w, h}` in logical window coordinates (points from the top left
+    /// of the window's content).
+    pub region: Option<Value>,
+    /// A window of this project by id.
+    pub window: Option<u64>,
+}
+
+/// Arguments of `ui_command` (`SPEC-0319` v7 behaviours 46-52).
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct UiCommandArgs {
+    /// The command (see the tool's description).
+    pub command: String,
+    /// `open_file`: file relative to the project root.
+    pub path: Option<String>,
+    /// `open_file`: 1-based line.
+    pub line: Option<usize>,
+    /// `open_file`: 1-based column.
+    pub column: Option<usize>,
+    /// `tool_window`: its id (see `list`).
+    pub id: Option<String>,
+    /// `tool_window`: `open` (default), `focus` or `close`.
+    pub op: Option<String>,
+    /// `settings`: page id (see `list`).
+    pub page: Option<String>,
+    /// `invoke`: action id.
+    pub action: Option<String>,
+    /// `type_text`: the text.
+    pub text: Option<String>,
+    /// `choose`: 0-based index.
+    pub index: Option<usize>,
+    /// `choose`: or exact label.
+    pub label: Option<String>,
     /// A window of this project by id.
     pub window: Option<u64>,
 }
@@ -162,7 +194,7 @@ fn locator(v: &Value) -> Result<Locator, McpError> {
 }
 
 /// The action of `ui_act` from its flat arguments.
-fn action_of(args: &UiActArgs) -> Result<idecraft_uidriver::Action, McpError> {
+fn action_of(args: &UiActArgs) -> Result<ferris_idea_uidriver::Action, McpError> {
     let mut o = Map::new();
     o.insert("action".into(), json!(args.action));
     let mut put = |k: &str, v: Option<Value>| {
@@ -194,7 +226,52 @@ fn action_of(args: &UiActArgs) -> Result<idecraft_uidriver::Action, McpError> {
     })
 }
 
-fn level_of(s: Option<&str>) -> Result<Option<idecraft_uidriver::Level>, McpError> {
+/// The command of `ui_command` from its flat arguments.
+fn command_of(args: &UiCommandArgs) -> Result<ferris_idea_uidriver::UiCommand, McpError> {
+    let mut o = Map::new();
+    o.insert("command".into(), json!(args.command));
+    let mut put = |k: &str, v: Option<Value>| {
+        if let Some(v) = v {
+            o.insert(k.into(), v);
+        }
+    };
+    put("path", args.path.clone().map(Value::from));
+    put("line", args.line.map(Value::from));
+    put("column", args.column.map(Value::from));
+    put("id", args.id.clone().map(Value::from));
+    put("op", args.op.clone().map(Value::from));
+    put("page", args.page.clone().map(Value::from));
+    put("action", args.action.clone().map(Value::from));
+    put("text", args.text.clone().map(Value::from));
+    put("index", args.index.map(Value::from));
+    put("label", args.label.clone().map(Value::from));
+    // The error names the field, never a typed text.
+    serde_json::from_value(Value::Object(o)).map_err(|e| {
+        let why = e.to_string();
+        let why = why.split(" at line").next().unwrap_or_default();
+        mcp_error(&UiError::invalid(format!(
+            "invalid: {}: {why}",
+            args.command
+        )))
+    })
+}
+
+/// The region of `ui_screenshot`.
+fn region_of(v: &Value) -> Result<ferris_idea_uidriver::Rect, McpError> {
+    let r: ferris_idea_uidriver::Rect = serde_json::from_value(v.clone()).map_err(|_| {
+        mcp_error(&UiError::invalid(
+            "invalid: region is {x, y, w, h} in logical window coordinates",
+        ))
+    })?;
+    if r.is_empty() || !(r.x.is_finite() && r.y.is_finite() && r.w.is_finite() && r.h.is_finite()) {
+        return Err(mcp_error(&UiError::invalid(
+            "invalid: region needs a positive width and height",
+        )));
+    }
+    Ok(r)
+}
+
+fn level_of(s: Option<&str>) -> Result<Option<ferris_idea_uidriver::Level>, McpError> {
     match s {
         None => Ok(None),
         Some(l) => serde_json::from_value(json!(l)).map(Some).map_err(|_| {
@@ -206,7 +283,7 @@ fn level_of(s: Option<&str>) -> Result<Option<idecraft_uidriver::Level>, McpErro
 }
 
 /// The matcher of `ui_expect` from its flat arguments.
-fn matcher_of(args: &UiExpectArgs) -> Result<idecraft_uidriver::Matcher, McpError> {
+fn matcher_of(args: &UiExpectArgs) -> Result<ferris_idea_uidriver::Matcher, McpError> {
     let mut o = Map::new();
     o.insert("matcher".into(), json!(args.matcher));
     if let Some(t) = &args.text {
@@ -239,13 +316,13 @@ impl IdeServer {
     fn ui_settings_file(&self) -> Option<PathBuf> {
         self.ide_settings_file
             .clone()
-            .or_else(idecraft_core::ide_settings_file)
+            .or_else(ferris_idea_core::ide_settings_file)
     }
 
     /// Whether the user switched external driving on (behaviour 32).
     pub(crate) fn ui_external_on(&self) -> bool {
         self.ui_settings_file()
-            .is_some_and(|f| idecraft_core::load_ide_settings(&f).ui.driver.external)
+            .is_some_and(|f| ferris_idea_core::load_ide_settings(&f).ui.driver.external)
     }
 
     /// The client's name and this MCP session's id.
@@ -263,7 +340,7 @@ impl IdeServer {
         if self.window.is_none() {
             return Err(mcp_error(&UiError::new(
                 ErrorCode::Unavailable,
-                "unavailable: this MCP server runs without the IDECraft window (stdio, `idecraft mcp`)",
+                "unavailable: this MCP server runs without the Ferris IDEA window (stdio, `ferris-idea mcp`)",
                 "the UI driver is served by the window's MCP server over HTTP; its address and token are in mcp-http/<pid>.json of the settings folder",
             )));
         }
@@ -272,22 +349,24 @@ impl IdeServer {
         }
         // An emergency stop withdraws `ui` given for this session only (behaviour 37).
         {
-            let generation = idecraft_uidriver::security::stop_generation();
+            let generation = ferris_idea_uidriver::security::stop_generation();
             let mut s = self.session.lock().unwrap_or_else(|e| e.into_inner());
             if s.ui_stop_generation != generation {
                 s.allowed.remove("ui");
                 s.ui_stop_generation = generation;
             }
         }
-        self.require(idecraft_core::Grant::Ui).await.map_err(|e| {
-            let text = e.message.to_string();
-            let line = if text.starts_with("denied") {
-                text
-            } else {
-                format!("not_granted: {text}")
-            };
-            McpError::invalid_params(line, Some(json!({"code": "not_granted", "right": "ui"})))
-        })?;
+        self.require(ferris_idea_core::Grant::Ui)
+            .await
+            .map_err(|e| {
+                let text = e.message.to_string();
+                let line = if text.starts_with("denied") {
+                    text
+                } else {
+                    format!("not_granted: {text}")
+                };
+                McpError::invalid_params(line, Some(json!({"code": "not_granted", "right": "ui"})))
+            })?;
         Ok(self.ui_grants())
     }
 
@@ -313,7 +392,7 @@ impl IdeServer {
             result: Err(UiError::new(
                 ErrorCode::Unavailable,
                 m,
-                "is the IDECraft window still open?",
+                "is the Ferris IDEA window still open?",
             )),
             facts: Default::default(),
         };
@@ -333,6 +412,126 @@ impl IdeServer {
             Ok(Ok(r)) => r,
             Ok(Err(_)) => unavailable("unavailable: the window could not serve the UI driver"),
             Err(_) => unavailable("unavailable: the window did not answer in time"),
+        }
+    }
+
+    /// Asks once in the window for the effect right a refusal names (not `ui`, which the
+    /// prelude asked), as the corresponding tool would; true when it was given.
+    async fn ask_effect_right(&self, e: &UiError, grants: &mut Grants, asked: &mut bool) -> bool {
+        if *asked || e.code != ErrorCode::NotGranted {
+            return false;
+        }
+        let Some(right) = e.right.as_deref().filter(|r| *r != "ui") else {
+            return false;
+        };
+        let Ok(grant) = serde_json::from_value::<ferris_idea_core::Grant>(json!(right)) else {
+            return false;
+        };
+        *asked = true;
+        if self.require(grant).await.is_ok() {
+            grants.0.insert(right.to_owned());
+            return true;
+        }
+        false
+    }
+
+    /// Writes one audit line for an external client.
+    #[allow(clippy::too_many_arguments)]
+    fn ui_audit(
+        &self,
+        actor: &Actor,
+        tool: &str,
+        target: Option<&str>,
+        facts: &ferris_idea_uidriver::trace::AuditFacts,
+        outcome: &str,
+        started: Instant,
+        typed_len: Option<usize>,
+    ) -> Result<(), McpError> {
+        let Actor::External { client, session } = actor else {
+            return Ok(());
+        };
+        self.log(
+            self.workspace.root(),
+            audit_entry(
+                client,
+                session,
+                tool,
+                target,
+                facts,
+                outcome,
+                started.elapsed(),
+                typed_len,
+            ),
+        )
+    }
+
+    /// Runs a window command (`SPEC-0319` v7 behaviours 46-52): the prelude (a window, the
+    /// setting, `ui`), the checks that need no window, a missing effect right asked once, the
+    /// window's own checks, and one audit line per call — refused calls too.
+    pub(crate) async fn ui_command_impl(
+        &self,
+        args: UiCommandArgs,
+    ) -> Result<CallToolResult, McpError> {
+        let started = Instant::now();
+        let actor = self.ui_actor();
+        let command = command_of(&args)?;
+        let target = command.audit_text();
+        let typed_len = command.typed_len();
+        let grants = match self.ui_prelude().await {
+            Ok(g) => g,
+            Err(e) => {
+                if self.window.is_some() && self.ui_external_on() {
+                    let outcome = e.message.split(':').next().unwrap_or("refused").to_owned();
+                    self.ui_audit(
+                        &actor,
+                        "ui_command",
+                        Some(&target),
+                        &Default::default(),
+                        &outcome,
+                        started,
+                        typed_len,
+                    )?;
+                }
+                return Err(e);
+            }
+        };
+        // A missing effect right fails at once: a window command never waits for a question
+        // the driving agent cannot answer (SPEC-0319 v7 behaviour 54a).
+        let reply =
+            match ferris_idea_uidriver::command::authorize_command(&actor, &command, &grants) {
+                Err(e) => Reply {
+                    result: Err(e),
+                    facts: Default::default(),
+                },
+                Ok(_) => {
+                    self.ui_send(
+                        args.window,
+                        UiCallKind::Command {
+                            command: command.clone(),
+                            actor: actor.clone(),
+                            grants: grants.clone(),
+                        },
+                        DEFAULT_TIMEOUT,
+                    )
+                    .await
+                }
+            };
+        let outcome = match &reply.result {
+            Ok(_) => "ok",
+            Err(e) => e.code.as_str(),
+        };
+        self.ui_audit(
+            &actor,
+            "ui_command",
+            Some(&target),
+            &reply.facts,
+            outcome,
+            started,
+            typed_len,
+        )?;
+        match reply.result {
+            Ok(v) => crate::json_result(v),
+            Err(e) => Err(mcp_error(&e)),
         }
     }
 
@@ -391,17 +590,9 @@ impl IdeServer {
                 .await;
             // A missing effect right is asked once in the window, like a tool call's would be.
             if let Err(e) = &reply.result
-                && e.code == ErrorCode::NotGranted
-                && !asked
-                && let Some(right) = e.right.as_deref()
-                && right != "ui"
-                && let Ok(grant) = serde_json::from_value::<idecraft_core::Grant>(json!(right))
+                && self.ask_effect_right(e, &mut grants, &mut asked).await
             {
-                asked = true;
-                if self.require(grant).await.is_ok() {
-                    grants.0.insert(right.to_owned());
-                    continue;
-                }
+                continue;
             }
             break reply;
         };
@@ -513,35 +704,52 @@ impl IdeServer {
         args: UiScreenshotArgs,
     ) -> Result<CallToolResult, McpError> {
         let started = Instant::now();
-        self.ui_prelude().await?;
-        if let Some(l) = &args.locator {
-            locator(l)?;
-        }
-        let reply = self
-            .ui_send(args.window, UiCallKind::Screenshot, DEFAULT_TIMEOUT)
-            .await;
         let actor = self.ui_actor();
-        if let Actor::External { client, session } = &actor {
-            let outcome = match &reply.result {
-                Ok(_) => "ok",
-                Err(e) => e.code.as_str(),
-            };
-            self.log(
-                self.workspace.root(),
-                audit_entry(
-                    client,
-                    session,
-                    "ui_screenshot",
-                    None,
-                    &reply.facts,
-                    outcome,
-                    started.elapsed(),
-                    None,
-                ),
-            )?;
-        }
+        let grants = self.ui_prelude().await?;
+        let locator = args.locator.as_ref().map(locator).transpose()?;
+        let region = args.region.as_ref().map(region_of).transpose()?;
+        let target = match (&locator, &region) {
+            (Some(l), _) => Some(l.to_text()),
+            (None, Some(r)) => Some(format!("region {},{} {}x{}", r.x, r.y, r.w, r.h)),
+            (None, None) => None,
+        };
+        let reply = self
+            .ui_send(
+                args.window,
+                UiCallKind::Screenshot {
+                    locator,
+                    region,
+                    terminal_read: grants.has("terminal-read"),
+                },
+                DEFAULT_TIMEOUT,
+            )
+            .await;
+        let outcome = match &reply.result {
+            Ok(_) => "ok",
+            Err(e) => e.code.as_str(),
+        };
+        self.ui_audit(
+            &actor,
+            "ui_screenshot",
+            target.as_deref(),
+            &reply.facts,
+            outcome,
+            started,
+            None,
+        )?;
         match reply.result {
-            Ok(v) => crate::json_result(v),
+            Ok(mut v) => {
+                // The PNG goes as MCP image content, the facts as JSON beside it.
+                let png = v
+                    .as_object_mut()
+                    .and_then(|o| o.remove("png_base64"))
+                    .and_then(|p| p.as_str().map(str::to_owned));
+                let mut content = vec![rmcp::model::ContentBlock::json(v)?];
+                if let Some(png) = png {
+                    content.push(rmcp::model::ContentBlock::image(png, "image/png"));
+                }
+                Ok(CallToolResult::success(content))
+            }
             Err(e) => Err(mcp_error(&e)),
         }
     }
@@ -561,7 +769,7 @@ impl IdeServer {
                     Some(p) => {
                         // A trace written into the workspace is a file of the project
                         // (SPEC-0053 v8 behaviour 13).
-                        self.require(idecraft_core::Grant::Write).await?;
+                        self.require(ferris_idea_core::Grant::Write).await?;
                         Some(self.trace_dir_in_workspace(p)?)
                     }
                 },
@@ -649,10 +857,10 @@ impl IdeServer {
     ) -> Result<CallToolResult, McpError> {
         // The setting goes off even without a window to tell (behaviour 37).
         if let Some(file) = self.ui_settings_file() {
-            let mut s = idecraft_core::load_ide_settings(&file);
+            let mut s = ferris_idea_core::load_ide_settings(&file);
             if s.ui.driver.external {
                 s.ui.driver.external = false;
-                idecraft_core::save_ide_settings(&file, &s).map_err(|e| {
+                ferris_idea_core::save_ide_settings(&file, &s).map_err(|e| {
                     McpError::internal_error(
                         format!("the setting could not be switched off: {e}"),
                         None,
@@ -675,7 +883,7 @@ impl IdeServer {
             s.allowed.remove("ui");
         }
         if let Actor::External { client, session } = self.ui_actor() {
-            let _ = idecraft_core::log_agent_action(
+            let _ = ferris_idea_core::log_agent_action(
                 self.workspace.root(),
                 &audit_entry(
                     &client,

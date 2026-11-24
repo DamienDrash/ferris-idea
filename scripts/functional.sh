@@ -5,25 +5,30 @@
 #   functional.sh           run the suite (reference databases when they run) and write the table
 #   functional.sh --check   only check that every matrix row has a module (no build; used by parity.sh)
 set -eu
+# Variables under the former name (IDECRAFT_*) still count while today's is not set. rebrand:keep
+for former in $(env | sed -n 's/^IDECRAFT_\([A-Za-z0-9_]*\)=.*/\1/p'); do # rebrand:keep
+  eval "[ -n \"\${FERRIS_IDEA_$former+x}\" ] || { FERRIS_IDEA_$former=\$IDECRAFT_$former; export FERRIS_IDEA_$former; }" # rebrand:keep
+done
 cd "$(dirname "$0")/.."
 
 if [ "${1:-}" != "--check" ]; then
   # The same reference databases as scripts/ci-local.sh, when they run.
-  nc -z 127.0.0.1 54329 2>/dev/null && export IDECRAFT_TEST_PG="${IDECRAFT_TEST_PG:-postgresql://idecraft@127.0.0.1:54329/inventory?sslmode=disable}"
-  nc -z 127.0.0.1 33069 2>/dev/null && export IDECRAFT_TEST_MYSQL="${IDECRAFT_TEST_MYSQL:-mysql://idecraft@127.0.0.1:33069/inventory?ssl-mode=DISABLED}"
-  nc -z 127.0.0.1 33079 2>/dev/null && export IDECRAFT_TEST_MARIADB="${IDECRAFT_TEST_MARIADB:-mariadb://idecraft@127.0.0.1:33079/inventory?ssl-mode=DISABLED}"
+  nc -z 127.0.0.1 54329 2>/dev/null && export FERRIS_IDEA_TEST_PG="${FERRIS_IDEA_TEST_PG:-postgresql://idecraft@127.0.0.1:54329/inventory?sslmode=disable}"
+  nc -z 127.0.0.1 33069 2>/dev/null && export FERRIS_IDEA_TEST_MYSQL="${FERRIS_IDEA_TEST_MYSQL:-mysql://idecraft@127.0.0.1:33069/inventory?ssl-mode=DISABLED}"
+  nc -z 127.0.0.1 33079 2>/dev/null && export FERRIS_IDEA_TEST_MARIADB="${FERRIS_IDEA_TEST_MARIADB:-mariadb://idecraft@127.0.0.1:33079/inventory?ssl-mode=DISABLED}"
   # Their password files (db.sh secure). The harness copies them into each test project's password
-  # folder for the MCP server (IDECRAFT_TEST_SECRETS_DIR, SPEC-0008 behaviour 14), never the keychain.
+  # folder for the MCP server (FERRIS_IDEA_TEST_SECRETS_DIR, SPEC-0008 behaviour 14), never the keychain.
   # secret_file VAR FILE: export VAR naming FILE when FILE exists and VAR is not set yet.
   secret_file() { if [ -s "$2" ] && [ -z "$(printenv "$1")" ]; then export "$1=$2"; fi; }
-  secrets_dir="${XDG_CONFIG_HOME:-$HOME/.config}/idecraft"
-  secret_file IDECRAFT_TEST_PG_PASSWORD_FILE "$secrets_dir/refdb-postgres.pass"
-  secret_file IDECRAFT_TEST_MYSQL_PASSWORD_FILE "$secrets_dir/refdb-mysql.pass"
-  secret_file IDECRAFT_TEST_MARIADB_PASSWORD_FILE "$secrets_dir/refdb-mysql.pass"
+  secrets_dir="${XDG_CONFIG_HOME:-$HOME/.config}/ferris-idea"
+  [ -d "$secrets_dir" ] || secrets_dir="${XDG_CONFIG_HOME:-$HOME/.config}/idecraft" # rebrand:keep (the settings folder before its takeover, SPEC-0356)
+  secret_file FERRIS_IDEA_TEST_PG_PASSWORD_FILE "$secrets_dir/refdb-postgres.pass"
+  secret_file FERRIS_IDEA_TEST_MYSQL_PASSWORD_FILE "$secrets_dir/refdb-mysql.pass"
+  secret_file FERRIS_IDEA_TEST_MARIADB_PASSWORD_FILE "$secrets_dir/refdb-mysql.pass"
   report=$(mktemp -d)
   trap 'rm -rf "$report"' EXIT
   status=0
-  IDECRAFT_FUNCTIONAL_REPORT="$report" cargo test -p idecraft --test functional >"$report/out.txt" 2>&1 || status=$?
+  FERRIS_IDEA_FUNCTIONAL_REPORT="$report" cargo test -p ferris-idea --test functional >"$report/out.txt" 2>&1 || status=$?
   export FUNCTIONAL_REPORT="$report"
 fi
 
@@ -105,10 +110,10 @@ doc = f'''# Funktionstests je Matrixzeile
 **Stand:** {date} · Commit `{commit}` · erzeugt von `scripts/functional.sh` · Grundlage: [Feature-Matrix](FEATURE_MATRIX.md), Tests: `tests/functional/`
 
 Je Zeile der Feature-Matrix ein Testmodul, geschrieben aus Zeile und Akzeptanzkriterien der Spezifikation,
-nicht aus der Implementierung. Die Tests bedienen IDECraft nur von außen: Befehlszeile `idecraft`, MCP über
+nicht aus der Implementierung. Die Tests bedienen Ferris IDEA nur von außen: Befehlszeile `ferris-idea`, MCP über
 stdio und über den HTTP-Transport des Fensters, auf Kopien von `tests/reference-projects` und gegen die
 Referenzdatenbanken. Verhalten, das nur ein Fenster zeigt, prüft der Fenster-Selbsttest
-(`idecraft ui --selftest`, `scripts/ci-window.sh`); die Spalte nennt seine Schritte.
+(`ferris-idea ui --selftest`, `scripts/ci-window.sh`); die Spalte nennt seine Schritte.
 
 **Ergebnis:** {len(matrix)} Zeilen, {with_tests} mit Tests, {len(matrix) - with_tests} mit benanntem Grund ·
 {sum(totals.values())} Tests: {totals["passed"]} bestanden, {totals["skipped"]} übersprungen (Werkzeug oder Datenbank fehlt), {totals["failed"]} fehlgeschlagen.

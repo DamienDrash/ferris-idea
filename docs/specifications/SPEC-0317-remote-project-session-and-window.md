@@ -16,11 +16,11 @@
   ADR-0012, SPEC-0003, SPEC-0044, SPEC-0053, SPEC-0058, SPEC-0059, SPEC-0094, SPEC-0121, SPEC-0158,
   SPEC-0220, SPEC-0262
 - **Feature matrix rows:** F-083
-- **Roadmap:** M6.12 steps 2 and 3 (session protocol, window); M10.3 (`idecraft serve`, first part)
+- **Roadmap:** M6.12 steps 2 and 3 (session protocol, window); M10.3 (`ferris-idea serve`, first part)
 
 ## Purpose
 Open a folder on an SSH host as a normal project: the project tree and the editor show the host's
-files, the text is owned by IDECraft's backend on the host, typing stays as fast as locally, and a
+files, the text is owned by Ferris IDEA's backend on the host, typing stays as fast as locally, and a
 network break or a closed laptop lid does not lose a single unsaved character.
 
 ## Behaviour
@@ -38,7 +38,7 @@ network break or a closed laptop lid does not lose a single unsaved character.
    backend (step 4), start it, open the session. Each step's failure is said with what to do
    (SPEC-0121 behaviour 2 messages for host keys, login and reachability; ADR-0025 section 8). Cancel
    ends whatever was started on the host. [GEN, ADR-0025]
-4. **Backend:** the backend is `idecraft serve --stdio` of the window's own version and build, found
+4. **Backend:** the backend is `ferris-idea serve --stdio` of the window's own version and build, found
    or uploaded as SPEC-0158 behaviour 2 says. After an upload, and before each start of an uploaded
    copy, the window compares the copy's SHA-256 with its own binary's (computed by the window, not
    taken from the host); a mismatch deletes the copy and refuses with "the backend on the host does
@@ -79,7 +79,7 @@ network break or a closed laptop lid does not lose a single unsaved character.
     window offers compare, overwrite or reload as SPEC-0058 does for local files. A file changed on
     the host while unmodified in the window is reloaded silently, as locally. [GEN, SPEC-0058]
 11. **Closing the project** asks about unsaved remote files as for local files (SPEC-0261), then
-    sends `session.bye`; the backend ends when no client is left. Quitting IDECraft does the same
+    sends `session.bye`; the backend ends when no client is left. Quitting Ferris IDEA does the same
     for every remote project window. [GEN]
 
 ### Network breaks and reconnection
@@ -95,7 +95,7 @@ network break or a closed laptop lid does not lose a single unsaved character.
     remote project again offers to restore each copy (behaviour 15 decides how). [GEN, SPEC-0262]
 14. **Reconnecting:** after a break the window reconnects by itself, after 1, 2, 4, 8, 16 and then
     every 30 s, as long as the backend's reattach period lasts (ADR-0025 section 8, default 10
-    minutes); Reconnect in the widget's menu tries at once. Over SSH it runs `idecraft serve --attach
+    minutes); Reconnect in the widget's menu tries at once. Over SSH it runs `ferris-idea serve --attach
     <session id>` on the host, which bridges standard input and output to the backend's reattach
     socket, and sends `session.resume` with the token as the first message. The backend replays the
     missed notifications, the window resends its pending edits (applied once), and the documents,
@@ -112,7 +112,7 @@ network break or a closed laptop lid does not lose a single unsaved character.
 
 ### Security (ADR-0025)
 17. **Channel:** only the SSH channel of ADR-0025 section 1a in this spec, with SPEC-0121's options
-    (batch mode, strict host keys, the user's keys and agent, no passwords through IDECraft, a
+    (batch mode, strict host keys, the user's keys and agent, no passwords through Ferris IDEA, a
     hybrid post-quantum key exchange only — `serve` and `--attach` on a host without one are
     refused with SPEC-0121's message, also on reconnection). The
     backend opens no TCP listener; its only socket is the reattach socket in a 0700 folder with the
@@ -193,7 +193,7 @@ network break or a closed laptop lid does not lose a single unsaved character.
   `serve` starts through the same `Remote` and its shared options, so a classical host is refused
   before anything runs (`crates/remote/tests/it/pq_kex.rs`).
 - **AK-6** MCP (`crates/mcp/tests/it/protocol.rs`; the state of an open project through
-  `idecraft_remote::RemoteProject::describe` against the test `sshd`): `remote_project_open` plan
+  `ferris_idea_remote::RemoteProject::describe` against the test `sshd`): `remote_project_open` plan
   without rights and refused without `ssh`/`run`; `remote_projects` and `remote_documents` show state and pending
   edits but no token; `remote_project_close` dry run lists unsaved files.
 - **AK-7** Window self-test (v3: with a backend in the self-test's process, so the window steps
@@ -217,7 +217,7 @@ network break or a closed laptop lid does not lose a single unsaved character.
 ## Protocol details fixed in v2 (deviations from ADR-0026, with reasons)
 Building the protocol without a window fixed these points; ADR-0026 stays the rule otherwise.
 1. **Crate:** the protocol, the backend and the client half live in `crates/session`
-   (`idecraft-session`), not in `crates/remote`: the in-process transport and M10.3 use them without
+   (`ferris-idea-session`), not in `crates/remote`: the in-process transport and M10.3 use them without
    SSH. `crates/remote` adds only the SSH half (start, attach, checksum, `RemoteProject`). [GEN]
 2. **Acknowledgements in the event stream:** besides the answer to `doc.edit`, the backend sends the
    author `doc.acked {doc, cseq, revision, hash}` as a numbered notification. A window that resumes
@@ -241,11 +241,11 @@ Building the protocol without a window fixed these points; ADR-0026 stays the ru
    edit among them as acknowledged; only when the log no longer reaches back does it take
    `doc.snapshot` and keep its own text as a local version. The backend also sends
    `doc.saved {doc, revision}` to the other clients of a saved document. [ADR-0025 §8]
-6. **`serve` options:** `idecraft serve [<folder>] --stdio [--state-dir <dir>] [--run-dir <dir>]
-   [--reattach-minutes <n>]` and `idecraft serve --attach <session id> [--run-dir <dir>]`. A folder
+6. **`serve` options:** `ferris-idea serve [<folder>] --stdio [--state-dir <dir>] [--run-dir <dir>]
+   [--reattach-minutes <n>]` and `ferris-idea serve --attach <session id> [--run-dir <dir>]`. A folder
    on the command line restricts the session to that folder; `session.hello` still names it. The
    state folder (audit log) defaults to the settings folder of SPEC-0053, the run folder (reattach
-   sockets) to `$XDG_RUNTIME_DIR/idecraft` or `~/.cache/idecraft/run`; both are created 0700 and
+   sockets) to `$XDG_RUNTIME_DIR/ferris-idea` or `~/.cache/ferris-idea/run`; both are created 0700 and
    refused when another user owns them or others may read them. After its standard input ends,
    the stdio backend keeps running for the reattach period and then exits. [ADR-0025 §5]
 7. **Idle and queue limits:** a connection without any frame for 45 s is treated as a break (the
@@ -267,7 +267,7 @@ Building the protocol without a window fixed these points; ADR-0026 stays the ru
 
 ## Window details fixed in v3 (with reasons)
 Building the window integration fixed these points; behaviours 1–20 stay the rule otherwise.
-1. **Entry points:** IDECraft has no welcome screen yet (SPEC-0094, out of scope there), so
+1. **Entry points:** Ferris IDEA has no welcome screen yet (SPEC-0094, out of scope there), so
    "Remote Development…" is the second row of the project popup (after "Open…") and an item of
    File (`Remote.OpenProject`, also found by Search Everywhere); a welcome screen gets it when it
    comes. The dialog is the Remote Host tool window of SPEC-0121 in a Remote Development mode: the

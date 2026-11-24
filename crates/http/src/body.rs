@@ -29,7 +29,7 @@ pub fn body_files(request: &ResolvedRequest) -> Vec<String> {
 /// Reads the body file `written` of a request file in `dir` of the project `root` (behaviour 11):
 /// relative to `dir`, inside `root` after resolving links, a regular file of UTF-8 text of at most
 /// [`MAX_BODY_FILE`] bytes, not the private environment file and nothing under `.git` or
-/// `.idecraft`. The error names the path and the rule.
+/// `.ferris-idea`. The error names the path and the rule.
 fn read_body_file(written: &str, dir: &Path, root: &Path) -> Result<String, String> {
     let path = Path::new(written);
     if written.starts_with('~') || path.is_absolute() || written.starts_with(['/', '\\']) {
@@ -47,11 +47,11 @@ fn read_body_file(written: &str, dir: &Path, root: &Path) -> Result<String, Stri
     };
     let kept = inside
         .components()
-        .any(|c| matches!(c, Component::Normal(n) if n == ".git" || n == ".idecraft"))
+        .any(|c| matches!(c, Component::Normal(n) if n == ".git" || n == ".ferris-idea"))
         || inside.file_name().is_some_and(|n| n == PRIVATE_ENV_FILE);
     if kept {
         return Err(format!(
-            "body file {written}: the private environment file and files under .git and .idecraft are never sent"
+            "body file {written}: the private environment file and files under .git and .ferris-idea are never sent"
         ));
     }
     let opened = std::fs::File::open(&file).map_err(|e| format!("body file {written}: {e}"))?;
@@ -159,12 +159,14 @@ mod tests {
     }
 
     fn project(name: &str) -> std::path::PathBuf {
-        let root =
-            std::env::temp_dir().join(format!("idecraft-httpbody-{name}-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!(
+            "ferris-idea-httpbody-{name}-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("project/api/data")).unwrap();
         std::fs::create_dir_all(root.join("project/.git")).unwrap();
-        std::fs::create_dir_all(root.join("project/.idecraft")).unwrap();
+        std::fs::create_dir_all(root.join("project/.ferris-idea")).unwrap();
         root
     }
 
@@ -179,7 +181,7 @@ mod tests {
         std::fs::write(base.join("outside.txt"), "outside the project").unwrap();
         std::fs::write(dir.join(PRIVATE_ENV_FILE), "{\"dev\": {\"token\": \"t\"}}").unwrap();
         std::fs::write(root.join(".git/config"), "[remote]").unwrap();
-        std::fs::write(root.join(".idecraft/agent-log.jsonl"), "{}").unwrap();
+        std::fs::write(root.join(".ferris-idea/agent-log.jsonl"), "{}").unwrap();
         std::fs::write(dir.join("binary.bin"), [0xff, 0xfe, 0x00]).unwrap();
 
         let send = |body: &str| {
@@ -216,7 +218,7 @@ mod tests {
         refused("< .", "not a regular file");
         refused(&format!("< {PRIVATE_ENV_FILE}"), "never sent");
         refused("< ../.git/config", "never sent");
-        refused("< ../.idecraft/agent-log.jsonl", "never sent");
+        refused("< ../.ferris-idea/agent-log.jsonl", "never sent");
         refused("< binary.bin", "not UTF-8");
         // One refused file refuses the whole body.
         refused("< payload.json\n< ../../outside.txt", "outside the project");

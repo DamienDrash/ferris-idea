@@ -119,7 +119,7 @@ fn head(file: &Path) -> Option<String> {
 ///
 /// - A folder with a Maven or Gradle build file, and everything below it, belongs to that build:
 ///   nothing is derived there, unless the folder was unlinked by hand (`unlinked` of
-///   `.idecraft/build-tools.toml`), and no derived folder holds such a folder.
+///   `.ferris-idea/build-tools.toml`), and no derived folder holds such a folder.
 /// - Of each folder the first files by name are read, at most [`MAX_FILES_PER_FOLDER`], until one
 ///   declares a package the folder's last names spell; a folder below a source folder already
 ///   found is not read. In all at most [`MAX_FILES_READ`] files are read, of each at most
@@ -348,7 +348,7 @@ mod tests {
 
     fn project(tag: &str, files: &[(&str, &str)]) -> Project {
         let dir = std::env::temp_dir().join(format!(
-            "idecraft-source-roots-{tag}-{}",
+            "ferris-idea-source-roots-{tag}-{}",
             std::process::id()
         ));
         let _ = std::fs::remove_dir_all(&dir);
@@ -511,7 +511,7 @@ mod tests {
             ]
         );
         // A module unlinked by hand is no module of the model: its sources are derived.
-        p.write(".idecraft/build-tools.toml", "unlinked = [\"lib\"]\n");
+        p.write(".ferris-idea/build-tools.toml", "unlinked = [\"lib\"]\n");
         assert_eq!(
             p.roots(),
             [
@@ -525,7 +525,7 @@ mod tests {
         // A build file in the project folder speaks for everything.
         p.write("settings.gradle", "");
         assert!(p.roots().is_empty());
-        p.write(".idecraft/build-tools.toml", "unlinked = [\".\"]\n");
+        p.write(".ferris-idea/build-tools.toml", "unlinked = [\".\"]\n");
         assert_eq!(
             p.roots(),
             [

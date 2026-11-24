@@ -22,13 +22,13 @@
 
 ## Purpose
 An assistant in the IDE for those who want one, with the provider, its cost and where the code
-goes decided by the user alone. IDECraft ships no provider, no account and no telemetry
+goes decided by the user alone. Ferris IDEA ships no provider, no account and no telemetry
 (ADR-0007); off, it sends nothing.
 
 ## Behaviour
 1. **Settings › Tools › AI Assistant:** "Enable AI Assistant" (off by default), Endpoint (base URL
    of an OpenAI-compatible API), Model, API key. Enter applies; endpoint and model go to
-   `settings.toml`, the key into the system keychain (service `idecraft-ai`, account host:port of
+   `settings.toml`, the key into the system keychain (service `ferris-idea-ai`, account host:port of
    the endpoint) and the field is emptied; the page says whether a key is stored. A key is optional
    (local servers need none). **v2:** the keychain is read (once per endpoint when the page is shown,
    not on every search keystroke) and written in the background, never on the UI thread: a system
@@ -46,12 +46,12 @@ goes decided by the user alone. IDECraft ships no provider, no account and no te
 3. **Attachments:** code is attached visibly ("Attached: src/a.rs:3-9 (7 lines)") before it is
    sent: opening the chat with a selection attaches it; Escape removes it; the question sends it
    as a fenced block with the file label and language. Nothing else from the project is sent.
-4. **AI Chat window** (`IDECraft.AiChat`, Tools › AI Assistant, View › Tool Windows): status line
+4. **AI Chat window** (`FerrisIDEA.AiChat`, Tools › AI Assistant, View › Tool Windows): status line
    with model and endpoint, the conversation (You / AI), "Waiting for the answer…", errors, the
    question field (Enter sends, Shift+Enter is a line break), New Chat; Escape and ⇧Esc hide it.
    **v3:** the conversation scrolls to the newest message when a question is sent, while the answer
    arrives and when it ends, so the answer and its actions (SPEC-0313 behaviour 8) are in view.
-5. **Explain Code** (`IDECraft.AiExplainCode`): the selection, else the whole file, is attached and
+5. **Explain Code** (`FerrisIDEA.AiExplainCode`): the selection, else the whole file, is attached and
    asked to be explained; the answer appears in the chat.
    **v4:** Explain Code is available wherever the focus is in the window, the chat's field
    included, as long as an editor is open (OBS-0063 A6; the menu bar asks the focused element's
@@ -109,7 +109,7 @@ goes decided by the user alone. IDECraft ships no provider, no account and no te
 ## Acceptance criteria
 - **AK-1** Refusals when off, unconfigured or with a bad URL; message with attachment; request
   body; key reference; a chat with a fake endpoint including Bearer key, no header without key,
-  and an error status (unit tests `idecraft_ai::tests`).
+  and an error status (unit tests `ferris_idea_ai::tests`).
 - **AK-2** MCP: off and without provider by default, the key not stored, the settings carry `ai`
   (`crates/mcp/tests/it/protocol.rs`: `ide_settings_tools`).
 - **AK-3** Window self-test against a fake endpoint on the loopback address: the settings page
@@ -160,6 +160,6 @@ the OpenAI-compatible one, the reference's AI service; selecting text inside an 
 copies a block or the whole answer); images and HTML in answers.
 
 ## Known deviations from the reference
-The reference's assistant uses its vendor's service with its own account; IDECraft talks to an
+The reference's assistant uses its vendor's service with its own account; Ferris IDEA talks to an
 endpoint the user names and ships none. Not compared side by side (the reference's AI is not
 examined).

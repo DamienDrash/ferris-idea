@@ -83,12 +83,12 @@ Find text in the open file without leaving the editor, as with the reference's f
     Ctrl+Alt+F in the default one) opens the filter menu of the find bar — search in selection
     and the comments and string literals filter of behaviour 13 — as its button does. Without
     a find bar the action does nothing and its key goes on to the next action. [OSS: id and
-    keys of the ported keymaps; the menu's items are IDECraft's, behaviours 12 and 13]
+    keys of the ported keymaps; the menu's items are Ferris IDEA's, behaviours 12 and 13]
 
 ## Acceptance criteria
 - **AK-1** Current match from the caret, wrapping both ways, counter texts, options, empty query, invalid
   regular expression (unit tests).
-- **AK-2** In a real window (`idecraft ui --selftest`): ⌘F and typing count the matches (`1/2`), Enter
+- **AK-2** In a real window (`ferris-idea ui --selftest`): ⌘F and typing count the matches (`1/2`), Enter
   and Shift+Enter step without changing the text, Escape closes the bar.
 - **AK-3** Use by hand: highlights, toggles, buttons, search while editing, Replace All and its undo.
 - **AK-4** Replacements with captures, literal `$1` without regex, invalid regex (unit test); in the

@@ -1,4 +1,4 @@
-//! `git.*` (`SPEC-0318` behaviours 15–16): the host repository through IDECraft's own Git library
+//! `git.*` (`SPEC-0318` behaviours 15–16): the host repository through Ferris IDEA's own Git library
 //! (no `git` process for these). Paths are relative to the project folder on the wire; a
 //! repository path outside the project (a project in a sub-folder of its repository) goes out as a
 //! file name with `outside: true`.
@@ -6,8 +6,8 @@
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use idecraft_session::{Backend, ErrorCode, Right, RpcError};
-use idecraft_vcs::{CommitOptions, Repo};
+use ferris_idea_session::{Backend, ErrorCode, Right, RpcError};
+use ferris_idea_vcs::{CommitOptions, Repo};
 use serde_json::{Value, json};
 
 use crate::{HostOptions, add, backend_of, internal, invalid, text};
@@ -15,7 +15,7 @@ use crate::{HostOptions, add, backend_of, internal, invalid, text};
 /// The most commits one `git.commits_touching` looks at.
 const MAX_TOUCHING: usize = 5000;
 
-pub(crate) fn git_error(e: idecraft_vcs::GitError) -> RpcError {
+pub(crate) fn git_error(e: ferris_idea_vcs::GitError) -> RpcError {
     let s = e.to_string();
     if s.contains("not a Git repository") || s.contains("NotARepository") {
         RpcError::new(ErrorCode::NotFound, s).hint("the host project is not in a Git repository")
@@ -35,7 +35,7 @@ pub(crate) fn open(backend: &Backend) -> Result<(Repo, PathBuf, String), RpcErro
         .workdir()
         .and_then(|w| std::fs::canonicalize(w).ok())
         .ok_or_else(|| RpcError::new(ErrorCode::NotFound, "the repository has no working tree"))?;
-    let prefix = idecraft_session::paths::relative(&work, &root)
+    let prefix = ferris_idea_session::paths::relative(&work, &root)
         .filter(|p| p != ".")
         .unwrap_or_default();
     Ok((repo, root, prefix))
@@ -86,8 +86,8 @@ pub(crate) fn out<T: serde::Serialize>(value: T, prefix: &str) -> Result<Value, 
 
 /// The repository and the checked project path a request names; the path is checked first, so a
 /// path leaving the project is refused before Git is asked (SEC-14).
-fn open_doc(call: &idecraft_session::Call) -> Result<(Repo, String, String), RpcError> {
-    let doc = idecraft_session::paths::check_relative(text(&call.params, "path")?)?;
+fn open_doc(call: &ferris_idea_session::Call) -> Result<(Repo, String, String), RpcError> {
+    let doc = ferris_idea_session::paths::check_relative(text(&call.params, "path")?)?;
     crate::resolve(&call.root, &doc)?;
     let (repo, _, prefix) = open(&backend_of(call)?)?;
     Ok((repo, prefix, doc))
@@ -146,7 +146,9 @@ pub fn bind(backend: &Backend, options: &HostOptions) {
             // Checked as paths only: a deleted file's history is the point of the filter.
             let paths: Vec<String> = list("paths")?
                 .into_iter()
-                .map(|p| idecraft_session::paths::check_relative(p).map(|p| to_repo(&prefix, &p)))
+                .map(|p| {
+                    ferris_idea_session::paths::check_relative(p).map(|p| to_repo(&prefix, &p))
+                })
                 .collect::<Result<_, _>>()?;
             let found = repo.commits_touching(&ids, &paths).map_err(git_error)?;
             let touching: Vec<&String> = ids.iter().filter(|i| found.contains(*i)).collect();
@@ -185,10 +187,12 @@ pub fn bind(backend: &Backend, options: &HostOptions) {
                 .map(|a| a.iter().filter_map(Value::as_str).collect::<Vec<_>>())
                 .unwrap_or_default()
                 .into_iter()
-                .map(|p| idecraft_session::paths::check_relative(p).map(|p| to_repo(&prefix, &p)))
+                .map(|p| {
+                    ferris_idea_session::paths::check_relative(p).map(|p| to_repo(&prefix, &p))
+                })
                 .collect::<Result<_, _>>()?;
             // Hooks are project code: they run only for a trusted host project (behaviour 5).
-            let trusted = idecraft_core::trust::allows_project_code(&root);
+            let trusted = ferris_idea_core::trust::allows_project_code(&root);
             let options = CommitOptions {
                 verify: trusted,
                 amend: call.params["amend"].as_bool() == Some(true),

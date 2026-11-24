@@ -8,18 +8,19 @@
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_languages::java_generate::{DelegateField, DelegateMethod};
+use ferris_idea_workbench::nav_model::Place;
+use ferris_idea_workbench::popup_place::{self, Area, CaretSpot};
+use ferris_idea_workbench::{ChoiceView, WorkbenchView};
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_languages::java_generate::{DelegateField, DelegateMethod};
-use idecraft_workbench::nav_model::Place;
-use idecraft_workbench::popup_place::{self, Area, CaretSpot};
-use idecraft_workbench::{ChoiceView, WorkbenchView};
 
 const PERSON: &str =
     "package shop;\n\npublic class Person {\n    private String name;\n    private int age;\n}\n";
 const OUTSIDE: &str = "Put the caret inside a class to generate code";
 
 fn workspace(tag: &str) -> PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-genlists-{tag}-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-genlists-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src/main/java/shop")).unwrap();
     root.canonicalize().unwrap()
@@ -114,8 +115,8 @@ fn placed(
     });
     assert_eq!(limit, Some(rows), "the list takes the rows that fit");
     let height = height.min(
-        idecraft_workbench::choice_view::CHROME
-            + rows.min(shown.max(1)) as f32 * idecraft_workbench::metrics::MENU_ITEM_HEIGHT,
+        ferris_idea_workbench::choice_view::CHROME
+            + rows.min(shown.max(1)) as f32 * ferris_idea_workbench::metrics::MENU_ITEM_HEIGHT,
     );
     let (top, bottom) = if place.above {
         (place.y - height, place.y)
@@ -128,7 +129,8 @@ fn placed(
     );
     assert!(
         place.x >= area.left + popup_place::MARGIN
-            && place.x + idecraft_workbench::choice_view::WIDTH <= area.right - popup_place::MARGIN,
+            && place.x + ferris_idea_workbench::choice_view::WIDTH
+                <= area.right - popup_place::MARGIN,
         "the list at x {} keeps inside {area:?}",
         place.x
     );
@@ -151,7 +153,12 @@ fn the_generate_list_opens_at_the_caret_and_filters(cx: &mut TestAppContext) {
             "Setter",
             "Getter and Setter",
             "equals() and hashCode()",
-            "toString()"
+            "toString()",
+            // SPEC-0122 v10 behaviour 3d (OBS-0119 K2): no supertype, so no Implement Methods…;
+            // no copyright profile, so no Copyright.
+            "Override Methods…",
+            "Delegate Methods…",
+            "Test…",
         ]
     );
     // Under the caret's line, its left edge at the caret (OBS-0027 L10).
@@ -179,17 +186,22 @@ fn the_generate_list_opens_at_the_caret_and_filters(cx: &mut TestAppContext) {
     cx.simulate_keystrokes("backspace backspace backspace shift-g");
     assert_eq!(
         list(&bench, cx, "G", |p| p.shown_items()),
-        ["Getter", "Getter and Setter", "toString()"]
+        [
+            "Getter",
+            "Getter and Setter",
+            "toString()",
+            "Delegate Methods…"
+        ]
     );
     assert_eq!(list(&bench, cx, "G", |p| p.selected()), 1);
-    cx.simulate_keystrokes("down down down");
+    cx.simulate_keystrokes("down down down down");
     assert_eq!(
-        list(&bench, cx, "↓↓↓", |p| p.selected()),
+        list(&bench, cx, "↓↓↓↓", |p| p.selected()),
         1,
         "↓ wraps among the shown rows"
     );
     cx.simulate_keystrokes("up");
-    assert_eq!(list(&bench, cx, "↑", |p| p.selected()), 5);
+    assert_eq!(list(&bench, cx, "↑", |p| p.selected()), 7);
     // Backspace widens again.
     cx.simulate_keystrokes("backspace s e t t");
     assert_eq!(
@@ -204,7 +216,10 @@ fn the_generate_list_opens_at_the_caret_and_filters(cx: &mut TestAppContext) {
             "Setter",
             "Getter and Setter",
             "equals() and hashCode()",
-            "toString()"
+            "toString()",
+            "Override Methods…",
+            "Delegate Methods…",
+            "Test…",
         ]
     );
     // A text no row has: the list stays and Enter does nothing.
@@ -215,7 +230,7 @@ fn the_generate_list_opens_at_the_caret_and_filters(cx: &mut TestAppContext) {
     let (filter, shown) = list(&bench, cx, "Escape", |p| {
         (p.filter().map(str::to_owned), p.shown().len())
     });
-    assert_eq!((filter.as_deref(), shown), (Some(""), 6));
+    assert_eq!((filter.as_deref(), shown), (Some(""), 9));
     // … and Enter takes the row a text leaves: the field list opens at the same place.
     cx.simulate_keystrokes("s e t t enter");
     let (title, fields) = list(&bench, cx, "Enter", |p| {

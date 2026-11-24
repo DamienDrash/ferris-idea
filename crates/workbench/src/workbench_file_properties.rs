@@ -1,12 +1,12 @@
 //! The file property actions in the window (`SPEC-0336`): line separators, encoding, byte order
 //! mark and the read-only state of the active file or the Project tree's selection. What they
 //! offer, ask and say is in [`crate::file_properties_model`]; the properties and every write to
-//! a file that is not open are in [`idecraft_core::file_properties`].
+//! a file that is not open are in [`ferris_idea_core::file_properties`].
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_core::file_properties as fp;
 use gpui::{Context, Entity, Window};
-use idecraft_core::file_properties as fp;
 
 use super::{DrawnFor, WorkbenchView};
 use crate::editor_view::EditorView;

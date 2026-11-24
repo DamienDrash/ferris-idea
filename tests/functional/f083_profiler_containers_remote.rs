@@ -26,11 +26,16 @@ fn profiler_lists_own_processes_and_never_the_reference() {
         }
     }
     p.write(
-        ".idecraft/run.toml",
+        ".ferris-idea/run.toml",
         "[[run]]\nname = \"w\"\ncommand = [\"sh\", \"-c\", \"true\"]\n",
     );
-    let preview = ide.ok("profile_run", json!({"name": "w"}));
-    assert!(text(&preview).contains("w"), "{preview}");
+    // SPEC-0252 v3 behaviour 1: where the kernel forbids perf (Linux with
+    // kernel.perf_event_paranoid above 2, as on the CI host), even the dry run is refused and
+    // names the setting; elsewhere the dry run previews the run.
+    match ide.call("profile_run", json!({"name": "w"})) {
+        Ok(preview) => assert!(text(&preview).contains("w"), "{preview}"),
+        Err(e) => assert!(e.contains("perf_event_paranoid"), "{e}"),
+    }
     ide.refused("profile_run", json!({"name": "w", "dry_run": false}));
 }
 

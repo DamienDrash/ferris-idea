@@ -3,7 +3,7 @@
   "additionalProperties": false,
   "description": "Exchange file `.idcsettings` (SPEC-0303). TOML; validated on import with every problem and its key path.",
   "properties": {
-    "idecraft": {
+    "ferris-idea": {
       "additionalProperties": false,
       "properties": {
         "author": {
@@ -33,7 +33,7 @@
           "type": "string"
         },
         "min_version": {
-          "description": "Oldest IDECraft version the author expects.",
+          "description": "Oldest Ferris IDEA version the author expects.",
           "type": "string"
         },
         "name": {
@@ -95,6 +95,10 @@
             },
             "light_theme": {
               "type": "string"
+            },
+            "startup_animation": {
+              "description": "The startup animation while start-up work runs (SPEC-0355).",
+              "type": "boolean"
             },
             "sync_with_os": {
               "type": "boolean"
@@ -179,6 +183,42 @@
             "font_size": {
               "description": "Font size in pixels.",
               "type": "number"
+            },
+            "grammar": {
+              "additionalProperties": false,
+              "description": "Scope of the grammar and spelling checks (SPEC-0155 v8).",
+              "properties": {
+                "commit_messages": {
+                  "description": "Check commit messages.",
+                  "type": "boolean"
+                },
+                "file_types": {
+                  "additionalProperties": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "comments": {
+                        "type": "boolean"
+                      },
+                      "documentation": {
+                        "description": "Documentation comments and docstrings.",
+                        "type": "boolean"
+                      },
+                      "enabled": {
+                        "description": "Check files of the type.",
+                        "type": "boolean"
+                      },
+                      "string_literals": {
+                        "description": "Off by default.",
+                        "type": "boolean"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "description": "Scope per file type (status-bar name, e.g. Java, Plain text).",
+                  "type": "object"
+                }
+              },
+              "type": "object"
             },
             "highlight_usages_at_caret": {
               "type": "boolean"
@@ -286,6 +326,20 @@
           },
           "type": "object"
         },
+        "intentions": {
+          "additionalProperties": false,
+          "description": "Intentions (SPEC-0076 v11).",
+          "properties": {
+            "disabled": {
+              "description": "Titles of the intentions turned off in the context actions.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        },
         "notifications": {
           "additionalProperties": false,
           "description": "Notifications (SPEC-0337).",
@@ -351,9 +405,9 @@
     }
   },
   "required": [
-    "idecraft",
+    "ferris-idea",
     "settings"
   ],
-  "title": "IDECraft settings bundle (kind `settings`, format 1)",
+  "title": "Ferris IDEA settings bundle (kind `settings`, format 1)",
   "type": "object"
 }

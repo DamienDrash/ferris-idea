@@ -1,6 +1,6 @@
 # SPEC-0005: SQL script splitting
 
-- **Version:** 6 · **Date:** 2026-11-16 (v6: a T-SQL batch that declares a variable or uses control of flow runs as one statement from there to its `GO`, behaviour 11a — F-060 run without a screen); 2026-11-15 (v5: the editor colours block comments by the same rules, behaviour 19 — OBS-0051 L7); 2026-11-15 (v4: every result set of one statement, behaviour 18 — OBS-0051 L2); 2026-11-14 (v3: `DELIMITER`, escape strings, nested comments, SQLite brackets, MySQL's `--` rule and properties of every split, behaviours 12–17 — F-050); 2026-11-13 (v2: the bodies of triggers, procedures and functions stay one
+- **Version:** 7 · **Date:** 2026-11-17 (v7: the editor and `highlight_file` colour a SQL file by its dialect's lexis over the general grammar — comments, strings, quoted names, numbers, variables, separators and the dialect's keywords, behaviour 20, AK-22 to AK-24 — OBS-0083 L7); 2026-11-16 (v6: a T-SQL batch that declares a variable or uses control of flow runs as one statement from there to its `GO`, behaviour 11a — F-060 run without a screen); 2026-11-15 (v5: the editor colours block comments by the same rules, behaviour 19 — OBS-0051 L7); 2026-11-15 (v4: every result set of one statement, behaviour 18 — OBS-0051 L2); 2026-11-14 (v3: `DELIMITER`, escape strings, nested comments, SQLite brackets, MySQL's `--` rule and properties of every split, behaviours 12–17 — F-050); 2026-11-13 (v2: the bodies of triggers, procedures and functions stay one
   statement — F-053, notes from the SQLite check in PR 650; v1 2026-10-30)
 - **Sources:** GEN (running "the current statement" or a whole script in SQL tools), STD (SQL lexical rules; PostgreSQL, MySQL and SQLite manuals for dialect differences; SQLite `CREATE TRIGGER`, MySQL compound statements, PostgreSQL `CREATE FUNCTION … BEGIN ATOMIC`, T-SQL batches; v3: PostgreSQL manual on `E'…'` strings and nested block comments, MySQL manual on the `mysql` client's `delimiter` command and on `--` comments, SQLite documentation on `[identifier]`, Transact-SQL reference on nested comments)
 - **Feature matrix rows:** F-050, F-053
@@ -77,6 +77,46 @@ Split an SQL script into individual statements so they can be executed one by on
     it ends at the first `*/`. Quotes, dollar quotes and line comments are skipped as in splitting, so a
     `/*` in a string opens nothing. The dialect is that of the file's data source (SPEC-0192), else the
     one its path names (SPEC-0019), else PostgreSQL as for inspections. [STD]
+20. **v7 – Colours by the dialect's lexis (OBS-0083 L7):** the SQL editor and the MCP tool
+    `highlight_file` (SPEC-0027 behaviour 6) read a SQL file with the lexical rules of its dialect —
+    the ones splitting uses (behaviours 12 to 16 and 19), the dialect chosen as in behaviour 19 — and lay
+    what that reading decides over the colours of the general SQL grammar. One grammar stays; the
+    dialect is a layer over it. The layer names:
+    - **comments:** `--` (in MySQL and MariaDB only with the blank of behaviour 15), `#` in MySQL and
+      MariaDB, block comments as in behaviour 19;
+    - **strings:** `'…'` (with MySQL's and MariaDB's `\'`), `"…"` in MySQL and MariaDB, `N'…'`,
+      `X'…'`, `B'…'`, PostgreSQL's `E'…'`, Oracle's `q'[…]'` and `nq'…'`, dollar quotes in PostgreSQL
+      and DuckDB;
+    - **quoted names:** `` `x` `` in MySQL, MariaDB and SQLite, `[x]` in SQL Server and SQLite, `"x"`
+      elsewhere — a quoted name keeps the role the grammar gave it if that is the role of a name
+      (column, variable, type, function), else it shows as a variable;
+    - **numbers**, and as parameters: `@var` and `@@var` in SQL Server, MySQL and MariaDB, `?` and
+      `?1`, `:name` in Oracle and SQLite, `$name` in SQLite, `$1` in PostgreSQL and DuckDB;
+    - **separators:** a `DELIMITER` line (the word a keyword, the new delimiter and each later use of
+      it a delimiter), SQL Server's `GO` line (a keyword, its count a number), Oracle's `/` line (a
+      delimiter);
+    - **keywords:** the reserved words all dialects share (`SELECT`, `FROM`, `WHERE`, `JOIN`, `BEGIN`,
+      `END`, `NULL`, `FETCH`, `OVER`, …) and each dialect's own — MySQL and MariaDB their compound
+      statement words (`DECLARE`, `ELSEIF`, `LOOP`, `LEAVE`, `SIGNAL`, …), `LIMIT`, `REGEXP`, `SHOW`,
+      MariaDB also `RETURNING`; SQL Server `TOP`, `NOLOCK` and the other table hints, `DECLARE`,
+      `EXEC`, `TRY`/`CATCH`, `OUTPUT`, `MERGE`, `PRINT`; Oracle the PL/SQL words (`EXCEPTION`, `ELSIF`,
+      `LOOP`, `PRAGMA`, `RAISE`, …), `MINUS`, `CONNECT`, `PRIOR`, `ROWNUM`; SQLite `PRAGMA`, `GLOB`,
+      `AUTOINCREMENT`, `WITHOUT`, `ROWID`, `CONFLICT`, `STRICT`, `VACUUM`; DuckDB `QUALIFY`, `PIVOT`,
+      `UNPIVOT`, `SUMMARIZE`, `DESCRIBE`, `ASOF`, `INSTALL`, `LOAD`; PostgreSQL `ILIKE`, `RETURNING`,
+      `LATERAL`, `SIMILAR`. Some words are keywords only in place, so a column of that name stays a
+      name: an object kind (`PROCEDURE`, `VIEW`, `INDEX`, `TRIGGER`, …) after `CREATE`, `ALTER`, `DROP`
+      or `REPLACE`; `KEY` after `PRIMARY` or `FOREIGN`; a data type after a variable (`DECLARE @n int`),
+      after `RETURNS` and after `AS` inside parentheses (a cast); `FIRST`, `NEXT`, `ROWS`, `ONLY` and
+      `TIES` in a `FETCH` or `OFFSET` clause; `IF`, `LEFT`, `RIGHT`, `REPLACE` and `TRUNCATE` unless a
+      `(` follows (then they are calls). A word after `.` is a name.
+
+    The grammar's own strings and comments give way to the layer; everything the layer does not name
+    keeps the grammar's colour (functions, columns, aliases, the types of a column definition). Until
+    v6 a dialect changed only nested comments: bound to MariaDB a line with a backtick and `\'` lost all
+    its colours and `#` comments showed as operator and keyword; `TOP`, `@n` and the `GO` lines of
+    SQL Server and Oracle's `FETCH FIRST` were uncoloured or coloured as names. [STD: the lexical
+    structure in the MySQL, MariaDB, Transact-SQL, Oracle SQL, SQLite, DuckDB and PostgreSQL
+    references; GEN]
 
 ## Acceptance criteria
 - **AK-1** Basic splitting and trimming.
@@ -127,6 +167,24 @@ Split an SQL script into individual statements so they can be executed one by on
   their `GO` as one statement, the statements before them in the batch split at `;`, `begin tran;`
   splits as before; live on SQL Server (`crates/database/tests/it/dialect_steps_live.rs::sql_server_steps`)
   the variable is read in the same batch and the `CATCH` part answers.
+- **AK-22 (v7, behaviour 20)** The samples of OBS-0083 (`docs/research/observations/evidence/OBS-0083/`)
+  in their dialects (`sql_colours::tests`): MariaDB — `#` comment, `` `id` `` a name, `'a\'b'` one
+  string, `RETURNING`, `DELIMITER`, `PROCEDURE`, `BEGIN`, `END` keywords, `//` a delimiter, `--1` no
+  comment, `"…"` a string, `@@version` a parameter, MySQL without `RETURNING`; SQL Server — `TOP`,
+  `NOLOCK`, both `GO` lines, `DECLARE` and `int` after `@n` keywords, `[id]` a name, `N'text'` a string,
+  `@n` a parameter, a column `text` and a mid-line `go` no keywords; Oracle — `q'[a;b/c]'` a string, the
+  `/` line a delimiter, `BEGIN`, `NULL`, `END`, `FETCH FIRST 1 ROWS ONLY` keywords, a column `first` a
+  name, `:name` a parameter; SQLite — `PRAGMA` a keyword (not in PostgreSQL), `?1` a parameter; DuckDB —
+  `$$dollar$$` a string, `QUALIFY`, `SUMMARIZE` keywords (not in SQLite); `replace(` and `left(` calls,
+  `OR REPLACE` and `LEFT JOIN` keywords; runs ordered without overlaps in every dialect.
+- **AK-23 (v7, behaviour 20)** `syntax::tests::a_layer_wins_over_the_grammar` (the layer's kinds over a
+  broken tree, the tree's strings dropped, a quoted name keeping the tree's field role, only runs in the
+  asked range); `sql_editor_model::tests::nested_comments_are_coloured_per_dialect` (behaviour 19 through
+  the layer).
+- **AK-24 (v7, behaviour 20)** `protocol.rs::highlight_file_reads_sql_in_its_dialect`: `q.mariadb.sql`
+  gives a comment, one string over `'a\'b'` and `RETURNING` as keyword; `q.tsql.sql` gives `TOP`, `GO`
+  and `int` as keywords and `@n` as parameter. In the window next to the reference: OBS-0083 part 2,
+  step D4.
 
 ## Out of scope
 A count after `GO` (`GO 5`): the line ends the batch and the batch runs once. `psql` backslash commands,

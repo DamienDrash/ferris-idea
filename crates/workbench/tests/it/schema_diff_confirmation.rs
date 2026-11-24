@@ -5,8 +5,8 @@
 
 #![cfg(target_os = "macos")]
 
+use ferris_idea_workbench::WorkbenchView;
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_workbench::WorkbenchView;
 
 const QUERY: &str = "select * from customers;\n";
 
@@ -21,9 +21,9 @@ fn sqlite(db: &std::path::Path, sql: &str) -> bool {
 /// A workspace with two SQLite connections: `shop`, and `copy` with a table and a view on it that
 /// `shop` does not have. `None` without the `sqlite3` program.
 fn workspace() -> Option<std::path::PathBuf> {
-    let root = std::env::temp_dir().join(format!("idecraft-ht121-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-ht121-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir_all(root.join(".idecraft")).unwrap();
+    std::fs::create_dir_all(root.join(".ferris-idea")).unwrap();
     let (shop, copy) = (root.join("shop.db"), root.join("copy.db"));
     let made = sqlite(
         &shop,
@@ -38,7 +38,7 @@ fn workspace() -> Option<std::path::PathBuf> {
         return None;
     }
     std::fs::write(
-        root.join(".idecraft/connections.toml"),
+        root.join(".ferris-idea/connections.toml"),
         format!(
             "[[connection]]\nid = \"shop\"\nname = \"shop\"\ndialect = \"sqlite\"\npath = \"{}\"\n\n\
              [[connection]]\nid = \"copy\"\nname = \"copy\"\ndialect = \"sqlite\"\npath = \"{}\"\n",

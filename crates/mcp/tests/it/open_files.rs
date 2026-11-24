@@ -10,13 +10,15 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use idecraft_editor::TextBuffer;
-use idecraft_editor::documents::{
+use ferris_idea_editor::TextBuffer;
+use ferris_idea_editor::documents::{
     DocumentChange, DocumentEdit, DocumentEdited, DocumentRegistry, apply_edit,
 };
-use idecraft_mcp::effects::{Change, TOOLS};
-use idecraft_mcp::open_files::{OWN_FILES, REFUSES_UNSAVED, REFUSES_UNSAVED_MAX, THROUGH_BUFFER};
-use idecraft_mcp::window::{PendingWork, PermissionAnswer, PermissionRequest, QuitMode, Window};
+use ferris_idea_mcp::effects::{Change, TOOLS};
+use ferris_idea_mcp::open_files::{
+    OWN_FILES, REFUSES_UNSAVED, REFUSES_UNSAVED_MAX, THROUGH_BUFFER,
+};
+use ferris_idea_mcp::window::{PendingWork, PermissionAnswer, PermissionRequest, QuitMode, Window};
 use serde_json::json;
 use tokio::sync::oneshot;
 
@@ -47,13 +49,13 @@ fn every_file_changing_tool_edits_open_files_through_the_buffer_or_refuses() {
         .map(|t| t.tool)
         .collect();
     let mut lists: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
-    for t in THROUGH_BUFFER {
+    for t in THROUGH_BUFFER.iter() {
         lists.entry(t).or_default().push("THROUGH_BUFFER");
     }
     for t in REFUSES_UNSAVED {
         lists.entry(t).or_default().push("REFUSES_UNSAVED");
     }
-    for (t, why) in OWN_FILES {
+    for (t, why) in OWN_FILES.iter() {
         lists.entry(t).or_default().push("OWN_FILES");
         if why.trim().is_empty() {
             problems.push(format!("{t}: OWN_FILES without a reason"));
@@ -65,7 +67,7 @@ fn every_file_changing_tool_edits_open_files_through_the_buffer_or_refuses() {
         }
         if !changing.contains(tool) {
             problems.push(format!(
-                "{tool}: listed in crates/mcp/src/open_files.rs, but its row in TOOLS does not change files"
+                "{tool}: in an open-files list, but its row in TOOLS does not change files"
             ));
         }
     }
@@ -76,7 +78,7 @@ fn every_file_changing_tool_edits_open_files_through_the_buffer_or_refuses() {
             ));
         }
     }
-    for tool in THROUGH_BUFFER {
+    for tool in THROUGH_BUFFER.iter() {
         let code = code_of(tool, &functions);
         if !["write_document(", "write_documents(", "write_shown("]
             .iter()
@@ -185,9 +187,9 @@ async fn open_with_unsaved_typing(
     })
     .await;
     let editor = window.lock().unwrap().clone().unwrap();
-    std::fs::create_dir_all(root.join(".idecraft")).unwrap();
+    std::fs::create_dir_all(root.join(".ferris-idea")).unwrap();
     std::fs::write(
-        root.join(".idecraft/copyright.txt"),
+        root.join(".ferris-idea/copyright.txt"),
         "Copyright $today.year ACME",
     )
     .unwrap();
@@ -230,7 +232,7 @@ async fn an_agent_edit_of_an_unsaved_buffer_keeps_the_users_text_and_undoes_in_o
     assert_eq!(answer["applied"], true, "{answer}");
     // The answer and the buffer hold the user's typing and the notice.
     let shown = editor.buffer.lock().unwrap().text();
-    assert!(shown.starts_with("# Copyright 2026 ACME"), "{shown}");
+    assert!(shown.starts_with("#  Copyright 2026 ACME"), "{shown}");
     assert!(shown.ends_with(&typed), "{shown}");
     assert_eq!(answer["text"], json!(shown));
     // Nothing was written behind the editor; the entry moved on by one and stays unsaved.
@@ -266,7 +268,7 @@ async fn an_agent_edit_of_an_unsaved_buffer_keeps_the_users_text_and_undoes_in_o
         .await;
     assert!(!is_error(&done), "{done}");
     let shown = editor.buffer.lock().unwrap().text();
-    assert!(shown.starts_with("# Copyright 2027 ACME"), "{shown}");
+    assert!(shown.starts_with("#  Copyright 2027 ACME"), "{shown}");
     assert_eq!(std::fs::read_to_string(&file).unwrap(), shown);
     assert!(!editor.registry.get(&key).unwrap().modified);
     assert!(editor.buffer.lock().unwrap().undo());
@@ -334,7 +336,7 @@ async fn tools_that_cannot_edit_the_buffer_refuse_unsaved_files() {
     assert!(
         std::fs::read_to_string(&file)
             .unwrap()
-            .starts_with("# Copyright 2026 ACME")
+            .starts_with("#  Copyright 2026 ACME")
     );
 }
 
@@ -609,7 +611,7 @@ async fn a_change_of_several_open_files_applies_to_all_or_none() {
 }
 
 /// SPEC-0220 v3 AK-9: format_file formats the shown text of a file with unsaved changes and
-/// leaves the disk alone: IDECraft's own SQL formatter, and with clangd the language server.
+/// leaves the disk alone: Ferris IDEA's own SQL formatter, and with clangd the language server.
 #[tokio::test]
 async fn format_file_formats_the_shown_text_of_an_unsaved_buffer() {
     let (mut client, root, editors) = with_editors().await;
@@ -1113,4 +1115,35 @@ async fn replace_text_in_file_goes_through_the_buffer() {
     );
     assert!(editor.buffer.lock().unwrap().undo());
     assert_eq!(editor.buffer.lock().unwrap().text(), typed);
+}
+
+/// SPEC-0006 v59 AK-24: `apply_patch` patches an open file with unsaved changes in its buffer,
+/// next to the user's typing, not on the disk, and a closed file on the disk, as one change; one
+/// undo gives the typing back.
+#[tokio::test]
+async fn apply_patch_goes_through_the_buffer() {
+    let (mut client, root, editors) = with_editors().await;
+    let open = root.join("src/open.txt");
+    let closed = root.join("src/closed.txt");
+    std::fs::write(&open, "a\nb\n").unwrap();
+    std::fs::write(&closed, "x\n").unwrap();
+    editors.open(&open);
+    editors.type_at_end(&open, "typed\n");
+    let typed = editors.text(&open);
+    // The typed line, named at line 1: found further down.
+    let patch = "--- a/src/open.txt\n+++ b/src/open.txt\n@@ -1 +1 @@\n-typed\n+TYPED\n--- a/src/closed.txt\n+++ b/src/closed.txt\n@@ -1 +1 @@\n-x\n+X\n";
+    let done = client
+        .call("apply_patch", json!({"patch": patch, "dry_run": false}))
+        .await;
+    assert!(!is_error(&done), "{done}");
+    assert_eq!(json_text(&done)["applied"], true);
+    assert_eq!(editors.text(&open), "a\nb\nTYPED\n");
+    assert_eq!(
+        std::fs::read_to_string(&open).unwrap(),
+        "a\nb\n",
+        "nothing behind the editor"
+    );
+    assert_eq!(std::fs::read_to_string(&closed).unwrap(), "X\n");
+    assert!(editors.undo(&open));
+    assert_eq!(editors.text(&open), typed);
 }

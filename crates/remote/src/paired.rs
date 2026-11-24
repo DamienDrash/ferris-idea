@@ -1,17 +1,17 @@
 //! A folder on a paired host as a remote project (`SPEC-0321` behaviours 13–23): a session over the
-//! encrypted paired channel to a running `idecraft serve --pair`. A broken channel is resumed
+//! encrypted paired channel to a running `ferris-idea serve --pair`. A broken channel is resumed
 //! with a new handshake; a restarted backend means a new session with the documents reconciled.
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use idecraft_pairing::{
+use ferris_idea_pairing::{
     ChildPipe, Identity, KeyError, PairError, PairLink, PendingPairing, Side, Store, connect_known,
     connect_known_on, default_device_name, start_pairing, start_pairing_on,
     start_pairing_with_link,
 };
-use idecraft_session::{ClientSession, ErrorCode, Reconnected, Recovery};
+use ferris_idea_session::{ClientSession, ErrorCode, Reconnected, Recovery};
 use serde_json::{Value, json};
 
 use crate::project::Unsaved;
@@ -100,7 +100,7 @@ fn connect_path(
     store: &Store,
     identity: &Identity,
     device: &str,
-) -> Result<idecraft_session::Transport, RemoteError> {
+) -> Result<ferris_idea_session::Transport, RemoteError> {
     let Some((alias, port)) = ssh_path(address) else {
         return connect_known(address, store, identity, device).map_err(pair_error);
     };
@@ -115,13 +115,13 @@ fn connect_path(
 
 /// The store of this window's paired hosts.
 fn window_list() -> Result<Store, RemoteError> {
-    let dir = idecraft_core::user_config_dir()
+    let dir = ferris_idea_core::user_config_dir()
         .ok_or_else(|| RemoteError::Failed("no settings folder for paired hosts".into()))?
         .join("remote");
     Store::open(
         Side::Window,
         &dir,
-        std::env::var_os("IDECRAFT_KEY_FILE").is_some(),
+        ferris_idea_core::product_var_os("FERRIS_IDEA_KEY_FILE").is_some(),
     )
     .map_err(key_error)
 }
@@ -195,12 +195,12 @@ pub fn add_path(address: &str, path: &str) -> Result<bool, RemoteError> {
 
 /// The accepting side's store (paired devices).
 fn serve_store() -> Result<(Store, PathBuf), RemoteError> {
-    let state = idecraft_core::user_config_dir()
+    let state = ferris_idea_core::user_config_dir()
         .ok_or_else(|| RemoteError::Failed("no settings folder for paired devices".into()))?;
     let store = Store::open(
         Side::Serve,
         &state.join("remote"),
-        std::env::var_os("IDECRAFT_KEY_FILE").is_some(),
+        ferris_idea_core::product_var_os("FERRIS_IDEA_KEY_FILE").is_some(),
     )
     .map_err(key_error)?;
     Ok((store, state))
@@ -240,7 +240,7 @@ fn restrict(
     if let Some(extra) = rights.iter().find(|r| !device.rights.contains(r)) {
         return Err(RemoteError::Failed(format!(
             "`{extra}` is not among this device's rights; only the user can widen them with \
-             `idecraft serve --rights`"
+             `ferris-idea serve --rights`"
         )));
     }
     let mut kept: Vec<String> = vec!["view".to_owned()];
@@ -257,7 +257,7 @@ pub fn device_revoke(fingerprint: &str) -> Result<bool, RemoteError> {
 /// The newest audit lines, for one device or all (`SPEC-0324` behaviour 10).
 pub fn device_log(fingerprint: Option<&str>, limit: usize) -> Result<Vec<Value>, RemoteError> {
     let (_, state) = serve_store()?;
-    Ok(idecraft_pairing::audit::read_log(
+    Ok(ferris_idea_pairing::audit::read_log(
         &state,
         fingerprint,
         limit,
@@ -324,7 +324,7 @@ impl PairedProject {
         let session = ClientSession::open(
             transport,
             folder,
-            &format!("idecraft {}", env!("CARGO_PKG_VERSION")),
+            &format!("ferris-idea {}", env!("CARGO_PKG_VERSION")),
             &label,
             recovery,
         )
@@ -452,7 +452,7 @@ mod tests {
         store
             .add_device(&public, "phone", &["view".into(), "edit".into()])
             .unwrap();
-        let fp = idecraft_pairing::fingerprint(&public);
+        let fp = ferris_idea_pairing::fingerprint(&public);
         let refused = restrict(&store, &fp, &["run".into()]).unwrap_err();
         assert!(refused.to_string().contains("only the user"), "{refused}");
         let kept = restrict(&store, &fp, &["edit".into()]).unwrap();

@@ -1,6 +1,6 @@
 //! The changelists of a project (`SPEC-0335`): named lists the changed files are sorted into, one
-//! of them active and receiving new changes, kept for one user in the workspace's IDECraft
-//! settings (`.idecraft/changelists.toml`). A changelist is a thing of the IDE; nothing of it is
+//! of them active and receiving new changes, kept for one user in the workspace's Ferris IDEA
+//! settings (`.ferris-idea/changelists.toml`). A changelist is a thing of the IDE; nothing of it is
 //! written into the repository.
 //!
 //! Names and paths in the state file are data: a path is only ever compared with the paths the
@@ -12,7 +12,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 /// Where the changelists of a workspace are kept, relative to its root.
-pub const CHANGELISTS_FILE: &str = ".idecraft/changelists.toml";
+pub const CHANGELISTS_FILE: &str = ".ferris-idea/changelists.toml";
 
 /// The name of the list every project starts with, and of the list that replaces the last one.
 pub const DEFAULT_NAME: &str = "Changes";
@@ -161,7 +161,7 @@ impl std::fmt::Display for Unreadable {
             Unreadable::Broken => f.write_str("its content is not a list of changelists"),
             Unreadable::Version(v) => write!(
                 f,
-                "it has format version {v}, this IDECraft reads version {FORMAT_VERSION}"
+                "it has format version {v}, this Ferris IDEA reads version {FORMAT_VERSION}"
             ),
         }
     }
@@ -536,7 +536,7 @@ impl Changelists {
     /// [`DEFAULT_NAME`]; so is a file that cannot be used, with the reason (behaviour 21).
     pub fn load(root: &Path) -> (Self, Option<Unreadable>) {
         let file = root.join(CHANGELISTS_FILE);
-        // A link is not followed: the file is IDECraft's own or it is not used.
+        // A link is not followed: the file is Ferris IDEA's own or it is not used.
         let meta = match std::fs::symlink_metadata(&file) {
             Ok(m) => m,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return (Self::default(), None),
@@ -585,7 +585,7 @@ impl Changelists {
             if out.lists.len() == MAX_LISTS {
                 break;
             }
-            // The name as written: one that needs trimming is not a name IDECraft wrote.
+            // The name as written: one that needs trimming is not a name Ferris IDEA wrote.
             let Ok(name) = valid_name(&list.name) else {
                 continue;
             };
@@ -624,7 +624,7 @@ impl Changelists {
                 })
                 .collect(),
         };
-        let mut text = String::from("# Changelists of this workspace (IDECraft)\n");
+        let mut text = String::from("# Changelists of this workspace (Ferris IDEA)\n");
         text.push_str(&toml::to_string(&stored).expect("strings and lists of strings"));
         text
     }
@@ -647,7 +647,7 @@ impl Changelists {
                     .is_some_and(|v| v.version > FORMAT_VERSION);
             if newer {
                 return Err(std::io::Error::other(format!(
-                    "{CHANGELISTS_FILE} was written by a newer IDECraft"
+                    "{CHANGELISTS_FILE} was written by a newer Ferris IDEA"
                 )));
             }
         }
@@ -677,8 +677,10 @@ mod tests {
     use super::*;
 
     fn scratch(tag: &str) -> std::path::PathBuf {
-        let dir =
-            std::env::temp_dir().join(format!("idecraft-changelists-{tag}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "ferris-idea-changelists-{tag}-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -1045,7 +1047,7 @@ mod tests {
         assert_eq!(read, lists);
         assert_eq!(read.active(), "Checkout \"v2\" = [x]");
         // No temporary file is left behind.
-        let left: Vec<_> = std::fs::read_dir(dir.join(".idecraft"))
+        let left: Vec<_> = std::fs::read_dir(dir.join(".ferris-idea"))
             .unwrap()
             .map(|e| e.unwrap().file_name().into_string().unwrap())
             .collect();
@@ -1115,7 +1117,7 @@ files = ["a.rs", "e.rs"]
     #[test]
     fn an_unusable_file_is_the_list_changes_with_the_reason() {
         let dir = scratch("unusable");
-        std::fs::create_dir_all(dir.join(".idecraft")).unwrap();
+        std::fs::create_dir_all(dir.join(".ferris-idea")).unwrap();
         let file = dir.join(CHANGELISTS_FILE);
         // Missing: no problem.
         assert_eq!(Changelists::load(&dir), (Changelists::default(), None));
@@ -1161,7 +1163,7 @@ files = ["a.rs", "e.rs"]
     #[test]
     fn a_newer_file_and_a_link_are_not_written() {
         let dir = scratch("kept");
-        std::fs::create_dir_all(dir.join(".idecraft")).unwrap();
+        std::fs::create_dir_all(dir.join(".ferris-idea")).unwrap();
         let file = dir.join(CHANGELISTS_FILE);
         let mut lists = Changelists::default();
         lists.create("Cart", true).unwrap();
@@ -1204,7 +1206,7 @@ files = ["a.rs", "e.rs"]
         lists.sync(&paths(&["a.rs"]), &[]);
         assert!(!lists.save_if_kept(&dir).unwrap());
         assert!(!dir.join(CHANGELISTS_FILE).exists());
-        assert!(!dir.join(".idecraft").exists());
+        assert!(!dir.join(".ferris-idea").exists());
         // With a second list there is something to keep.
         lists.create("Cart", false).unwrap();
         assert!(lists.save_if_kept(&dir).unwrap());

@@ -5,7 +5,7 @@
   AK-16, IMP-0497 — OBS-0076 C1); 2026-11-16 (v4: a CA file is the only trust anchor for SQL Server too —
   the chain the server shows must lead to a certificate of the file before any login data leaves;
   connector plugins get a connection without TLS only where the profile's mode allows plain text,
-  elsewhere TLS that IDECraft makes for them — behaviours 10, 14, AK-14, AK-15, IMP-0426, IMP-0427);
+  elsewhere TLS that Ferris IDEA makes for them — behaviours 10, 14, AK-14, AK-15, IMP-0426, IMP-0427);
   2026-11-16 (v3: `prefer` falls back to a plain connection only for a
   server on the loopback; on any other host it needs TLS like `require`, and the error says how to give
   the server TLS; the same rule for SQL Server and Oracle; SQL Server takes a CA file — IMP-0421,
@@ -69,14 +69,14 @@ to less than requested.
     certificate), checked in `verify-ca` and `verify-full`; its driver trusts the file's certificates
     in addition to the system's roots and cannot replace them (SPEC-0116 v6 behaviour 15). **v4 – The
     CA file is the only anchor for SQL Server too (IMP-0426):** besides the driver's check of the
-    certificate against the file and the system's roots together, IDECraft checks the chain the
+    certificate against the file and the system's roots together, Ferris IDEA checks the chain the
     server showed against the file alone: it must lead to a certificate of the file, or be that
     certificate. Otherwise the connection ends before any login data is sent, with an error naming
     the file. Up to v3 a certificate for the host name from any authority the system trusts was
     accepted although the profile named a private CA (SPEC-0116 v7 behaviour 15). [STD, rule 12]
 11. **v2 – Private files (IMP-0374):** a key file or PKCS#12 bundle that its group or others can read is
     refused with its path and mode ("mode 0644; restrict it with chmod 600"); a key protected by a
-    passphrase is refused, since IDECraft never asks for or keeps one. The error never contains the
+    passphrase is refused, since Ferris IDEA never asks for or keeps one. The error never contains the
     file's content. [STD, GEN]
 12. **v2 – Through an SSH tunnel** (SPEC-0108 v4 behaviour 8): the socket goes to the tunnel's local end,
     and certificate and host name are checked against the profile's host, not `127.0.0.1`. [GEN]
@@ -95,9 +95,9 @@ to less than requested.
 14. **v4 – Connector plugins (IMP-0427):** a database system reached through a WebAssembly plugin
     (SPEC-0314) follows the same modes. The plugin gets a connection without TLS only where the
     profile's mode allows plain text — `disable` on any host, `prefer` for a server on the loopback
-    (behaviour 3); everywhere else it gets only a connection whose TLS IDECraft makes, at TLS 1.2 or
+    (behaviour 3); everywhere else it gets only a connection whose TLS Ferris IDEA makes, at TLS 1.2 or
     newer, with the checks of the mode and the profile's CA file instead of the system's roots
-    (SPEC-0314 v2 behaviour 10). IDECraft cannot see what a plugin sends, so a connection without
+    (SPEC-0314 v2 behaviour 10). Ferris IDEA cannot see what a plugin sends, so a connection without
     TLS is refused before anything is resolved, not watched. [GEN, rule 12]
 15. **v5 – A refused certificate (OBS-0076 C1, IMP-0497):** when `verify-ca` or `verify-full` fails
     because the system does not accept the server's certificate (an unknown authority, a name that
@@ -125,7 +125,7 @@ certificate):
 - **AK-7** (v2) A key file with mode 0644 or 0640, an encrypted key, a CA file without certificates are
   refused naming the file, never its content (`session::tests::private_files_are_checked`; live
   `tests/tls.rs` `readable_client_keys_are_refused`).
-- **AK-8** (v2, live, `IDECRAFT_TEST_MYSQL_CA` = the server's own CA): `verify-ca` with it connects
+- **AK-8** (v2, live, `FERRIS_IDEA_TEST_MYSQL_CA` = the server's own CA): `verify-ca` with it connects
   encrypted (on macOS the system refuses MySQL's ten-year certificate, which the test accepts as the
   only other outcome); `verify-full` with it fails on the host name; `verify-ca` with a CA that did not
   sign the certificate fails — no fallback (`tests/tls.rs` `mysql_ca_files_are_checked`).
@@ -140,25 +140,25 @@ certificate):
   (`oracle::tests::prefer_off_the_loopback_is_tcps`).
 - **AK-11** (v3, behaviour 13) The hint per dialect names its server setting and no weaker mode
   (`session::tests::the_hint_says_how_to_give_the_server_tls`).
-- **AK-12** (v3, live, `IDECRAFT_TEST_PG` without TLS) `prefer` with the profile host `db.example.invalid`,
+- **AK-12** (v3, live, `FERRIS_IDEA_TEST_PG` without TLS) `prefer` with the profile host `db.example.invalid`,
   the socket going to the reference PostgreSQL as through a tunnel, fails with mode `prefer`, the
   reason and `ssl = on`; with host `localhost` it connects and reports "not encrypted"
   (`tests/tls.rs` `postgres_prefer_off_the_loopback_needs_tls`).
-- **AK-13** (v3, live, `IDECRAFT_TEST_SQLSERVER`; SPEC-0116 v6 AK-10) On macOS `require` and
+- **AK-13** (v3, live, `FERRIS_IDEA_TEST_SQLSERVER`; SPEC-0116 v6 AK-10) On macOS `require` and
   `prefer` connect encrypted, `disable` does not; `verify-full` without a CA file fails on the
-  certificate; with the test CA of `mssql.sh tls` (`IDECRAFT_TEST_SQLSERVER_CA`) it connects to
+  certificate; with the test CA of `mssql.sh tls` (`FERRIS_IDEA_TEST_SQLSERVER_CA`) it connects to
   `localhost` and fails on the host name for `127.0.0.1` (`tests/tls.rs` `sql_server_modes`).
 - **AK-14** (v4, behaviour 10; SPEC-0116 v7 AK-11) Unit: a chain that leads to a certificate of the
   CA file passes, also the file's own server certificate; a chain from another authority is refused,
   also when that authority would be trusted elsewhere; the server's Certificate message is read from
   the pre-login packets of its handshake flight, and the first login bytes are held back when the
   chain does not lead to the file or was not shown (`tds_tls::tests`). Live (SQL Server of the
-  reference environment, `IDECRAFT_TEST_SQLSERVER_CA`): `verify-full` with the test CA connects to
+  reference environment, `FERRIS_IDEA_TEST_SQLSERVER_CA`): `verify-full` with the test CA connects to
   `localhost`; with a CA file that did not sign the server's certificate it fails naming the file
   (`tests/tls.rs` `sql_server_modes`).
 - **AK-15** (v4, behaviour 14; SPEC-0314 v2 AK-6) A plugin's connection without TLS is refused for
   `require`, `verify-ca`, `verify-full`, and for `prefer` off the loopback; allowed for `disable` and
-  for `prefer` on the loopback; TLS made by IDECraft connects with `require`, and with `verify-full`
+  for `prefer` on the loopback; TLS made by Ferris IDEA connects with `require`, and with `verify-full`
   only with the CA file that signed the server's certificate (`network::tests`).
 - **AK-16** (v5, behaviour 15) `connection_form::tests::a_refused_certificate_points_to_the_ca_file`:
   MySQL's refusal of its own ten-year certificate under `verify-full` gets the CA-file hint on the
@@ -176,6 +176,6 @@ encrypted keys are refused instead of used or unlocked with a stored passphrase 
 reference's SSH/SSL tab was only seen (OBS-0026 item 12), not compared mode by mode. v3: `prefer`
 reaches a plain connection only on the loopback, elsewhere it needs TLS (IMP-0421); how the reference
 treats `prefer` was not recorded. v4: a SQL Server CA file is the only trust anchor (IMP-0426), and
-connector plugins get TLS from IDECraft under the same modes (IMP-0427); the reference has no
+connector plugins get TLS from Ferris IDEA under the same modes (IMP-0427); the reference has no
 sandboxed connector plugins. v5: a certificate the check refused gets a hint about the CA file and never
 a weaker mode (IMP-0497); the reference's message for it was not recorded.

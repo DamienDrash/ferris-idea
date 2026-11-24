@@ -1,6 +1,6 @@
 # SPEC-0262: State that survives any exit
 
-- **Version:** 2 · **Date:** 2026-11-10 (v2: a signal that the platform's quit does not carry out
+- **Version:** 3 · **Date:** 2026-11-23 (v3: the deadline after a signal runs from the signal itself, also when the window's thread is blocked, and ends the process within 5 s, behaviour 3, AK-5; OBS-0117, where `kill <pid>` did not end the window); 2026-11-10 (v2: a signal that the platform's quit does not carry out
   in time still ends the process, behaviour 3; coordinator's window run of 2026-11-10, where
   `SIGTERM` left a window with running work open, see SPEC-0261 v4)
 - **Sources:** OBS-0002, OBS-0003, OBS-0004 (after `SIGTERM` the reference restores an older
@@ -10,7 +10,7 @@
 - **Feature matrix rows:** F-087
 
 ## Purpose
-However IDECraft ends, the next start finds the state it had last, never a half-written or older
+However Ferris IDEA ends, the next start finds the state it had last, never a half-written or older
 one.
 
 ## Behaviour
@@ -29,6 +29,13 @@ one.
    the signal, the programs of run configurations are ended (SPEC-0261 v4 behaviour 13) and the
    process exits (SPEC-0261 v4 behaviour 17), so a signal never leaves a window open. [STD,
    IMP-0004]
+   **v3:** the deadline is set by the thread that receives the signal, at the signal, not by the
+   window's thread: a window thread that is blocked or busy (a modal loop, a stalled step) can no
+   longer keep the process alive. After a signal the process has ended within 5 s — the normal quit
+   if it finishes in time, otherwise after 4 s the programs of run configurations end and the
+   process exits with status 0. Unsaved editor text is dropped as with `ferris-idea quit --discard`;
+   whatever recovery data exists stays on disk. Until v2 the deadline was set only once the window's
+   thread saw the signal, so a blocked window thread ignored `SIGTERM`.
 
 ## Acceptance criteria
 - **AK-1** Atomic write: replaces content, creates the folder, leaves no temporary file, keeps the
@@ -38,6 +45,10 @@ one.
 - **AK-4** The 5 s deadline ends a process whose quit does not finish (`lifecycle::tests`); hand
   check: with a debug session and a long-running configuration, `kill <pid>` ends the window
   within 5 s (SPEC-0261 v4 AK-12).
+- **AK-5 (v3, behaviour 3)** Process test `termination::tests::a_signal_ends_a_process_whose_window_thread_is_blocked`
+  (`crates/app/src/termination.rs`): a child process catches the signals and then blocks its main
+  thread; after `SIGTERM` it has exited with status 0 within 5 s. `lifecycle::tests`: the signal
+  deadline is 4 s and shares the once-only arming with the quit deadline.
 - **AK-3** Hand test (round 4, no. 191): open a project, change the tool window layout, `kill <pid>` the window,
   start again → same layout and terminal tabs.
 

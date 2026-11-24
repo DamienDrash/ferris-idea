@@ -1,7 +1,7 @@
 # Database connectors
 
-IDECraft connects to a database system through a *connector*: a small TOML file that names the
-protocol family IDECraft already speaks and what this system does differently. The built-in
+Ferris IDEA connects to a database system through a *connector*: a small TOML file that names the
+protocol family Ferris IDEA already speaks and what this system does differently. The built-in
 systems are such files too ([`crates/database/connectors/`](../../crates/database/connectors/)).
 Decisions: [ADR-0020](../adr/0020-database-connectors.md); format:
 [SPEC-0300](../specifications/SPEC-0300-database-connector-catalogue.md); sharing:
@@ -24,7 +24,7 @@ A system that speaks the PostgreSQL, MySQL, MariaDB or SQL Server (TDS) wire pro
 Write a file `acme.idcconnector`:
 
 ```toml
-[idecraft]
+[ferris-idea]
 kind = "connector"
 format = 1
 id = "acme"                 # lowercase letters, digits and -
@@ -51,10 +51,10 @@ schemas = "select nspname, case when nspname = current_schema() then '1' else '0
 ```
 
 Then use **Import database system…** at the end of the system list in the connection dialog (or
-copy the file into `connectors/` in the IDECraft settings folder, `~/.config/idecraft/connectors/`
-by default). IDECraft shows every problem with its key and every query the file would run before
+copy the file into `connectors/` in the Ferris IDEA settings folder, `~/.config/ferris-idea/connectors/`
+by default). Ferris IDEA shows every problem with its key and every query the file would run before
 it stores anything. A definition is data: it never names a program, a library or an address
-IDECraft would run or fetch, and its queries run on your connection like queries you type, under
+Ferris IDEA would run or fetch, and its queries run on your connection like queries you type, under
 the connection's read-only and agent rules.
 
 Column layouts of the `[introspection]` queries:
@@ -72,7 +72,7 @@ Systems with a protocol of their own (Snowflake, BigQuery, Db2, …) will use th
 
 ## Connector plugins
 
-A system with neither a protocol IDECraft speaks nor an ODBC driver can be reached through a
+A system with neither a protocol Ferris IDEA speaks nor an ODBC driver can be reached through a
 WebAssembly plugin that implements its protocol. The definition says `family = "plugin"` and names
 the plugin under `[plugin]`:
 
@@ -93,12 +93,12 @@ default_port = 7000
 ```
 
 The plugin asks for the permission `profile-network`. It can only connect to the host and port of
-the connection you pick; IDECraft refuses every other host and port. Before the plugin first
-connects to a host, IDECraft warns you:
+the connection you pick; Ferris IDEA refuses every other host and port. Before the plugin first
+connects to a host, Ferris IDEA warns you:
 - which plugin it is and who made it;
 - that it gets network access to that host and receives the connection's user name and password;
 - its status;
-- that IDECraft does not review its code.
+- that Ferris IDEA does not review its code.
 
 Allowing is kept per plugin and host. Revoke it in Settings › Plugins (⇧Delete). Agents see the
 same warning through MCP and need a grant of their own. Every connection a plugin opens is written

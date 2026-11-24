@@ -1,4 +1,4 @@
-//! The listener of `idecraft serve --pair` end to end over loopback (`SPEC-0321` AK-5–AK-14,
+//! The listener of `ferris-idea serve --pair` end to end over loopback (`SPEC-0321` AK-5–AK-14,
 //! AK-16): real TCP, real Noise, a real session backend.
 #![cfg(unix)]
 
@@ -8,11 +8,11 @@ use std::os::unix::fs::PermissionsExt;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use idecraft_pairing::{
+use ferris_idea_pairing::{
     Console, Identity, Limits, ListenError, ListenOptions, PairError, Side, Store, Timing,
     connect_known, fingerprint, listen, start_pairing,
 };
-use idecraft_session::{Backend, BackendConfig, ClientSession, Connection, ErrorCode, Right};
+use ferris_idea_session::{Backend, BackendConfig, ClientSession, Connection, ErrorCode, Right};
 use serde_json::json;
 
 /// A console that answers as told and records everything shown, so a test can find the code.
@@ -46,7 +46,7 @@ struct Host {
     project: std::path::PathBuf,
     state: std::path::PathBuf,
     console: Arc<TestConsole>,
-    running: idecraft_pairing::Running,
+    running: ferris_idea_pairing::Running,
     addr: SocketAddr,
 }
 
@@ -175,7 +175,7 @@ fn ak16_pair_open_edit_save_and_resume() {
     s.open_doc("a.txt").unwrap();
     s.edit(
         "a.txt",
-        &[idecraft_session::Op {
+        &[ferris_idea_session::Op {
             at: 0,
             delete: 0,
             insert: "new ".into(),
@@ -260,7 +260,7 @@ fn ak21_a_connection_right_after_pairing_is_accepted() {
 /// older host, or one that failed) leaves nothing pinned on the window.
 #[test]
 fn ak21_no_pin_without_the_hosts_stored_message() {
-    use idecraft_pairing::noise::{Accept, pairing_key, prologue, respond};
+    use ferris_idea_pairing::noise::{Accept, pairing_key, prologue, respond};
     let (_d, root) = scratch();
     let host_store = Store::open_file(Side::Serve, &root.join("host")).unwrap();
     let host_id = host_store.identity().unwrap();
@@ -278,7 +278,7 @@ fn ak21_no_pin_without_the_hosts_stored_message() {
         let (done, _) =
             respond(&mut stream, &host_id, &accept, &prologue("window", "serve")).unwrap();
         let mut channel =
-            idecraft_pairing::Channel::new(stream, done.transport, Limits::default()).unwrap();
+            ferris_idea_pairing::Channel::new(stream, done.transport, Limits::default()).unwrap();
         channel.write_line("ok").unwrap();
         let _ = channel.read_line(32);
         // An older host stops here.

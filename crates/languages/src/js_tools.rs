@@ -100,7 +100,7 @@ pub fn find_prettier(root: &Path, file: &Path) -> Option<JsTool> {
 /// Runs `tool` with `args` in its folder, `input` on standard input; output, error text, exit code.
 fn run(tool: &JsTool, args: &[&str], input: &str) -> Result<(String, String, Option<i32>), String> {
     // The project's own tools are project code: never in safe mode (`SPEC-0278` behaviour 5).
-    idecraft_core::trust::require_trusted(&tool.dir)?;
+    ferris_idea_core::trust::require_trusted(&tool.dir)?;
     run_command(&tool.bin, &tool.dir, args, input)
 }
 
@@ -336,6 +336,7 @@ pub fn fixes_at(problems: &[LintProblem], at: usize) -> Vec<crate::inspections::
                 }],
                 learn: None,
                 keep: None,
+                bundle_key: None,
                 action: None,
             });
         }
@@ -357,6 +358,7 @@ pub fn fixes_at(problems: &[LintProblem], at: usize) -> Vec<crate::inspections::
             edits,
             learn: None,
             keep: None,
+            bundle_key: None,
             action: None,
         });
     }
@@ -534,7 +536,7 @@ mod tests {
 
     #[test]
     fn tools_come_from_the_project() {
-        let root = std::env::temp_dir().join(format!("idecraft-jstools-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("ferris-idea-jstools-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let app = root.join("packages/app");
         std::fs::create_dir_all(app.join("node_modules/.bin")).unwrap();

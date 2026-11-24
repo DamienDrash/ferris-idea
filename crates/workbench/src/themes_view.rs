@@ -1,8 +1,8 @@
 //! The theme popup of Quick Switch Scheme (`SPEC-0060` v5): the bundled themes, the chosen one
 //! marked; Enter switches.
 
+use ferris_idea_ui::theme::ThemeId;
 use gpui::{Context, EventEmitter, FocusHandle, KeyDownEvent, Window, div, prelude::*, px};
-use idecraft_ui::theme::ThemeId;
 
 use crate::palette::{Palette, current_theme};
 use crate::workbench_view::c;

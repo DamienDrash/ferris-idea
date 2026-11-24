@@ -11,15 +11,15 @@ TARGET="${1:-$HOME/ReferenceEnv/projects/java-large}"
 PACKAGES="${2:-50}"
 CLASSES="${3:-100}"
 [ ! -e "$TARGET" ] || { echo "$TARGET exists, remove it first" >&2; exit 1; }
-awk -v root="$TARGET/src/main/java/org/idecraft/sample" -v np="$PACKAGES" -v nc="$CLASSES" 'BEGIN {
+awk -v root="$TARGET/src/main/java/org/ferrisidea/sample" -v np="$PACKAGES" -v nc="$CLASSES" 'BEGIN {
   for (p = 0; p < np; p++) {
     dir = sprintf("%s/p%02d", root, p)
     system("mkdir -p \"" dir "\"")
     for (c = 0; c < nc; c++) {
       f = sprintf("%s/Item%03d.java", dir, c)
       # each class refers to one class in the previous package, so references cross packages
-      dep = sprintf("org.idecraft.sample.p%02d.Item%03d", (p + np - 1) % np, (c * 7) % nc)
-      printf "package org.idecraft.sample.p%02d;\n\n", p > f
+      dep = sprintf("org.ferrisidea.sample.p%02d.Item%03d", (p + np - 1) % np, (c * 7) % nc)
+      printf "package org.ferrisidea.sample.p%02d;\n\n", p > f
       printf "import java.util.ArrayList;\nimport java.util.List;\nimport java.util.Map;\nimport java.util.TreeMap;\n\n" > f
       printf "/** Synthetic class %d in package %d. */\npublic final class Item%03d {\n", c, p, c > f
       printf "    private final List<String> names = new ArrayList<>();\n" > f
@@ -46,7 +46,7 @@ if [ "${MAVEN:-0}" = 1 ]; then
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
-  <groupId>org.idecraft.sample</groupId>
+  <groupId>org.ferrisidea.sample</groupId>
   <artifactId>java-large</artifactId>
   <version>0.0.1</version>
   <properties>

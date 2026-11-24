@@ -1,14 +1,14 @@
-//! SPEC-0009 against a real server. Set `IDECRAFT_TEST_PG` to a SPEC-0008 URL of the reference
+//! SPEC-0009 against a real server. Set `FERRIS_IDEA_TEST_PG` to a SPEC-0008 URL of the reference
 //! database (e.g. `postgresql://idecraft@127.0.0.1:54329/inventory?sslmode=disable`); without it
-//! these tests pass without doing anything. The password comes from `IDECRAFT_TEST_PG_PASSWORD` or
-//! the file named by `IDECRAFT_TEST_PG_PASSWORD_FILE` (`tests/common`).
+//! these tests pass without doing anything. The password comes from `FERRIS_IDEA_TEST_PG_PASSWORD` or
+//! the file named by `FERRIS_IDEA_TEST_PG_PASSWORD_FILE` (`tests/common`).
 
 use crate::common;
 
-use idecraft_database::{ConnectionProfile, OnError, Outcome, PgSession};
+use ferris_idea_database::{ConnectionProfile, OnError, Outcome, PgSession};
 
 async fn session(read_only: bool) -> Option<PgSession> {
-    let url = std::env::var("IDECRAFT_TEST_PG").ok()?;
+    let url = ferris_idea_core::product_var("FERRIS_IDEA_TEST_PG").ok()?;
     let mut profile = ConnectionProfile::from_url("reference", &url).unwrap();
     profile.read_only = read_only;
     Some(

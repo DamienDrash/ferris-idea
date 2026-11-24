@@ -8,14 +8,14 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use idecraft_core::RunEvent;
-use idecraft_remote::inprocess::{HostSwitch, InProcessProject, Setup};
-use idecraft_remote::{
+use ferris_idea_core::RunEvent;
+use ferris_idea_remote::inprocess::{HostSwitch, InProcessProject, Setup};
+use ferris_idea_remote::{
     ConnState, HostTerminal, LiveProject, RunTarget, TermOutput, TermPhase, Timing, start_host_run,
 };
 
 fn scratch(tag: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("idecraft-hostfn-{tag}-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-hostfn-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("project")).unwrap();
     std::fs::canonicalize(dir).unwrap()
@@ -34,13 +34,13 @@ fn fast() -> Timing {
 
 fn open(dir: &Path) -> (LiveProject, HostSwitch) {
     let setup: Setup = Arc::new(|b| {
-        idecraft_host::bind(
+        ferris_idea_host::bind(
             b,
-            idecraft_host::HostOptions {
+            ferris_idea_host::HostOptions {
                 language_servers: false,
                 poll: Duration::from_millis(200),
                 shell: Some("/bin/sh".into()),
-                ..idecraft_host::HostOptions::default()
+                ..ferris_idea_host::HostOptions::default()
             },
         );
     });
@@ -139,7 +139,7 @@ fn a_host_terminal_reattaches_at_its_offset_and_keeps_typing_from_the_break() {
     let end = read_until(&term, &mut text, "\u{0}never", Duration::from_secs(10));
     assert_eq!(end.map(|e| e.0), Some(Some(3)), "{text}");
     assert_eq!(term.phase(), TermPhase::Ended);
-    let _ = live.close(idecraft_remote::Unsaved::Discard);
+    let _ = live.close(ferris_idea_remote::Unsaved::Discard);
 }
 
 #[test]
@@ -163,11 +163,11 @@ fn closing_a_host_terminal_ends_its_shell_on_the_host() {
                     .any(|t| t["term"] == id.as_str())
             })
     }));
-    let _ = live.close(idecraft_remote::Unsaved::Discard);
+    let _ = live.close(ferris_idea_remote::Unsaved::Discard);
 }
 
 /// The events of a run until its handle's channel closes.
-fn events_of(handle: &idecraft_core::RunHandle, limit: Duration) -> Vec<RunEvent> {
+fn events_of(handle: &ferris_idea_core::RunHandle, limit: Duration) -> Vec<RunEvent> {
     let t0 = Instant::now();
     let mut out = Vec::new();
     while t0.elapsed() < limit {
@@ -193,9 +193,9 @@ fn lines(events: &[RunEvent], stderr: bool) -> Vec<String> {
 #[test]
 fn a_host_run_reports_like_a_local_run_stops_and_reattaches_after_a_break() {
     let dir = scratch("run");
-    std::fs::create_dir_all(dir.join("project/.idecraft")).unwrap();
+    std::fs::create_dir_all(dir.join("project/.ferris-idea")).unwrap();
     std::fs::write(
-        dir.join("project/.idecraft/run.toml"),
+        dir.join("project/.ferris-idea/run.toml"),
         r#"[[run]]
 name = "hello"
 command = ["sh", "-c", "echo to-out; echo to-err >&2; exit 4"]
@@ -284,5 +284,5 @@ command = ["sh", "-c", "echo started; sleep 30"]
 
     // A missing configuration is refused by the host.
     assert!(start_host_run(&live, &RunTarget::Name("missing".into())).is_err());
-    let _ = live.close(idecraft_remote::Unsaved::Discard);
+    let _ = live.close(ferris_idea_remote::Unsaved::Discard);
 }

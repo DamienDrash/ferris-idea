@@ -1,4 +1,4 @@
-//! Desktop views of IDECraft on GPUI (ADR-0003, ADR-0009).
+//! Desktop views of Ferris IDEA on GPUI (ADR-0003, ADR-0009).
 //!
 //! Implements `SPEC-0058` (editor view) `SPEC-0059` (project tree and tabs), `SPEC-0061` (window chrome) and
 //! `SPEC-0062` (terminal tool window) and `SPEC-0063` (Commit tool window) and `SPEC-0076` (context actions) from `docs/specifications/`. The toolkit-free parts live in
@@ -87,6 +87,12 @@ pub mod python_fixes;
 pub mod python_widget;
 pub mod quit_model;
 pub mod result_model;
+pub mod room_comment_popup;
+pub mod room_comments_model;
+pub mod room_history_model;
+pub mod room_join_model;
+pub mod room_model;
+pub mod room_share_model;
 pub mod run_debug_actions;
 pub mod run_editor_model;
 pub mod run_list_model;
@@ -108,12 +114,14 @@ pub mod todo_model;
 pub mod toolbar_fit;
 pub mod tree_nav;
 pub mod trust_model;
+pub mod usage_counts_model;
 pub mod usages_model;
 pub mod value_fold_model;
 pub mod vcs_ops_model;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub mod x11_wake;
 
+pub mod agents_view;
 mod ai_chat_view;
 pub mod ai_context_model;
 pub mod ai_markdown;
@@ -129,6 +137,7 @@ pub mod committed_text;
 mod connection_dialog;
 mod connector_import;
 mod console_session;
+mod containers_pane;
 mod containers_view;
 mod copy_table_dialog;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -166,11 +175,13 @@ mod merge_view;
 pub mod metrics;
 mod plugin_network_dialog;
 mod plugin_run_dialog;
+pub mod profile_lines_model;
 mod profiler_view;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod projects_view;
 mod python_view;
 mod rebase_view;
+mod remote_conflict;
 mod remote_view;
 mod rename_preview;
 mod report_dialog;
@@ -191,16 +202,26 @@ mod vcs_ops_view;
 mod run_config_dialog;
 mod run_view;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
+pub mod splash_view;
+pub mod startup_animation;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 mod structure_view;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod terminal_view;
 pub mod traffic_lights;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod usages_view;
+pub mod welcome_model;
+pub mod welcome_ssh_model;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub mod welcome_ssh_view;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub mod welcome_view;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod workbench_view;
 
-pub use ai_chat_view::{AiChatEvent, AiChatView};
+pub use agents_view::AgentsView;
+pub use ai_chat_view::{AiChatEvent, AiChatView, AiTab};
 pub use attach_view::{AttachEvent, AttachRow, AttachView, attach_rows};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub use bookmarks_view::{BookmarkEvent, BookmarksPopup, BookmarksToolView};
@@ -222,11 +243,24 @@ pub use debug_view::{DebugMenu, DebugState, DebugView, DebugViewEvent};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub use diff_view::{DiffEvent, DiffView};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
-pub use editor_view::{Decorations, EditorEvent, EditorView};
+pub use editor_view::{Decorations, EditorEvent, EditorView, profile_cost_id, usage_count_id};
 pub use endpoints_view::{EndpointsEvent, EndpointsView, GENERATED_REQUESTS};
 pub use er_view::{ErEvent, ErExport, ErView};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub use everywhere_view::{EverywhereEvent, EverywhereView};
+/// The database crate, for the window self-test of the connector catalogue (`SPEC-0302`).
+pub use ferris_idea_database as database;
+/// Isolation levels of data editor transactions (`SPEC-0190` v3 behaviour 13).
+pub use ferris_idea_database::Isolation;
+/// How a result is shown: table, tree or text (`SPEC-0099` v3 behaviour 10).
+pub use ferris_idea_database::grid::ResultView;
+pub use ferris_idea_plugins as plugins;
+pub use ferris_idea_terminal::{
+    LinkTarget as TerminalLinkTarget, MouseButton as TerminalMouseButton,
+    MouseMode as TerminalMouseMode,
+};
+/// Tool window layout (SPEC-0167), shared with the MCP server.
+pub use ferris_idea_ui::tool_windows;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub use find_in_files_view::{FindInFilesEvent, FindInFilesView};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -238,19 +272,6 @@ pub use goto_view::{GotoEvent, GotoView};
 pub use hierarchy_view::{HierarchyEvent, HierarchyMode, HierarchyView};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub use history_view::{HistoryEvent, HistoryView};
-/// The database crate, for the window self-test of the connector catalogue (`SPEC-0302`).
-pub use idecraft_database as database;
-/// Isolation levels of data editor transactions (`SPEC-0190` v3 behaviour 13).
-pub use idecraft_database::Isolation;
-/// How a result is shown: table, tree or text (`SPEC-0099` v3 behaviour 10).
-pub use idecraft_database::grid::ResultView;
-pub use idecraft_plugins as plugins;
-pub use idecraft_terminal::{
-    LinkTarget as TerminalLinkTarget, MouseButton as TerminalMouseButton,
-    MouseMode as TerminalMouseMode,
-};
-/// Tool window layout (SPEC-0167), shared with the MCP server.
-pub use idecraft_ui::tool_windows;
 pub use import_preview::{ImportPreview, ImportPreviewEvent};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub use intentions_view::{IntentionsEvent, IntentionsView};
@@ -259,7 +280,7 @@ pub use plugin_network_dialog::{PluginNetworkDialog, PluginNetworkDialogEvent};
 pub use plugin_run_dialog::{PluginRunDialog, PluginRunDialogEvent};
 pub use profiler_view::{ProfilerEvent, ProfilerTab, ProfilerView};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
-pub use projects_view::{ProjectsEvent, ProjectsView};
+pub use projects_view::{Form as ProjectForm, ProjectsEvent, ProjectsView};
 pub use python_view::{FAILURE_LINES, InstallFailure, PythonEvent, PythonView};
 pub use rebase_view::{RebaseEvent, RebaseView};
 pub use remote_view::{Pending as RemotePending, RemoteEvent, RemoteView};
@@ -285,7 +306,10 @@ pub use todo_view::{TodoEvent, TodoToolView};
 pub use usages_view::{UsagesEvent, UsagesView};
 pub use vcs_ops_view::{PushEvent, PushView, UpdateEvent, UpdateView, VcsOpsEvent, VcsOpsView};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
+pub use welcome_view::WelcomeView;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub use workbench_view::{
-    EditorSelectionState, HiddenBottom, MenuPlace, PluginPanel, RemoteStateDir, WorkbenchView,
-    open_live_window, queue_opened, take_opened,
+    EditorSelectionState, HiddenBottom, HostKeySource, JoinOpen, JoinOpener, MenuPlace,
+    PluginPanel, RemoteStateDir, WorkbenchView, link_label, open_live_window, queue_opened,
+    take_opened,
 };

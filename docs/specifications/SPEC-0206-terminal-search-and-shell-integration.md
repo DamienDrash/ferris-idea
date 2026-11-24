@@ -32,7 +32,7 @@ Long output needs a search, and the terminal should know where commands start an
    that load the user's own (`$ZDOTDIR` or `$HOME`) first and then add `precmd`/`preexec`; bash is
    started with `--rcfile` of a generated file that loads `~/.bashrc` first and then adds
    `PROMPT_COMMAND` and a `DEBUG` trap. Hooks of the user stay in place. The environment variable
-   `IDECRAFT_SHELL_INTEGRATION=0` turns it off. [STD, GEN]
+   `FERRIS_IDEA_SHELL_INTEGRATION=0` turns it off. [STD, GEN]
 6. **MCP:** `terminal_render` returns `prompts`: per OSC 133 prompt the history line, the command text
    between `B` and `C` and the exit status. [ADR-0008]
 7. **v2 – MCP search:** `terminal_render` takes `find` and `match_case` and returns `matches`:
@@ -47,7 +47,7 @@ Long output needs a search, and the terminal should know where commands start an
   the scrollback is full (unit tests).
 - **AK-2** zsh and bash with the generated start-up files report prompts, commands and statuses and the
   folder after `cd` (`pty` integration tests; skipped when the shell is missing).
-- **AK-3** In a real window (`idecraft ui --selftest`): ⌘F finds a line scrolled out of view and shows
+- **AK-3** In a real window (`ferris-idea ui --selftest`): ⌘F finds a line scrolled out of view and shows
   it, Escape returns; ⌘↑ jumps to the previous prompt; the failed command's mark is red.
 - **AK-4** MCP `terminal_render` with `prompts` (protocol test).
 - **AK-5** By hand next to the reference (round 4, no. 141).

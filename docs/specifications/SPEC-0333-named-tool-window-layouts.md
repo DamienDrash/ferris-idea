@@ -87,7 +87,7 @@ layout always stays.
     Rename… and Delete…; then Restore Current Layout, Save Changes in Current Layout and Save
     Current Layout as New…. What is not available is left out: Delete… of the selected layout,
     and Save Changes in Current Layout while the default layout is selected. The submenu shows
-    the saved layouts as they were when IDECraft started or last changed them in this process.
+    the saved layouts as they were when Ferris IDEA started or last changed them in this process.
     [OSS: ids, texts and order of the layouts group; GEN]
 13. **Find Action** finds Restore Current Layout, Save Changes in Current Layout, Save Current
     Layout as New… and the default layout as "Restore Default Layout", all in the group Layouts.
@@ -100,8 +100,8 @@ layout always stays.
 
 ### Storage
 15. **File.** The layouts are kept in `window-layouts.json` in the user's settings folder
-    (SPEC-0053 behaviour 2: `$IDECRAFT_CONFIG_DIR`, else `$XDG_CONFIG_HOME/idecraft`, else
-    `~/.config/idecraft`), written whole and atomically after every change and read again before
+    (SPEC-0053 behaviour 2: `$FERRIS_IDEA_CONFIG_DIR`, else `$XDG_CONFIG_HOME/ferris-idea`, else
+    `~/.config/ferris-idea`), written whole and atomically after every change and read again before
     every action, so two windows do not overwrite each other's layouts. [ADR-0021, GEN]
 16. **Format (version 1).** A JSON object:
     - `version` — `1`.
@@ -109,7 +109,7 @@ layout always stays.
       default layout.
     - `layouts` — an array of objects, each with
       - `name` — the name (behaviour 5);
-      - `layout` — the arrangement in the form of `.idecraft/tool-windows.json` (SPEC-0167
+      - `layout` — the arrangement in the form of `.ferris-idea/tool-windows.json` (SPEC-0167
         behaviour 8): `version`, `stripes` and `windows`, each window with `id`, `side`
         (`left`, `bottom`, `right`) and, where they apply, `size`, `split`, `mode`, `removed`
         and `bounds`;
@@ -136,7 +136,7 @@ layout always stays.
       `removed`), `skipped` (entries the file holds but behaviour 17 skips), `problem` (behaviour
       18) and `limits` (name length, number of layouts).
     - `action: "save"` with `name` saves the workspace's saved tool window layout
-      (`.idecraft/tool-windows.json`) with `shown` (ids, default none) and `active_window` as a
+      (`.ferris-idea/tool-windows.json`) with `shown` (ids, default none) and `active_window` as a
       new layout and selects it; without `name` it saves them into the selected layout.
     - `action: "apply"` with `name` (`Default` for the default layout) selects the layout and
       writes its arrangement to the workspace's layout file; `action: "restore"` does so for the
@@ -187,23 +187,23 @@ the editor area (splits and tabs); the content, tabs and options of the tool win
 
 ## Known deviations from the reference
 - The open platform keeps the layouts in an XML file of its settings and starts with a saved
-  layout named "Custom" selected; IDECraft keeps a JSON file and starts with the default layout
+  layout named "Custom" selected; Ferris IDEA keeps a JSON file and starts with the default layout
   selected and no saved layout.
 - Names: the open platform allows 50 characters, compares names exactly and trims nothing;
-  IDECraft allows 64, ignores capitals when comparing, trims, and refuses path separators,
+  Ferris IDEA allows 64, ignores capitals when comparing, trims, and refuses path separators,
   control characters and "Default", so that a name is safe wherever it is shown or passed on.
 - The open platform also stores per window whether it is maximised, the width shared by a side
-  and the tab style of a window's content; IDECraft has no saved state for these and does not
+  and the tab style of a window's content; Ferris IDEA has no saved state for these and does not
   store them.
-- The default layout of the open platform says which windows are shown; IDECraft's keeps the
+- The default layout of the open platform says which windows are shown; Ferris IDEA's keeps the
   shown windows (SPEC-0167 behaviour 17).
 - In the main menu the open platform offers Restore and Save Changes only inside the selected
-  layout's own submenu; IDECraft also offers them in the Layouts submenu itself, so Restore
+  layout's own submenu; Ferris IDEA also offers them in the Layouts submenu itself, so Restore
   Current Layout is reachable while the default layout is selected.
 - The toolkit's menu bar can neither tick nor grey out an item. The selected layout and the
   selected Default have a ✓ before the title instead, and an item that is not available is left
   out instead of shown greyed out.
-- A second IDECraft process, or another project window, shows saved layouts another one changed
+- A second Ferris IDEA process, or another project window, shows saved layouts another one changed
   only after its own next layout action or a restart; the actions themselves always work on the
   file as it is.
 - The MCP tool changes the saved files, not a running window (as `tool_windows`).

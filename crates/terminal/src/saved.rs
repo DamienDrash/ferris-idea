@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 /// File under the project folder.
-pub const SAVED_FILE: &str = ".idecraft/terminal-sessions.json";
+pub const SAVED_FILE: &str = ".ferris-idea/terminal-sessions.json";
 /// History lines kept per shell.
 pub const SAVED_LINES: usize = 1000;
 
@@ -134,7 +134,7 @@ mod tests {
 
     #[test]
     fn saved_tabs_round_trip_with_a_line_cap() {
-        let root = std::env::temp_dir().join(format!("idecraft-saved-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("ferris-idea-saved-{}", std::process::id()));
         std::fs::create_dir_all(&root).unwrap();
         let lines: Vec<String> = (0..1500).map(|i| i.to_string()).collect();
         let shell = SavedShell::new(root.join("gone"), lines);

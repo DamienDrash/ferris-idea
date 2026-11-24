@@ -1,9 +1,9 @@
 # SPEC-0094: Open project and recent projects
 
-- **Version:** 9 · **Date:** 2026-11-17 (v9: `recent_projects` needs the agent right
+- **Version:** 10 · **Date:** 2026-11-18 (v10: the Welcome window of SPEC-0355 replaces the folder chooser at a start without a project and after the last window, behaviour 9; the list keeps folders that no longer exist until the user removes them, behaviour 3; AK-8, AK-21 — gap W0 of F-001, the project owner's decision of 2026-11-18; the forms' fields keep long paths inside, an error goes when a field is edited, New Project has its own hint and its new folder is trusted, behaviours 13a and 14, AK-22 — window check A16, CL1, NP1, NP2); 2026-11-17 (v9: `recent_projects` needs the agent right
   `recent-projects`, behaviour 23, AK-20 — security review: an agent of one project read the
   folders of all the user's other projects); 2026-11-17 (v8: each recent project once, by its canonical path,
-  behaviour 22, AK-19 — headless check of F-001, OBS-0077); 2026-11-15 (v7: a path to a file opens the file's project and the file in an editor, never a project with the file as its root, behaviours 18 to 21, AK-16 to AK-18 — window check of 2026-11-15, `idecraft ui <folder>/queries/file.sql` showed the file as the project folder and opened nothing; 2026-11-14 (v6: `NextWindow` and `PreviousWindow` step through every window of the application, behaviour 17, AK-15; sixth package of docs/research/KEYMAP_COVERAGE.md; v5: the popup's actions New Project…, Clone Repository… and its Open Projects section, behaviours 1 and 12 to 15, AK-10 to AK-14; the window that opens the popup or closes projects is read directly, behaviour 16 — crash of the window check of 2026-11-14 — comparison next to the reference of 2026-11-14, F-001; v4: the window's close button closes as Close Project,
+  behaviour 22, AK-19 — headless check of F-001, OBS-0077); 2026-11-15 (v7: a path to a file opens the file's project and the file in an editor, never a project with the file as its root, behaviours 18 to 21, AK-16 to AK-18 — window check of 2026-11-15, `ferris-idea ui <folder>/queries/file.sql` showed the file as the project folder and opened nothing; 2026-11-14 (v6: `NextWindow` and `PreviousWindow` step through every window of the application, behaviour 17, AK-15; sixth package of docs/research/KEYMAP_COVERAGE.md; v5: the popup's actions New Project…, Clone Repository… and its Open Projects section, behaviours 1 and 12 to 15, AK-10 to AK-14; the window that opens the popup or closes projects is read directly, behaviour 16 — crash of the window check of 2026-11-14 — comparison next to the reference of 2026-11-14, F-001; v4: the window's close button closes as Close Project,
   behaviour 11, AK-9; v3: closing project windows — the current one, all, all others —
   behaviours 6 to 10, AK-5 to AK-8; v2: next and previous project window, the keymap's `NextProjectWindow` and `PreviousProjectWindow`, behaviour 5, AK-4); 2026-11-01 (v1)
 - **Sources:** GEN (the project widget at the left of the main toolbar opens a popup with Open… and the
@@ -28,9 +28,11 @@ Switch between projects and open a new one without the command line.
    the system's folder dialog; the chosen folder opens the same way. A folder that cannot be opened
    leaves a message in the status bar. [GEN, OSS]
 3. **List:** every window that opens a project puts it at the front of `recent-projects` in the user's
-   IDECraft settings folder (SPEC-0053: `$IDECRAFT_CONFIG_DIR`, else `$XDG_CONFIG_HOME/idecraft`, else
-   `~/.config/idecraft`), one folder per line, at most 25. Folders that no longer exist are left out when
-   the list is read. [GEN]
+   Ferris IDEA settings folder (SPEC-0053: `$FERRIS_IDEA_CONFIG_DIR`, else `$XDG_CONFIG_HOME/ferris-idea`, else
+   `~/.config/ferris-idea`), one folder per line, at most 25. Folders that no longer exist are left out when
+   the list is read. (v10) They stay in the file — a drive that is not attached comes back — until the
+   user removes them in the Welcome window (SPEC-0355 behaviour 9), which alone shows them, greyed;
+   the popup, `recent_projects` and the start-up still leave them out. [GEN]
 4. Agents read the list through `recent_projects` (v9: only with the `recent-projects` right,
    behaviour 23). [ADR-0008]
 5. **Next and previous project window (v2):** `NextProjectWindow` (⌥⌘` in the macOS keymap, Ctrl+Alt+] in
@@ -63,9 +65,10 @@ Switch between projects and open a new one without the command line.
    open platform. Each closed project moves to the front of the recent list (behaviour 3), so the
    one closed last is opened first at the next start. A closed window's project is no longer listed
    as open, and the agent server stops serving that project (SPEC-0221).
-9. **After the last window (v3):** when no project window is left, IDECraft offers the folder chooser
-   it shows at a start without a folder (behaviour 2); choosing a folder opens it, cancelling quits
-   IDECraft. IDECraft has no welcome screen of its own (see Out of scope).
+9. **After the last window (v3, v10):** when no project window is left, Ferris IDEA shows its Welcome
+   window (SPEC-0355), as at a start without a project; opening a project from it closes it, closing
+   it while no project window is open quits Ferris IDEA. Until v10 Ferris IDEA showed the system's folder
+   chooser here and at a start without a folder, and cancelling it quit.
 10. **Agents (v3):** the MCP tool `close_project` closes this project's window (`scope` `this`),
     every other (`others`) or all (`all`). `dry_run` (default true) only names the windows that
     would close and their unsaved files and running work. A real close needs the user-granted
@@ -77,12 +80,12 @@ Switch between projects and open a new one without the command line.
 11. **The window's close button (v4):** closing a local project window with its close button (the
     title bar's button, the system's close command) is Close Project of behaviour 6: the same
     question for its unsaved files and running work (behaviour 7), the same stopping, recent list
-    and agent server (behaviour 8), the folder chooser after the last window (behaviour 9). Until
+    and agent server (behaviour 8), after the last window the Welcome window (behaviour 9, v10). Until
     v3 the button closed the window at once: unsaved changes were lost without a word, and the
-    window's run configurations kept running with no window left to stop them until IDECraft quit.
+    window's run configurations kept running with no window left to stop them until Ferris IDEA quit.
     A remote project's window keeps its own question (SPEC-0317). ⌘W closes a tab, never the
     window (SPEC-0059). [GEN, security first]
-12. **Open Projects (v5):** every project open in a window of this IDECraft is a row with its
+12. **Open Projects (v5):** every project open in a window of this Ferris IDEA is a row with its
     initials, name and folder, in the order the windows opened; the window the popup is used in is
     marked "current". Choosing a row brings that project's window to the front (behaviour 2); the
     popup closes. A remote project's window is not listed here (SPEC-0317 lists those under Remote
@@ -110,12 +113,21 @@ Switch between projects and open a new one without the command line.
     - After the clone the new folder opens in a window of its own, which asks whether to trust the
       project like any new folder (SPEC-0278); nothing of it runs before.
     [GEN, rule 12, ADR-0025]
+13a. **The forms' fields (v10):** a long address or path stays inside its field, which shows the
+    part around the caret; it never runs past the form's edge. An error about the fields goes as
+    soon as either field is edited. Each form's line under the fields names its own rule: the
+    clone's address rule only in Clone Repository. Until v10 a long Location ran past the
+    popup into the editor, an error stayed after the Location was changed, and New Project
+    showed the clone's hint (window check A16, CL1 and NP1). [GEN]
 14. **New Project (v5):** the row turns the popup into a form with the project's name, the folder
     it goes in ("Location", the folder of the current project at first) and "Create Git
     repository" (on at first). "Create" makes the empty folder — it must be new, in a folder that
     exists, its name one plain folder name — runs `git init` in it when asked, and opens it in a
     window of its own (behaviour 2); a problem shows in the form and nothing is made. No project
-    type, template or build file is generated. [GEN]
+    type, template or build file is generated. (v10) The folder New Project made is trusted at
+    once (SPEC-0278) when it holds nothing but what `git init` wrote: Ferris IDEA made it a moment
+    ago and there is no code of anyone else in it, so the trust question would only be noise
+    (window check A16, NP2). A clone still asks. [GEN]
 15. **Agents (v5):** `clone_repository` (address, `location`, `name`, `dry_run` default true,
     `timeout_s`) and `new_project` (`name`, `location`, `git_init`, `dry_run` default true) follow
     behaviours 13 and 14. Their `location` is the workspace's parent folder (default) or a folder
@@ -140,12 +152,12 @@ Switch between projects and open a new one without the command line.
     lists them; the step wraps at both ends, and with a single window the actions do nothing.
     Both stand in the Window menu below the project window entries (SPEC-0124 v13 behaviour 15).
     On macOS the system itself steps through an application's windows on ⌘`; where the key
-    reaches IDECraft the result is the same kind of step. [OSS: ids, titles and keys of the
+    reaches Ferris IDEA the result is the same kind of step. [OSS: ids, titles and keys of the
     ported keymaps and `ActionsBundle.properties`; GEN for the order]
-18. **A file's project (v7):** wherever IDECraft is asked to open a path as a project and the
+18. **A file's project (v7):** wherever Ferris IDEA is asked to open a path as a project and the
     path is a file (after following links), it opens the file's project, never a project whose
     root is the file. The project is the folder found first, walking from the file's folder up:
-    1. the nearest folder with `.idecraft/` or `.idea/` (a folder that was opened as a project);
+    1. the nearest folder with `.ferris-idea/` or `.idea/` (a folder that was opened as a project);
     2. else the nearest version control root (`.git` folder or file, `.hg/`, `.svn/`);
     3. else the nearest folder with a build file (`Cargo.toml`, `package.json`, `pom.xml`,
        `build.gradle`, `build.gradle.kts`, `settings.gradle`, `settings.gradle.kts`, `build.sbt`,
@@ -162,22 +174,22 @@ Switch between projects and open a new one without the command line.
     or a stray `.idea` there would make the whole home folder the project — indexed, watched and
     served to agents (rule 12). A folder path opens as before. [GEN, rule 12]
 19. **The file opens at once (v7):** the file opens in a focused editor tab of that project's
-    window. When a window of this IDECraft already shows the project, the file opens there and
-    the window comes to the front; no second window. `idecraft ui <file>` and
-    `idecraft launch <file>` (SPEC-0282 behaviours 6 and 8) first look for a running IDECraft that
+    window. When a window of this Ferris IDEA already shows the project, the file opens there and
+    the window comes to the front; no second window. `ferris-idea ui <file>` and
+    `ferris-idea launch <file>` (SPEC-0282 behaviours 6 and 8) first look for a running Ferris IDEA that
     serves the project (the discovery files of SPEC-0221): when one does, the file is handed to
-    it with `editor_tabs` `open` (behaviour 21) as client `idecraft-cli`, which that window asks
+    it with `editor_tabs` `open` (behaviour 21) as client `ferris-idea-cli`, which that window asks
     the `ui` right for like any client (SPEC-0053), and the command ends without a window of its
     own; without one, or when the hand-off fails (refused, no answer), a new window opens as
     above. The same holds inside the window for every way a path reaches `open_project`
     (the popup's rows, the folder chooser, a recent project). [GEN]
-20. **Commands that serve a project to agents (v7):** `idecraft mcp <path>`, `idecraft call <path> …`
-    and `idecraft open <path>` (a path that is not an exchange file) take a folder. A file is
+20. **Commands that serve a project to agents (v7):** `ferris-idea mcp <path>`, `ferris-idea call <path> …`
+    and `ferris-idea open <path>` (a path that is not an exchange file) take a folder. A file is
     refused, with the folder behaviour 18 finds named in the message so the user can pass it;
     `call` ends with exit code 2 as for other wrong arguments. They do not widen a file to its
     project by themselves: the agent server's scope is what the user named, and a file widened
-    to its repository would give agents more than asked (rule 12). Dropping: IDECraft has no
-    welcome screen (behaviour 9); files dropped on a project window's editor open in tabs of
+    to its repository would give agents more than asked (rule 12). Dropping: the Welcome window
+    takes no drops (v10, SPEC-0355); files dropped on a project window's editor open in tabs of
     that window and dropped folders are passed over, as before (SPEC-0059 v5 behaviour 11).
     [rule 12]
 21. **Agents (v7):** `editor_tabs` has the action `open`: it opens the file `path`
@@ -203,13 +215,13 @@ Switch between projects and open a new one without the command line.
     right `recent-projects`, its meaning and the grant entry to add, and returns no folder. With it
     the tool returns the list as before and writes one line to the workspace's agent log with the
     tool, the right and the number of folders, never their paths. The project popup, the next and
-    previous project window and every other use of the list inside IDECraft's own windows are
+    previous project window and every other use of the list inside Ferris IDEA's own windows are
     unaffected: the right governs agents only. Until v9 the tool needed no right, so every agent
     connected to any project could read the folders of all others. [GEN, SPEC-0053]
 ## Acceptance criteria
 - **AK-1** Most recent first, no duplicates, missing folders left out, at most 25
   (`crates/core/tests/it/recent.rs`); the tool is listed (`crates/mcp/tests/it/protocol.rs`).
-- **AK-2** In a real window (`idecraft ui --selftest`, with its own list): the popup lists "Open…" and
+- **AK-2** In a real window (`ferris-idea ui --selftest`, with its own list): the popup lists "Open…" and
   the other recent project, Escape closes it, choosing the project opens a second window.
 - **AK-3** By hand: popup look next to the reference, Open… with the folder dialog, an open project's
   window comes to the front.
@@ -229,9 +241,9 @@ Switch between projects and open a new one without the command line.
   chooser).
 - **AK-10 (v5, behaviours 1 and 12)** `project_popup_model::tests::open_projects_come_before_the_recent_ones`:
   the four actions, the open projects in order with the current one marked, then the recent ones
-  that are not open. In a real window (`idecraft ui --selftest`): the rows start with the four
+  that are not open. In a real window (`ferris-idea ui --selftest`): the rows start with the four
   actions, the current project is marked, choosing the other recent project opens a second window.
-- **AK-11 (v5, behaviours 13 and 14)** `clone::tests` (`idecraft-vcs`): HTTPS and SSH accepted,
+- **AK-11 (v5, behaviours 13 and 14)** `clone::tests` (`ferris-idea-vcs`): HTTPS and SSH accepted,
   credentials, other transports and disguised options refused without repeating the credentials;
   new folders only; progress lines; the arguments that keep other transports and submodules out;
   a clone that fails or is cancelled leaves no folder; New Project with and without `git init`.
@@ -252,7 +264,7 @@ Switch between projects and open a new one without the command line.
   second and the process goes on. By hand: the steps of the window check (one window; two
   windows; the popup; Close Project; the close button).
 - **AK-8 (v3)** By hand in a window: each action with two and three windows, with an unsaved file
-  and a running program; after the last window the folder chooser.
+  and a running program; after the last window (v10) the Welcome window.
 - **AK-4 (v2, behaviour 5)** The window after and before the current one in opening order, the wrap at both
   ends, nothing with one window or when the current one is unknown, closed windows left out
   (`run_debug_actions::tests::project_windows_step_in_opening_order_and_wrap`,
@@ -270,13 +282,13 @@ Switch between projects and open a new one without the command line.
   window they report nothing to do (`sixth_package_keymap.rs::next_and_previous_window_step`).
   On screen: not checked.
 
-- **AK-16 (v7, behaviour 18)** Unit tests `project_root::tests` (`idecraft-core`): a folder is its
+- **AK-16 (v7, behaviour 18)** Unit tests `project_root::tests` (`ferris-idea-core`): a folder is its
   own project; a file in a plain folder gives that folder; a file in a crate of a Cargo
-  workspace inside a Git repository gives the repository; `.idea/` and `.idecraft/` win over a
+  workspace inside a Git repository gives the repository; `.idea/` and `.ferris-idea/` win over a
   nearer Git root and a nearer build file; a build file wins when there is no version control;
   the home folder and the root are passed over (a `.git` in the home folder is ignored); a link
-  to a file gives the project of the file it points to. `launch::tests` (crate `idecraft`, `crates/app`): the
-  start folder of `idecraft launch <file>` is its project.
+  to a file gives the project of the file it points to. `launch::tests` (crate `ferris-idea`, `crates/app`): the
+  start folder of `ferris-idea launch <file>` is its project.
 - **AK-17 (v7, behaviours 19 and 20)** Window test of the test harness (`open_file_path.rs`):
   `open_project` with a file inside a repository opens one window whose project is the
   repository root (not the file) and whose active, focused tab is the file; a second file of
@@ -286,7 +298,7 @@ Switch between projects and open a new one without the command line.
   (`protocol::editor_tabs_open_checks_the_path`): `open` with a file of the workspace reaches the
   window as an absolute path; a path outside the workspace, through `..`, a folder and a missing
   file are refused before the window is asked; the action is listed. By hand: not checked
-  (`idecraft ui <file>` with and without a running window).
+  (`ferris-idea ui <file>` with and without a running window).
 
 - **AK-19 (v8, behaviour 22)** `crates/core/tests/it/recent.rs`:
   `spellings_of_one_folder_are_one_entry`: a list with a folder with a trailing `/`, through
@@ -300,17 +312,27 @@ Switch between projects and open a new one without the command line.
   lists the existing folder of the list (a missing one left out) and the agent log holds a line
   with `recent_projects`, the right and `count` 1, without the folder's path. The effects table
   names the check (`tests/it/effects.rs`). By hand: not needed (the popup does not use the tool).
+- **AK-22 (v10, behaviours 13a and 14)** `project_popup_model::tests::new_projects_are_trusted_and_hints_belong_to_their_form`:
+  each form's own hint; a folder with only `.git` is trusted, one with other files is not,
+  nothing is written while trust is not enforced. Window test `welcome_window.rs`
+  (`new_project_from_the_welcome_window`): an error about the Location goes when it is edited.
+  By hand: a long Location stays inside the field (window check).
+- **AK-21 (v10, behaviours 3 and 9)** `crates/core/tests/it/recent.rs`:
+  `missing_folders_stay_until_removed`: remembering keeps a missing folder in the file,
+  `load_recent_projects` leaves it out, `load_recent_entries` lists it with `exists` false, and
+  `forget_project` removes it. The Welcome window after the last window: SPEC-0355 AK-3.
 
 ## Out of scope
-A welcome screen without a project (v3: after the last window the folder chooser stands in for it), removing entries from the list, opening a project in the current
-window (the reference asks), project groups, opening a single file without a project (v7: a file opens with its project, behaviour 18); (v5) cloning other than with Git, cloning with credentials typed into IDECraft (they stay in the credential helper or the SSH agent), project templates and types in New Project, remote projects in the Open Projects section.
+Removing entries from the list outside the Welcome window (v10: SPEC-0355 behaviour 9 removes them; until v10 Ferris IDEA had no welcome screen and the folder chooser stood in for it), opening a project in the current
+window (the reference asks), project groups, opening a single file without a project (v7: a file opens with its project, behaviour 18); (v5) cloning other than with Git, cloning with credentials typed into Ferris IDEA (they stay in the credential helper or the SSH agent), project templates and types in New Project, remote projects in the Open Projects section.
 
 ## Known deviations from the reference
-The reference asks whether to open a project in this window or a new one; IDECraft always opens a new
+The reference asks whether to open a project in this window or a new one; Ferris IDEA always opens a new
 window (or brings the open one to the front), so no work in the current window is closed by accident
-(IMP-0033). v3: when several windows close, IDECraft asks once for all of them before any closes,
+(IMP-0033). v3: when several windows close, Ferris IDEA asks once for all of them before any closes,
 like quitting (SPEC-0261 behaviour 14); the open platform asks per project as each closes, so a
 Cancel in the middle leaves some closed and some open.
 v2: the order in which the reference steps through its project windows was not compared.
 v5: New Project makes an empty folder only, without the reference's project types and templates. Clone Repository takes only HTTPS and SSH addresses without credentials and never asks for a password itself; the reference's handling of other address forms and of credentials was not compared.
 Not compared side by side yet.
+v10: a folder New Project made with nothing but `git init` in it is trusted without the question; the reference's behaviour here was not compared (window check A16, NP2).

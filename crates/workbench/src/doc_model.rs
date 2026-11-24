@@ -220,7 +220,12 @@ fn inline(line: &str) -> (String, Vec<Range<usize>>) {
         if all[at] == '['
             && let Some((text, target, next)) = link_at(&all, at)
         {
-            if targets.contains(&target) {
+            if image && target.trim_start_matches("://").starts_with("data:") {
+                // An embedded picture: the popup draws no images and its text names the
+                // picture, not the subject (`SPEC-0077` v9: the CSS server's Baseline icon).
+                let kept = linked.trim_end().len();
+                linked.truncate(kept);
+            } else if targets.contains(&target) {
                 // The same target again (ruby-lsp lists a file indexed twice): left out with
                 // the separator before it.
                 let kept = linked
@@ -239,6 +244,7 @@ fn inline(line: &str) -> (String, Vec<Range<usize>>) {
         linked.push(all[i]);
         i += 1;
     }
+    let linked = underscore_emphasis(&linked);
     let mut out = String::with_capacity(linked.len());
     let mut code: Vec<Range<usize>> = Vec::new();
     let mut open: Option<usize> = None;
@@ -267,6 +273,17 @@ fn inline(line: &str) -> (String, Vec<Range<usize>>) {
             // blanks or inside a word (`2*3`) stays.
             '*' if open.is_none() && single_emphasis(out.chars().last(), chars.peek().copied()) => {
             }
+            // A character reference outside inline code stands for its character (v10):
+            // `&lt;color&gt;` reads `<color>`.
+            '&' if open.is_none() => match entity(chars.clone()) {
+                Some((decoded, len)) => {
+                    out.push(decoded);
+                    for _ in 0..len {
+                        chars.next();
+                    }
+                }
+                None => out.push(ch),
+            },
             _ => out.push(ch),
         }
     }
@@ -281,6 +298,120 @@ fn inline(line: &str) -> (String, Vec<Range<usize>>) {
         })
         .collect();
     (text, code)
+}
+
+/// `_text_` and `__text__` without their markers (`SPEC-0077` v9), by CommonMark's rule for `_`: a
+/// run opens where no letter or digit stands before it and text follows, and closes a run of the
+/// same length where text stands before it and no letter or digit follows. Inline code and a
+/// marker without its partner keep their underscores.
+fn underscore_emphasis(line: &str) -> String {
+    let chars: Vec<char> = line.chars().collect();
+    let n = chars.len();
+    // Characters inside backticks are left alone.
+    let mut in_code = vec![false; n];
+    let mut open: Option<usize> = None;
+    for (i, c) in chars.iter().enumerate() {
+        if *c == '`' {
+            match open.take() {
+                Some(start) => in_code[start..=i].iter_mut().for_each(|x| *x = true),
+                None => open = Some(i),
+            }
+        }
+    }
+    let word = |c: Option<&char>| c.is_some_and(|c| c.is_alphanumeric());
+    let text = |c: Option<&char>| c.is_some_and(|c| !c.is_whitespace());
+    let run_at = |i: usize| chars[i..].iter().take_while(|c| **c == '_').count();
+    let mut drop = vec![false; n];
+    let mut i = 0;
+    while i < n {
+        if chars[i] != '_' || in_code[i] || (i > 0 && chars[i - 1] == '_') {
+            i += 1;
+            continue;
+        }
+        let len = run_at(i);
+        let before = i.checked_sub(1).map(|b| &chars[b]);
+        let after = chars.get(i + len);
+        let opens = len <= 2
+            && !word(before)
+            && before != Some(&'\\')
+            && text(after)
+            && after != Some(&'_');
+        if !opens {
+            i += len;
+            continue;
+        }
+        // The nearest closing run of the same length on the line.
+        let mut j = i + len;
+        let mut close = None;
+        while j < n {
+            if chars[j] == '_' && !in_code[j] && chars[j - 1] != '_' {
+                let l = run_at(j);
+                let after = chars.get(j + l);
+                if l == len && text(Some(&chars[j - 1])) && chars[j - 1] != '\\' && !word(after) {
+                    close = Some(j);
+                    break;
+                }
+                j += l;
+                continue;
+            }
+            j += 1;
+        }
+        match close {
+            Some(j) => {
+                drop[i..i + len].iter_mut().for_each(|x| *x = true);
+                drop[j..j + len].iter_mut().for_each(|x| *x = true);
+                i = j + len;
+            }
+            None => i += len,
+        }
+    }
+    chars
+        .iter()
+        .zip(drop)
+        .filter(|(_, d)| !d)
+        .map(|(c, _)| *c)
+        .collect()
+}
+
+/// The character of the reference that follows a `&` in `rest` (`&lt;`, `&#60;`, `&#x3C;`) and
+/// how many chars after the `&` it takes, `;` included (`SPEC-0077` v10). Named references are
+/// those language servers write; an unknown name or a `&` without `;` is no reference.
+fn entity(rest: impl Iterator<Item = char>) -> Option<(char, usize)> {
+    let ahead: String = rest.take(12).collect();
+    let body = &ahead[..ahead.find(';')?];
+    if body.is_empty() {
+        return None;
+    }
+    let decoded = if let Some(number) = body.strip_prefix('#') {
+        let value = match number.strip_prefix(['x', 'X']) {
+            Some(hex) => u32::from_str_radix(hex, 16).ok()?,
+            None => number.parse::<u32>().ok()?,
+        };
+        char::from_u32(value).filter(|c| *c != '\0')?
+    } else {
+        match body {
+            "lt" => '<',
+            "gt" => '>',
+            "amp" => '&',
+            "quot" => '"',
+            "apos" => '\'',
+            "nbsp" => '\u{a0}',
+            "ndash" => '–',
+            "mdash" => '—',
+            "hellip" => '…',
+            "laquo" => '«',
+            "raquo" => '»',
+            "copy" => '©',
+            "reg" => '®',
+            "trade" => '™',
+            "times" => '×',
+            "middot" => '·',
+            "rarr" => '→',
+            "larr" => '←',
+            _ => return None,
+        }
+    };
+    Some((decoded, body.chars().count() + 1))
 }
 
 /// Whether a single `*` between `before` and `after` opens or closes emphasis (`SPEC-0077` v4):
@@ -610,7 +741,7 @@ pub fn type_info(hover: &str, name: Option<&str>) -> Option<String> {
                     {
                         return None;
                     }
-                    idecraft_languages::smart::type_from_hover(hover, name)
+                    ferris_idea_languages::smart::type_from_hover(hover, name)
                 })
         })
         .or_else(|| match blocks.last() {
@@ -653,7 +784,7 @@ impl HoverAsk {
 #[cfg(test)]
 mod tests {
     /// SPEC-0077/AK-12 (v7): the type Type Info shows, from the hover texts of the language
-    /// servers IDECraft starts.
+    /// servers Ferris IDEA starts.
     #[test]
     fn type_info_reads_the_type_from_a_hover() {
         let of = |hover: &str, name: &str| super::type_info(hover, Some(name));
@@ -960,6 +1091,70 @@ mod tests {
         );
         assert_eq!(blocks("a *b* c"), [text("a b c")]);
         assert_eq!(blocks("a * b and 2*3"), [text("a * b and 2*3")]);
+    }
+
+    /// SPEC-0077 AK-14 (v9): underscore emphasis loses its markers, other underscores stay; an
+    /// embedded picture is left out.
+    #[test]
+    fn underscore_emphasis_is_removed() {
+        assert_eq!(
+            blocks(
+                "A flex container.\n\n_Widely available across major browsers (Baseline since 2015)_"
+            ),
+            [
+                text("A flex container."),
+                text("Widely available across major browsers (Baseline since 2015)")
+            ]
+        );
+        assert_eq!(blocks("a __bold__ word"), [text("a bold word")]);
+        assert_eq!(
+            blocks("snake_case and a _ b"),
+            [text("snake_case and a _ b")]
+        );
+        assert_eq!(blocks("an _unclosed one"), [text("an _unclosed one")]);
+        assert_eq!(blocks("\\_kept\\_"), [text("_kept_")]);
+        assert_eq!(blocks("not_this_one here"), [text("not_this_one here")]);
+        let code = blocks("Use `_x_` now");
+        let DocBlock::Text(shown, ranges) = &code[0] else {
+            panic!("{code:?}")
+        };
+        assert_eq!(shown, "Use _x_ now");
+        assert_eq!(ranges.first(), Some(&(4..7)));
+        assert_eq!(
+            blocks("Flex. ![Baseline icon](data:image/svg+xml;base64,AAAA) _Widely available_"),
+            [text("Flex. Widely available")]
+        );
+        assert_eq!(
+            blocks("![logo](https://x.org/l.png) end"),
+            [text("logo end")]
+        );
+    }
+
+    /// SPEC-0077 AK-15 (v10, behaviour 2): character references outside inline code are decoded,
+    /// a lone `&` and an unknown name stay, inline code keeps them as written.
+    #[test]
+    fn character_references_are_decoded() {
+        assert_eq!(
+            blocks("Syntax: &lt;color&gt; | &#60;b&#x3E; &amp; more"),
+            [text("Syntax: <color> | <b> & more")]
+        );
+        assert_eq!(
+            blocks("A & B, &unknown; and &lt"),
+            [text("A & B, &unknown; and &lt")]
+        );
+        let code = blocks("Use `&lt;` for &lt;");
+        let DocBlock::Text(shown, ranges) = &code[0] else {
+            panic!("{code:?}")
+        };
+        assert_eq!(shown, "Use &lt; for <");
+        assert_eq!(ranges.first(), Some(&(4..8)));
+        assert_eq!(
+            blocks("# Heading &amp; more\n\n_Widely available &mdash; since 2015_"),
+            [
+                DocBlock::Heading("Heading & more".into()),
+                text("Widely available — since 2015")
+            ]
+        );
     }
 
     /// SPEC-0077 v3: inline code keeps its place across joined lines.

@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use crate::model::{Profile, ProfileNode, Unit};
+use crate::model::{LineCosts, Profile, ProfileNode, Unit};
 
 /// JVM option that records execution samples every millisecond into `{out}` (JDK 17 or newer);
 /// the recorder's start-up messages are kept out of the program's output.
@@ -95,6 +95,8 @@ pub fn parse_jfr(text: &str) -> Profile {
     let mut in_stack = false;
     let mut own = false;
     let mut total = 0u64;
+    // Every line of a sample's stack, once per sample (SPEC-0136 v3 behaviour 7).
+    let mut lines = LineCosts::default();
     for line in text.lines() {
         let t = line.trim();
         if t == "jdk.ExecutionSample {" {
@@ -116,6 +118,13 @@ pub fn parse_jfr(text: &str) -> Profile {
             }
         } else if t == "}" && !stack.is_empty() && !own {
             total += 1;
+            lines.add(
+                stack
+                    .iter()
+                    .rev()
+                    .map(|f| (f.name.as_str(), f.location.as_ref())),
+                1.0,
+            );
             let mut node = threads.entry(thread.clone()).or_default();
             node.count += 1;
             // Frames come innermost first.
@@ -152,6 +161,7 @@ pub fn parse_jfr(text: &str) -> Profile {
         total: total as f64,
         roots,
         notes: Vec::new(),
+        lines: lines.finish(),
     }
 }
 
@@ -276,5 +286,51 @@ jdk.ExecutionSample {
         assert!(is_java("/opt/jdk/bin/java"));
         assert!(!is_java("javac"));
         assert!(!is_java("kotlin"));
+    }
+
+    // SPEC-0136 v3 behaviour 7: every line of a sample once, self at the innermost line; the JDK's
+    // frames are outside the project.
+    #[test]
+    fn lines_count_once_per_sample_and_jdk_frames_are_outside() {
+        let text = "jdk.ExecutionSample {
+  sampledThread = \"main\" (javaThreadId = 1)
+  stackTrace = [
+    java.util.Objects.equals(Object, Object) line: 64
+    demo.Tree.walk(Node) line: 9
+    demo.Tree.walk(Node) line: 9
+    demo.Tree.main(String[]) line: 20
+  ]
+}
+
+jdk.ExecutionSample {
+  sampledThread = \"main\" (javaThreadId = 1)
+  stackTrace = [
+    demo.Tree.walk(Node) line: 7
+    demo.Tree.main(String[]) line: 20
+  ]
+}
+";
+        let mut p = parse_jfr(text);
+        let lines = p.line_costs();
+        let get = |f: &str, l: u32| {
+            lines
+                .iter()
+                .find(|c| c.file == f && c.line == l)
+                .map(|c| (c.total, c.self_cost))
+        };
+        assert_eq!(get("demo/Tree.java", 9), Some((1.0, 0.0)), "recursion once");
+        assert_eq!(get("demo/Tree.java", 7), Some((1.0, 1.0)));
+        assert_eq!(get("demo/Tree.java", 20), Some((2.0, 0.0)));
+        assert_eq!(get("java/util/Objects.java", 64), Some((1.0, 1.0)));
+        // The method's row keeps its busiest line; the lines keep all of them.
+        let root = crate::project::tests::workspace("jfr-lines", &["src/main/java/demo/Tree.java"]);
+        let mut index = crate::SourceIndex::new(&root);
+        p.mark_project(&mut |f| index.in_project(f));
+        let hot = crate::hot_spots(&p);
+        let equals = hot.iter().find(|h| h.name == "Objects.equals").unwrap();
+        let walk = hot.iter().find(|h| h.name == "Tree.walk").unwrap();
+        assert!(!equals.in_project && walk.in_project);
+        assert!(p.roots[0].is_thread());
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

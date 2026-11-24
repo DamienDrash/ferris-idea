@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The files Ferris IDEA owns (SPEC-0354 behaviour 7; the same list as the document types of the
+     macOS bundle, scripts/bundle-macos.sh). Installed as share/mime/packages/ferris-idea.xml. -->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-ferris-idea-connector">
+    <comment>Ferris IDEA database connector</comment>
+    <sub-class-of type="text/plain"/>
+    <icon name="ferris-idea"/>
+    <glob pattern="*.idcconnector"/>
+  </mime-type>
+  <mime-type type="application/x-ferris-idea-sources">
+    <comment>Ferris IDEA data sources</comment>
+    <sub-class-of type="text/plain"/>
+    <icon name="ferris-idea"/>
+    <glob pattern="*.idcsources"/>
+  </mime-type>
+  <mime-type type="application/x-ferris-idea-run">
+    <comment>Ferris IDEA run configuration</comment>
+    <sub-class-of type="text/plain"/>
+    <icon name="ferris-idea"/>
+    <glob pattern="*.idcrun"/>
+  </mime-type>
+  <mime-type type="application/x-ferris-idea-keymap">
+    <comment>Ferris IDEA keymap</comment>
+    <sub-class-of type="text/plain"/>
+    <icon name="ferris-idea"/>
+    <glob pattern="*.idckeymap"/>
+  </mime-type>
+  <mime-type type="application/x-ferris-idea-theme">
+    <comment>Ferris IDEA theme</comment>
+    <sub-class-of type="text/plain"/>
+    <icon name="ferris-idea"/>
+    <glob pattern="*.idctheme"/>
+  </mime-type>
+  <mime-type type="application/x-ferris-idea-code-style">
+    <comment>Ferris IDEA code style</comment>
+    <sub-class-of type="text/plain"/>
+    <icon name="ferris-idea"/>
+    <glob pattern="*.idcstyle"/>
+  </mime-type>
+  <mime-type type="application/x-ferris-idea-live-templates">
+    <comment>Ferris IDEA live templates</comment>
+    <sub-class-of type="text/plain"/>
+    <icon name="ferris-idea"/>
+    <glob pattern="*.idctemplates"/>
+  </mime-type>
+  <mime-type type="application/x-ferris-idea-settings">
+    <comment>Ferris IDEA settings</comment>
+    <sub-class-of type="text/plain"/>
+    <icon name="ferris-idea"/>
+    <glob pattern="*.idcsettings"/>
+  </mime-type>
+  <mime-type type="application/x-ferris-idea-plugin">
+    <comment>Ferris IDEA plugin</comment>
+    <sub-class-of type="application/zip"/>
+    <icon name="ferris-idea"/>
+    <glob pattern="*.idcplugin"/>
+  </mime-type>
+</mime-info>

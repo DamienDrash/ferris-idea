@@ -822,16 +822,11 @@ mod tests {
             .any(|(t, k)| t == text && *k == kind)
     }
 
-    const MARIA: &str =
-        include_str!("../../../docs/research/observations/evidence/OBS-0083/maria.sql");
-    const TSQL: &str =
-        include_str!("../../../docs/research/observations/evidence/OBS-0083/tsql.sql");
-    const ORACLE: &str =
-        include_str!("../../../docs/research/observations/evidence/OBS-0083/oracle.sql");
-    const LITE: &str =
-        include_str!("../../../docs/research/observations/evidence/OBS-0083/lite.sql");
-    const DUCK: &str =
-        include_str!("../../../docs/research/observations/evidence/OBS-0083/duck.sql");
+    const MARIA: &str = include_str!("../tests/fixtures/sql-colours/maria.sql");
+    const TSQL: &str = include_str!("../tests/fixtures/sql-colours/tsql.sql");
+    const ORACLE: &str = include_str!("../tests/fixtures/sql-colours/oracle.sql");
+    const LITE: &str = include_str!("../tests/fixtures/sql-colours/lite.sql");
+    const DUCK: &str = include_str!("../tests/fixtures/sql-colours/duck.sql");
 
     /// SPEC-0005 v7 AK-22 (OBS-0083 L7): the MariaDB sample.
     #[test]

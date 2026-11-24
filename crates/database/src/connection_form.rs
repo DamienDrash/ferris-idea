@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Keychain service of passwords saved from the connection dialog.
-pub const KEYCHAIN_SERVICE: &str = "idecraft";
+pub const KEYCHAIN_SERVICE: &str = "ferris-idea";
 
 /// The fields of the connection dialog as text (behaviour 2).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -273,7 +273,7 @@ pub struct ConnectionTest {
     pub product: String,
     /// Version the server reports; `None` when it could not be asked cheaply.
     pub server_version: Option<String>,
-    /// The client library IDECraft talks to the database with.
+    /// The client library Ferris IDEA talks to the database with.
     pub driver: String,
     /// Round trip of the test query (`SELECT 1` by default).
     pub ping: Duration,
@@ -475,7 +475,7 @@ fn mariadb_version(text: &str) -> String {
         .to_owned()
 }
 
-/// The client library IDECraft uses for `dialect` (`SPEC-0108` v4 behaviour 9: the dialog's
+/// The client library Ferris IDEA uses for `dialect` (`SPEC-0108` v4 behaviour 9: the dialog's
 /// Driver line). Each family has one built-in driver; none is downloaded (IMP-0371).
 pub fn driver_label(dialect: Dialect) -> &'static str {
     match dialect {
@@ -552,6 +552,113 @@ pub fn save_connection(
     Ok(name)
 }
 
+/// Where a new database file may be made (`SPEC-0108` v13 behaviour 23).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileScope {
+    /// The user's own action in the dialog: any folder the user can write to.
+    Anywhere,
+    /// An agent's request: only inside the workspace, never through a link to outside.
+    Workspace,
+}
+
+/// Creates the empty database file the SQLite or DuckDB `form` names (`SPEC-0108` v13 behaviour
+/// 23): only on this explicit request, never while testing or connecting. A relative file is made
+/// in the workspace at `root`. An existing file or link is never touched; the folder must exist.
+/// With [`FileScope::Workspace`] a path with `..`, outside the workspace or through a link to a
+/// place outside is refused, checked before the file is made and again after it (a folder swapped
+/// for a link meanwhile); a file made outside after all is removed again. The file is readable and
+/// writable by its owner only (Unix). DuckDB files are initialised by DuckDB. Returns the file.
+pub fn create_database_file(
+    root: &Path,
+    form: &ConnectionForm,
+    scope: FileScope,
+) -> Result<PathBuf, String> {
+    if !form.dialect.file_based() {
+        return Err(format!(
+            "{} keeps its databases on a server; only SQLite and DuckDB connections have a database file",
+            form.dialect.label()
+        ));
+    }
+    let typed = form.path.trim();
+    if typed.is_empty() {
+        return Err("enter the database file to create".into());
+    }
+    let typed = Path::new(typed);
+    let file = if typed.is_relative() {
+        root.join(typed)
+    } else {
+        typed.to_path_buf()
+    };
+    if file.symlink_metadata().is_ok() {
+        return Err(format!(
+            "{} already exists; nothing was created",
+            file.display()
+        ));
+    }
+    let Some(folder) = file.parent().filter(|f| !f.as_os_str().is_empty()) else {
+        return Err(format!("{} names no folder", file.display()));
+    };
+    if !folder.is_dir() {
+        return Err(format!(
+            "the folder {} does not exist; nothing was created",
+            folder.display()
+        ));
+    }
+    let inside = |what: &str| -> Result<(), String> {
+        if scope == FileScope::Anywhere {
+            return Ok(());
+        }
+        let refused = || {
+            format!(
+                "{} is outside the workspace{what}; an agent creates database files only inside it \
+                 (the user can create one anywhere in the connection dialog)",
+                file.display()
+            )
+        };
+        if typed
+            .components()
+            .any(|c| matches!(c, std::path::Component::ParentDir))
+        {
+            return Err(refused());
+        }
+        let root = root.canonicalize().map_err(|e| e.to_string())?;
+        let folder = folder.canonicalize().map_err(|e| e.to_string())?;
+        if folder.starts_with(&root) {
+            Ok(())
+        } else {
+            Err(refused())
+        }
+    };
+    inside("")?;
+    // Off Unix the file cannot be made readable by its owner only yet (`SPEC-0321` v6
+    // behaviour 8a).
+    if cfg!(not(unix)) {
+        return Err(format!(
+            "{}: a private database file is not supported on this platform yet; nothing was created",
+            file.display()
+        ));
+    }
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    options
+        .open(&file)
+        .map_err(|e| format!("{}: {e}", file.display()))?;
+    // Checked again: a folder on the way may have become a link to outside meanwhile.
+    if let Err(e) = inside(" (a folder on the way changed while the file was made)") {
+        let _ = std::fs::remove_file(&file);
+        return Err(e);
+    }
+    if form.dialect == Dialect::DuckDb
+        && let Err(e) = crate::duckdb::initialise(&file)
+    {
+        let _ = std::fs::remove_file(&file);
+        return Err(format!("{}: {e}", file.display()));
+    }
+    Ok(file)
+}
+
 /// Removes connection `id` of the workspace at `root` and its password in `store` (behaviour 5).
 /// Returns the removed name.
 pub fn remove_connection(root: &Path, id: &str, store: &dyn SecretStore) -> Result<String, String> {
@@ -608,6 +715,133 @@ pub fn test_form(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// SPEC-0108 v13 AK-24 (OBS-0083 L8): the file is made only when asked, never over an
+    /// existing one, only in an existing folder, and for agents only inside the workspace.
+    #[test]
+    fn a_database_file_is_created_only_where_allowed() {
+        let base =
+            std::env::temp_dir().join(format!("ferris-idea-create-db-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let root = base.join("ws");
+        let outside = base.join("outside");
+        std::fs::create_dir_all(root.join("data")).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        let form = |dialect, path: &str| ConnectionForm {
+            path: path.into(),
+            ..ConnectionForm::new(dialect)
+        };
+        // SQLite, relative to the workspace: an empty file SQLite opens, owner-only.
+        let made = create_database_file(
+            &root,
+            &form(Dialect::Sqlite, "data/new.db"),
+            FileScope::Workspace,
+        )
+        .unwrap();
+        assert_eq!(made, root.join("data/new.db"));
+        let conn = rusqlite::Connection::open(&made).unwrap();
+        conn.execute_batch("create table t (id integer)").unwrap();
+        drop(conn);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&made).unwrap().permissions().mode();
+            assert_eq!(mode & 0o777, 0o600);
+        }
+        // Never over an existing file: the table stays.
+        let again = create_database_file(
+            &root,
+            &form(Dialect::Sqlite, "data/new.db"),
+            FileScope::Anywhere,
+        );
+        assert!(again.unwrap_err().contains("already exists"));
+        let conn = rusqlite::Connection::open(&made).unwrap();
+        conn.execute_batch("select * from t").unwrap();
+        drop(conn);
+        // DuckDB: a database DuckDB opens read-only.
+        let duck = create_database_file(
+            &root,
+            &form(Dialect::DuckDb, "data/new.duckdb"),
+            FileScope::Workspace,
+        )
+        .unwrap();
+        let config = duckdb::Config::default()
+            .access_mode(duckdb::AccessMode::ReadOnly)
+            .unwrap();
+        let conn = duckdb::Connection::open_with_flags(&duck, config).unwrap();
+        conn.execute_batch("select 1").unwrap();
+        drop(conn);
+        // No folder is made; a server dialect has no file; an empty name is refused.
+        assert!(
+            create_database_file(
+                &root,
+                &form(Dialect::Sqlite, "nope/x.db"),
+                FileScope::Anywhere
+            )
+            .unwrap_err()
+            .contains("does not exist")
+        );
+        assert!(!root.join("nope").exists());
+        assert!(
+            create_database_file(
+                &root,
+                &form(Dialect::PostgreSql, "x.db"),
+                FileScope::Anywhere
+            )
+            .is_err()
+        );
+        assert!(
+            create_database_file(&root, &form(Dialect::Sqlite, " "), FileScope::Anywhere).is_err()
+        );
+        // Agents: not outside, not through `..`, not through a link to outside.
+        let out = outside.join("o.db").display().to_string();
+        assert!(
+            create_database_file(&root, &form(Dialect::Sqlite, &out), FileScope::Workspace)
+                .unwrap_err()
+                .contains("outside the workspace")
+        );
+        assert!(
+            create_database_file(
+                &root,
+                &form(Dialect::Sqlite, "../outside/p.db"),
+                FileScope::Workspace
+            )
+            .is_err()
+        );
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(&outside, root.join("link")).unwrap();
+            assert!(
+                create_database_file(
+                    &root,
+                    &form(Dialect::Sqlite, "link/q.db"),
+                    FileScope::Workspace
+                )
+                .is_err()
+            );
+            // A link to a folder inside the workspace stays usable.
+            std::os::unix::fs::symlink(root.join("data"), root.join("inner")).unwrap();
+            assert!(
+                create_database_file(
+                    &root,
+                    &form(Dialect::Sqlite, "inner/r.db"),
+                    FileScope::Workspace
+                )
+                .is_ok()
+            );
+            assert!(root.join("data/r.db").is_file());
+        }
+        assert_eq!(
+            std::fs::read_dir(&outside).unwrap().count(),
+            0,
+            "nothing outside"
+        );
+        // The user may create one anywhere.
+        assert!(
+            create_database_file(&root, &form(Dialect::Sqlite, &out), FileScope::Anywhere).is_ok()
+        );
+        let _ = std::fs::remove_dir_all(&base);
+    }
 
     fn form() -> ConnectionForm {
         ConnectionForm {
@@ -683,7 +917,8 @@ mod tests {
 
     #[test]
     fn save_and_remove_keep_passwords_in_the_store_only() {
-        let root = std::env::temp_dir().join(format!("idecraft-conn-save-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("ferris-idea-conn-save-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         let store = crate::MemoryStore::default();

@@ -1,15 +1,15 @@
-//! `idecraft device` (`SPEC-0324` behaviour 15): the command line of a paired device. Pair with a
-//! machine running `idecraft serve --pair`, list and forget hosts, add a path, and call one method.
+//! `ferris-idea device` (`SPEC-0324` behaviour 15): the command line of a paired device. Pair with a
+//! machine running `ferris-idea serve --pair`, list and forget hosts, add a path, and call one method.
 
 use std::io::{BufRead, IsTerminal, Write};
 use std::process::ExitCode;
 
-use idecraft_pairing::parse_link;
-use idecraft_remote::paired;
-use idecraft_remote::{HostSpec, PairedProject};
+use ferris_idea_pairing::parse_link;
+use ferris_idea_remote::paired;
+use ferris_idea_remote::{HostSpec, PairedProject};
 use serde_json::{Value, json};
 
-const USAGE: &str = "usage: idecraft device pair <address> --code <code> | pair <link> | hosts | \
+const USAGE: &str = "usage: ferris-idea device pair <address> --code <code> | pair <link> | hosts | \
                      forget <address> | add-path <address> <new path> | \
                      call <address> <folder> <method> [<json params>]";
 
@@ -20,7 +20,7 @@ fn address(text: &str) -> Result<String, String> {
     Ok(label.trim_start_matches("paired://").to_owned())
 }
 
-/// Runs `idecraft device …`.
+/// Runs `ferris-idea device …`.
 pub fn run(args: &[String]) -> ExitCode {
     let result = match args
         .iter()
@@ -28,6 +28,11 @@ pub fn run(args: &[String]) -> ExitCode {
         .collect::<Vec<_>>()
         .as_slice()
     {
+        // `SPEC-0321` v6 behaviour 1a.
+        [help] if crate::is_help(help) => {
+            println!("{USAGE}");
+            return ExitCode::SUCCESS;
+        }
         ["pair", link] if parse_link(link).is_some() => pair_link(link),
         ["pair", address_text, "--code", code] => pair_code(address_text, code),
         ["hosts"] => hosts(),
@@ -71,7 +76,7 @@ fn confirm(digits: &str, host: &str) -> Result<bool, String> {
     Ok(matches!(line.trim().to_lowercase().as_str(), "y" | "yes"))
 }
 
-fn finish(pending: idecraft_pairing::PendingPairing) -> Result<(), String> {
+fn finish(pending: ferris_idea_pairing::PendingPairing) -> Result<(), String> {
     match confirm(pending.digits(), &pending.host_fingerprint()) {
         Ok(true) => {
             let fingerprint = paired::finish_pairing(pending).map_err(|e| e.to_string())?;
@@ -132,7 +137,7 @@ fn call(address_text: &str, folder: &str, method: &str, params: &str) -> Result<
         .session
         .call(method, params)
         .map_err(|e| format!("{}: {}", e.code.as_str(), e.message));
-    let _ = project.close(idecraft_remote::Unsaved::Discard);
+    let _ = project.close(ferris_idea_remote::Unsaved::Discard);
     println!("{}", result?);
     Ok(())
 }

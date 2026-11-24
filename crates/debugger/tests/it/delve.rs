@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use idecraft_debugger::{
+use ferris_idea_debugger::{
     DapClient, DebugSession, DelveServer, Runtime, SourceBreakpoint, SpecialBreakpoints, StopState,
     Target, attach, attach_arguments, go_launch, known_adapters, launch_go, lifetime,
 };
@@ -60,7 +60,7 @@ fn delve() -> Option<Vec<String>> {
         .output()
         .is_ok_and(|o| o.status.success());
     match command {
-        Some(command) if go && idecraft_debugger::can_debug_unattended() => Some(command),
+        Some(command) if go && ferris_idea_debugger::can_debug_unattended() => Some(command),
         _ => {
             eprintln!("skipped: dlv or go is not installed, or no unattended debugging");
             None
@@ -71,7 +71,7 @@ fn delve() -> Option<Vec<String>> {
 /// A Go module with a program, a package and its tests, in the temporary folder as it is named
 /// (on macOS behind a symbolic link, which Delve's path substitution has to bridge).
 fn project(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("idecraft-delve-{name}-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-delve-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("calc")).unwrap();
     std::fs::write(dir.join("go.mod"), "module example.com/demo\n\ngo 1.21\n").unwrap();
@@ -140,7 +140,7 @@ fn go_program_stops_in_a_loop_with_condition_and_evaluate() {
     assert!(
         placed[&main]
             .iter()
-            .all(|b| b.evaluated_by == idecraft_debugger::EvaluatedBy::Adapter),
+            .all(|b| b.evaluated_by == ferris_idea_debugger::EvaluatedBy::Adapter),
         "Delve evaluates conditions, hit counts and log messages itself: {placed:?}"
     );
     let thread = match session.wait_state(WAIT, 10).unwrap() {
@@ -296,7 +296,7 @@ fn go_panic_function_breakpoint_and_build_error() {
     let launch = go_launch(&words("run . crash"), &dir, &BTreeMap::new()).unwrap();
     let special = SpecialBreakpoints {
         uncaught: true,
-        functions: vec![idecraft_debugger::FunctionBreakpoint {
+        functions: vec![ferris_idea_debugger::FunctionBreakpoint {
             name: "calc.Add".into(),
             condition: Some("b == 4".into()),
             ..Default::default()
@@ -305,7 +305,7 @@ fn go_panic_function_breakpoint_and_build_error() {
     };
     let (mut session, _) = launch_go(&command, launch, &BTreeMap::new(), &special).unwrap();
     assert!(
-        !session.output().contains("[IDECraft]"),
+        !session.output().contains("[Ferris IDEA]"),
         "{}",
         session.output()
     );
@@ -375,7 +375,7 @@ fn go_panic_function_breakpoint_and_build_error() {
 }
 
 /// SPEC-0147 v3 AK-7: a Delve server on this machine is attached to through its port, without
-/// an adapter of IDECraft's: the program stops at the breakpoint, and the console says what Stop
+/// an adapter of Ferris IDEA's: the program stops at the breakpoint, and the console says what Stop
 /// does to such a server.
 #[test]
 fn go_delve_server_is_attached_through_its_port() {
@@ -418,7 +418,7 @@ fn go_delve_server_is_attached_through_its_port() {
             &format!("--listen=127.0.0.1:{port}"),
         ];
         assert_eq!(
-            idecraft_debugger::classify("dlv", &listed),
+            ferris_idea_debugger::classify("dlv", &listed),
             (Runtime::Go, Some(port))
         );
         let target = Target::Address {

@@ -6,15 +6,16 @@ use crate::semantics::{Annotated, AxAction, Effect, Role, Semantics};
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 
+use ferris_idea_ui::keymap::{Keystroke, Shortcut};
+use ferris_idea_ui::theme::ThemeId;
 use gpui::{
     App, Bounds, Context, ElementInputHandler, EntityInputHandler, EventEmitter, FocusHandle,
     KeyDownEvent, Pixels, UTF16Selection, Window, canvas, div, prelude::*, px, uniform_list,
 };
-use idecraft_ui::keymap::{Keystroke, Shortcut};
-use idecraft_ui::theme::ThemeId;
 
 mod edit_actions;
 mod general_pages;
+mod options;
 
 use crate::palette::{Palette, current_theme};
 use crate::settings_model::{KeymapRow, Page, keymap_rows, pages};
@@ -29,9 +30,12 @@ pub enum SettingsEvent {
     /// The installed plugins changed: read them again.
     PluginsChanged,
     /// Apply and save these IDE settings (`SPEC-0129`).
-    Ide(Box<idecraft_core::IdeSettings>),
+    Ide(Box<ferris_idea_core::IdeSettings>),
     /// Run this command in a new terminal tab (signing in to a subscription, `SPEC-0160`).
     RunInTerminal(String),
+    /// Open the user's own Claude Code in a new terminal tab of the project (`SPEC-0160` v2
+    /// behaviour 7).
+    OpenClaudeCode,
     /// A trusted location was removed: windows check their trust again (`SPEC-0278`).
     TrustChanged,
     /// The project's inspection profile changed: inspect the open editors again (`SPEC-0315`).
@@ -65,21 +69,24 @@ pub struct SettingsView {
     /// A row of the keymap list was chosen (click, ↑/↓, Enter) since the search last changed:
     /// ⇧⌫ then restores also while the search holds text (`SPEC-0105` v4 behaviour 4).
     row_chosen: bool,
+    /// The keymap list has the keys: a row was clicked or Tab left the search (v10 behaviour
+    /// 16). ⌫ removes then, and Escape gives the keys back to the search.
+    list_keys: bool,
     /// Note under the keymap list: conflicts or what was changed.
     note: Option<String>,
     /// The user's plugins folder and what it holds (Plugins page).
     plugins_dir: Option<PathBuf>,
-    plugins: Vec<idecraft_plugins::Installed>,
+    plugins: Vec<ferris_idea_plugins::Installed>,
     /// The plugin a first Delete asked to remove; a second Delete removes it.
     removing: Option<String>,
     /// A plugin file shown for review before it is installed (`SPEC-0211` behaviour 2).
-    plugin_review: Option<(PathBuf, idecraft_plugins::Review)>,
+    plugin_review: Option<(PathBuf, ferris_idea_plugins::Review)>,
     /// The permissions ticked in the review, granted when it installs (`SPEC-0276` behaviour 1).
-    review_grants: Vec<idecraft_plugins::Permission>,
+    review_grants: Vec<ferris_idea_plugins::Permission>,
     /// The dictionary being downloaded (`SPEC-0159`).
     downloading: Option<&'static str>,
     /// IDE settings as the Editor, Font and Terminal pages show them (`SPEC-0129`).
-    ide: idecraft_core::IdeSettings,
+    ide: ferris_idea_core::IdeSettings,
     /// The shell field of the Terminal page.
     shell: gpui::Entity<crate::editor_view::EditorView>,
     /// The protected branches field of the Version Control page (`SPEC-0150`).
@@ -92,7 +99,7 @@ pub struct SettingsView {
     font_preview: gpui::Entity<crate::editor_view::EditorView>,
     /// The settings as the dialog found them when it opened: what "Revert changes" goes back to
     /// (`SPEC-0105` v7 behaviour 8).
-    opened: idecraft_core::IdeSettings,
+    opened: ferris_idea_core::IdeSettings,
     /// The search field of Advanced Settings and its text (`SPEC-0337` v2 behaviour 5b).
     advanced_search: gpui::Entity<crate::editor_view::EditorView>,
     advanced_query: String,
@@ -107,19 +114,22 @@ pub struct SettingsView {
     /// The endpoint whose key was read last (or is being read or written).
     ai_key_endpoint: Option<String>,
     /// Whether the user is signed in to the chosen subscription (`SPEC-0160`).
-    ai_login: Option<idecraft_ai::subscription::Login>,
+    ai_login: Option<ferris_idea_ai::subscription::Login>,
     /// The project whose JDKs and build tools the Build Tools page shows.
     root: Option<PathBuf>,
     /// Lines of the Build Tools and Languages pages, read when shown: text and whether it is a
     /// problem.
     info: Vec<(String, bool)>,
     /// Entries of the Trusted Locations page (`SPEC-0278` behaviour 8).
-    trusted: Vec<idecraft_core::trust::TrustedLocation>,
+    trusted: Vec<ferris_idea_core::trust::TrustedLocation>,
     /// The text field of Advanced Settings and the key it edits (`SPEC-0337` behaviour 5).
     advanced_field: gpui::Entity<crate::editor_view::EditorView>,
     advanced_editing: Option<&'static str>,
     /// The project's inspection profile as the Inspections page shows it (`SPEC-0315`).
-    inspection_profile: idecraft_languages::inspection_profile::Profile,
+    inspection_profile: ferris_idea_languages::inspection_profile::Profile,
+    /// The selected column of a file type's row on the Grammar and Style page
+    /// (`SPEC-0155` v8 behaviour 14): 0 the file type, then comments, documentation, strings.
+    grammar_column: usize,
     focus: FocusHandle,
 }
 
@@ -128,6 +138,17 @@ impl EventEmitter<SettingsEvent> for SettingsView {}
 impl SettingsView {
     /// A dialog on `page`; `extra` are actions without a bundled shortcut.
     pub fn new(page: Page, extra: Vec<&'static str>, cx: &mut Context<Self>) -> Self {
+        Self::with_plugins_dir(page, extra, ferris_idea_plugins::plugins_dir(), cx)
+    }
+
+    /// [`Self::new`] managing the plugins of `plugins_dir` from the start, so the user's folder is
+    /// never read when another is meant (the Welcome window's tests, `SPEC-0355`).
+    pub fn with_plugins_dir(
+        page: Page,
+        extra: Vec<&'static str>,
+        plugins_dir: Option<PathBuf>,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let mut view = Self {
             query: String::new(),
             query_marked: false,
@@ -141,8 +162,9 @@ impl SettingsView {
             rows: Vec::new(),
             recording: false,
             row_chosen: false,
+            list_keys: false,
             note: None,
-            plugins_dir: idecraft_plugins::plugins_dir(),
+            plugins_dir,
             plugins: Vec::new(),
             plugin_review: None,
             review_grants: Vec::new(),
@@ -179,6 +201,7 @@ impl SettingsView {
             advanced_field: cx.new(crate::editor_view::EditorView::field),
             advanced_editing: None,
             inspection_profile: Default::default(),
+            grammar_column: 0,
             focus: cx.focus_handle(),
         };
         view.opened = view.ide.clone();
@@ -247,11 +270,21 @@ impl SettingsView {
     /// Re-reads the keymap rows and the installed plugins, e.g. after a shortcut changed.
     pub fn refresh(&mut self) {
         let keymap = crate::keymaps::current();
-        self.rows = keymap_rows(&keymap, &self.extra, &self.query);
+        // The chosen keymap row stays chosen and listed when its shortcuts are removed, so that
+        // Shift+Delete restores the same action (v10 behaviour 16).
+        let kept = (self.page == Page::Keymap && self.row_chosen)
+            .then(|| self.rows.get(self.selected).map(|r| r.action.clone()))
+            .flatten();
+        let mut extra: Vec<&str> = self.extra.clone();
+        extra.extend(kept.as_deref());
+        self.rows = keymap_rows(&keymap, &extra, &self.query);
+        if let Some(i) = kept.and_then(|a| self.rows.iter().position(|r| r.action == a)) {
+            self.selected = i;
+        }
         self.plugins = self
             .plugins_dir
             .as_deref()
-            .map(idecraft_plugins::installed)
+            .map(ferris_idea_plugins::installed)
             .unwrap_or_default();
         let n = self.count();
         if self.page != Page::Appearance {
@@ -277,7 +310,7 @@ impl SettingsView {
     fn read_inspection_profile(&mut self) {
         if let Some(root) = &self.root {
             self.inspection_profile =
-                idecraft_languages::inspection_profile::load(root).unwrap_or_default();
+                ferris_idea_languages::inspection_profile::load(root).unwrap_or_default();
         }
     }
 
@@ -303,7 +336,7 @@ impl SettingsView {
     /// Turns the selected inspection on or off, or (with `cycle`) gives it the next severity,
     /// and writes the profile (`SPEC-0315` behaviours 2, 4).
     pub fn change_inspection(&mut self, cycle: bool, cx: &mut Context<Self>) {
-        use idecraft_languages::inspections::Level;
+        use ferris_idea_languages::inspections::Level;
         let Some(root) = self.root.clone() else {
             return;
         };
@@ -327,6 +360,41 @@ impl SettingsView {
         self.save_inspection_profile(&root, cx);
     }
 
+    /// Space or Enter on the Grammar and Style page (`SPEC-0155` v8 behaviour 14): turns the
+    /// selected switch over — commit messages, a file type or one of its contexts (the selected
+    /// column), saved in the IDE settings; or a writing rule, saved in the project's inspection
+    /// profile as on the Inspections page.
+    pub fn toggle_grammar(&mut self, cx: &mut Context<Self>) {
+        use crate::settings_model::{GrammarRow, grammar_rows, toggle_grammar};
+        let Some(row) = grammar_rows().get(self.selected).copied() else {
+            return;
+        };
+        match row {
+            GrammarRow::Rule(id) => {
+                let Some(root) = self.root.clone() else {
+                    self.note = Some("The rules belong to a project: open one first".into());
+                    cx.notify();
+                    return;
+                };
+                let (enabled, _) = self.inspection_profile.state(id);
+                self.inspection_profile.set(id, Some(!enabled), None);
+                self.save_inspection_profile(&root, cx);
+            }
+            row => {
+                let column = self.grammar_column;
+                self.change_ide(
+                    |s| _ = toggle_grammar(&mut s.editor.grammar, row, column),
+                    cx,
+                );
+            }
+        }
+    }
+
+    /// The selected column of the Grammar and Style page (tests).
+    pub fn set_grammar_column(&mut self, column: usize) {
+        self.grammar_column = column.min(crate::settings_model::GRAMMAR_COLUMNS.len() - 1);
+    }
+
     /// Returns the selected inspection to its default (`SPEC-0315` behaviour 4).
     fn reset_inspection(&mut self, cx: &mut Context<Self>) {
         let Some(root) = self.root.clone() else {
@@ -339,7 +407,7 @@ impl SettingsView {
     }
 
     fn save_inspection_profile(&mut self, root: &std::path::Path, cx: &mut Context<Self>) {
-        match idecraft_languages::inspection_profile::save(root, &self.inspection_profile) {
+        match ferris_idea_languages::inspection_profile::save(root, &self.inspection_profile) {
             Ok(()) => self.note = None,
             Err(e) => self.note = Some(format!("Cannot write the inspection profile: {e}")),
         }
@@ -348,7 +416,7 @@ impl SettingsView {
     }
 
     /// The IDE settings the pages show.
-    pub fn ide(&self) -> &idecraft_core::IdeSettings {
+    pub fn ide(&self) -> &ferris_idea_core::IdeSettings {
         &self.ide
     }
 
@@ -360,7 +428,7 @@ impl SettingsView {
     /// Changes the IDE settings and asks the workbench to apply and save them (behaviour 1).
     pub fn change_ide(
         &mut self,
-        change: impl FnOnce(&mut idecraft_core::IdeSettings),
+        change: impl FnOnce(&mut ferris_idea_core::IdeSettings),
         cx: &mut Context<Self>,
     ) {
         let mut ide = self.ide.clone();
@@ -463,7 +531,11 @@ impl SettingsView {
         let page = self.page;
         self.change_ide(
             |s| {
-                crate::settings_model::copy_page(page, &idecraft_core::IdeSettings::default(), s);
+                crate::settings_model::copy_page(
+                    page,
+                    &ferris_idea_core::IdeSettings::default(),
+                    s,
+                );
             },
             cx,
         );
@@ -515,6 +587,14 @@ impl SettingsView {
         );
     }
 
+    /// Switches the startup animation (`SPEC-0355` v2 behaviour 23).
+    pub fn toggle_startup_animation(&mut self, cx: &mut Context<Self>) {
+        self.change_ide(
+            |s| s.appearance.startup_animation = !s.appearance.startup_animation,
+            cx,
+        );
+    }
+
     /// Switches following the system's light or dark appearance (`SPEC-0131` behaviour 1).
     pub fn toggle_sync(&mut self, cx: &mut Context<Self>) {
         self.change_ide(
@@ -554,14 +634,23 @@ impl SettingsView {
             },
             cx,
         );
-        let note =
-            if let Some(cli) = idecraft_ai::subscription::Cli::from_id(&self.ide.ai.subscription) {
-                format!("Questions go to {}", cli.name())
-            } else if endpoint.is_empty() {
-                "No endpoint: nothing can be sent".to_owned()
+        let note = if ferris_idea_ai::claude_in_terminal(&self.ide.ai) {
+            if ferris_idea_ai::provider_of(&endpoint) == Some("Anthropic") {
+                format!(
+                    "Claude's plan runs in the Terminal; questions go to {endpoint} with your API key"
+                )
             } else {
-                format!("Questions go to {endpoint}")
-            };
+                "Claude's plan runs in the Terminal; nothing is sent from AI Chat without the Anthropic API".to_owned()
+            }
+        } else if let Some(cli) =
+            ferris_idea_ai::subscription::Cli::from_id(&self.ide.ai.subscription)
+        {
+            format!("Questions go to {}", cli.name())
+        } else if endpoint.is_empty() {
+            "No endpoint: nothing can be sent".to_owned()
+        } else {
+            format!("Questions go to {endpoint}")
+        };
         if !key.is_empty() {
             // The keychain is written off the UI thread (OBS-0026 L26): a system prompt for
             // keychain access must not block the window. The model list waits for the key.
@@ -573,12 +662,12 @@ impl SettingsView {
             ));
             let target = endpoint.clone();
             let task = cx.background_executor().spawn(async move {
-                use idecraft_database::SecretStore;
-                idecraft_ai::key_ref(&target)
+                use ferris_idea_database::SecretStore;
+                ferris_idea_ai::key_ref(&target)
                     .map_err(|e| e.to_string())
                     .and_then(|r| {
-                        idecraft_database::SystemStore
-                            .set(&r, &idecraft_database::Secret::new(key))
+                        ferris_idea_database::SystemStore
+                            .set(&r, &ferris_idea_database::Secret::new(key))
                             .map_err(|e| e.to_string())
                     })
             });
@@ -593,7 +682,10 @@ impl SettingsView {
                         Err(e) => format!("{note}; API key not stored: {e}"),
                     };
                     this.note = Some(note.clone());
-                    if !endpoint.is_empty() && this.ide.ai.subscription.is_empty() {
+                    if !endpoint.is_empty()
+                        && (this.ide.ai.subscription.is_empty()
+                            || ferris_idea_ai::claude_in_terminal(&this.ide.ai))
+                    {
                         this.list_models(endpoint, note, cx);
                     }
                     cx.notify();
@@ -606,7 +698,10 @@ impl SettingsView {
         // Another endpoint may have another key: read it in the background.
         self.read_ai_key(cx);
         self.note = Some(note.clone());
-        if !endpoint.is_empty() && self.ide.ai.subscription.is_empty() {
+        if !endpoint.is_empty()
+            && (self.ide.ai.subscription.is_empty()
+                || ferris_idea_ai::claude_in_terminal(&self.ide.ai))
+        {
             self.list_models(endpoint, note, cx);
         }
         cx.notify();
@@ -623,7 +718,7 @@ impl SettingsView {
         self.ai_key_stored = None;
         let target = endpoint.clone();
         let task = cx.background_executor().spawn(async move {
-            idecraft_ai::stored_key(&idecraft_database::SystemStore, &target).is_some()
+            ferris_idea_ai::stored_key(&ferris_idea_database::SystemStore, &target).is_some()
         });
         cx.spawn(async move |this, cx| {
             let stored = task.await;
@@ -646,8 +741,8 @@ impl SettingsView {
     /// (`SPEC-0143`); no model is chosen for the user.
     fn list_models(&mut self, endpoint: String, note: String, cx: &mut Context<Self>) {
         let task = cx.background_executor().spawn(async move {
-            let key = idecraft_ai::stored_key(&idecraft_database::SystemStore, &endpoint);
-            idecraft_ai::list_models(&endpoint, key.as_deref())
+            let key = ferris_idea_ai::stored_key(&ferris_idea_database::SystemStore, &endpoint);
+            ferris_idea_ai::list_models(&endpoint, key.as_deref())
         });
         cx.spawn(async move |this, cx| {
             let models = task.await;
@@ -664,16 +759,16 @@ impl SettingsView {
     }
 
     /// Chooses the next provider (`SPEC-0143`, `SPEC-0160`): first the chat subscriptions, whose
-    /// programs IDECraft runs, then the API templates, which fill the endpoint.
+    /// programs Ferris IDEA runs, then the API templates, which fill the endpoint.
     pub fn cycle_provider(&mut self, cx: &mut Context<Self>) {
-        use idecraft_ai::subscription::{CLIS, Cli};
-        let n = CLIS.len() + idecraft_ai::PROVIDERS.len();
+        use ferris_idea_ai::subscription::{CLIS, Cli};
+        let n = CLIS.len() + ferris_idea_ai::PROVIDERS.len();
         let current = match Cli::from_id(&self.ide.ai.subscription) {
             Some(cli) => CLIS.iter().position(|c| *c == cli),
             None => {
                 let endpoint = self.ai_fields[0].read(cx).state.buffer.text();
-                idecraft_ai::provider_of(&endpoint).and_then(|name| {
-                    idecraft_ai::PROVIDERS
+                ferris_idea_ai::provider_of(&endpoint).and_then(|name| {
+                    ferris_idea_ai::PROVIDERS
                         .iter()
                         .position(|(n, _)| *n == name)
                         .map(|i| i + CLIS.len())
@@ -684,13 +779,13 @@ impl SettingsView {
         if let Some(cli) = CLIS.get(next).copied() {
             self.change_ide(|s| s.ai.subscription = cli.id().to_owned(), cx);
             self.note = Some(format!(
-                "{}: IDECraft runs `{}` with your subscription; the API key is not used",
+                "{}: Ferris IDEA runs `{}` with your subscription; the API key is not used",
                 cli.name(),
                 cli.program()
             ));
             self.check_login(cx);
         } else {
-            let (name, url) = idecraft_ai::PROVIDERS[next - CLIS.len()];
+            let (name, url) = ferris_idea_ai::PROVIDERS[next - CLIS.len()];
             self.change_ide(|s| s.ai.subscription.clear(), cx);
             self.ai_login = None;
             self.ai_fields[0].update(cx, |f, cx| f.set_text(url, cx));
@@ -701,19 +796,58 @@ impl SettingsView {
         cx.notify();
     }
 
+    /// Fills the Anthropic API template (`SPEC-0143`): Claude in AI Chat with the user's own API
+    /// key, which goes to the keychain as for every endpoint (`SPEC-0160` v2 behaviour 6). The
+    /// subscription stays: with Claude's plan in the Terminal the chat then uses this endpoint.
+    /// Model and key wait for the user; Enter applies.
+    pub fn use_anthropic_api(&mut self, cx: &mut Context<Self>) {
+        let Some((name, url)) = ferris_idea_ai::PROVIDERS
+            .iter()
+            .copied()
+            .find(|(n, _)| *n == "Anthropic")
+        else {
+            return;
+        };
+        self.selected = 1;
+        self.ai_fields[0].update(cx, |f, cx| f.set_text(url, cx));
+        self.note = Some(format!(
+            "{name}: endpoint {url}; enter the model and your Anthropic API key, then Enter applies"
+        ));
+        cx.notify();
+    }
+
+    /// Switches how Claude with the plan is used (`SPEC-0160` v2 behaviour 6): Chat (the default)
+    /// or Terminal.
+    pub fn toggle_claude_plan_mode(&mut self, cx: &mut Context<Self>) {
+        use ferris_idea_core::ClaudePlanMode;
+        let next = match self.ide.ai.claude_plan_mode {
+            ClaudePlanMode::Chat => ClaudePlanMode::Terminal,
+            ClaudePlanMode::Terminal => ClaudePlanMode::Chat,
+        };
+        self.change_ide(|s| s.ai.claude_plan_mode = next, cx);
+        self.note = Some(match next {
+            ClaudePlanMode::Chat => "Claude plan: Chat — AI Chat runs Claude Code with your plan".into(),
+            ClaudePlanMode::Terminal => "Claude plan: Terminal — Sign in opens Claude Code in a terminal; AI Chat uses Claude with your Anthropic API key".into(),
+        });
+        cx.notify();
+    }
+
     /// Asks the chosen subscription's program in the background whether the user is signed in.
     fn check_login(&mut self, cx: &mut Context<Self>) {
-        let Some(cli) = idecraft_ai::subscription::Cli::from_id(&self.ide.ai.subscription) else {
+        let Some(cli) = ferris_idea_ai::subscription::Cli::from_id(&self.ide.ai.subscription)
+        else {
             self.ai_login = None;
             return;
         };
         let task = cx
             .background_executor()
-            .spawn(async move { idecraft_ai::subscription::login(cli) });
+            .spawn(async move { ferris_idea_ai::subscription::login(cli) });
         cx.spawn(async move |this, cx| {
             let login = task.await;
             let _ = this.update(cx, |this, cx| {
-                if idecraft_ai::subscription::Cli::from_id(&this.ide.ai.subscription) == Some(cli) {
+                if ferris_idea_ai::subscription::Cli::from_id(&this.ide.ai.subscription)
+                    == Some(cli)
+                {
                     this.ai_login = Some(login);
                     cx.notify();
                 }
@@ -725,7 +859,15 @@ impl SettingsView {
     /// Sign in (Enter on its row): runs the subscription program's sign-in in a new terminal tab,
     /// where the program asks for the account itself (`SPEC-0160` behaviour 1).
     pub fn sign_in(&mut self, cx: &mut Context<Self>) {
-        use idecraft_ai::subscription::{Cli, Login};
+        use ferris_idea_ai::subscription::{Cli, Login};
+        if ferris_idea_ai::claude_in_terminal(&self.ide.ai)
+            && self.ai_login != Some(Login::NotInstalled)
+        {
+            // Claude's plan in the Terminal: Claude Code itself, where it signs in by itself
+            // (SPEC-0160 v2 behaviour 7).
+            cx.emit(SettingsEvent::OpenClaudeCode);
+            return;
+        }
         let Some(cli) = Cli::from_id(&self.ide.ai.subscription) else {
             self.note = Some("Sign in is for a subscription; choose one as the provider".into());
             cx.notify();
@@ -744,7 +886,7 @@ impl SettingsView {
     }
 
     /// Whether the user is signed in to the chosen subscription, once checked (tests).
-    pub fn ai_login(&self) -> Option<idecraft_ai::subscription::Login> {
+    pub fn ai_login(&self) -> Option<ferris_idea_ai::subscription::Login> {
         self.ai_login
     }
 
@@ -762,7 +904,7 @@ impl SettingsView {
     /// Enter on the Natural Languages page: uses the selected dictionary, downloading it first
     /// when it is neither there nor built in (`SPEC-0159` v2 behaviours 2–3).
     pub fn use_dictionary(&mut self, cx: &mut Context<Self>) {
-        use idecraft_languages::dictionaries as d;
+        use ferris_idea_languages::dictionaries as d;
         let Some(entry) = d::CATALOG.get(self.selected) else {
             return;
         };
@@ -794,7 +936,7 @@ impl SettingsView {
         cx.notify();
         let task = cx.background_executor().spawn(async move {
             d::install(&dir, code, &|url| {
-                let request = idecraft_http::ResolvedRequest {
+                let request = ferris_idea_http::ResolvedRequest {
                     name: None,
                     line: 0,
                     method: "GET".into(),
@@ -803,7 +945,7 @@ impl SettingsView {
                     body: String::new(),
                     unresolved: Vec::new(),
                 };
-                let response = idecraft_http::send(&request, std::time::Duration::from_secs(60))
+                let response = ferris_idea_http::send(&request, std::time::Duration::from_secs(60))
                     .map_err(|e| e.to_string())?;
                 if response.status != 200 {
                     return Err(format!("{url}: HTTP {}", response.status));
@@ -831,10 +973,11 @@ impl SettingsView {
         .detach();
     }
 
-    /// Delete on the Natural Languages page: removes the selected dictionary's files; the built-in
-    /// one stays (`SPEC-0159` v2 behaviour 2).
+    /// Delete on the Natural Languages page: removes the selected dictionary's files; a built-in
+    /// one stays, only a file of its code left by an earlier download goes (`SPEC-0159` v4
+    /// behaviour 2).
     pub fn remove_dictionary(&mut self, cx: &mut Context<Self>) {
-        use idecraft_languages::dictionaries as d;
+        use ferris_idea_languages::dictionaries as d;
         let (Some(dir), Some(entry)) = (d::dictionaries_dir(), d::CATALOG.get(self.selected))
         else {
             return;
@@ -845,12 +988,47 @@ impl SettingsView {
             return;
         }
         self.note = Some(match d::remove(&dir, entry.code) {
+            Ok(()) if d::is_built_in(entry.code) => format!(
+                "The downloaded copy of {} removed; the built-in one stays",
+                entry.name
+            ),
             Ok(()) => format!("{} removed", entry.name),
             Err(e) => e,
         });
-        if self.ide.editor.spelling_dictionary == entry.code && !d::is_built_in(entry.code) {
-            self.change_ide(|s| s.editor.spelling_dictionary.clear(), cx);
+        // The removed dictionary leaves the ones used (SPEC-0159 v4); a built-in one stays.
+        let chosen = d::chosen_codes(&self.ide.editor.spelling_dictionary);
+        if chosen.contains(&entry.code) && !d::is_built_in(entry.code) {
+            let rest: Vec<&str> = chosen.into_iter().filter(|c| *c != entry.code).collect();
+            self.change_ide(|s| s.editor.spelling_dictionary = rest.join(","), cx);
         }
+        cx.notify();
+    }
+
+    /// Space on the Natural Languages page: adds the selected dictionary to the ones used for
+    /// typos, or takes it away; the last one stays (`SPEC-0159` v4 behaviour 3). A dictionary that
+    /// is neither built in nor downloaded is downloaded with Enter first.
+    pub fn toggle_dictionary(&mut self, cx: &mut Context<Self>) {
+        use ferris_idea_languages::dictionaries as d;
+        let Some(entry) = d::CATALOG.get(self.selected) else {
+            return;
+        };
+        let dir = d::dictionaries_dir();
+        if !d::usable(dir.as_deref(), entry.code) {
+            self.note = Some(format!("Press Enter to download {} first", entry.name));
+            cx.notify();
+            return;
+        }
+        let next = d::toggled(
+            dir.as_deref(),
+            &self.ide.editor.spelling_dictionary,
+            entry.code,
+        );
+        let names: Vec<&str> = d::chosen_codes(&next)
+            .iter()
+            .filter_map(|c| d::entry(c).map(|e| e.name))
+            .collect();
+        self.note = Some(format!("Used for typos: {}", names.join(", ")));
+        self.change_ide(|s| s.editor.spelling_dictionary = next, cx);
         cx.notify();
     }
 
@@ -907,7 +1085,7 @@ impl SettingsView {
     /// Reads the trusted locations and says whether the current project is trusted and why
     /// (`SPEC-0278` behaviour 8).
     fn trust_info(&mut self) -> Vec<(String, bool)> {
-        let settings = idecraft_core::trust::TrustSettings::process();
+        let settings = ferris_idea_core::trust::TrustSettings::process();
         let mut out = Vec::new();
         match settings.locations() {
             Ok(list) => self.trusted = list,
@@ -934,7 +1112,7 @@ impl SettingsView {
             out.push((
                 format!(
                     "{}={env} trusts projects for this session",
-                    idecraft_core::trust::TRUST_ENV
+                    ferris_idea_core::trust::TRUST_ENV
                 ),
                 false,
             ));
@@ -947,11 +1125,11 @@ impl SettingsView {
         let Some(entry) = self.trusted.get(self.selected).cloned() else {
             return;
         };
-        let Some(file) = idecraft_core::trust::trust_file() else {
+        let Some(file) = ferris_idea_core::trust::trust_file() else {
             return;
         };
         self.note = Some(
-            match idecraft_core::trust::remove_location(&file, &entry.path) {
+            match ferris_idea_core::trust::remove_location(&file, &entry.path) {
                 Ok(_) => {
                     cx.emit(SettingsEvent::TrustChanged);
                     format!(
@@ -1001,7 +1179,7 @@ impl SettingsView {
                         0 => cs.right_margin = (cs.right_margin as f32 + step).max(0.0) as u32,
                         1 => cs.show_right_margin = !cs.show_right_margin,
                         _ => {
-                            let Some(lang) = idecraft_core::CODE_STYLE_LANGUAGES.get(row - 2)
+                            let Some(lang) = ferris_idea_core::CODE_STYLE_LANGUAGES.get(row - 2)
                             else {
                                 return;
                             };
@@ -1022,11 +1200,11 @@ impl SettingsView {
                 |s| match row {
                     0 => {
                         s.vcs.update_method = match s.vcs.update_method {
-                            idecraft_core::UpdateMethod::Merge => {
-                                idecraft_core::UpdateMethod::Rebase
+                            ferris_idea_core::UpdateMethod::Merge => {
+                                ferris_idea_core::UpdateMethod::Rebase
                             }
-                            idecraft_core::UpdateMethod::Rebase => {
-                                idecraft_core::UpdateMethod::Merge
+                            ferris_idea_core::UpdateMethod::Rebase => {
+                                ferris_idea_core::UpdateMethod::Merge
                             }
                         }
                     }
@@ -1045,6 +1223,15 @@ impl SettingsView {
                 },
                 cx,
             ),
+            // A disabled intention's row turns it on again (SPEC-0076 v11 behaviour 15).
+            Page::Editor if row >= 12 => {
+                let title = self.ide.intentions.disabled.get(row - 12).cloned();
+                if let Some(title) = title {
+                    self.change_ide(|s| _ = s.intentions.set_enabled(&title, true), cx);
+                    let last = self.count().saturating_sub(1);
+                    self.selected = self.selected.min(last);
+                }
+            }
             Page::Editor => self.change_ide(
                 |s| match row {
                     0 => s.editor.strip_trailing_spaces = !s.editor.strip_trailing_spaces,
@@ -1066,7 +1253,7 @@ impl SettingsView {
                     10 => s.editor.config_values = !s.editor.config_values,
                     // SPEC-0083 v8 behaviour 22: always / on hover.
                     _ => {
-                        use idecraft_core::FoldingArrows::{Always, Hover};
+                        use ferris_idea_core::FoldingArrows::{Always, Hover};
                         s.editor.folding_arrows = match s.editor.folding_arrows {
                             Always => Hover,
                             Hover => Always,
@@ -1087,9 +1274,10 @@ impl SettingsView {
             // Terminal lines to attach, in steps of 50 (`SPEC-0313` behaviour 2).
             Page::Ai if row == 5 => self.change_ide(
                 |s| {
-                    let now = idecraft_ai::context::terminal_lines(s.ai.terminal_lines) as f32;
-                    s.ai.terminal_lines =
-                        idecraft_ai::context::terminal_lines((now + step * 50.0).max(1.0) as usize);
+                    let now = ferris_idea_ai::context::terminal_lines(s.ai.terminal_lines) as f32;
+                    s.ai.terminal_lines = ferris_idea_ai::context::terminal_lines(
+                        (now + step * 50.0).max(1.0) as usize,
+                    );
                 },
                 cx,
             ),
@@ -1098,7 +1286,7 @@ impl SettingsView {
     }
 
     /// The plugins the Plugins page lists.
-    pub fn plugins(&self) -> &[idecraft_plugins::Installed] {
+    pub fn plugins(&self) -> &[ferris_idea_plugins::Installed] {
         &self.plugins
     }
 
@@ -1111,7 +1299,7 @@ impl SettingsView {
             return;
         };
         self.page = Page::Plugins;
-        match idecraft_plugins::review(&dir, path) {
+        match ferris_idea_plugins::review(&dir, path) {
             Ok(review) => {
                 self.note = None;
                 // What is granted now stays ticked; nothing new is ticked by itself.
@@ -1132,7 +1320,7 @@ impl SettingsView {
     }
 
     /// The plugin file under review (tests).
-    pub fn plugin_review(&self) -> Option<&idecraft_plugins::Review> {
+    pub fn plugin_review(&self) -> Option<&ferris_idea_plugins::Review> {
         self.plugin_review.as_ref().map(|(_, r)| r)
     }
 
@@ -1144,14 +1332,18 @@ impl SettingsView {
         };
         let ticked = std::mem::take(&mut self.review_grants);
         // Exactly the module the user reviewed, not the file again (SPEC-0211 v3 behaviour 7).
-        self.note = Some(match idecraft_plugins::install_reviewed(&dir, &review) {
+        self.note = Some(match ferris_idea_plugins::install_reviewed(&dir, &review) {
             Ok(m) => {
                 // Granted at install: what the user ticked in the review (SPEC-0276 behaviour 1).
                 for p in &m.permissions {
-                    let _ =
-                        idecraft_plugins::set_granted(&dir, &review.file, *p, ticked.contains(p));
+                    let _ = ferris_idea_plugins::set_granted(
+                        &dir,
+                        &review.file,
+                        *p,
+                        ticked.contains(p),
+                    );
                 }
-                if !ticked.contains(&idecraft_plugins::Permission::SuggestCommands) {
+                if !ticked.contains(&ferris_idea_plugins::Permission::SuggestCommands) {
                     forget_plugin_runs(&review.file);
                 }
                 cx.emit(SettingsEvent::PluginsChanged);
@@ -1162,7 +1354,7 @@ impl SettingsView {
                     .replacen("Reinstall ", "Reinstalled ", 1)
                     .replacen("Downgrade ", "Downgraded ", 1)
                     .replacen("Replace ", "Replaced ", 1);
-                let what = idecraft_plugins::contributions(&m);
+                let what = ferris_idea_plugins::contributions(&m);
                 if what.is_empty() {
                     done
                 } else {
@@ -1179,13 +1371,13 @@ impl SettingsView {
     /// only `only` (SPEC-0276 behaviour 1).
     pub fn toggle_review_grant(
         &mut self,
-        only: Option<idecraft_plugins::Permission>,
+        only: Option<ferris_idea_plugins::Permission>,
         cx: &mut Context<Self>,
     ) {
         let Some((_, review)) = &self.plugin_review else {
             return;
         };
-        let asked: Vec<idecraft_plugins::Permission> = review
+        let asked: Vec<ferris_idea_plugins::Permission> = review
             .permissions
             .iter()
             .map(|(p, _)| *p)
@@ -1200,7 +1392,7 @@ impl SettingsView {
     }
 
     /// The permissions ticked in the review (tests).
-    pub fn review_grants(&self) -> &[idecraft_plugins::Permission] {
+    pub fn review_grants(&self) -> &[ferris_idea_plugins::Permission] {
         &self.review_grants
     }
 
@@ -1234,7 +1426,7 @@ impl SettingsView {
     /// the buttons (SPEC-0211 behaviour 2).
     fn plugin_review_box(
         &self,
-        review: &idecraft_plugins::Review,
+        review: &ferris_idea_plugins::Review,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let p = Palette::current();
@@ -1242,12 +1434,12 @@ impl SettingsView {
         // v3 behaviour 8).
         let downgrade = matches!(
             review.kind,
-            idecraft_plugins::ReviewKind::Downgrade { .. }
-                | idecraft_plugins::ReviewKind::Replace { .. }
+            ferris_idea_plugins::ReviewKind::Downgrade { .. }
+                | ferris_idea_plugins::ReviewKind::Replace { .. }
         );
         let warning = c(p.status_text(crate::palette::Status::Warning));
         // Each permission with a tick: Install grants what is ticked (SPEC-0276 behaviour 1).
-        let asks: Vec<(idecraft_plugins::Permission, bool)> = review
+        let asks: Vec<(ferris_idea_plugins::Permission, bool)> = review
             .permissions
             .iter()
             .map(|(perm, _)| (*perm, self.review_grants.contains(perm)))
@@ -1371,13 +1563,15 @@ impl SettingsView {
             return;
         };
         let (file, enable) = (p.file.clone(), !p.enabled);
-        self.note = Some(match idecraft_plugins::set_enabled(&dir, &file, enable) {
-            Ok(()) => {
-                cx.emit(SettingsEvent::PluginsChanged);
-                format!("{file} {}", if enable { "enabled" } else { "disabled" })
-            }
-            Err(e) => e.to_string(),
-        });
+        self.note = Some(
+            match ferris_idea_plugins::set_enabled(&dir, &file, enable) {
+                Ok(()) => {
+                    cx.emit(SettingsEvent::PluginsChanged);
+                    format!("{file} {}", if enable { "enabled" } else { "disabled" })
+                }
+                Err(e) => e.to_string(),
+            },
+        );
         self.refresh();
     }
 
@@ -1389,7 +1583,7 @@ impl SettingsView {
         else {
             return;
         };
-        let asks: Vec<idecraft_plugins::Permission> = p
+        let asks: Vec<ferris_idea_plugins::Permission> = p
             .manifest
             .as_ref()
             .map(|m| m.permissions.clone())
@@ -1402,10 +1596,10 @@ impl SettingsView {
         }
         let on = asks
             .iter()
-            .any(|perm| !idecraft_plugins::granted(&dir, &file, *perm));
+            .any(|perm| !ferris_idea_plugins::granted(&dir, &file, *perm));
         let result = asks
             .iter()
-            .try_for_each(|perm| idecraft_plugins::set_granted(&dir, &file, *perm, on));
+            .try_for_each(|perm| ferris_idea_plugins::set_granted(&dir, &file, *perm, on));
         if !on {
             forget_plugin_runs(&file);
         }
@@ -1431,7 +1625,7 @@ impl SettingsView {
         };
         let file = p.file.clone();
         self.note = Some(
-            match idecraft_plugins::revoke_network(&dir, &file, None, None) {
+            match ferris_idea_plugins::revoke_network(&dir, &file, None, None) {
                 Ok(0) => format!("{file} has no network grants"),
                 Ok(n) => format!(
                     "{file}: {n} network grant{} revoked",
@@ -1448,7 +1642,7 @@ impl SettingsView {
     pub fn plugin_network_lines(&self, file: &str) -> Vec<String> {
         self.plugins_dir
             .as_deref()
-            .map(idecraft_plugins::network_grants)
+            .map(ferris_idea_plugins::network_grants)
             .unwrap_or_default()
             .into_iter()
             .filter(|g| g.plugin == file)
@@ -1466,7 +1660,7 @@ impl SettingsView {
     /// Whether the plugin `file` was granted project access (tests).
     pub fn plugin_granted(&self, file: &str) -> bool {
         self.plugins_dir.as_deref().is_some_and(|d| {
-            idecraft_plugins::granted(d, file, idecraft_plugins::Permission::ProjectRead)
+            ferris_idea_plugins::granted(d, file, ferris_idea_plugins::Permission::ProjectRead)
         })
     }
 
@@ -1483,7 +1677,7 @@ impl SettingsView {
             return;
         }
         self.removing = None;
-        self.note = Some(match idecraft_plugins::uninstall(&dir, &file) {
+        self.note = Some(match ferris_idea_plugins::uninstall(&dir, &file) {
             Ok(()) => {
                 forget_plugin_runs(&file);
                 cx.emit(SettingsEvent::PluginsChanged);
@@ -1498,7 +1692,10 @@ impl SettingsView {
     pub fn show(&mut self, page: Page, cx: &mut Context<Self>) {
         if page != self.page {
             self.page_scroll.set_offset(gpui::Point::default());
+            // A page's note belongs to that page (`SPEC-0105` v10 behaviour 15).
+            self.note = None;
         }
+        self.list_keys = false;
         self.page = page;
         self.reveal_page = true;
         self.selected = 0;
@@ -1514,9 +1711,9 @@ impl SettingsView {
 
     fn count(&self) -> usize {
         match self.page {
-            // The themes, the editor scheme (SPEC-0337), Sync with OS (SPEC-0131) and Compact
-            // mode (SPEC-0165).
-            Page::Appearance => ThemeId::ALL.len() + 3,
+            // The themes, the editor scheme (SPEC-0337), Sync with OS (SPEC-0131), Compact
+            // mode (SPEC-0165) and the startup animation (SPEC-0355).
+            Page::Appearance => ThemeId::ALL.len() + 4,
             // Confirm before quitting, Reopen the last project, Save on focus loss (SPEC-0337).
             Page::SystemSettings => 3,
             Page::Notifications => 1,
@@ -1524,26 +1721,28 @@ impl SettingsView {
             Page::Keymap => self.rows.len(),
             Page::Plugins => self.plugins.len(),
             // Two On Save options, then the code insight switches (SPEC-0290, SPEC-0295).
-            Page::Editor => 12,
+            // Then one row per disabled intention (SPEC-0076 v11 behaviour 15).
+            Page::Editor => 12 + self.ide.intentions.disabled.len(),
             // Font, Size, Line spacing, then Enable ligatures (SPEC-0150 v2).
             Page::Font => 4,
             Page::EditorTabs => {
                 crate::settings_model::tab_setting_rows(&self.ide.editor.tabs).len()
             }
             // Right margin, Show it, then one row per language.
-            Page::CodeStyle => 2 + idecraft_core::CODE_STYLE_LANGUAGES.len(),
+            Page::CodeStyle => 2 + ferris_idea_core::CODE_STYLE_LANGUAGES.len(),
             // Update method, Allow force push, Protected branches, Azure DevOps key exchange,
             // own ProxyCommand (ADR-0025 v5).
             Page::VersionControl => 5,
-            Page::NaturalLanguages => idecraft_languages::dictionaries::CATALOG.len(),
+            Page::NaturalLanguages => ferris_idea_languages::dictionaries::CATALOG.len(),
+            Page::Grammar => crate::settings_model::grammar_rows().len(),
             Page::Inspections => crate::settings_model::inspection_rows(&self.query).len(),
             Page::BuildTools | Page::Languages | Page::Terminal => 0,
             Page::TrustedLocations => self.trusted.len(),
             // Enable, then Provider (SPEC-0143).
             // Enable, Provider, Inline completion, Sign in (SPEC-0160), MCP over HTTP (SPEC-0221),
             // Terminal lines to attach (SPEC-0313), Allow agents and scripts to operate the
-            // window (SPEC-0319).
-            Page::Ai => 7,
+            // window (SPEC-0319), Claude plan (SPEC-0160 v2).
+            Page::Ai => 8,
         }
     }
 
@@ -1563,8 +1762,10 @@ impl SettingsView {
                     self.cycle_scheme(1, cx);
                 } else if self.selected == ThemeId::ALL.len() + 1 {
                     self.toggle_sync(cx);
-                } else {
+                } else if self.selected == ThemeId::ALL.len() + 2 {
                     self.toggle_compact(cx);
+                } else {
+                    self.toggle_startup_animation(cx);
                 }
             }
             Page::Keymap => {
@@ -1578,6 +1779,7 @@ impl SettingsView {
             Page::SystemSettings | Page::Notifications => self.toggle_general(self.selected, cx),
             Page::Advanced => self.step_advanced(0, cx),
             Page::NaturalLanguages => self.use_dictionary(cx),
+            Page::Grammar => self.toggle_grammar(cx),
             Page::Inspections => self.change_inspection(true, cx),
             Page::Editor | Page::EditorTabs => self.adjust(0.0, cx),
             Page::Font if self.selected == 3 => self.adjust(0.0, cx),
@@ -1589,6 +1791,7 @@ impl SettingsView {
             Page::Ai if self.selected == 3 => self.sign_in(cx),
             Page::Ai if self.selected == 4 => self.toggle_mcp_http(cx),
             Page::Ai if self.selected == 6 => self.toggle_ui_driver_external(cx),
+            Page::Ai if self.selected == 7 => self.toggle_claude_plan_mode(cx),
             Page::Ai => self.toggle_ai(cx),
             _ => {}
         }
@@ -1608,6 +1811,13 @@ impl SettingsView {
             .filter(|id| *id != action)
             .map(str::to_owned)
             .collect();
+        // A chord macOS takes itself never arrives; the note says so (v12 behaviour 18).
+        let system = keymap
+            .macos
+            .then(|| crate::settings_model::macos_reserved(&stroke))
+            .flatten()
+            .map(|what| format!("; macOS takes it itself ({what}), so it will not arrive"))
+            .unwrap_or_default();
         let mut shortcuts = keymap.shortcuts(&action).to_vec();
         let new = Shortcut::Keyboard {
             first: stroke,
@@ -1617,12 +1827,12 @@ impl SettingsView {
         if !shortcuts.contains(&new) {
             shortcuts.push(new);
         }
-        let title = idecraft_languages::everywhere::action_title(&action).0;
+        let title = ferris_idea_languages::everywhere::action_title(&action).0;
         self.note = Some(if others.is_empty() {
-            format!("{shown} added to {title}")
+            format!("{shown} added to {title}{system}")
         } else {
             format!(
-                "{shown} added to {title}; also used by {}",
+                "{shown} added to {title}; also used by {}{system}",
                 others.join(", ")
             )
         });
@@ -1634,7 +1844,7 @@ impl SettingsView {
         let Some(action) = self.selected_action() else {
             return;
         };
-        let title = idecraft_languages::everywhere::action_title(&action).0;
+        let title = ferris_idea_languages::everywhere::action_title(&action).0;
         self.note = Some(if restore {
             format!("{title}: bundled shortcuts restored")
         } else {
@@ -1760,7 +1970,7 @@ impl SettingsView {
             if k.key == "escape" {
                 self.recording = false;
                 self.note = None;
-            } else if let Some(stroke) = idecraft_ui::keymap::EventStrokes::of(
+            } else if let Some(stroke) = ferris_idea_ui::keymap::EventStrokes::of(
                 &k.key,
                 m.control,
                 m.alt,
@@ -1784,10 +1994,10 @@ impl SettingsView {
         // While a search is typed, printable keys extend it; a space no longer switches a setting
         // of the page the search moved to (D9, hand test 30: "save all" became "saveall").
         // The text itself arrives through the input handler (`SPEC-0105` v3 behaviour 3a).
-        if k.key_char
-            .as_deref()
-            .is_some_and(|ch| extends_query(&self.query, ch, m.control || m.platform))
-        {
+        // After a click on an option the page has the keys: Space switches it (v11 behaviour 17).
+        if k.key_char.as_deref().is_some_and(|ch| {
+            options::types_into_search(&self.query, ch, m.control || m.platform, self.list_keys)
+        }) {
             return;
         }
         // Select All, Copy, Cut, Paste, Undo and Redo act on the search here, before the menu
@@ -1821,7 +2031,21 @@ impl SettingsView {
         // Mac keyboards have no forward Delete key without fn: with the search empty, ⌫ removes
         // and ⇧⌫ restores like Delete and ⇧Delete (D10, hand test 30; D18). With a search typed,
         // ⇧⌫ still restores once a keymap row was chosen; ⌫ alone keeps editing the search.
-        let on_row = m.shift && self.page == Page::Keymap && self.row_chosen;
+        // While the keymap list or an option has the keys, ⌫ is theirs too (v10 behaviour 16,
+        // v11 behaviour 17).
+        let on_row = self.list_keys || self.page == Page::Keymap && m.shift && self.row_chosen;
+        // Escape on the keymap list, or on an option with a search typed, gives the keys back to
+        // the search instead of closing the dialog (v10 behaviour 16, v11 behaviour 17).
+        if self.list_keys
+            && (self.page == Page::Keymap || !self.query.is_empty())
+            && k.key == "escape"
+            && !self.list_has_keys
+        {
+            self.list_keys = false;
+            cx.stop_propagation();
+            cx.notify();
+            return;
+        }
         let key = list_key(&k.key, &self.query, on_row);
         let n = self.count();
         if key != "delete" {
@@ -1877,6 +2101,16 @@ impl SettingsView {
     ) -> bool {
         match key {
             "left" | "-" if self.page == Page::Font => self.adjust(-1.0, cx),
+            // The columns of a file type's row (SPEC-0155 v8 behaviour 14).
+            "left" if self.page == Page::Grammar => {
+                self.grammar_column = self.grammar_column.saturating_sub(1);
+                cx.notify();
+            }
+            "right" if self.page == Page::Grammar => {
+                self.grammar_column =
+                    (self.grammar_column + 1).min(crate::settings_model::GRAMMAR_COLUMNS.len() - 1);
+                cx.notify();
+            }
             "left" | "-" if self.page == Page::EditorTabs => self.adjust(-1.0, cx),
             "right" | "+" | "=" if self.page == Page::EditorTabs => self.adjust(1.0, cx),
             "left" | "-" if self.page == Page::Ai && self.selected == 5 => self.adjust(-1.0, cx),
@@ -1907,21 +2141,10 @@ impl SettingsView {
             }
             "left" | "-" if self.page == Page::Advanced => self.step_advanced(-1, cx),
             "right" | "+" | "=" if self.page == Page::Advanced => self.step_advanced(1, cx),
-            "space" if self.page == Page::Advanced => self.step_advanced(0, cx),
             "enter" if self.page == Page::Advanced && self.edit_advanced(window, cx) => {}
             "delete" if self.page == Page::Advanced => self.reset_advanced(cx),
-            "space" if matches!(self.page, Page::SystemSettings | Page::Notifications) => {
-                self.toggle_general(self.selected, cx)
-            }
-            "space"
-                if matches!(
-                    self.page,
-                    Page::Editor | Page::EditorTabs | Page::CodeStyle | Page::VersionControl
-                ) && !(self.page == Page::CodeStyle && self.selected == 0)
-                    || self.page == Page::Font && self.selected == 3 =>
-            {
-                self.adjust(0.0, cx)
-            }
+            // Space switches the selected option of every page (v11 behaviour 17).
+            "space" if self.switch_option(cx) => {}
             // The rows stop at the first and the last one: ↑ on the first row no longer jumped to
             // the end and changed the value there (hand test 76).
             "down" if n > 0 => {
@@ -1934,6 +2157,11 @@ impl SettingsView {
             }
             "enter" => self.activate(cx),
             "escape" => cx.emit(SettingsEvent::Close),
+            // Tab from the search gives the keys to the keymap list (v10 behaviour 16).
+            "tab" if self.page == Page::Keymap && !self.query.is_empty() && !self.list_keys => {
+                self.list_keys = true;
+                self.row_chosen = true;
+            }
             "tab" => {
                 let list = self.pages();
                 let at = list.iter().position(|p| *p == self.page).unwrap_or(0);
@@ -1948,6 +2176,8 @@ impl SettingsView {
                 self.remove_trusted(cx)
             }
             "space" if self.page == Page::Plugins => self.toggle_plugin_grant(cx),
+            "space" if self.page == Page::NaturalLanguages => self.toggle_dictionary(cx),
+            "space" if self.page == Page::Grammar => self.toggle_grammar(cx),
             "space" if self.page == Page::Inspections => self.change_inspection(false, cx),
             "delete" | "backspace" if self.page == Page::Inspections && self.query.is_empty() => {
                 self.reset_inspection(cx)
@@ -1983,7 +2213,10 @@ impl SettingsView {
         }
         if self.page != before {
             self.page_scroll.set_offset(gpui::Point::default());
+            self.note = None;
         }
+        // Editing the search gives the keys back to it (v10 behaviour 16).
+        self.list_keys = false;
         self.selected = 0;
         self.row_chosen = false;
         self.refresh();
@@ -2033,6 +2266,11 @@ impl EntityInputHandler for SettingsView {
     ) {
         let reviewing = self.page == Page::Plugins && self.plugin_review.is_some();
         if self.recording || reviewing || !searchable_text(text) {
+            return;
+        }
+        // A search never starts with a space: Space on a row that switches nothing no longer
+        // lands in the empty search (`SPEC-0105` v11 behaviour 17, window check G1).
+        if (self.query.is_empty() || self.query_marked) && text.trim().is_empty() {
             return;
         }
         // Text typed over the marked search replaces it (`SPEC-0105` v8 behaviour 10).
@@ -2122,7 +2360,7 @@ fn build_tools_info(root: Option<&Path>) -> Vec<(String, bool)> {
     let Some(root) = root else {
         return vec![("No project".into(), false)];
     };
-    let env = idecraft_core::java_environment(&idecraft_core::JavaSearch::from_env(root));
+    let env = ferris_idea_core::java_environment(&ferris_idea_core::JavaSearch::from_env(root));
     let mut out = vec![("JDKs".into(), false)];
     if env.jdks.is_empty() {
         out.push((
@@ -2186,7 +2424,7 @@ fn build_tools_info(root: Option<&Path>) -> Vec<(String, bool)> {
 /// The Languages & Frameworks page: each language's server, or what to install (`SPEC-0129`
 /// behaviour 5, IMP-0019).
 fn languages_info() -> Vec<(String, bool)> {
-    idecraft_languages::servers::overview()
+    ferris_idea_languages::servers::overview()
         .into_iter()
         .map(|l| match l.selected {
             Some(program) => (format!("{}: {program}", l.language), false),
@@ -2348,10 +2586,18 @@ impl Render for SettingsView {
                     .gap_1()
                     .children(rows.into_iter().enumerate().map(|(i, (label, value))| {
                         let switch = value == "☑" || value == "☐";
+                        // A switch is an option (v11 behaviour 17).
+                        if switch {
+                            return self.option_row(
+                                ("settings-tabs", i),
+                                format!("settings-tabs-{i}"),
+                                options::Mark::Check(value == "☑"),
+                                label,
+                                cx,
+                            );
+                        }
                         row(("settings-tabs", i), i == selected)
-                            .when(switch, |d| d.child(value.clone()).child(label))
-                            .when(!switch, |d| {
-                                d.child(div().w(px(260.)).child(label))
+                                .child(div().w(px(260.)).child(label))
                                     .child(small_button(("tabs-less", i), "‹").on_click(
                                         cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
                                             this.selected = i;
@@ -2365,12 +2611,9 @@ impl Render for SettingsView {
                                             this.adjust(1.0, cx);
                                         }),
                                     ))
-                            })
-                            .on_click(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
-                                this.selected = i;
-                                if switch {
-                                    this.adjust(0.0, cx);
-                                }
+                            .on_click(cx.listener(move |this, _: &gpui::ClickEvent, window, cx| {
+                                this.give_page_keys(i, window);
+                                cx.notify();
                             }))
                     }))
                     .child(
@@ -2385,8 +2628,8 @@ impl Render for SettingsView {
             Page::Editor => {
                 // SPEC-0083 v8 behaviour 22: the last row is a choice of two, shown by its value.
                 let arrows = match ide.editor.folding_arrows {
-                    idecraft_core::FoldingArrows::Always => "Show code folding arrows: always",
-                    idecraft_core::FoldingArrows::Hover => "Show code folding arrows: on hover",
+                    ferris_idea_core::FoldingArrows::Always => "Show code folding arrows: always",
+                    ferris_idea_core::FoldingArrows::Hover => "Show code folding arrows: on hover",
                 };
                 let checks = [
                     (
@@ -2402,7 +2645,7 @@ impl Render for SettingsView {
                         ide.editor.semantic_highlighting,
                     ),
                     ("Show parameter name hints", ide.editor.parameter_hints),
-                    ("Show usages of types", ide.editor.usage_counts),
+                    ("Show usages of declarations", ide.editor.usage_counts),
                     (
                         "Show usages above the declaration (else at the line end)",
                         ide.editor.usage_counts_above,
@@ -2447,25 +2690,47 @@ impl Render for SettingsView {
                                 .pb_1()
                                 .child(t)
                         });
-                        div().children(heading).child(
-                        row(("settings-editor", i), i == selected)
-                            .child(match (i, on) {
-                                (10, _) => "⇄",
-                                (_, true) => "☑",
-                                (_, false) => "☐",
-                            })
-                            .child(hit_label(label, &query, p))
-                            .on_click(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
-                                this.selected = i;
-                                this.adjust(0.0, cx);
-                            })))
+                        // The last row is the choice of the folding arrows (SPEC-0083 v8
+                        // behaviour 22); every other row is a check box (v11 behaviour 17).
+                        let mark = if i == 11 {
+                            options::Mark::Choice
+                        } else {
+                            options::Mark::Check(on)
+                        };
+                        div().children(heading).child(self.option_row(
+                            ("settings-editor", i),
+                            format!("settings-editor-{i}"),
+                            mark,
+                            label,
+                            cx,
+                        ))
                     }))
+                    // The disabled intentions (SPEC-0076 v11 behaviour 15).
+                    .when(!ide.intentions.disabled.is_empty(), |d| {
+                        d.child(
+                            div()
+                                .text_color(c(p.ui_muted))
+                                .pt_2()
+                                .pb_1()
+                                .child("Disabled Intentions"),
+                        )
+                        .children(ide.intentions.disabled.iter().enumerate().map(|(k, title)| {
+                            let i = 12 + k;
+                            row(("settings-editor", i), i == selected)
+                                .child("☐")
+                                .child(title.clone())
+                                .on_click(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+                                    this.selected = i;
+                                    this.adjust(0.0, cx);
+                                }))
+                        }))
+                    })
                     .child(
                         div()
                             .pt_2()
                             .text_xs()
                             .text_color(c(p.ui_dim))
-                            .child("Enter or Space switches the selected option"),
+                            .child("Enter or Space switches the selected option; on a disabled intention it turns it on again"),
                     )
                     .into_any_element()
             }
@@ -2577,13 +2842,13 @@ impl Render for SettingsView {
                     ))
                     // The ligatures checkbox under the font rows (SPEC-0150 v2 behaviour 1a).
                     .child(
-                        row(("settings-font", 3), selected == 3)
-                            .child(if ide.editor.ligatures { "☑" } else { "☐" })
-                            .child(hit_label("Enable ligatures", &query, p))
-                            .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
-                                this.selected = 3;
-                                this.adjust(0.0, cx);
-                            })),
+                        self.option_row(
+                            ("settings-font", 3),
+                            "settings-font-ligatures".into(),
+                            options::Mark::Check(ide.editor.ligatures),
+                            "Enable ligatures",
+                            cx,
+                        ),
                     )
                     // A preview of one's own text, in the editors' font (v7 behaviour 10).
                     .child(div().pt_1().text_color(c(p.ui_muted)).child("Preview"))
@@ -2616,7 +2881,7 @@ impl Render for SettingsView {
                     .into_any_element()
             }
             Page::Inspections => {
-                use idecraft_languages::inspections::{Level, description};
+                use ferris_idea_languages::inspections::{Level, description};
                 let rows = crate::settings_model::inspection_rows(&self.query);
                 let level_name = |l: Level| match l {
                     Level::Error => "Error",
@@ -2750,25 +3015,96 @@ impl Render for SettingsView {
                     })
                     .into_any_element()
             }
+            Page::Grammar => {
+                use crate::settings_model::{GrammarRow, grammar_rows};
+                let g = ide.editor.grammar.clone();
+                let column = self.grammar_column;
+                let mark = |on: bool| if on { "☑" } else { "☐" };
+                let rows = grammar_rows();
+                let list = div()
+                    .id("settings-grammar")
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_y_scroll()
+                    .flex()
+                    .flex_col()
+                    .children(rows.into_iter().enumerate().map(|(i, r)| {
+                        let on = selected == i;
+                        let cell = |k: usize, label: &'static str, value: bool| {
+                            div()
+                                .id(("settings-grammar-cell", i * 8 + k))
+                                .w(px(if k == 0 { 170. } else { 130. }))
+                                .flex()
+                                .gap_1()
+                                .when(on && column == k, |d| d.text_color(c(p.link)))
+                                .child(mark(value))
+                                .child(label)
+                                .on_click(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
+                                    this.selected = i;
+                                    this.grammar_column = k;
+                                    this.toggle_grammar(cx);
+                                }))
+                        };
+                        let line = row(("settings-grammar", i), on);
+                        match r {
+                            GrammarRow::CommitMessages => {
+                                line.child(cell(0, "Commit messages", g.commit_messages))
+                            }
+                            GrammarRow::FileType(ty) => {
+                                let scope = g.scope(ty);
+                                line.child(cell(0, ty, scope.enabled))
+                                    .child(cell(1, "Comments", scope.comments))
+                                    .child(cell(2, "Documentation", scope.documentation))
+                                    .child(cell(3, "String literals", scope.string_literals))
+                            }
+                            GrammarRow::Rule(id) => {
+                                let (enabled, _) = self.inspection_profile.state(id);
+                                line.child(cell(
+                                    0,
+                                    ferris_idea_languages::inspections::name_of(id),
+                                    enabled,
+                                ))
+                            }
+                        }
+                    }));
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_1()
+                    .h_full()
+                    .child(div().text_color(c(p.ui_muted)).pb_1().child(
+                        "Where grammar and spelling are checked: commit messages, then per file type its comments, documentation and string literals; the writing rules below are those of the project's inspection profile.",
+                    ))
+                    .child(list)
+                    .child(div().pt_1().text_xs().text_color(c(p.ui_dim)).child(
+                        "Space or Enter turns the selected switch over; Left and Right choose a column of a file type; open editors follow at once",
+                    ))
+                    .when_some(self.note.clone(), |d, note| {
+                        d.child(div().text_color(c(p.ui_muted)).child(note))
+                    })
+                    .into_any_element()
+            }
             Page::NaturalLanguages => {
-                use idecraft_languages::dictionaries as d;
+                use ferris_idea_languages::dictionaries as d;
                 let dir = d::dictionaries_dir();
-                let active = d::active(dir.as_deref(), &ide.editor.spelling_dictionary);
+                let active = d::active_all(dir.as_deref(), &ide.editor.spelling_dictionary);
                 div()
                     .flex()
                     .flex_col()
                     .gap_1()
                     .child(div().text_color(c(p.ui_muted)).pb_1().child(
-                        "Grammar in comments, Markdown and text: repeated words and a/an. Typos with an English word list; English (United States) is built in:",
+                        "Grammar in comments, Markdown and text: repeated words and a/an. Typos with English word lists; English (United States) and English (United Kingdom) are built in:",
                     ))
                     .children(d::CATALOG.iter().enumerate().map(|(i, e)| {
-                        let installed = dir.as_deref().is_some_and(|dir| d::is_installed(dir, e.code));
-                        let built_in = d::is_built_in(e.code) && !installed;
+                        let built_in = d::is_built_in(e.code);
+                        let installed = !built_in
+                            && dir.as_deref().is_some_and(|dir| d::is_installed(dir, e.code));
+                        let used = active.contains(&e.code);
                         let state = if self.downloading == Some(e.code) {
                             "downloading…".to_owned()
-                        } else if active == e.code && built_in {
+                        } else if used && built_in {
                             "built in, used".to_owned()
-                        } else if active == e.code {
+                        } else if used {
                             "used".to_owned()
                         } else if installed {
                             "downloaded".to_owned()
@@ -2778,7 +3114,7 @@ impl Render for SettingsView {
                             format!("{} KB", (e.dic.0 + e.aff.0) / 1024)
                         };
                         row(("settings-dict", i), selected == i)
-                            .child(div().w(px(14.)).child(if active == e.code { "●" } else { "○" }))
+                            .child(div().w(px(14.)).child(if used { "●" } else { "○" }))
                             .child(div().w(px(200.)).child(e.name))
                             .child(div().w(px(110.)).text_color(c(p.ui_muted)).child(state))
                             .child(div().text_xs().text_color(c(p.ui_dim)).child(e.license))
@@ -2788,9 +3124,10 @@ impl Render for SettingsView {
                             }))
                     }))
                     .child(div().pt_1().text_xs().text_color(c(p.ui_dim)).child(format!(
-                        "Enter uses a dictionary, downloading it first unless it is built in; Delete removes a \
-                         downloaded one. Hunspell dictionaries of the LibreOffice project, checked by size and \
-                         SHA-256 and kept in {}.",
+                        "Enter uses only the selected dictionary, downloading it first unless it is built in; \
+                         Space adds it to the ones used or takes it away; Delete removes a downloaded one. The \
+                         built-in ones come from SCOWL; the others are Hunspell dictionaries of the LibreOffice \
+                         project, checked by size and SHA-256 and kept in {}.",
                         dir.map(|d| d.display().to_string()).unwrap_or_else(|| "the settings folder".into()),
                     )))
                     .when_some(self.note.clone(), |d, note| {
@@ -2804,13 +3141,13 @@ impl Render for SettingsView {
                     .child(div().w(px(140.)).child(hit_label("Hard wrap at", &query, p)))
                     .child(format!("{} columns", cs.right_margin))
                     .child(div().text_xs().text_color(c(p.ui_dim)).child("Left/Right"));
-                let show = row(("settings-style", 1usize), selected == 1)
-                    .child(if cs.show_right_margin { "☑" } else { "☐" })
-                    .child(hit_label("Show the right margin in the editor", &query, p))
-                    .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
-                        this.selected = 1;
-                        this.adjust(0.0, cx);
-                    }));
+                let show = self.option_row(
+                    ("settings-style", 1usize),
+                    "settings-style-1".into(),
+                    options::Mark::Check(cs.show_right_margin),
+                    "Show the right margin in the editor",
+                    cx,
+                );
                 div()
                     .flex()
                     .flex_col()
@@ -2819,7 +3156,7 @@ impl Render for SettingsView {
                     .child(show)
                     .child(div().pt_2().text_color(c(p.ui_muted)).child("Indentation"))
                     .children(
-                        idecraft_core::CODE_STYLE_LANGUAGES
+                        ferris_idea_core::CODE_STYLE_LANGUAGES
                             .iter()
                             .enumerate()
                             .map(|(i, lang)| {
@@ -2834,8 +3171,8 @@ impl Render for SettingsView {
                                         st.tab
                                     ))
                                     .on_click(cx.listener(
-                                        move |this, _: &gpui::ClickEvent, _, cx| {
-                                            this.selected = at;
+                                        move |this, _: &gpui::ClickEvent, window, cx| {
+                                            this.give_page_keys(at, window);
                                             cx.notify();
                                         },
                                     ))
@@ -2857,23 +3194,22 @@ impl Render for SettingsView {
                         row(("settings-vcs", 0usize), selected == 0)
                             .child(div().w(px(160.)).child(hit_label("Update method", &query, p)))
                             .child(match v.update_method {
-                                idecraft_core::UpdateMethod::Merge => "Merge",
-                                idecraft_core::UpdateMethod::Rebase => "Rebase",
+                                ferris_idea_core::UpdateMethod::Merge => "Merge",
+                                ferris_idea_core::UpdateMethod::Rebase => "Rebase",
                             })
                             .child(div().text_xs().text_color(c(p.ui_dim)).child("Enter switches"))
-                            .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
-                                this.selected = 0;
-                                this.adjust(0.0, cx);
+                            .on_click(cx.listener(|this, _: &gpui::ClickEvent, window, cx| {
+                                this.click_option(0, window, cx);
                             })),
                     )
                     .child(
-                        row(("settings-vcs", 1usize), selected == 1)
-                            .child(if v.allow_force_push { "☑" } else { "☐" })
-                            .child(hit_label("Allow force push (with lease)", &query, p))
-                            .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
-                                this.selected = 1;
-                                this.adjust(0.0, cx);
-                            })),
+                        self.option_row(
+                            ("settings-vcs", 1usize),
+                            "settings-vcs-1".into(),
+                            options::Mark::Check(v.allow_force_push),
+                            "Allow force push (with lease)",
+                            cx,
+                        ),
                     )
                     .child(
                         div()
@@ -2903,17 +3239,13 @@ impl Render for SettingsView {
                          from the Push dialog or through MCP. Enter on the field edits it, Enter again saves.",
                     ))
                     .child(
-                        row(("settings-vcs", 3usize), selected == 3)
-                            .child(if ide.git.ssh.allow_classic_kex_for_azure_devops {
-                                "☑"
-                            } else {
-                                "☐"
-                            })
-                            .child(hit_label("Allow a classical SSH key exchange for Azure DevOps", &query, p))
-                            .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
-                                this.selected = 3;
-                                this.adjust(0.0, cx);
-                            })),
+                        self.option_row(
+                            ("settings-vcs", 3usize),
+                            "settings-vcs-3".into(),
+                            options::Mark::Check(ide.git.ssh.allow_classic_kex_for_azure_devops),
+                            "Allow a classical SSH key exchange for Azure DevOps",
+                            cx,
+                        ),
                     )
                     .child(div().text_xs().text_color(c(p.ui_dim)).child(
                         "Git over SSH needs a post-quantum key exchange. Azure DevOps offers none yet; \
@@ -2921,17 +3253,13 @@ impl Render for SettingsView {
                          its strongest classical one and warns. HTTPS with a token avoids it.",
                     ))
                     .child(
-                        row(("settings-vcs", 4usize), selected == 4)
-                            .child(if ide.ssh.allow_own_proxy_command {
-                                "☑"
-                            } else {
-                                "☐"
-                            })
-                            .child(hit_label("Allow a ProxyCommand from the SSH configuration", &query, p))
-                            .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
-                                this.selected = 4;
-                                this.adjust(0.0, cx);
-                            })),
+                        self.option_row(
+                            ("settings-vcs", 4usize),
+                            "settings-vcs-4".into(),
+                            options::Mark::Check(ide.ssh.allow_own_proxy_command),
+                            "Allow a ProxyCommand from the SSH configuration",
+                            cx,
+                        ),
                     )
                     .child(
                         div()
@@ -2942,7 +3270,7 @@ impl Render for SettingsView {
                                 p.ui_dim
                             }))
                             .child(if ide.ssh.allow_own_proxy_command {
-                                "Warning: a ProxyCommand runs a program IDECraft cannot hold to the \
+                                "Warning: a ProxyCommand runs a program Ferris IDEA cannot hold to the \
                                  post-quantum key exchange; its hops may be classical. Each use is \
                                  logged in ssh-proxy-command.log. ProxyJump needs no exception."
                             } else {
@@ -2985,8 +3313,8 @@ impl Render for SettingsView {
                 })
                 .children(self.trusted.iter().enumerate().map(|(i, l)| {
                     let kind = match l.kind {
-                        idecraft_core::trust::TrustKind::Project => "project",
-                        idecraft_core::trust::TrustKind::Folder => "folder and its projects",
+                        ferris_idea_core::trust::TrustKind::Project => "project",
+                        ferris_idea_core::trust::TrustKind::Folder => "folder and its projects",
                     };
                     row(("trusted-row", i), i == selected)
                         // One line, cut with an ellipsis: a wrapped long path overlapped the
@@ -3013,27 +3341,31 @@ impl Render for SettingsView {
             Page::Ai => {
                 let has_key = self.ai_key_stored;
                 let labels = ["Endpoint", "Model", "API key"];
-                let subscription = idecraft_ai::subscription::Cli::from_id(&ide.ai.subscription);
+                let subscription = ferris_idea_ai::subscription::Cli::from_id(&ide.ai.subscription);
                 let provider = match subscription {
                     Some(cli) => cli.name(),
                     None => {
-                        idecraft_ai::provider_of(&self.ai_fields[0].read(cx).state.buffer.text())
+                        ferris_idea_ai::provider_of(&self.ai_fields[0].read(cx).state.buffer.text())
                             .unwrap_or("Custom")
                     }
                 };
+                let claude_in_terminal = ferris_idea_ai::claude_in_terminal(&ide.ai);
                 let login = match (subscription, self.ai_login) {
+                    (Some(_), Some(l)) if claude_in_terminal && l != ferris_idea_ai::subscription::Login::NotInstalled => {
+                        "Claude Code signs in by itself — Enter opens it in a terminal".to_owned()
+                    }
                     (None, _) => "for a subscription".to_owned(),
                     (Some(_), None) => "checking…".to_owned(),
-                    (Some(_), Some(idecraft_ai::subscription::Login::SignedIn)) => {
+                    (Some(_), Some(ferris_idea_ai::subscription::Login::SignedIn)) => {
                         "signed in".to_owned()
                     }
-                    (Some(_), Some(idecraft_ai::subscription::Login::SignedOut)) => {
+                    (Some(_), Some(ferris_idea_ai::subscription::Login::SignedOut)) => {
                         "not signed in — Enter opens the sign-in in a terminal".to_owned()
                     }
-                    (Some(_), Some(idecraft_ai::subscription::Login::Unknown)) => {
+                    (Some(_), Some(ferris_idea_ai::subscription::Login::Unknown)) => {
                         "shows at the first question".to_owned()
                     }
-                    (Some(cli), Some(idecraft_ai::subscription::Login::NotInstalled)) => {
+                    (Some(cli), Some(ferris_idea_ai::subscription::Login::NotInstalled)) => {
                         format!("not installed — {}", cli.install_hint())
                     }
                 };
@@ -3042,20 +3374,18 @@ impl Render for SettingsView {
                         .flex_col()
                         .gap_1()
                         .child(
-                            row(("settings-ai", 0usize), selected == 0)
-                                .relative()
-                                .semantics(crate::semantics::Semantics::new(crate::semantics::Role::ListItem).name("Enable AI Assistant").test_id("settings-ai-0").action(crate::semantics::AxAction::Click).effects(&[crate::semantics::Effect::None]))
-                                .child(if ide.ai.enabled { "☑" } else { "☐" })
-                                .child("Enable AI Assistant")
-                                .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
-                                    this.selected = 0;
-                                    this.toggle_ai(cx);
-                                })),
+                            self.option_row(
+                                ("settings-ai", 0usize),
+                                "settings-ai-0".into(),
+                                options::Mark::Check(ide.ai.enabled),
+                                "Enable AI Assistant",
+                                cx,
+                            )
                         )
                         .child(
                             row(("settings-ai", 1usize), selected == 1)
                                 .relative()
-                                .semantics(crate::semantics::Semantics::new(crate::semantics::Role::ListItem).name("Provider").test_id("settings-ai-1").action(crate::semantics::AxAction::Click).effects(&[crate::semantics::Effect::None]))
+                                .semantics(crate::semantics::Semantics::new(crate::semantics::Role::ListItem).name("Provider").value(provider).test_id("settings-ai-1").action(crate::semantics::AxAction::Click).effects(&[crate::semantics::Effect::None]))
                                 .child(div().w(px(80.)).text_color(c(p.ui_muted)).child("Provider"))
                                 .child(provider)
                                 .child(div().text_xs().text_color(c(p.ui_dim)).child("Enter cycles"))
@@ -3065,18 +3395,16 @@ impl Render for SettingsView {
                                 })),
                         )
                         .child(
-                            row(("settings-ai", 2usize), selected == 2)
-                                .relative()
-                                .semantics(crate::semantics::Semantics::new(crate::semantics::Role::ListItem).name("Inline completion").test_id("settings-ai-2").action(crate::semantics::AxAction::Click).effects(&[crate::semantics::Effect::None]))
-                                .child(if ide.ai.inline_completion { "☑" } else { "☐" })
-                                .child("Inline completion")
+                            self.option_row(
+                                ("settings-ai", 2usize),
+                                "settings-ai-2".into(),
+                                options::Mark::Check(ide.ai.inline_completion),
+                                "Inline completion",
+                                cx,
+                            )
                                 .child(div().text_xs().text_color(c(p.ui_dim)).child(
                                     "suggests code at the caret after a pause; Tab accepts",
                                 ))
-                                .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
-                                    this.selected = 2;
-                                    this.toggle_inline_completion(cx);
-                                })),
                         )
                         .child(
                             row(("settings-ai", 3usize), selected == 3)
@@ -3090,18 +3418,16 @@ impl Render for SettingsView {
                                 })),
                         )
                         .child(
-                            row(("settings-ai", 4usize), selected == 4)
-                                .relative()
-                                .semantics(crate::semantics::Semantics::new(crate::semantics::Role::ListItem).name("Serve MCP to local agents over HTTP").test_id("settings-ai-4").action(crate::semantics::AxAction::Click).effects(&[crate::semantics::Effect::None]))
-                                .child(if ide.mcp.http { "☑" } else { "☐" })
-                                .child("Serve MCP to local agents over HTTP")
+                            self.option_row(
+                                ("settings-ai", 4usize),
+                                "settings-ai-4".into(),
+                                options::Mark::Check(ide.mcp.http),
+                                "Serve MCP to local agents over HTTP",
+                                cx,
+                            )
                                 .child(div().text_xs().text_color(c(p.ui_dim)).child(
                                     "127.0.0.1 only, with a token per start; address and token in mcp-http/ of the settings folder",
                                 ))
-                                .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
-                                    this.selected = 4;
-                                    this.toggle_mcp_http(cx);
-                                })),
                         )
                         .child(
                             row(("settings-ai", 5usize), selected == 5)
@@ -3110,7 +3436,7 @@ impl Render for SettingsView {
                                 .child(div().text_color(c(p.ui_muted)).child("Terminal lines to attach"))
                                 .child(format!(
                                     "{}",
-                                    idecraft_ai::context::terminal_lines(ide.ai.terminal_lines)
+                                    ferris_idea_ai::context::terminal_lines(ide.ai.terminal_lines)
                                 ))
                                 .child(div().text_xs().text_color(c(p.ui_dim)).child(
                                     "←/→ by 50; terminals are read only when you attach or share a tab",
@@ -3121,19 +3447,36 @@ impl Render for SettingsView {
                                 })),
                         )
                         .child(
-                            row(("settings-ai", 6usize), selected == 6)
-                                .relative()
-                                .semantics(crate::semantics::Semantics::new(crate::semantics::Role::ListItem).name("Allow agents and scripts to operate the window").test_id("settings-ai-6").action(crate::semantics::AxAction::Click).effects(&[crate::semantics::Effect::None]))
-                                .child(if ide.ui.driver.external { "☑" } else { "☐" })
-                                .child("Allow agents and scripts to operate the window")
+                            self.option_row(
+                                ("settings-ai", 6usize),
+                                "settings-ai-6".into(),
+                                options::Mark::Check(ide.ui.driver.external),
+                                "Allow agents and scripts to operate the window",
+                                cx,
+                            )
                                 .child(div().text_xs().text_color(c(p.ui_dim)).child(
                                     "with the right \"ui\" per project; marked while it happens; Esc or Stop ends it and switches this off",
                                 ))
+                        )
+                        .child(
+                            // SPEC-0160 v2 behaviour 6: how Claude with the plan is used.
+                            row(("settings-ai", 7usize), selected == 7)
+                                .relative()
+                                .semantics(crate::semantics::Semantics::new(crate::semantics::Role::ListItem).name("Claude plan").value(match ide.ai.claude_plan_mode { ferris_idea_core::ClaudePlanMode::Chat => "Chat", ferris_idea_core::ClaudePlanMode::Terminal => "Terminal" }).test_id("settings-ai-7").action(crate::semantics::AxAction::Click).effects(&[crate::semantics::Effect::None]))
+                                .child(div().w(px(80.)).text_color(c(p.ui_muted)).child("Claude plan"))
+                                .child(match ide.ai.claude_plan_mode {
+                                    ferris_idea_core::ClaudePlanMode::Chat => "Chat",
+                                    ferris_idea_core::ClaudePlanMode::Terminal => "Terminal",
+                                })
+                                .child(div().text_xs().text_color(c(p.ui_dim)).child("Enter switches"))
                                 .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
-                                    this.selected = 6;
-                                    this.toggle_ui_driver_external(cx);
+                                    this.selected = 7;
+                                    this.toggle_claude_plan_mode(cx);
                                 })),
                         )
+                        .child(div().text_xs().text_color(c(p.ui_dim)).child(
+                            ferris_idea_ai::subscription::CLAUDE_PLAN_MODE_NOTE,
+                        ))
                         .children(self.ai_fields.iter().zip(labels).map(|(f, label)| {
                             div()
                                 .flex()
@@ -3149,9 +3492,19 @@ impl Render for SettingsView {
                                 )
                         }))
                         .child(div().text_xs().text_color(c(p.ui_dim)).child(match subscription {
+                            Some(_) if claude_in_terminal => format!(
+                                "Claude's plan runs in the Terminal as Claude Code (Sign in opens it). AI Chat uses \
+                                 Claude only through the Anthropic API template with your own API key: {}; \
+                                 without it nothing is sent.",
+                                match has_key {
+                                    Some(true) => "stored in the keychain; type to replace",
+                                    Some(false) => "none yet",
+                                    None => "checking the keychain…",
+                                }
+                            ),
                             Some(cli) => format!(
-                                "With a subscription IDECraft runs the provider's own program (`{}`) as a plain chat: \
-                                 no tools, in an empty folder, nothing kept. It uses your plan's limits; IDECraft never \
+                                "With a subscription Ferris IDEA runs the provider's own program (`{}`) as a plain chat: \
+                                 no tools, in an empty folder, nothing kept. It uses your plan's limits; Ferris IDEA never \
                                  sees its sign-in. Model: empty for the program's default. Endpoint and API key are \
                                  not used. Questions and attached code are sent only when the assistant is on.",
                                 cli.program()
@@ -3218,50 +3571,46 @@ impl Render for SettingsView {
                     .child({
                         let i = ThemeId::ALL.len() + 1;
                         let a = &self.ide.appearance;
-                        div()
-                            .id(("settings-theme", i))
-                            .mt_2()
-                            .h(px(26.))
-                            .px_2()
-                            .flex()
-                            .items_center()
-                            .gap_2()
-                            .rounded(px(4.))
-                            .when(i == selected, |d| d.bg(c(p.tree_selection)))
-                            .when(i != selected, |d| d.hover(|s| s.bg(c(p.tree_hover))))
-                            .child(if a.sync_with_os { "☑" } else { "☐" })
-                            .child(hit_label("Sync with OS", &query, p))
+                        self.option_row(
+                            ("settings-theme", i),
+                            format!("settings-theme-{i}"),
+                            options::Mark::Check(a.sync_with_os),
+                            "Sync with OS",
+                            cx,
+                        )
+                        .mt_2()
                             .child(div().text_color(c(p.ui_dim)).child(format!(
                                 "dark: {} · light: {}",
                                 a.dark_theme, a.light_theme
                             )))
-                            .on_click(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
-                                this.selected = i;
-                                this.toggle_sync(cx);
-                            }))
                     })
                     .child({
                         let i = ThemeId::ALL.len() + 2;
                         let on = self.ide.appearance.compact_mode;
-                        div()
-                            .id(("settings-theme", i))
-                            .h(px(26.))
-                            .px_2()
-                            .flex()
-                            .items_center()
-                            .gap_2()
-                            .rounded(px(4.))
-                            .when(i == selected, |d| d.bg(c(p.tree_selection)))
-                            .when(i != selected, |d| d.hover(|s| s.bg(c(p.tree_hover))))
-                            .child(if on { "☑" } else { "☐" })
-                            .child(hit_label("Compact mode", &query, p))
+                        self.option_row(
+                            ("settings-theme", i),
+                            format!("settings-theme-{i}"),
+                            options::Mark::Check(on),
+                            "Compact mode",
+                            cx,
+                        )
                             .child(div().text_color(c(p.ui_dim)).child(
                                 "lower rows and toolbar, as the theme's compact values set them",
                             ))
-                            .on_click(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
-                                this.selected = i;
-                                this.toggle_compact(cx);
-                            }))
+                    })
+                    .child({
+                        let i = ThemeId::ALL.len() + 3;
+                        let on = self.ide.appearance.startup_animation;
+                        self.option_row(
+                            ("settings-theme", i),
+                            format!("settings-theme-{i}"),
+                            options::Mark::Check(on),
+                            "Startup animation",
+                            cx,
+                        )
+                            .child(div().text_color(c(p.ui_dim)).child(
+                                "while Ferris IDEA starts; Reduce Motion shows the logo still",
+                            ))
                     })
                     .child(
                         div().pt_1().text_xs().text_color(c(p.ui_dim)).child(
@@ -3305,13 +3654,37 @@ impl Render for SettingsView {
                                             r.shortcuts.clone()
                                         },
                                     ))
+                                    // A chord macOS takes itself (SPEC-0105 v12 behaviour 18).
+                                    .when_some(r.system.clone(), |d, note| {
+                                        d.child(
+                                            div()
+                                                .text_xs()
+                                                .text_color(c(p.ui_dim))
+                                                .whitespace_nowrap()
+                                                .child(note),
+                                        )
+                                    })
                                     .on_click(cx.listener(
-                                        move |this, _: &gpui::ClickEvent, _, cx| {
+                                        move |this, _: &gpui::ClickEvent, window, cx| {
                                             this.selected = i;
                                             this.row_chosen = true;
+                                            // The list takes the keys (v10 behaviour 16).
+                                            this.list_keys = true;
+                                            this.list_has_keys = false;
+                                            window.focus(&this.focus);
                                             cx.notify();
                                         },
                                     ))
+                                    .relative()
+                                    .semantics(
+                                        Semantics::new(Role::ListItem)
+                                            .name(r.title.clone())
+                                            .value(r.shortcuts.clone())
+                                            .test_id(format!("settings-keymap-row-{i}"))
+                                            .selected(i == selected)
+                                            .action(AxAction::Click)
+                                            .effects(&[Effect::None]),
+                                    )
                             })
                             .collect::<Vec<_>>()
                     }),
@@ -3375,7 +3748,7 @@ impl Render for SettingsView {
                     )
                     .child(
                         div().text_color(c(p.ui_dim)).text_xs().child(
-                            idecraft_ui::keymap::local_keys(
+                            ferris_idea_ui::keymap::local_keys(
                                 "Enter enables or disables · Space grants or withdraws its permissions · ⇧Delete revokes network grants · Delete twice removes · ⌘O installs",
                                 cfg!(target_os = "macos"),
                             ),
@@ -3404,14 +3777,14 @@ impl Render for SettingsView {
                                         m.description.as_str()
                                     },
                                     // What it contributes (SPEC-0211 behaviour 1).
-                                    idecraft_plugins::contributions(m).join(" · "),
+                                    ferris_idea_plugins::contributions(m).join(" · "),
                                     // The access it asks for and whether it has it (SPEC-0156,
                                     // SPEC-0276).
                                     m.permissions
                                         .iter()
                                         .map(|perm| {
                                             let on = self.plugins_dir.as_deref().is_some_and(|d| {
-                                                idecraft_plugins::granted(d, &pl.file, *perm)
+                                                ferris_idea_plugins::granted(d, &pl.file, *perm)
                                             });
                                             format!(
                                                 " · {} ({})",
@@ -3593,7 +3966,7 @@ impl Render for SettingsView {
                                     .gap_1()
                                     .rounded(px(4.))
                                     .border_1()
-                                    .border_color(c(if self.query.is_empty() {
+                                    .border_color(c(if self.query.is_empty() || self.list_keys {
                                         p.separator
                                     } else {
                                         p.accent
@@ -3624,6 +3997,7 @@ impl Render for SettingsView {
                                     .on_click(cx.listener(
                                         |this, _: &gpui::ClickEvent, window, cx| {
                                             this.query_marked = false;
+                                            this.list_keys = false;
                                             window.focus(&this.focus);
                                             cx.notify();
                                         },
@@ -3693,7 +4067,7 @@ pub(crate) fn dialog_top() -> f32 {
 }
 
 /// The example text the Font page's preview starts with; it can be edited.
-const FONT_PREVIEW: &str = "fn main() -> Result<(), Error> {\n    println!(\"Hello, IDECraft\"); // 0O 1lI != <= ->\n    Ok(())\n}\n";
+const FONT_PREVIEW: &str = "fn main() -> Result<(), Error> {\n    println!(\"Hello, Ferris IDEA\"); // 0O 1lI != <= ->\n    Ok(())\n}\n";
 
 /// A setting's label on its page; while the search text matches it, it is marked with a frame
 /// and is a node of the semantic tree, test id `settings-hit` (`SPEC-0105` v7 behaviour 7).
@@ -3717,7 +4091,7 @@ pub(crate) fn hit_label(text: &'static str, query: &str, p: &Palette) -> gpui::A
 }
 
 /// The note after a model list arrived: its first ids, or why there is none.
-fn models_note(note: &str, models: Result<Vec<String>, idecraft_ai::AiError>) -> String {
+fn models_note(note: &str, models: Result<Vec<String>, ferris_idea_ai::AiError>) -> String {
     match models {
         Ok(ids) if ids.is_empty() => format!("{note}; the endpoint lists no models"),
         Ok(ids) => {
@@ -3737,8 +4111,8 @@ fn models_note(note: &str, models: Result<Vec<String>, idecraft_ai::AiError>) ->
 /// Forgets every "always allow" of plugin `file` in the user's settings folder (`SPEC-0276`
 /// behaviour 1: the grant withdrawn or the plugin removed).
 fn forget_plugin_runs(file: &str) {
-    if let Some(f) = idecraft_plugins::run_permissions_file() {
-        let _ = idecraft_plugins::forget_plugin(&f, file);
+    if let Some(f) = ferris_idea_plugins::run_permissions_file() {
+        let _ = ferris_idea_plugins::forget_plugin(&f, file);
     }
 }
 

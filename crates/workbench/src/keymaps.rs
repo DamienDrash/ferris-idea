@@ -4,9 +4,9 @@
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
+pub use ferris_idea_ui::keymap::Keystroke;
+use ferris_idea_ui::keymap::{Keymap, KeymapFile, Shortcut};
 use gpui::{App, Global};
-pub use idecraft_ui::keymap::Keystroke;
-use idecraft_ui::keymap::{Keymap, KeymapFile, Shortcut};
 
 /// The user keymap file in use; the self-test points it into its own folder.
 pub struct UserKeymapFile(pub PathBuf);
@@ -17,7 +17,7 @@ impl Global for UserKeymapFile {}
 pub fn keymap_file(cx: &App) -> Option<PathBuf> {
     match cx.try_global::<UserKeymapFile>() {
         Some(f) => Some(f.0.clone()),
-        None => idecraft_core::keymap_file(),
+        None => ferris_idea_core::keymap_file(),
     }
 }
 
@@ -140,7 +140,7 @@ pub fn click_actions(button: u8, m: &gpui::Modifiers) -> Vec<String> {
 }
 
 fn click_actions_in(keymap: &Keymap, button: u8, m: &gpui::Modifiers) -> Vec<String> {
-    let held = idecraft_ui::keymap::MouseModifiers {
+    let held = ferris_idea_ui::keymap::MouseModifiers {
         ctrl: m.control,
         alt: m.alt,
         shift: m.shift,

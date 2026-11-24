@@ -1,7 +1,7 @@
 //! The changelist actions of the Commit tool window without toolkit (`SPEC-0335` behaviours
 //! 8–12): what an action acts on, what its strip holds and what the window says.
 
-use idecraft_core::changelists::{CHANGELISTS_FILE, Changelists, Deleted, Moved, Unreadable};
+use ferris_idea_core::changelists::{CHANGELISTS_FILE, Changelists, Deleted, Moved, Unreadable};
 
 /// A changelist action (`SPEC-0335` behaviours 8–12).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -273,7 +273,7 @@ pub fn deleted(list: &str, outcome: &Deleted) -> String {
         }
         Deleted::Replaced { .. } => format!(
             "Changelist '{list}' replaced by '{}': a project keeps one changelist",
-            idecraft_core::changelists::DEFAULT_NAME
+            ferris_idea_core::changelists::DEFAULT_NAME
         ),
         Deleted::Kept => LAST_LIST_STAYS.to_owned(),
     }

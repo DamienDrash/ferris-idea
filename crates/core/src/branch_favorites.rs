@@ -1,5 +1,5 @@
 //! Favourite branches per repository (`SPEC-0068` v8 behaviour 25, `SPEC-0086` v10 behaviour 19):
-//! kept in the workspace's IDECraft settings (`.idecraft/branch-favorites.toml`), never in `.git`,
+//! kept in the workspace's Ferris IDEA settings (`.ferris-idea/branch-favorites.toml`), never in `.git`,
 //! with local and remote-tracking branches apart. `main` and `master` are favourites until they are
 //! unmarked.
 
@@ -9,7 +9,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 /// Where the favourites of a workspace are kept, relative to its root.
-pub const BRANCH_FAVORITES: &str = ".idecraft/branch-favorites.toml";
+pub const BRANCH_FAVORITES: &str = ".ferris-idea/branch-favorites.toml";
 
 /// Branch names that are favourites until unmarked, locally and on every remote.
 pub const DEFAULT_FAVORITES: [&str; 2] = ["main", "master"];
@@ -117,7 +117,7 @@ impl BranchFavorites {
 
     /// Writes the favourites back.
     pub fn save(&self, root: &Path) -> std::io::Result<()> {
-        let mut text = String::from("# Favourite branches of this workspace (IDECraft)\n");
+        let mut text = String::from("# Favourite branches of this workspace (Ferris IDEA)\n");
         text.push_str(&toml::to_string(self).map_err(std::io::Error::other)?);
         crate::write_atomic(&root.join(BRANCH_FAVORITES), text)
     }
@@ -242,7 +242,7 @@ mod tests {
 
     #[test]
     fn saved_per_repository_in_the_workspace_settings() {
-        let dir = std::env::temp_dir().join(format!("idecraft-fav-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-fav-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("sub")).unwrap();
         assert_eq!(repo_key(&dir, &dir), ".");

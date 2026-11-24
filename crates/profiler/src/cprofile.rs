@@ -134,6 +134,7 @@ pub fn parse_cprofile(json: &str) -> Result<Profile, String> {
         total,
         roots,
         notes: Vec::new(),
+        lines: Vec::new(),
     })
 }
 

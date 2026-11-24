@@ -1,0 +1,9 @@
+<!-- Ferris IDEA own icon, PolyForm Shield License 1.0.0 (LICENSE.md). An ignore file such as .dockerignore (SPEC-0004 v12 behaviour 15): lines of patterns and a crossed-out circle. -->
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect x="2" y="3" width="12" height="1" rx="0.5" fill="#CED0D6"/>
+<rect x="2" y="6" width="7" height="1" rx="0.5" fill="#CED0D6"/>
+<rect x="2" y="9" width="4" height="1" rx="0.5" fill="#CED0D6"/>
+<rect x="2" y="12" width="4" height="1" rx="0.5" fill="#CED0D6"/>
+<circle cx="11" cy="11" r="3" stroke="#CED0D6"/>
+<path d="M8.9 13.1L13.1 8.9" stroke="#CED0D6"/>
+</svg>

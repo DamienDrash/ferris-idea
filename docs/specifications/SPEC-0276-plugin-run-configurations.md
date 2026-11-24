@@ -11,7 +11,7 @@
 
 ## Purpose
 Plugins can contribute run configuration types without being able to start a program themselves: a
-plugin only suggests a command, IDECraft shows exactly what would run, and only the user's
+plugin only suggests a command, Ferris IDEA shows exactly what would run, and only the user's
 confirmation starts it.
 
 ## Behaviour
@@ -28,7 +28,7 @@ confirmation starts it.
    to it, if any) and answers `{configs: [{name, program, args, cwd, env}]}` (`args` defaults to
    none, `cwd` to the project folder, `env` to none). It runs in a fresh instance with a fifth of an
    action's instruction budget, gets no new host functions, and may read the project only as granted
-   for `project-read` (SPEC-0156). IDECraft runs it only for enabled plugins that were granted
+   for `project-read` (SPEC-0156). Ferris IDEA runs it only for enabled plugins that were granted
    `suggest-commands`; it is not offered as a command. [ADR-0016]
 3. **Checks:** the host takes at most 50 suggestions per type and drops each suggestion that breaks
    a rule, naming why: a name of 1 to 80 characters, unique within its type; a program that is not
@@ -65,7 +65,7 @@ confirmation starts it.
 6. **Starting:** a confirmed suggestion starts like a configuration of SPEC-0047 behaviour 5 with
    its output in the Run tool window: the program with the arguments as a list, without a shell and
    without replacing `${…}` variables (SPEC-0047 behaviour 3 does not apply), in its folder, with
-   IDECraft's environment plus the suggested variables, in its own process group, with the default
+   Ferris IDEA's environment plus the suggested variables, in its own process group, with the default
    timeout. [STD, GEN]
 7. **Always allow:** kept in the user's own settings folder (as the agent rights of SPEC-0053
    behaviour 2), file `plugin-run-permissions.toml`, as `[[workspace]]` tables with `path` and
@@ -84,7 +84,7 @@ confirmation starts it.
    true, `timeout`) returns the exact command in a dry run; a real run needs the grant of behaviour
    1, the agent right `run` (SPEC-0053), and the user's "always allow" for exactly this command in
    this workspace — an agent cannot confirm in the user's place, so without it the run is refused
-   with a message saying how the user allows it. A real run is logged in `.idecraft/agent-log.jsonl`
+   with a message saying how the user allows it. A real run is logged in `.ferris-idea/agent-log.jsonl`
    and answers like `run_command`. `revoke_plugin_run_permission` (`plugin`, optional `type` and
    `name`) forgets matching entries of this workspace. No tool grants or allows anything.
    [ADR-0008, SPEC-0053]
@@ -125,6 +125,6 @@ programs themselves, plugin settings pages, writing suggestions into `run.toml`.
 ## Known deviations from the reference
 The reference's plugins add run configuration types with JVM code that runs inside the IDE and can
 start any program, through a shell if it likes, without the user seeing the command line first.
-IDECraft's plugins can only suggest a command; IDECraft checks it, shows the exact argument list and
+Ferris IDEA's plugins can only suggest a command; Ferris IDEA checks it, shows the exact argument list and
 starts it only after the user's confirmation, and "always allow" holds only for the identical
 command (IMP-0277).

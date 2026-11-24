@@ -21,7 +21,7 @@ pub enum ProjectsEvent {
     /// Open this project, or bring its window to the front.
     Open(PathBuf),
     /// Clone the checked address into the new folder (behaviour 13).
-    Clone(idecraft_vcs::CloneSource, PathBuf),
+    Clone(ferris_idea_vcs::CloneSource, PathBuf),
     /// Cancel the running clone.
     CancelClone,
     /// Make the empty project folder, with `git init` when true (behaviour 14).
@@ -54,6 +54,12 @@ pub struct ProjectsView {
     /// The running clone's progress text, shown above the list with Cancel.
     cloning: Option<String>,
     default_location: String,
+    /// Only the form, without the list: in the Welcome window (`SPEC-0355` behaviour 7). Leaving
+    /// the form closes it.
+    standalone: bool,
+    /// The fields' texts when the error was shown: editing either clears it (window check A16,
+    /// CL1).
+    error_texts: (String, String),
 }
 
 impl EventEmitter<ProjectsEvent> for ProjectsView {}
@@ -82,17 +88,66 @@ impl ProjectsView {
         recent: Vec<PathBuf>,
         cx: &mut Context<Self>,
     ) -> Self {
+        let first = cx.new(EditorView::field);
+        let location = cx.new(EditorView::field);
+        // An error about the fields goes as soon as either is edited (window check A16, CL1).
+        for field in [&first, &location] {
+            cx.observe(field, |this: &mut Self, _, cx| {
+                if this.error.is_some() && this.texts(cx) != this.error_texts {
+                    this.error = None;
+                    cx.notify();
+                }
+            })
+            .detach();
+        }
         Self {
             rows: popup_rows(&open, &current, &recent),
             selected: 0,
             focus: cx.focus_handle(),
             form: None,
-            first: cx.new(EditorView::field),
-            location: cx.new(EditorView::field),
+            first,
+            location,
             git_init: true,
             error: None,
             cloning: None,
             default_location: crate::project_popup_model::default_location(&current),
+            standalone: false,
+            error_texts: Default::default(),
+        }
+    }
+
+    /// The texts of the first field and of Location.
+    fn texts(&self, cx: &gpui::App) -> (String, String) {
+        (
+            self.first.read(cx).state.buffer.text(),
+            self.location.read(cx).state.buffer.text(),
+        )
+    }
+
+    /// Only `form`, with `location` as the suggested folder, for the Welcome window
+    /// (`SPEC-0355` behaviour 7): Cancel and Escape close it instead of showing a list.
+    pub fn form_only(
+        form: Form,
+        location: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        let mut view = Self::new(Vec::new(), PathBuf::new(), Vec::new(), cx);
+        view.rows.clear();
+        view.standalone = true;
+        view.default_location = location;
+        view.open_form(form, Some(window), cx);
+        view
+    }
+
+    /// Leaves the form: back to the list, or closed when there is none.
+    fn leave_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.form = None;
+        self.error = None;
+        if self.standalone {
+            cx.emit(ProjectsEvent::Close);
+        } else {
+            window.focus(&self.focus);
         }
     }
 
@@ -203,7 +258,10 @@ impl ProjectsView {
                 self.error = None;
                 cx.emit(event);
             }
-            Err(why) => self.error = Some(why),
+            Err(why) => {
+                self.error = Some(why);
+                self.error_texts = self.texts(cx);
+            }
         }
         cx.notify();
     }
@@ -213,11 +271,7 @@ impl ProjectsView {
         if self.form.is_some() {
             match key {
                 "enter" => self.submit(cx),
-                "escape" => {
-                    self.form = None;
-                    self.error = None;
-                    window.focus(&self.focus);
-                }
+                "escape" => self.leave_form(window, cx),
                 "tab" => {
                     let next = if self.first.read(cx).focus().is_focused(window) {
                         self.location.read(cx).focus()
@@ -278,7 +332,16 @@ impl ProjectsView {
                         .rounded(px(4.))
                         .border_1()
                         .border_color(c(p.separator))
-                        .child(div().flex_1().min_w_0().h(px(18.)).child(editor)),
+                        // A long path stays inside the field (window check A16, CL1).
+                        .overflow_hidden()
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .h(px(18.))
+                                .overflow_hidden()
+                                .child(editor),
+                        ),
                 )
         };
         let first = self.first.read(cx).state.buffer.text();
@@ -344,10 +407,13 @@ impl ProjectsView {
                     .py_1()
                     .text_xs()
                     .text_color(c(p.ui_dim))
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .text_ellipsis()
                     .child(match &target {
                         Some(t) => format!("Into {}", short(t)),
                         None => {
-                            "Only HTTPS and SSH; no password or token in the address.".to_owned()
+                            crate::project_popup_model::form_hint(form == Form::Clone).to_owned()
                         }
                     }),
             )
@@ -371,9 +437,7 @@ impl ProjectsView {
                     .child(
                         button("project-form-cancel", "Cancel", false).on_click(cx.listener(
                             |this, _: &gpui::ClickEvent, window, cx| {
-                                this.form = None;
-                                this.error = None;
-                                window.focus(&this.focus);
+                                this.leave_form(window, cx);
                                 cx.notify();
                             },
                         )),
@@ -506,7 +570,7 @@ impl Render for ProjectsView {
                     let glyph = match action {
                         PopupRow::NewProject => "general/add",
                         PopupRow::Clone => "toolwindows/commit",
-                        PopupRow::RemoteDevelopment => "idecraft/remote",
+                        PopupRow::RemoteDevelopment => "ferris-idea/remote",
                         _ => "nodes/folder",
                     };
                     row(i)

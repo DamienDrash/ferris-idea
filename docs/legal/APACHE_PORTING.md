@@ -24,7 +24,7 @@ Referenz-Commit für alle Übernahmen, bis er bewusst angehoben wird:
    // SPDX-License-Identifier: Apache-2.0
    // Derived from JetBrains intellij-community, <quellpfad>
    // at commit <sha>. Copyright 2000-2026 JetBrains s.r.o. and contributors.
-   // Modified by the IDECraft contributors: ported from <Java|Kotlin> to Rust.
+   // Modified by the Ferris IDEA contributors: ported from <Java|Kotlin> to Rust.
    ```
 
    Assets (SVG, JSON, XML) behalten ihren Inhalt; die Herkunft steht in

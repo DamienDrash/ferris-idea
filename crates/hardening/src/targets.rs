@@ -26,7 +26,7 @@ pub struct Target {
 pub const TARGETS: &[Target] = &[
     Target {
         name: "lsp_frame",
-        about: "LSP Content-Length framing and the replies IDECraft reads (hover, completion, …)",
+        about: "LSP Content-Length framing and the replies Ferris IDEA reads (hover, completion, …)",
         run: lsp_frame,
         seeds: &[
             b"Content-Length: 2\r\n\r\n{}",
@@ -125,7 +125,7 @@ pub const TARGETS: &[Target] = &[
         about: "arbitrary WebAssembly as a plugin module (SPEC-0104)",
         run: plugin_module,
         seeds: &[b"\x00asm\x01\x00\x00\x00"],
-        dict: &[b"\x00asm\x01\x00\x00\x00", b"memory", b"idecraft_manifest", b"idecraft_alloc"],
+        dict: &[b"\x00asm\x01\x00\x00\x00", b"memory", b"ferris_idea_manifest", b"ferris_idea_alloc"],
     },
     Target {
         name: "plugin_answers",
@@ -285,7 +285,7 @@ fn scratch() -> PathBuf {
         NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     });
     let dir = std::env::temp_dir().join(format!(
-        "idecraft-fuzz-{}-{}",
+        "ferris-idea-fuzz-{}-{}",
         std::process::id(),
         N.with(|n| *n)
     ));
@@ -305,7 +305,7 @@ fn write(root: &Path, rel: &str, text: &str) -> PathBuf {
 
 struct Identity;
 
-impl idecraft_languages::insight::Converter for Identity {
+impl ferris_idea_languages::insight::Converter for Identity {
     fn character(&mut self, _uri: &str, _line: u64, units: u64) -> u64 {
         units
     }
@@ -313,7 +313,7 @@ impl idecraft_languages::insight::Converter for Identity {
 
 /// Runs the readers of language-server replies on one decoded message.
 fn lsp_replies(v: &Value) {
-    use idecraft_languages::insight;
+    use ferris_idea_languages::insight;
     for r in [v, &v["result"]] {
         let _ = insight::parse_hover(r, "file:///a.rs", &mut Identity);
         let _ = insight::parse_signature_help(r);
@@ -339,7 +339,7 @@ pub fn lsp_frame(data: &[u8]) {
     runtime().block_on(async {
         let mut reader = tokio::io::BufReader::new(data);
         for _ in 0..64 {
-            match idecraft_languages::lsp::read_message(&mut reader).await {
+            match ferris_idea_languages::lsp::read_message(&mut reader).await {
                 Ok(Some(v)) => lsp_replies(&v),
                 Ok(None) | Err(_) => break,
             }
@@ -355,7 +355,7 @@ pub fn lsp_frame(data: &[u8]) {
 pub fn dap_frame(data: &[u8]) {
     let mut reader = std::io::BufReader::new(data);
     for _ in 0..64 {
-        match idecraft_debugger::read_message(&mut reader) {
+        match ferris_idea_debugger::read_message(&mut reader) {
             Ok(Some(_)) => {}
             Ok(None) | Err(_) => break,
         }
@@ -391,18 +391,32 @@ const MCP_TOOLS: &[&str] = &[
 ];
 
 /// Arguments for a fuzzed call: the bytes as a JSON object, else as every common string field.
-fn mcp_arguments(data: &[u8]) -> Value {
+fn mcp_arguments(tool: &str, data: &[u8]) -> Value {
     match serde_json::from_slice::<Value>(data) {
         Ok(v @ Value::Object(_)) => v,
         _ => {
             let s = text(data);
-            json!({
+            let mut all = json!({
                 "path": s, "text": s, "query": s, "sql": s, "output": s, "pattern": s,
                 "base": s, "ours": s, "theirs": s, "report": s, "keystroke": s,
-            })
+            });
+            // Only the names the tool declares, so the call reaches the tool instead of the
+            // refusal of unknown arguments (`SPEC-0006` v59 behaviour 21).
+            if let (Some(declared), Some(map)) = (
+                MCP_DECLARED.get(tool).and_then(Option::as_ref),
+                all.as_object_mut(),
+            ) {
+                map.retain(|k, _| declared.contains(k));
+            }
+            all
         }
     }
 }
+
+/// The argument names each tool declares (`SPEC-0006` v59 behaviour 21), read once.
+static MCP_DECLARED: std::sync::LazyLock<
+    BTreeMap<String, Option<std::collections::BTreeSet<String>>>,
+> = std::sync::LazyLock::new(|| ferris_idea_mcp::declared_arguments().into_iter().collect());
 
 struct McpClient {
     write: tokio::io::WriteHalf<tokio::io::DuplexStream>,
@@ -418,13 +432,13 @@ impl McpClient {
         write(&root, "src/app.py", "a = 1\nb = 2\n");
         write(&root, "schema.sql", "select 1; select 2;");
         write(&root, ".idea/misc.xml", "<project/>");
-        let permissions = idecraft_core::AgentPermissions {
+        let permissions = ferris_idea_core::AgentPermissions {
             allow: Default::default(),
             file: Some(root.join("agent-permissions.toml")),
             problem: None,
         };
-        let workspace = idecraft_core::Workspace::open(&root).expect("scratch workspace");
-        let server = idecraft_mcp::IdeServer::with_permissions(workspace, permissions)
+        let workspace = ferris_idea_core::Workspace::open(&root).expect("scratch workspace");
+        let server = ferris_idea_mcp::IdeServer::with_permissions(workspace, permissions)
             .with_plugins_dir(root.join(".plugins"))
             .with_theme_file(root.join(".theme"))
             .with_ide_settings_file(root.join(".settings.toml"))
@@ -507,7 +521,7 @@ pub fn mcp_jsonrpc(data: &[u8]) {
         } else {
             let (pick, args) = rest.split_first().unwrap_or((&0, &[]));
             let tool = MCP_TOOLS[*pick as usize % MCP_TOOLS.len()];
-            let params = json!({"name": tool, "arguments": mcp_arguments(args)});
+            let params = json!({"name": tool, "arguments": mcp_arguments(tool, args)});
             if client.request("tools/call", params).await.is_none() {
                 return false;
             }
@@ -523,8 +537,8 @@ pub fn mcp_jsonrpc(data: &[u8]) {
 /// SQL splitting in every dialect, with the promised ranges.
 pub fn sql_split(data: &[u8]) {
     let script = text(data);
-    for dialect in idecraft_database::Dialect::ALL {
-        let statements = idecraft_database::split_statements(&script, dialect);
+    for dialect in ferris_idea_database::Dialect::ALL {
+        let statements = ferris_idea_database::split_statements(&script, dialect);
         let mut last = 0;
         for s in &statements {
             assert!(
@@ -551,7 +565,7 @@ pub fn terminal_vte(data: &[u8]) {
     let chunk = 1 + get(2) % 64;
     let resize = get(3);
     let body = data.get(4..).unwrap_or_default();
-    let mut terminal = idecraft_terminal::Terminal::new(rows, cols);
+    let mut terminal = ferris_idea_terminal::Terminal::new(rows, cols);
     let half = body.len() / 2;
     for piece in body[..half].chunks(chunk) {
         terminal.feed(piece);
@@ -574,10 +588,10 @@ pub fn terminal_vte(data: &[u8]) {
     let _ = screen.history_lines(200);
     let _ = screen.prompts().len();
     let _ = screen.take_responses();
-    let _ = idecraft_terminal::find_links(&text);
+    let _ = ferris_idea_terminal::find_links(&text);
     for index in 0..screen.scrollback_len() + rows {
         if let Some(cells) = screen.line(index) {
-            let _ = idecraft_terminal::line_links(screen, cells);
+            let _ = ferris_idea_terminal::line_links(screen, cells);
         }
     }
     let query: String = text
@@ -586,12 +600,12 @@ pub fn terminal_vte(data: &[u8]) {
         .take(2)
         .collect();
     if !query.is_empty() {
-        let _ = idecraft_terminal::search(screen, &query, false);
-        let _ = idecraft_terminal::search(screen, &query, true);
+        let _ = ferris_idea_terminal::search(screen, &query, false);
+        let _ = ferris_idea_terminal::search(screen, &query, true);
     }
     // History restore drops control characters, whatever the lines hold.
     let lines = screen.history_lines(20);
-    idecraft_terminal::Terminal::new(rows, cols).restore(&lines);
+    ferris_idea_terminal::Terminal::new(rows, cols).restore(&lines);
 }
 
 /// The undo history the model keeps: one step per entry, `(id, before, after)`.
@@ -640,7 +654,7 @@ impl Model {
 
 /// Text buffer: an op script against a plain model of text and history.
 pub fn text_buffer(data: &[u8]) {
-    use idecraft_editor::TextBuffer;
+    use ferris_idea_editor::TextBuffer;
     let mut ops = data;
     let mut take = |n: usize| -> &[u8] {
         let (a, b) = ops.split_at(n.min(ops.len()));
@@ -787,15 +801,15 @@ pub fn text_buffer(data: &[u8]) {
 
 /// Diffs and the three-way merge of three texts.
 pub fn diff_merge(data: &[u8]) {
-    use idecraft_vcs::{Labels, MarkerStyle, Merge3, Resolution};
+    use ferris_idea_vcs::{Labels, MarkerStyle, Merge3, Resolution};
     let p = parts(data, 3);
     let (base, ours, theirs) = (&p[0], &p[1], &p[2]);
-    let _ = idecraft_vcs::line_changes(base, ours);
-    let _ = idecraft_vcs::unified_hunks(base, theirs);
-    let rows = idecraft_vcs::side_by_side(ours, theirs);
-    let _ = idecraft_vcs::change_starts(&rows);
+    let _ = ferris_idea_vcs::line_changes(base, ours);
+    let _ = ferris_idea_vcs::unified_hunks(base, theirs);
+    let rows = ferris_idea_vcs::side_by_side(ours, theirs);
+    let _ = ferris_idea_vcs::change_starts(&rows);
     let per_line: Vec<Option<usize>> = (0..base.lines().count()).map(Some).collect();
-    let _ = idecraft_vcs::map_lines(base, ours, &per_line);
+    let _ = ferris_idea_vcs::map_lines(base, ours, &per_line);
     for mut merge in [
         Merge3::new(base, ours, theirs),
         Merge3::untrimmed(base, ours, theirs),
@@ -833,7 +847,7 @@ pub fn diff_merge(data: &[u8]) {
 
 /// Arbitrary bytes as a plugin module.
 pub fn plugin_module(data: &[u8]) {
-    if let Ok(plugin) = idecraft_plugins::Plugin::from_bytes(Path::new("fuzz.wasm"), data) {
+    if let Ok(plugin) = ferris_idea_plugins::Plugin::from_bytes(Path::new("fuzz.wasm"), data) {
         for action in plugin.manifest.actions.clone() {
             let _ = plugin.run_with_fuel(&action.id, "text", 1_000_000);
         }
@@ -849,16 +863,16 @@ fn answering_module(manifest: &[u8], answer: &[u8]) -> Vec<u8> {
   (global $next (mut i32) (i32.const 131072))
   (data (i32.const 1024) "{m}")
   (data (i32.const 65536) "{a}")
-  (func (export "idecraft_alloc") (param $len i32) (result i32)
+  (func (export "ferris_idea_alloc") (param $len i32) (result i32)
     (local $at i32)
     (local.set $at (global.get $next))
     (global.set $next (i32.add (global.get $next) (local.get $len)))
     (if (i32.gt_u (global.get $next) (i32.mul (memory.size) (i32.const 65536)))
       (then (drop (memory.grow (i32.add (i32.div_u (local.get $len) (i32.const 65536)) (i32.const 1))))))
     (local.get $at))
-  (func (export "idecraft_manifest") (result i64)
+  (func (export "ferris_idea_manifest") (result i64)
     (i64.or (i64.shl (i64.const 1024) (i64.const 32)) (i64.const {ml})))
-  (func (export "idecraft_run") (param i32 i32 i32 i32) (result i64)
+  (func (export "ferris_idea_run") (param i32 i32 i32 i32) (result i64)
     (i64.or (i64.shl (i64.const 65536) (i64.const 32)) (i64.const {al}))))"#,
         m = escape(manifest),
         a = escape(answer),
@@ -872,7 +886,7 @@ const ANSWER_MANIFEST: &str = r#"{"name":"fuzz","actions":[{"id":"e","title":"E"
 
 /// Plugin answers: a manifest (mode 0), one action's answer (modes 1–5), a file type (mode 6).
 pub fn plugin_answers(data: &[u8]) {
-    use idecraft_plugins::{
+    use ferris_idea_plugins::{
         Access, CompleteContext, EditorContext, FileType, InspectContext, PanelContext, Plugin,
     };
     let (mode, rest) = data.split_first().unwrap_or((&0, &[]));
@@ -891,13 +905,13 @@ pub fn plugin_answers(data: &[u8]) {
     match mode % 7 {
         0 => {
             if let Ok(p) = Plugin::from_bytes(path, &answering_module(rest, b"{}")) {
-                let _ = idecraft_plugins::contributions(&p.manifest);
+                let _ = ferris_idea_plugins::contributions(&p.manifest);
                 for t in &p.manifest.file_types {
-                    let _ = idecraft_plugins::highlight(t, source);
+                    let _ = ferris_idea_plugins::highlight(t, source);
                 }
                 let plugins = [p];
-                let _ = idecraft_plugins::file_type_for(&plugins, Path::new("a.t"), false);
-                let _ = idecraft_plugins::action_list(&plugins);
+                let _ = ferris_idea_plugins::file_type_for(&plugins, Path::new("a.t"), false);
+                let _ = ferris_idea_plugins::action_list(&plugins);
             }
         }
         6 => {
@@ -909,7 +923,7 @@ pub fn plugin_answers(data: &[u8]) {
                 let source = text(text_part);
                 let len = source.chars().count();
                 let mut last = 0;
-                for (range, _) in idecraft_plugins::highlight(&t, &source) {
+                for (range, _) in ferris_idea_plugins::highlight(&t, &source) {
                     assert!(
                         range.start >= last && range.start <= range.end && range.end <= len,
                         "highlight run {range:?} of {len} characters"
@@ -970,7 +984,7 @@ pub fn plugin_answers(data: &[u8]) {
 
 /// Keymap XML, keystrokes and shortcuts.
 pub fn keymap(data: &[u8]) {
-    use idecraft_ui::keymap::{KeymapFile, Keystroke, Shortcut};
+    use ferris_idea_ui::keymap::{KeymapFile, Keystroke, Shortcut};
     let s = text(data);
     let _ = KeymapFile::parse(&s);
     for line in s.lines().take(8) {
@@ -988,7 +1002,7 @@ pub fn keymap(data: &[u8]) {
 
 /// Colour schemes (mode even) and UI themes (mode odd).
 pub fn theme(data: &[u8]) {
-    use idecraft_ui::theme::{ColorScheme, UiTheme, parse_schemes};
+    use ferris_idea_ui::theme::{ColorScheme, UiTheme, parse_schemes};
     let (mode, rest) = data.split_first().unwrap_or((&0, &[]));
     let s = text(rest);
     if mode % 2 == 0 {
@@ -1017,9 +1031,9 @@ pub fn settings(data: &[u8]) {
     let s = text(rest);
     match mode % 10 {
         0 => {
-            let mut config = idecraft_core::LayeredConfig::new();
+            let mut config = ferris_idea_core::LayeredConfig::new();
             if config
-                .set_layer_toml(idecraft_core::Layer::User, &s)
+                .set_layer_toml(ferris_idea_core::Layer::User, &s)
                 .is_ok()
             {
                 let _ = config.effective();
@@ -1031,49 +1045,49 @@ pub fn settings(data: &[u8]) {
         1 => {
             let root = scratch();
             let file = write(&root, "settings.toml", &s);
-            let settings = idecraft_core::load_ide_settings(&file).clamped();
+            let settings = ferris_idea_core::load_ide_settings(&file).clamped();
             let _ = settings.line_height();
         }
         2 => {
-            let _ = idecraft_core::parse_run_configs(&s);
+            let _ = ferris_idea_core::parse_run_configs(&s);
         }
         3 => {
-            let _ = idecraft_ui::tool_windows::Layout::parse(&s);
+            let _ = ferris_idea_ui::tool_windows::Layout::parse(&s);
         }
         4 => {
-            let _ = idecraft_debugger::saved::parse_breakpoints(Path::new("/p"), &s);
+            let _ = ferris_idea_debugger::saved::parse_breakpoints(Path::new("/p"), &s);
         }
         5 => {
             let root = scratch();
             write(&root, ".editorconfig", &s);
-            let config = idecraft_core::editorconfig::editorconfig_for(&root.join("a/b.rs"));
+            let config = ferris_idea_core::editorconfig::editorconfig_for(&root.join("a/b.rs"));
             let _ = config.indent_unit();
             let _ = config.line_break();
             for line in s.lines().take(4) {
-                let _ = idecraft_core::editorconfig::section_matches(line, "a/b.rs");
+                let _ = ferris_idea_core::editorconfig::section_matches(line, "a/b.rs");
             }
         }
         6 => {
             let root = scratch();
             let file = write(&root, "grants.toml", &s);
-            let _ = idecraft_core::load_agent_permissions(&file, Path::new("/"));
+            let _ = ferris_idea_core::load_agent_permissions(&file, Path::new("/"));
         }
         7 => {
             let root = scratch();
             let file = write(&root, "recent.txt", &s);
-            let _ = idecraft_core::load_recent_projects(&file);
+            let _ = ferris_idea_core::load_recent_projects(&file);
         }
         8 => {
             let root = scratch();
-            write(&root, idecraft_database::PROFILE_FILE, &s);
-            let _ = idecraft_database::load_profiles(&root);
+            write(&root, ferris_idea_database::PROFILE_FILE, &s);
+            let _ = ferris_idea_database::load_profiles(&root);
         }
         _ => {
             let root = scratch();
             let p = parts(rest, 2);
-            write(&root, idecraft_http::ENV_FILE, &p[0]);
-            write(&root, idecraft_http::PRIVATE_ENV_FILE, &p[1]);
-            let _ = idecraft_http::load_environments(&root, &root);
+            write(&root, ferris_idea_http::ENV_FILE, &p[0]);
+            write(&root, ferris_idea_http::PRIVATE_ENV_FILE, &p[1]);
+            let _ = ferris_idea_http::load_environments(&root, &root);
         }
     }
 }
@@ -1093,7 +1107,7 @@ pub fn idea_project(data: &[u8]) {
     for (rel, content) in files.iter().zip(&p) {
         write(&root, rel, content);
     }
-    let _ = idecraft_core::read_idea_project(&root);
+    let _ = ferris_idea_core::read_idea_project(&root);
 }
 
 /// Build files of every kind the project model reads.
@@ -1119,44 +1133,44 @@ pub fn project_model(data: &[u8]) {
             PathBuf::from(rel)
         })
         .collect();
-    let _ = idecraft_core::read_project(&root, &files);
+    let _ = ferris_idea_core::read_project(&root, &files);
 }
 
 /// `.http` files resolved against an environment.
 pub fn http_file(data: &[u8]) {
     let s = text(data);
-    let file = idecraft_http::parse(&s);
+    let file = ferris_idea_http::parse(&s);
     let env: BTreeMap<String, String> = [("host", "localhost"), ("v", "{{v}}")]
         .into_iter()
         .map(|(k, v)| (k.to_owned(), v.to_owned()))
         .collect();
-    for request in idecraft_http::resolve(&file, &env) {
-        let _ = idecraft_http::parse_url(&request.url);
+    for request in ferris_idea_http::resolve(&file, &env) {
+        let _ = ferris_idea_http::parse_url(&request.url);
     }
-    let _ = idecraft_http::substitute(&s, &env, &env);
+    let _ = ferris_idea_http::substitute(&s, &env, &env);
     for line in s.lines().take(4) {
-        let _ = idecraft_http::parse_url(line);
+        let _ = ferris_idea_http::parse_url(line);
     }
 }
 
 /// Test reports in every format and with detection.
 pub fn test_report(data: &[u8]) {
-    use idecraft_core::ReportFormat;
+    use ferris_idea_core::ReportFormat;
     let s = text(data);
-    let _ = idecraft_core::parse_report(&s, None);
+    let _ = ferris_idea_core::parse_report(&s, None);
     for f in [
         ReportFormat::Junit,
         ReportFormat::Tap,
         ReportFormat::Libtest,
         ReportFormat::Jest,
     ] {
-        let _ = idecraft_core::parse_report(&s, Some(f));
+        let _ = ferris_idea_core::parse_report(&s, Some(f));
     }
 }
 
 /// Profiler outputs, picked by the first byte.
 pub fn profiler_formats(data: &[u8]) {
-    use idecraft_profiler as p;
+    use ferris_idea_profiler as p;
     let (mode, rest) = data.split_first().unwrap_or((&0, &[]));
     let s = text(rest);
     let profile = match mode % 9 {
@@ -1188,43 +1202,43 @@ pub fn misc_formats(data: &[u8]) {
     let s = text(rest);
     match mode % 10 {
         0 => {
-            let _ = idecraft_database::parse_postgres(&s);
+            let _ = ferris_idea_database::parse_postgres(&s);
         }
         1 => {
-            let _ = idecraft_database::parse_mysql(&s);
+            let _ = ferris_idea_database::parse_mysql(&s);
             let rows: Vec<Vec<Option<String>>> = s
                 .lines()
                 .take(64)
                 .map(|l| l.split('\t').map(|c| Some(c.to_owned())).collect())
                 .collect();
-            let _ = idecraft_database::parse_sqlite(&rows);
+            let _ = ferris_idea_database::parse_sqlite(&rows);
         }
         2 => {
-            let _ = idecraft_core::jvmdeps::parse_maven_tree(&s);
+            let _ = ferris_idea_core::jvmdeps::parse_maven_tree(&s);
         }
         3 => {
-            let _ = idecraft_core::jvmdeps::parse_gradle_tree(&s);
+            let _ = ferris_idea_core::jvmdeps::parse_gradle_tree(&s);
         }
         4 => {
-            let _ = idecraft_core::parse_specs(&s);
+            let _ = ferris_idea_core::parse_specs(&s);
             for line in s.lines().take(8) {
-                let _ = idecraft_core::split_pep508(line);
+                let _ = ferris_idea_core::split_pep508(line);
             }
         }
         5 => {
-            let _ = idecraft_languages::properties::parse(&s);
+            let _ = ferris_idea_languages::properties::parse(&s);
         }
         6 => {
-            let _ = idecraft_languages::project_dictionary::parse(&s);
+            let _ = ferris_idea_languages::project_dictionary::parse(&s);
         }
         7 => {
-            let _ = idecraft_languages::js_tools::parse_eslint("let a = 1;\nlet b;\n", &s);
+            let _ = ferris_idea_languages::js_tools::parse_eslint("let a = 1;\nlet b;\n", &s);
         }
         8 => {
             for open in [0, 1, s.len() / 2, s.len()] {
                 for types in [false, true] {
                     if let Some((outer, items)) =
-                        idecraft_languages::signature::split_list(&s, open, types)
+                        ferris_idea_languages::signature::split_list(&s, open, types)
                     {
                         assert!(outer.end <= s.len(), "list span past the text");
                         for item in items {
@@ -1238,7 +1252,7 @@ pub fn misc_formats(data: &[u8]) {
             }
         }
         _ => {
-            use idecraft_ai::subscription::{Cli, parse_line};
+            use ferris_idea_ai::subscription::{Cli, parse_line};
             for cli in [Cli::Claude, Cli::Codex, Cli::Gemini] {
                 for line in s.lines().take(8) {
                     let _ = parse_line(cli, line);

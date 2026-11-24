@@ -352,7 +352,7 @@ pub fn layout(root: &Path, interactive: bool) -> Result<(), Box<dyn std::error::
                     ..Default::default()
                 },
                 move |window, cx| {
-                    idecraft_workbench::x11_wake::until_first_frame(window);
+                    ferris_idea_workbench::x11_wake::until_first_frame(window);
                     cx.new(|_| LayoutView {
                         nodes,
                         expanded: HashSet::from([0]),

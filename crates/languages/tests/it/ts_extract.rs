@@ -1,18 +1,18 @@
 //! SPEC-0095 v6 and SPEC-0320 v7 with real TypeScript servers: Extract Variable, Extract Constant
 //! and Extract Method in a `.ts` file (OBS-0028 T4). With typescript-language-server the server's
 //! own actions are found and applied, the name it introduced is found for the name popup; with a
-//! server that offers no extraction (TypeScript 7's `tsc --lsp`) IDECraft's own Extract Variable
+//! server that offers no extraction (TypeScript 7's `tsc --lsp`) Ferris IDEA's own Extract Variable
 //! does it. Skipped without the server each test needs.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use idecraft_languages::LanguageId;
-use idecraft_languages::actions::{
+use ferris_idea_languages::LanguageId;
+use ferris_idea_languages::actions::{
     Refactoring, introduced_name, plan_code_action_in, refactoring_targets,
 };
-use idecraft_languages::insight::Range;
-use idecraft_languages::rename::apply_edits;
+use ferris_idea_languages::insight::Range;
+use ferris_idea_languages::rename::apply_edits;
 
 /// The function of OBS-0028 item 4, unformatted as there, with the further cases of the task.
 const FMT: &str = "export function f(x: number, a: number, b: number) {\n  if(x>3) return x\n  const s = a+b*2\n  const l = [1,2,3]\n  console.log(s, l)\n  return 0\n}\n";
@@ -26,14 +26,16 @@ impl Drop for Project {
 }
 
 fn server() -> Option<String> {
-    idecraft_languages::servers::resolve(LanguageId::TypeScript)
+    ferris_idea_languages::servers::resolve(LanguageId::TypeScript)
         .ok()
         .map(|r| r.candidate.program.to_owned())
 }
 
 fn project(name: &str) -> Project {
-    let root =
-        std::env::temp_dir().join(format!("idecraft-ts-extract-{name}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!(
+        "ferris-idea-ts-extract-{name}-{}",
+        std::process::id()
+    ));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src")).unwrap();
     let root = root.canonicalize().unwrap();
@@ -76,10 +78,10 @@ async fn applied(root: &Path, file: &Path, range: &Range, title: &str) -> String
 async fn typescript_language_server_extracts_variables_constants_and_functions() {
     if server().as_deref() != Some("typescript-language-server") {
         assert!(
-            std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+            ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
             "required tool missing: typescript-language-server"
         );
-        eprintln!("skipped: IDECraft does not choose typescript-language-server here");
+        eprintln!("skipped: Ferris IDEA does not choose typescript-language-server here");
         return;
     }
     let p = project("tsls");
@@ -154,7 +156,7 @@ async fn typescript_language_server_extracts_variables_constants_and_functions()
 }
 
 /// With any TypeScript server or none: Extract Variable on `x>3` works, by the server's action or
-/// IDECraft's own (TypeScript 7's `tsc --lsp` offers no extraction).
+/// Ferris IDEA's own (TypeScript 7's `tsc --lsp` offers no extraction).
 #[tokio::test(flavor = "multi_thread")]
 async fn extract_variable_works_with_every_typescript_server() {
     let p = project("any");

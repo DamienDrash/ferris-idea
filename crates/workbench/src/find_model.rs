@@ -2,7 +2,7 @@
 
 use std::ops::Range;
 
-use idecraft_core::{Finder, Query};
+use ferris_idea_core::{Finder, Query};
 
 /// Each match of `query` in `text` with its replacement (capture references resolved with a regex),
 /// in text order (`SPEC-0065` behaviour 8).
@@ -76,7 +76,7 @@ pub fn replacements_with(
 pub fn narrow_matches(
     matches: Vec<Range<usize>>,
     within: Option<&Range<usize>>,
-    context: idecraft_languages::syntax::SearchContext,
+    context: ferris_idea_languages::syntax::SearchContext,
     path: &std::path::Path,
     text: &str,
 ) -> Vec<Range<usize>> {
@@ -244,7 +244,7 @@ mod tests {
         let first_line = narrow_matches(
             found.clone(),
             Some(&(0..19)),
-            idecraft_languages::syntax::SearchContext::Anywhere,
+            ferris_idea_languages::syntax::SearchContext::Anywhere,
             path,
             code,
         );
@@ -252,7 +252,7 @@ mod tests {
         let no_comments = narrow_matches(
             found,
             None,
-            idecraft_languages::syntax::SearchContext::ExceptComments,
+            ferris_idea_languages::syntax::SearchContext::ExceptComments,
             path,
             code,
         );

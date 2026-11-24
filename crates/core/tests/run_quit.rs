@@ -4,7 +4,7 @@
 
 use std::time::{Duration, Instant};
 
-use idecraft_core::{RunEvent, end_all_runs, live_runs, load_run_configs, start_run};
+use ferris_idea_core::{RunEvent, end_all_runs, live_runs, load_run_configs, start_run};
 
 fn alive(pid: i32) -> bool {
     // Signal 0 only checks that the process exists.
@@ -13,12 +13,12 @@ fn alive(pid: i32) -> bool {
 
 #[test]
 fn ending_all_runs_ends_programs_and_their_children() {
-    let root = std::env::temp_dir().join(format!("idecraft-run-quit-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-run-quit-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir_all(root.join(".idecraft")).unwrap();
+    std::fs::create_dir_all(root.join(".ferris-idea")).unwrap();
     let child_pid = root.join("child.pid");
     std::fs::write(
-        root.join(".idecraft/run.toml"),
+        root.join(".ferris-idea/run.toml"),
         format!(
             r#"
 [[run]]

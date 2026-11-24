@@ -1,17 +1,18 @@
 //! The modules of the reference IDE's `.idea` in the Project tree (`SPEC-0049` v2 AK-6), in a
 //! window of the test harness with real keys: the roles of module, source, test, resource and
 //! excluded folders without a build file, the tree's keys reaching the rows, Synchronize after a
-//! module file changed, and a Maven POM winning for its folders. Only the project's own `.idea`
-//! is read, as SPEC-0049 allows; nothing in it is written.
+//! module file changed, and a Maven POM winning for its folders; the rows' icons in the semantic
+//! tree (`SPEC-0275` v24 AK-48). Only the project's own `.idea` is read, as SPEC-0049 allows;
+//! nothing in it is written.
 
 #![cfg(target_os = "macos")]
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_core::buildtools::FolderRole;
+use ferris_idea_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
+use ferris_idea_workbench::{WorkbenchView, semantics};
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_core::buildtools::FolderRole;
-use idecraft_workbench::WorkbenchView;
-use idecraft_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
 
 type Bench = Entity<WorkbenchView>;
 
@@ -56,7 +57,7 @@ const LIB_IML: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 </module>"#;
 
 fn project() -> PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-idea-tree-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-idea-tree-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     for dir in [
         ".idea",
@@ -100,12 +101,13 @@ fn project() -> PathBuf {
 }
 
 fn window(root: &Path, cx: &mut TestAppContext) -> (Bench, &'static mut VisualTestContext) {
+    semantics::set_consumer(semantics::Consumer::SelfTest, true);
     let settings = root.join(".test-settings");
     std::fs::create_dir_all(&settings).unwrap();
     cx.update(|cx| {
         cx.set_global(IdeSettingsFile(settings.join("settings.toml")));
         cx.set_global(ThemeFile(settings.join("theme")));
-        cx.set_global(CurrentIdeSettings(idecraft_core::IdeSettings::default()));
+        cx.set_global(CurrentIdeSettings(ferris_idea_core::IdeSettings::default()));
     });
     let at = root.to_path_buf();
     let window = cx.add_window(move |_, cx| WorkbenchView::new(&at, cx));
@@ -130,7 +132,21 @@ fn role(bench: &Bench, cx: &mut VisualTestContext, root: &Path, rel: &str) -> Op
     bench.read_with(cx, |b, _| b.tree_folder_info(&path).map(|i| i.role))
 }
 
-/// SPEC-0049 v2 AK-6.
+/// The names of the image nodes with test id `tree-icon-<name>` in the window's semantic tree.
+fn row_icons(cx: &mut VisualTestContext, name: &str) -> Vec<String> {
+    cx.run_until_parked();
+    let id = format!("tree-icon-{name}");
+    cx.update(|window, _| {
+        let tree = semantics::tree(semantics::window_id(window)).expect("a tree is built");
+        tree.iter()
+            .filter(|n| n.test_id() == Some(id.as_str()))
+            .inspect(|n| assert_eq!(n.role(), semantics::Role::Image, "{id}"))
+            .filter_map(|n| n.name().map(str::to_owned))
+            .collect()
+    })
+}
+
+/// SPEC-0049 v2 AK-6; SPEC-0275 v24 AK-48, v25 AK-49 (OBS-0093 T1 and T2).
 #[gpui::test]
 fn idea_modules_mark_the_project_tree(cx: &mut TestAppContext) {
     let root = project();
@@ -197,6 +213,22 @@ fn idea_modules_mark_the_project_tree(cx: &mut TestAppContext) {
         root.join("checks"),
         "↓ from assets reaches the test folder"
     );
+
+    // SPEC-0275 v24 AK-48, v25 AK-49: the rows' icons in the semantic tree — the package in the
+    // source folder, the module file, the source folder, a plain folder and the module folder.
+    bench.update(cx, |b, cx| {
+        assert!(b.reveal_in_tree(&root.join("code/shop/Cart.java"), cx));
+    });
+    cx.run_until_parked();
+    let shop = row_icons(cx, "shop");
+    assert!(!shop.is_empty(), "the package row is drawn");
+    assert!(shop.iter().all(|k| k == "nodes/package"), "{shop:?}");
+    assert_eq!(row_icons(cx, "app.iml"), ["fileTypes/ideaModule"]);
+    assert_eq!(row_icons(cx, "library"), ["nodes/module"]);
+    assert_eq!(row_icons(cx, "code"), ["ferris-idea/sourceRoot"]);
+    assert_eq!(row_icons(cx, "gen"), ["nodes/folder"]);
+    // A Java file shows its primary declaration's icon (SPEC-0131 v3 behaviour 7).
+    assert_eq!(row_icons(cx, "Cart.java"), ["nodes/class"]);
 
     // The module file changes on disk; Synchronize (⌥⌘Y) marks the new source folder.
     std::fs::write(

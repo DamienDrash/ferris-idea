@@ -6,7 +6,7 @@ here was written by the reference IDE.
 
 - `ipr-basic`: the file-based format: an `.ipr` with two modules, a project library, a version
   control mapping and a shared run configuration, its `.iws` with a personal one.
-- `run-configs`: the folder format with a run configuration of every type IDECraft translates,
+- `run-configs`: the folder format with a run configuration of every type Ferris IDEA translates,
   some it does not, facets, and a `workspace.xml` whose only used part is `RunManager`.
 
 Nothing in them is run by the tests; `grd/gradlew` is a stand-in.

@@ -6,13 +6,14 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
+use ferris_idea_workbench::WorkbenchView;
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_workbench::WorkbenchView;
 
 type Bench = Entity<WorkbenchView>;
 
 fn workspace(tag: &str, files: &[(&str, &str)]) -> PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-twelfth-{tag}-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-twelfth-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     for (name, text) in files {
         let path = root.join(name);

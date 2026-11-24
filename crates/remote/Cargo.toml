@@ -1,5 +1,5 @@
 [package]
-name = "idecraft-remote"
+name = "ferris-idea-remote"
 description = "Remote hosts over the system ssh: files, commands, a local mirror for editing"
 version.workspace = true
 edition.workspace = true
@@ -9,20 +9,35 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
-idecraft-core.workspace = true
-idecraft-pairing.workspace = true
-idecraft-debugger.workspace = true
-idecraft-session.workspace = true
+ferris-idea-core.workspace = true
+ferris-idea-pairing.workspace = true
+ferris-idea-debugger.workspace = true
+ferris-idea-session.workspace = true
 serde.workspace = true
 sha2 = "0.10"
+# Host keys of room links (SPEC-0323 v7): OpenSSH fingerprints and hashed known_hosts entries.
+base64 = "0.22"
+hmac = "0.12"
+sha1 = "0.10"
 serde_json = "1"
 thiserror.workspace = true
+# The in-process SSH server of `testing::TestHost` (feature `test-host`): only test builds turn it
+# on, through the dev-dependencies of the crates that use the test host; never in the product.
+russh = { version = "0.65", default-features = false, features = ["ring"], optional = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "net", "process", "io-util", "sync", "time", "macros"], optional = true }
+portable-pty = { version = "0.9", optional = true }
+
+[features]
+# An SSH server inside the test process for `testing::TestHost`, instead of the system `sshd`.
+test-host = ["dep:russh", "dep:tokio", "dep:portable-pty"]
 
 [dev-dependencies]
-idecraft-host.workspace = true
+# Its own tests use the in-process test host.
+ferris-idea-remote = { path = ".", features = ["test-host"] }
+ferris-idea-host.workspace = true
 tempfile = "3"
-idecraft-languages.workspace = true
-# The CPU time of the typing thread (SPEC-0317 v7 AK-8).
+ferris-idea-languages.workspace = true
+# The CPU time of the typing thread (SPEC-0317 v7 AK-10).
 nix = { version = "0.28", default-features = false, features = ["time"] }
 
 [lints]

@@ -8,7 +8,7 @@ use std::io::{Read, Write};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 
-use idecraft_session::{Backend, Call, ErrorCode, Right, RpcError, SessionHandle, StreamIn};
+use ferris_idea_session::{Backend, Call, ErrorCode, Right, RpcError, SessionHandle, StreamIn};
 use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system};
 use serde_json::{Value, json};
 
@@ -143,7 +143,7 @@ pub fn bind(backend: &Backend, options: &HostOptions) {
         true,
         move |call| {
             let root = call.root.clone();
-            let cwd = idecraft_session::paths::check_relative(
+            let cwd = ferris_idea_session::paths::check_relative(
                 call.params["cwd"].as_str().unwrap_or("."),
             )?;
             let dir = crate::resolve(&root, &cwd)?;

@@ -25,8 +25,8 @@
 | 2 | Verified parity | ≥ 50 % of the weight at stage 4 | 73.1 % (128 of 175) | **met, with a named limit** (same ratings; without them 52.6 %) |
 | 3 | Tests and CI | workspace tests and window self-test pass on macOS and Linux; 20 consecutive CI runs on `main` without a flaky failure | Linux workspace at `c92f957c`: 3703 passed / 0 failed / 32 skipped, 42 early returns; macOS workspace on `main` at `df649abc` (2026-11-16 03:21–03:58 UTC): **passed**, with every headless budget; window self-test macOS 1060/0 (`fdeeb75c`), Linux 1067/0 (`e12d45ea`); series of full green `main` runs **20 of 20** (2026-11-15 22:54:24 UTC) | **met, with a named limit** (the window self-test ran once per system, not on the current `main`) |
 | 4 | Performance | typing p95 < 16 ms in a 100 000-line file; cold start and idle memory at or below the reference | from the macOS window run of `fdeeb75c`: typing p95 1.73 ms; start to project window 474 ms; 151 MiB after 10 min idle, growth 0 MiB | **met, with a named limit** (not measured again on `c92f957c`; a true cold start after `purge` was never measured) |
-| 5 | Stability | no open blocker or escalation; no known data-loss bug | blockers: none; escalations: none; open questions 9, 33, 37, 38, 41, 42, 43, none a blocker; data-loss bugs: 9 found, 9 fixed, 0 known open | **met, with a named limit** (question 33 is an unexplained window defect; the hand test of #708 is open) |
-| 6 | Architecture readiness | A1–A3 decided; A2 implemented | A1 decided (ADR-0012 accepted 2026-11-14); A2: of 86 tools that change files, 28 write through the open buffer, 13 refuse a file with unsaved changes, 45 write IDECraft's own or new files to the disk; A3: 316 tools, every changing one checks a right | **met, with named limits** (what still writes to the disk, section 6) |
+| 5 | Stability | no open blocker or escalation; no known data-loss bug | blockers: none; escalations: none; open questions 9, 33, 37, 38, 41, 42, 43, none a blocker; data-loss bugs: 9 found, 9 fixed, 0 known open | **met, with a named limit** (question 33 is an unexplained window defect; the hand test of #708 passed on 2026-11-18) |
+| 6 | Architecture readiness | A1–A3 decided; A2 implemented | A1 decided (ADR-0012 accepted 2026-11-14); A2: of 86 tools that change files, 28 write through the open buffer, 13 refuse a file with unsaved changes, 45 write Ferris IDEA's own or new files to the disk; A3: 316 tools, every changing one checks a right | **met, with named limits** (what still writes to the disk, section 6) |
 | 7 | Release | explicit go of the Project Owner (GO-5) | conditional go in the owner's words of 2026-11-05 and 2026-11-14, read by the coordinator | **owner's decision** (effective, in the coordinator's reading, only once 1–6 are met) |
 
 Since 2026-11-16, criteria 1–6 are met, each with the named limits in its row. Criterion 7 is the owner's
@@ -116,7 +116,7 @@ with expectations older than the reference schema, fixed by #833).
 - **Last run on `main`:** the scheduled run of the CI workflow on the Mac's own runner
   (`scripts/ci-local.sh`: fmt, clippy, `cargo test --workspace` with the local reference databases
   running), GitHub run `43705598115`, `main` at `6c7e22a7` (after #794), 2026-11-15 10:45–10:59 UTC:
-  **failed**. `cargo test` stopped at the first failing test program, `idecraft-database --test it`:
+  **failed**. `cargo test` stopped at the first failing test program, `ferris-idea-database --test it`:
   944 tests had passed, 2 failed, 1 ignored; the rest of the workspace did not run.
   - `introspect::mysql_reference_schema` (`crates/database/tests/it/introspect.rs:144`) expects no
     foreign keys on MySQL's `stock` table (its comment: MySQL ignores the column form of `REFERENCES`).
@@ -129,7 +129,7 @@ with expectations older than the reference schema, fixed by #833).
     checked.
   - **Class:** test expectations older than the reference schema; not flaky, no product defect found.
     Linux cannot see it: the server CI has no MySQL, so both tests return early there.
-  - **Fix (after this measurement):** #833 updates both tests to the reference schema and makes the shared-server check of `introspect` ignore other tests' scratch tables (a flaky `mariadb_reference_schema`, 1 of 4 full runs, found while checking); `idecraft-database --test it` 104/104 in five full runs on the Mac. Criterion 3 still needs a green scheduled macOS run after #833.
+  - **Fix (after this measurement):** #833 updates both tests to the reference schema and makes the shared-server check of `introspect` ignore other tests' scratch tables (a flaky `mariadb_reference_schema`, 1 of 4 full runs, found while checking); `ferris-idea-database --test it` 104/104 in five full runs on the Mac. Criterion 3 still needs a green scheduled macOS run after #833.
 - **Earlier scheduled runs on `main`:** 2026-11-14 10:16 UTC at `1f159057` failed
   (`remote_project::a_folder_on_an_ssh_host_opens_survives_breaks_and_stays_private` timed out, the open
   flaky test of the earlier report; fixed by #761 the same evening); 2026-11-13 10:52 UTC at `ae3b2903`
@@ -158,12 +158,12 @@ with expectations older than the reference schema, fixed by #833).
 - **Verdict 3b: met** (0 failed), with the named limit that Linux checks less than the Mac (32 skipped, 42
   early returns; the earlier report had 5 skipped and an unknown number of early returns).
 
-### 3c. Window self-test `idecraft ui --selftest`
+### 3c. Window self-test `ferris-idea ui --selftest`
 
 - **Not run in this measurement.**
 - **macOS:** #791, `main` at `fdeeb75c` (after #776 and #785), 2026-11-15 09:22–09:42 CET, release bundle,
   nobody else on the screen: `{"checks":1060,"failed":[],"skipped":[]}`, 120 groups, all 8 window budgets
-  `ok`. Not covered: run-config-folders and run-config-templates (need `IDECRAFT_SELFTEST_DRIVER=1`), the
+  `ok`. Not covered: run-config-folders and run-config-templates (need `FERRIS_IDEA_SELFTEST_DRIVER=1`), the
   Ruby server steps (no Ruby language server on the Mac).
 - **Linux:** #776, branch `linux-selftest-mouse` at `e12d45ea` (merged as `9254c08c`), 2026-11-15
   02:31–02:37 CET in a Lima VM, X11 on Xvfb: `{"checks":1067,"failed":[],"skipped":[]}`
@@ -249,7 +249,7 @@ with expectations older than the reference schema, fixed by #833).
   - **38** (history of the menu-bar branch): settled by the fresh public history while the working
     repository stays private.
   - **41** (passwords of the reference IDE's data sources): limits database comparisons next to the
-    reference (OBS-0051 L6 stays "to be clarified"); needs the owner, not a defect of IDECraft.
+    reference (OBS-0051 L6 stays "to be clarified"); needs the owner, not a defect of Ferris IDEA.
   - **42** (Islands Light in the reference): F-085 stays at stage 3 with the named gap.
   - **43** (brand licence before publication): keeps the export dry run for GO-4 red; it concerns the
     publication, not QG-1.
@@ -264,7 +264,7 @@ with expectations older than the reference schema, fixed by #833).
 | Merge conflicts: cases where resolving lost content (OBS-0038: binary file, deleted side) | #628 | fixed |
 | A wrong-typed value in `settings.toml` reset all settings | #656 | fixed |
 | A file in a second editor group with unsaved changes could be renamed or moved away from its tab | #689 | fixed |
-| The close button of a project window closed at once, unsaved changes were lost | #708 | fixed (hand test SPEC-0094 AK-9 open) |
+| The close button of a project window closed at once, unsaved changes were lost | #708 | fixed (hand test SPEC-0094 AK-9 passed in the window on 2026-11-18: the close button asks “Save changes before closing …?” with the file name; Cancel keeps the window, Save All and Close writes the file and closes; then the folder chooser of behaviour 9 opens) |
 | Saving a non-UTF-8 file could write characters its encoding cannot hold | #710 | fixed |
 | Renaming a database object also changed `.sql` files bound to another connection (OBS-0051 L1) | #775 | fixed |
 | The migration script of Compare Schemas ran on the connection selected in the Database window, often the source, instead of the target | #802 | fixed |
@@ -281,12 +281,12 @@ with expectations older than the reference schema, fixed by #833).
 ### A1 — domain operations outside MCP and views
 
 - **Decided.** ADR-0012: "Status: accepted · 2026-11-14 · decided by the coordinator under the Project
-  Owner's general authority of 2026-11-13"; rules 1–4 apply now, rule 5 (capability layer, `idecraft serve`
+  Owner's general authority of 2026-11-13"; rules 1–4 apply now, rule 5 (capability layer, `ferris-idea serve`
   as the core for all callers) stays planned for M10. The ADR index has the row as accepted on 2026-11-14;
   merged with #750 (`44949feb`, 2026-11-14 16:03 CET); READINESS A1 says so.
 - **Applied in new code:** rule 2 in `crates/session/src/rpc.rs` (stable error codes) and
   `crates/session/src/transport.rs` (cancellation handle); rule 4 is SPEC-0220; file operations of the MCP
-  tools live in `idecraft_core::file_ops`, refactoring plans in `idecraft_languages`.
+  tools live in `ferris_idea_core::file_ops`, refactoring plans in `ferris_idea_languages`.
 - **Named limits:** no test enforces rules 1–3; many tool bodies still live in `crates/mcp/src/lib.rs`
   (rule 1 lets them move when they are touched). The decision is recorded in the ADR and in #750, not as an
   entry under PO-STATUS "Freigaben und Entscheidungen".
@@ -321,7 +321,7 @@ not:
 - **Own files (45)** — behaviour 11: they **write the disk**. An editor that shows such a file reloads it
   when it was saved and refuses its next save once when it has unsaved changes, so nothing is lost
   silently, but the agent's write does not reach the buffer.
-  - IDECraft's own data and settings in the project (`.idecraft/…`, `.idea/…` profiles and dictionaries):
+  - Ferris IDEA's own data and settings in the project (`.ferris-idea/…`, `.idea/…` profiles and dictionaries):
     `build_task`, `build_tool_links`, `build_tool_options`, `changelists`, `debug_renderers`, `file_type`,
     `git_branch_favorite`, `highlighting_level`, `import_file`, `inspection_profile`,
     `project_dictionary`, `python_select_interpreter`, `remove_bookmark`, `set_bookmark`,
@@ -335,7 +335,7 @@ not:
     `room_undo`, `room_version` (10). `remote_write` writes a file's content on the host with a stamp check
     against changes on the disk; it does not look at a remote project's open documents
     (`remote_documents`).
-  - The window's own steps and IDECraft's own record: `close_project`, `quit_ide`, `file_operation_undo`,
+  - The window's own steps and Ferris IDEA's own record: `close_project`, `quit_ide`, `file_operation_undo`,
     `local_history` (4).
 - **Tools without `files` (230):** for the 143 that only read, the effects ratchet fails on a direct write
   call in their code (it passed). For the 87 that change something else, the same scan of the MCP sources,
@@ -358,7 +358,7 @@ not:
 
 - **Met.** `crates/mcp/src/effects.rs` names the change, dry run and checks of all 316 tools;
   `effects::every_tool_with_a_changing_effect_checks_a_right` passed in the server CI run of `c92f957c`.
-  Two named exceptions without a right: `ui_driver_stop` (emergency stop) and `local_history` (IDECraft's
+  Two named exceptions without a right: `ui_driver_stop` (emergency stop) and `local_history` (Ferris IDEA's
   own record). Known limits that need the Project Owner: SPEC-0053 v8 behaviour 14. The ratchet's scan for
   write calls covers only tools classified as reading.
 

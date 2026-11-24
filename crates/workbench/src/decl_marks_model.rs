@@ -1,6 +1,6 @@
 //! What the gutter marks of declarations say (`SPEC-0320` behaviours 8 and 9).
 
-use idecraft_languages::ts_structure::{DeclarationMark, MarkKind, MarkTarget};
+use ferris_idea_languages::ts_structure::{DeclarationMark, MarkKind, MarkTarget};
 
 /// The mark of one line.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -210,7 +210,7 @@ mod tests {
     }
 
     use super::*;
-    use idecraft_languages::insight::{Location, Range};
+    use ferris_idea_languages::insight::{Location, Range};
     use std::path::PathBuf;
 
     fn target(name: &str) -> MarkTarget {
@@ -317,7 +317,7 @@ mod tests {
                 name: target.into(),
                 location: Location {
                     path: "/p/A.java".into(),
-                    range: idecraft_languages::insight::Range {
+                    range: ferris_idea_languages::insight::Range {
                         start_line: 1,
                         start_character: 0,
                         end_line: 1,

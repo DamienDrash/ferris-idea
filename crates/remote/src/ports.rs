@@ -6,8 +6,8 @@
 use std::sync::Mutex;
 use std::time::Duration;
 
-use idecraft_session::forward::LocalForward;
-use idecraft_session::{Connection, ErrorCode, RpcError};
+use ferris_idea_session::forward::LocalForward;
+use ferris_idea_session::{Connection, ErrorCode, RpcError};
 use serde_json::{Value, json};
 
 struct Entry {

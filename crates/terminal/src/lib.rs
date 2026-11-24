@@ -1,4 +1,4 @@
-//! Integrated terminal for IDECraft.
+//! Integrated terminal for Ferris IDEA.
 //!
 //! Implements `SPEC-0038`: a program in a pseudo terminal (`portable-pty`)
 //! and a screen model fed by the `vte` escape-sequence parser; `SPEC-0062`

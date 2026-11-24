@@ -1,6 +1,6 @@
 # SPEC-0011: SQLite session — open and run scripts
 
-- **Version:** 3 · **Date:** 2026-11-17 (v3: SQLite's own words in completion, behaviour 9, AK-10 —
+- **Version:** 4 · **Date:** 2026-11-17 (v4: the explicit action of behaviour 1 is Create File, SPEC-0108 v13 behaviour 23 — OBS-0083 L8); 2026-11-17 (v3: SQLite's own words in completion, behaviour 9, AK-10 —
   OBS-0083 L3); 2026-11-13 (v2: the file is read when it is opened, errors say what to do,
   read-only at the level of SQLite, a WAL database where nothing can be written; v1 2026-10-31)
 - **Sources:** STD (SQLite C interface: open flags, column count, `changes()`, storage classes, extended
@@ -13,7 +13,9 @@ PostgreSQL and MySQL sessions.
 
 ## Behaviour
 1. The session opens the profile's file. A file that does not exist is refused with an error naming the
-   path; nothing is created. Creating a new database is a separate, explicit action. [GEN]
+   path; nothing is created. Creating a new database is a separate, explicit action. [GEN] **v4:** that
+   action is Create File in the connection dialog and `create_file` of `save_connection` (SPEC-0108 v13
+   behaviour 23), for SQLite and DuckDB alike.
 2. A read-only profile opens the file read-only; changes fail. [STD]
 3. Scripts are split with SPEC-0005 (SQLite rules). A statement with result columns yields a result set,
    otherwise the number of changed rows. [STD]
@@ -68,7 +70,7 @@ Tests build a temporary database from the reference seed files (`tests/reference
   on SQLite, `pragma` not on MySQL, `top` not on SQLite.
 
 ## Out of scope
-Creating databases, attaching further files (a startup script may `ATTACH`), WAL configuration,
+Creating databases other than the empty file of behaviour 1 (v4), attaching further files (a startup script may `ATTACH`), WAL configuration,
 extensions, encryption, a choice of the time SQLite waits for a lock (five seconds).
 
 ## Known deviations from the reference

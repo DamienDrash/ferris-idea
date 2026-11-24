@@ -689,13 +689,13 @@ pub fn python_environments(
                     python,
                     "-m".into(),
                     "pytest".into(),
-                    "--junitxml=.idecraft/pytest.xml".into(),
+                    "--junitxml=.ferris-idea/pytest.xml".into(),
                 ],
                 cwd: None,
                 env: BTreeMap::new(),
                 kind: RunKind::Test,
                 report: Some("junit".into()),
-                report_file: Some(".idecraft/pytest.xml".into()),
+                report_file: Some(".ferris-idea/pytest.xml".into()),
                 before: Vec::new(),
                 timeout: None,
                 url: None,
@@ -703,6 +703,7 @@ pub fn python_environments(
                 allow_multiple: false,
                 before_launch: Vec::new(),
                 verbatim: false,
+                http: None,
             }
         } else {
             RunConfig {
@@ -720,6 +721,7 @@ pub fn python_environments(
                 allow_multiple: false,
                 before_launch: Vec::new(),
                 verbatim: false,
+                http: None,
             }
         }
     });

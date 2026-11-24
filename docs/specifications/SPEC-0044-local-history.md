@@ -1,7 +1,7 @@
 # SPEC-0044: Local history
 
 - **Version:** 2 · **Date:** 2026-11-05 (v2: bounded size and stable revision ids, behaviours 8 and 9;
-  found by the M8.2 soak, where an unbounded log made `idecraft mcp` grow from 89 to 309 MiB in two hours)
+  found by the M8.2 soak, where an unbounded log made `ferris-idea mcp` grow from 89 to 309 MiB in two hours)
 - **Sources:** GEN (IDEs keep earlier versions of files independent of version control, with labels, and
   let the user view and restore them; F-019), DOC (the reference keeps local history for a limited number
   of working days in its caches), STD (SHA-256 content addressing, JSON Lines), SPEC-0001 (workspace),
@@ -12,7 +12,7 @@
 Get back any earlier state of a file — also one never committed — without depending on Git.
 
 ## Behaviour
-1. The history lives in the workspace at `.idecraft/history/` (not in an IDE cache): file contents are
+1. The history lives in the workspace at `.ferris-idea/history/` (not in an IDE cache): file contents are
    stored once per distinct content under their SHA-256 (`objects/`), revisions are appended to
    `revisions.jsonl` (path, time, content hash or deletion, label, kind). [STD, improvement IMP-0021]
 2. Recording a file stores a revision only if its content differs from the file's latest revision; a
@@ -54,7 +54,7 @@ Get back any earlier state of a file — also one never committed — without de
   memory, keeps the newest ones, keeps other files' entries, and removes unreferenced contents; ids
   listed before a compaction still return the same content afterwards, removed ids return an error.
 - **AK-7** (v2) The soak test (M8.2, `docs/testing/HARDENING.md`) keeps the resident memory of
-  `idecraft mcp` within its growth budget for at least 20 minutes.
+  `ferris-idea mcp` within its growth budget for at least 20 minutes.
 
 ## Out of scope
 The history UI with diff view (M3.7), recording directory moves as such, history of non-workspace files,

@@ -9,14 +9,14 @@
 !docs/**/diagrams/*.png
 # Brand assets (own work, see docs/design/BRAND_GUIDELINES.md)
 !docs/design/assets/*.png
-# Screenshots of IDECraft itself for the README (docs/design/DESIGN_SYSTEM.md §5): our own
+# Screenshots of Ferris IDEA itself for the README (docs/design/DESIGN_SYSTEM.md §5): our own
 # application on demo projects, never the reference
 !docs/images/*.png
 
 # IDE metadata the reference IDE writes into our test projects
 /tests/reference-projects/*/.idea/
 
-# Inputs the stable fuzz driver saved (scripts/fuzz.sh, idecraft-fuzz run)
+# Inputs the stable fuzz driver saved (scripts/fuzz.sh, ferris-idea-fuzz run)
 /fuzz-crashes/
 
 # Mobile build output (scripts/build-mobile.sh)

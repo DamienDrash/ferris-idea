@@ -8,7 +8,7 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use idecraft_session::ErrorCode;
+use ferris_idea_session::ErrorCode;
 use serde_json::{Value, json};
 
 use crate::live::{ConnState, LiveProject};
@@ -308,7 +308,7 @@ impl Worker {
 }
 
 /// The exit code of `term` as the host lists it.
-fn exit_code(c: &idecraft_session::Connection, term: &str) -> Option<i32> {
+fn exit_code(c: &ferris_idea_session::Connection, term: &str) -> Option<i32> {
     let list = c.call("term.list", json!({}), LIMIT).ok()?;
     list["terminals"]
         .as_array()?

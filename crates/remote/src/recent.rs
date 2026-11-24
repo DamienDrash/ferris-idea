@@ -63,14 +63,22 @@ pub fn remember_remote(file: &Path, host: &str, folder: &str) -> std::io::Result
     if let Some(dir) = file.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    #[cfg(unix)]
-    {
-        idecraft_session::reattach::write_private(file, &bytes)
+    // Off Unix `write_private` refuses (`SPEC-0321` v6 behaviour 8a).
+    ferris_idea_session::reattach::write_private(file, &bytes)
+}
+
+/// Takes `host` and `folder` out of the list in `file` (written privately again); whether the
+/// entry was there. Only the list changes, never the host (`SPEC-0355` v3 behaviour 12f).
+pub fn forget_remote(file: &Path, host: &str, folder: &str) -> std::io::Result<bool> {
+    let mut list = load_recent_remote(file);
+    let before = list.len();
+    list.retain(|r| !(r.host == host && r.folder == folder));
+    if list.len() == before {
+        return Ok(false);
     }
-    #[cfg(not(unix))]
-    {
-        std::fs::write(file, bytes)
-    }
+    let bytes = serde_json::to_vec_pretty(&list).map_err(std::io::Error::other)?;
+    ferris_idea_session::reattach::write_private(file, &bytes)?;
+    Ok(true)
 }
 
 #[cfg(test)]
@@ -80,7 +88,7 @@ mod tests {
     #[test]
     fn newest_first_without_duplicates_and_private() {
         let dir =
-            std::env::temp_dir().join(format!("idecraft-recent-remote-{}", std::process::id()));
+            std::env::temp_dir().join(format!("ferris-idea-recent-remote-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let file = recent_remote_file(&dir);
         assert!(load_recent_remote(&file).is_empty());
@@ -112,6 +120,48 @@ mod tests {
         assert_eq!(keys.into_iter().collect::<Vec<_>>(), ["folder", "host"]);
         std::fs::write(&file, "not json").unwrap();
         assert!(load_recent_remote(&file).is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// SPEC-0355 v3 AK-8: one entry goes, the others stay in order, the file stays private.
+    #[test]
+    fn forget_removes_one_entry_and_stays_private() {
+        let dir =
+            std::env::temp_dir().join(format!("ferris-idea-forget-remote-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let file = recent_remote_file(&dir);
+        assert!(
+            !forget_remote(&file, "build", "/srv/app").unwrap(),
+            "no file"
+        );
+        remember_remote(&file, "build", "/srv/app").unwrap();
+        remember_remote(&file, "me@box:2222", "/home/me/site").unwrap();
+        remember_remote(&file, "build", "/srv/other").unwrap();
+        assert!(forget_remote(&file, "build", "/srv/app").unwrap());
+        assert!(
+            !forget_remote(&file, "build", "/srv/app").unwrap(),
+            "gone already"
+        );
+        assert!(
+            !forget_remote(&file, "box", "/home/me/site").unwrap(),
+            "host as written"
+        );
+        let left: Vec<(String, String)> = load_recent_remote(&file)
+            .into_iter()
+            .map(|r| (r.host, r.folder))
+            .collect();
+        assert_eq!(
+            left,
+            [
+                ("build".to_owned(), "/srv/other".to_owned()),
+                ("me@box:2222".to_owned(), "/home/me/site".to_owned())
+            ]
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            assert_eq!(std::fs::metadata(&file).unwrap().mode() & 0o777, 0o600);
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

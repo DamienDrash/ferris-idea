@@ -26,7 +26,7 @@ Stop where an exception is thrown or a method is entered, without hunting for th
    "Exception types" limits them (empty: any). "+ Method Breakpoint" (⌘N) adds a row with the
    fields "Method" and "Method condition"; a method breakpoint without a name is dropped.
    Remove clears the exception row or removes the method breakpoint. Changes are saved at
-   once in `.idecraft/special-breakpoints.json`. [GEN]
+   once in `.ferris-idea/special-breakpoints.json`. [GEN]
 2. **Mapping:** "caught" means every thrown exception and uses the adapter's filter for that
    (`caught`, `raised`, `all`, `cpp_throw`, `objc_throw`, `swift_throw`); "uncaught" uses
    `uncaught`, `userUnhandled` or `unhandled`. If a "throw" filter is on, uncaught ones stop
@@ -44,7 +44,7 @@ Stop where an exception is thrown or a method is entered, without hunting for th
    D30: the method breakpoint never stopped in Java). [STD, OSS]
 4. **Applying:** sent before the program runs and again whenever the dialog changes them while
    a session runs. What the adapter cannot do (no such filter, no function breakpoints, no
-   type limit) is said in the debug output as "[IDECraft] the debug adapter …"; the session
+   type limit) is said in the debug output as "[Ferris IDEA] the debug adapter …"; the session
    and its line breakpoints go on (IMP-0022: never silently ignored). [STD]
 5. **Stop on an exception:** the reason reads "exception: <type or description>" from
    `exceptionInfo` where the adapter answers it. [STD] **(v4)** Also in the state the MCP tools
@@ -91,8 +91,8 @@ Stop where an exception is thrown or a method is entered, without hunting for th
     line breakpoints. The dialog lists it with the other method breakpoints. [OBS, GEN]
 13. **Method entry and exit (v6, OBS-0054 B2):** a method breakpoint watches the entry (on by
     default), the exit or both; at least one stays on. Entry is the adapter's function
-    breakpoint. Exit is IDECraft's own, since the protocol only stops on entry: at the entry hit
-    of a breakpoint that watches only the exit, IDECraft steps out of the method and reports the
+    breakpoint. Exit is Ferris IDEA's own, since the protocol only stops on entry: at the entry hit
+    of a breakpoint that watches only the exit, Ferris IDEA steps out of the method and reports the
     stop after it returned with the reason `method exit`; with both, the program stops at entry,
     and the next Resume of that thread first steps out so it stops again after the return
     (`method exit`), then Resume goes on as usual. Saved as `entry` (only when off) and `exit`.
@@ -100,7 +100,7 @@ Stop where an exception is thrown or a method is entered, without hunting for th
 14. **Switched off (v6, OBS-0054 B3):** a method breakpoint can be switched off without removing it
     (`disabled`); a switched-off one is not sent to the adapter. [GEN]
 15. **Exception breakpoints per language (v6, OBS-0054 B5):** the dialog groups the exception
-    breakpoints by the languages IDECraft debugs — Java (also Kotlin), Python, JavaScript (also
+    breakpoints by the languages Ferris IDEA debugs — Java (also Kotlin), Python, JavaScript (also
     TypeScript), Native (C, C++, Rust, Swift) and Go — each group a heading with one row "Any
     exception" carrying caught, uncaught, exception types and exception classes of that language.
     A session uses the row of its adapter's language (java-debug and kotlin-debug-adapter: Java;

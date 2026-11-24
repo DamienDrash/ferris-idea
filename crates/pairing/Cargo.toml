@@ -1,6 +1,6 @@
 [package]
-name = "idecraft-pairing"
-description = "The paired channel of IDECraft: hybrid Noise handshake with ML-KEM-1024, encrypted channel, key store, pairing and the listener of `idecraft serve --pair` (SPEC-0321)"
+name = "ferris-idea-pairing"
+description = "The paired channel of Ferris IDEA: hybrid Noise handshake with ML-KEM-1024, encrypted channel, key store, pairing and the listener of `ferris-idea serve --pair` (SPEC-0321)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,7 +11,7 @@ publish.workspace = true
 [dependencies]
 getrandom = "0.3"
 hkdf = "0.12"
-idecraft-session.workspace = true
+ferris-idea-session.workspace = true
 keyring.workspace = true
 # Pre-release, so pinned exactly (ADR-0025 section 10).
 libcrux-ml-kem = { version = "=0.0.11", default-features = false, features = ["mlkem1024"] }
@@ -36,6 +36,7 @@ oo7.workspace = true
 
 [dev-dependencies]
 curve25519-dalek = "4"
+ferris-idea-core.workspace = true
 ml-kem = { version = "0.3", features = ["getrandom"] }
 tempfile = "3"
 

@@ -1,5 +1,5 @@
 //! Chrome's profile folder for debugging pages (`SPEC-0133` v3 behaviour 2): one per project, in
-//! IDECraft's user cache folder with mode 0700, never inside the project, and used by one browser
+//! Ferris IDEA's user cache folder with mode 0700, never inside the project, and used by one browser
 //! at a time.
 
 use std::collections::HashSet;
@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use sha2::{Digest, Sha256};
 
 /// Where an earlier version kept the profile, relative to the project.
-pub const OLD_PROFILE: &str = ".idecraft/browser-profile";
+pub const OLD_PROFILE: &str = ".ferris-idea/browser-profile";
 
 /// The profile folder of a project's page sessions.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -68,10 +68,13 @@ impl BrowserProfile {
         }
     }
 
-    /// The profile of the project at `project` in IDECraft's user cache folder; `None` without a
+    /// The profile of the project at `project` in Ferris IDEA's user cache folder; `None` without a
     /// home folder.
     pub fn for_project(project: &Path) -> Option<Self> {
-        Some(Self::in_cache(&idecraft_core::user_cache_dir()?, project))
+        Some(Self::in_cache(
+            &ferris_idea_core::user_cache_dir()?,
+            project,
+        ))
     }
 
     /// Creates the folder (and `browser-profiles` above it) with mode 0700, moving a profile an
@@ -91,7 +94,7 @@ impl BrowserProfile {
         Ok(old)
     }
 
-    /// Moves `<project>/.idecraft/browser-profile` to the new folder when the new one does not
+    /// Moves `<project>/.ferris-idea/browser-profile` to the new folder when the new one does not
     /// exist yet, the old one is a real folder and no browser holds it; otherwise leaves it.
     fn adopt_old(&self) -> OldProfile {
         let old = self.project.join(OLD_PROFILE);
@@ -118,11 +121,11 @@ impl BrowserProfile {
         match old {
             OldProfile::None => None,
             OldProfile::Moved => Some(format!(
-                "[IDECraft] The browser profile of earlier debug sessions was moved out of the project from {OLD_PROFILE} to {}\n",
+                "[Ferris IDEA] The browser profile of earlier debug sessions was moved out of the project from {OLD_PROFILE} to {}\n",
                 self.folder.display()
             )),
             OldProfile::Kept(why) => Some(format!(
-                "[IDECraft] {OLD_PROFILE} still holds the browser profile of earlier debug sessions (cookies, logins, cache) and is not ignored by Git; IDECraft no longer uses it ({why}). Delete it or move it out of the project.\n"
+                "[Ferris IDEA] {OLD_PROFILE} still holds the browser profile of earlier debug sessions (cookies, logins, cache) and is not ignored by Git; Ferris IDEA no longer uses it ({why}). Delete it or move it out of the project.\n"
             )),
         }
     }
@@ -195,9 +198,14 @@ fn tighten(path: &Path, meta: &std::fs::Metadata) -> Result<(), String> {
     Ok(())
 }
 
+/// Without POSIX modes the folder cannot be made private yet, so it is refused (`SPEC-0321` v6
+/// behaviour 8a).
 #[cfg(not(unix))]
-fn tighten(_: &Path, _: &std::fs::Metadata) -> Result<(), String> {
-    Ok(())
+fn tighten(path: &Path, _: &std::fs::Metadata) -> Result<(), String> {
+    Err(format!(
+        "{}: a private debug profile is not supported on this platform yet",
+        path.display()
+    ))
 }
 
 static IN_USE: Mutex<Option<HashSet<PathBuf>>> = Mutex::new(None);
@@ -252,7 +260,7 @@ mod tests {
 
     fn scratch(name: &str) -> PathBuf {
         let dir =
-            std::env::temp_dir().join(format!("idecraft-profile-{name}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("ferris-idea-profile-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::canonicalize(&dir).unwrap()
@@ -357,7 +365,7 @@ mod tests {
 
     #[test]
     fn a_profile_is_used_by_one_session_at_a_time() {
-        let folder = std::env::temp_dir().join(format!("idecraft-lock-{}", std::process::id()));
+        let folder = std::env::temp_dir().join(format!("ferris-idea-lock-{}", std::process::id()));
         let first = ProfileLock::acquire(&folder, Duration::ZERO).unwrap();
         assert!(ProfileLock::acquire(&folder, Duration::from_millis(50)).is_none());
         let waiter = {

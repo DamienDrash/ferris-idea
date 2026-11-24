@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use idecraft_core::shell_env::{Request, Resolution, Source, find_in, resolve};
+use ferris_idea_core::shell_env::{Request, Resolution, Source, find_in, resolve};
 
 /// One stub at a time: a script being written while another test starts a program cannot be
 /// started on Linux ("text file busy").
@@ -22,10 +22,10 @@ struct Stub {
 impl Stub {
     /// A folder with `home/`, `tools/mytool` and the script `body` as the shell.
     fn new(name: &str, body: &str) -> Self {
-        let dir = std::env::temp_dir()
-            .canonicalize()
-            .unwrap()
-            .join(format!("idecraft-shellenv-{name}-{}", std::process::id()));
+        let dir = std::env::temp_dir().canonicalize().unwrap().join(format!(
+            "ferris-idea-shellenv-{name}-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("home")).unwrap();
         std::fs::create_dir_all(dir.join("tools")).unwrap();
@@ -93,7 +93,7 @@ fn gone(pid: &str) -> bool {
 const ANSWERS: &str = r#"echo "Welcome to the stub shell"
 echo "PATH=/noise"
 echo "$*" > "$0.args"
-echo "$IDECRAFT_RESOLVING_ENVIRONMENT" > "$0.resolving"
+echo "$FERRIS_IDEA_RESOLVING_ENVIRONMENT" > "$0.resolving"
 pwd > "$0.cwd"
 cat > "$0.stdin"
 export PATH="$TOOLS:$PATH"
@@ -127,7 +127,7 @@ fn a_stub_shell_gives_the_path_and_a_tool_on_it_is_found() {
         assert!(
             !name.starts_with("LD_")
                 && !name.starts_with("DYLD_")
-                && !["PWD", "SHLVL", "_", "IDECRAFT_RESOLVING_ENVIRONMENT"].contains(&&*name)
+                && !["PWD", "SHLVL", "_", "FERRIS_IDEA_RESOLVING_ENVIRONMENT"].contains(&&*name)
                 && name != "ONLY_IN_THE_PROCESS"
                 && name != "HOME",
             "{name}"
@@ -137,11 +137,11 @@ fn a_stub_shell_gives_the_path_and_a_tool_on_it_is_found() {
     // it is asked for the environment.
     let args = stub.wrote("args").unwrap();
     assert!(
-        args.starts_with("-l -i -c printf %s __IDECRAFT_ENV_"),
+        args.starts_with("-l -i -c printf %s __FERRIS_IDEA_ENV_"),
         "{args}"
     );
     assert!(
-        args.contains("; /usr/bin/env -0; printf %s __IDECRAFT_ENV_"),
+        args.contains("; /usr/bin/env -0; printf %s __FERRIS_IDEA_ENV_"),
         "{args}"
     );
     assert_eq!(
@@ -237,7 +237,7 @@ fn the_shell_is_not_asked_when_it_is_not_needed() {
     // Started from a shell, switched off, or not a window.
     let mut from_shell = stub.request(&[("SHLVL", "1"), ("TERM", "xterm-256color")], long);
     from_shell.env[0].1 = "/opt/tools/bin:/usr/bin:/bin".into();
-    let off = stub.request(&[("IDECRAFT_SHELL_ENV", "off")], long);
+    let off = stub.request(&[("FERRIS_IDEA_SHELL_ENV", "off")], long);
     let mut no_window = stub.request(&[], long);
     no_window.window = false;
     for request in [from_shell, off, no_window] {
@@ -248,7 +248,7 @@ fn the_shell_is_not_asked_when_it_is_not_needed() {
     }
     assert_eq!(stub.wrote("asked"), None);
     // The switch asks for it without a window.
-    let mut forced = stub.request(&[("IDECRAFT_SHELL_ENV", "force")], long);
+    let mut forced = stub.request(&[("FERRIS_IDEA_SHELL_ENV", "force")], long);
     forced.window = false;
     assert_eq!(resolve(&forced).report.source, Source::Fallback);
     assert_eq!(stub.wrote("asked").as_deref(), Some("asked"));

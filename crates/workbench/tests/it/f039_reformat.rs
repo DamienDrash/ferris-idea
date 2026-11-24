@@ -6,8 +6,8 @@
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_workbench::{EditorView, WorkbenchView};
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_workbench::{EditorView, WorkbenchView};
 
 type Bench = Entity<WorkbenchView>;
 type Editor = Entity<EditorView>;
@@ -15,7 +15,7 @@ type Editor = Entity<EditorView>;
 const CODE: &str = "int a(int x){\nreturn x+1;\n}\nint b(int y){\nreturn y*2;\n}\n";
 
 fn workspace(tag: &str) -> PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-f039-{tag}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-f039-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     std::fs::write(root.join("shop.c"), CODE).unwrap();
@@ -109,7 +109,7 @@ fn clangd() -> bool {
     found
 }
 
-/// `SPEC-0075` v7 AK-8: a selection formatted through clangd stays selected over its text, the
+/// `SPEC-0075` v7 AK-10: a selection formatted through clangd stays selected over its text, the
 /// lines outside it stay, and one ⌘Z gives the text and the selection back. Before v7 the
 /// selection was dropped for a caret at its end.
 #[gpui::test]
@@ -142,7 +142,7 @@ fn a_reformatted_selection_stays_selected(cx: &mut TestAppContext) {
     let _ = std::fs::remove_dir_all(&root);
 }
 
-/// `SPEC-0075` v7 AK-8: formatting the whole file through clangd keeps every caret on its text.
+/// `SPEC-0075` v7 AK-10: formatting the whole file through clangd keeps every caret on its text.
 /// Before v7 only one caret was left.
 #[gpui::test]
 fn every_caret_stays_on_its_text(cx: &mut TestAppContext) {

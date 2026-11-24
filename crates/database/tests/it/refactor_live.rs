@@ -1,12 +1,12 @@
 //! SPEC-0164/AK-4: the statements of renaming views and indexes and of changing a column's type run
-//! on the reference PostgreSQL, MySQL and MariaDB servers (`IDECRAFT_TEST_PG`,
-//! `IDECRAFT_TEST_MYSQL`, `IDECRAFT_TEST_MARIADB`; without them nothing is done), in scratch tables
+//! on the reference PostgreSQL, MySQL and MariaDB servers (`FERRIS_IDEA_TEST_PG`,
+//! `FERRIS_IDEA_TEST_MYSQL`, `FERRIS_IDEA_TEST_MARIADB`; without them nothing is done), in scratch tables
 //! that are dropped afterwards.
 //! SPEC-0019/AK-14 (v5, OBS-0068 L3): renamed WITH queries still run on PostgreSQL.
 
 use crate::common;
 
-use idecraft_database::{
+use ferris_idea_database::{
     ConnectionProfile, OnError, Outcome, Session, change_type_ddl, ddl_in_transaction, introspect,
     rename, rename_index, run_refactoring,
 };
@@ -109,9 +109,9 @@ async fn check(var: &str) {
 
 #[tokio::test]
 async fn postgres_view_index_and_type() {
-    check("IDECRAFT_TEST_PG").await;
+    check("FERRIS_IDEA_TEST_PG").await;
     // Routines: PostgreSQL renames them with ALTER ROUTINE.
-    let Some((s, profile)) = session("IDECRAFT_TEST_PG").await else {
+    let Some((s, profile)) = session("FERRIS_IDEA_TEST_PG").await else {
         return;
     };
     let f = format!("rf_f{}", std::process::id());
@@ -126,7 +126,7 @@ async fn postgres_view_index_and_type() {
         &format!("create function {f}(p int) returns int as $$ select p + 1 $$ language sql"),
     )
     .await;
-    let r = idecraft_database::rename_routine(
+    let r = ferris_idea_database::rename_routine(
         &format!("select {f}(1)"),
         profile.dialect,
         &f,
@@ -144,19 +144,19 @@ async fn postgres_view_index_and_type() {
 
 #[tokio::test]
 async fn mysql_view_index_and_type() {
-    check("IDECRAFT_TEST_MYSQL").await;
+    check("FERRIS_IDEA_TEST_MYSQL").await;
 }
 
 #[tokio::test]
 async fn mariadb_view_index_and_type() {
-    check("IDECRAFT_TEST_MARIADB").await;
+    check("FERRIS_IDEA_TEST_MARIADB").await;
 }
 
 /// SPEC-0164 v5 AK-13 (OBS-0070 V3): after renaming a sequence, the file's `nextval('…')` and
 /// `'…'::regclass` name the new one and run; a literal written with another schema stays.
 #[tokio::test]
 async fn a_renamed_sequence_follows_in_nextval() {
-    let Some((s, profile)) = session("IDECRAFT_TEST_PG").await else {
+    let Some((s, profile)) = session("FERRIS_IDEA_TEST_PG").await else {
         return;
     };
     let q = format!("rf_q{}", std::process::id());
@@ -167,11 +167,11 @@ async fn a_renamed_sequence_follows_in_nextval() {
         )
         .await;
     ok(&s, &format!("create sequence {q}")).await;
-    let home = idecraft_database::current_schema(&s).await.unwrap();
+    let home = ferris_idea_database::current_schema(&s).await.unwrap();
     let script = format!(
         "select nextval('{q}'), currval('{home}.{q}'::regclass), nextval('other_schema.{q}')"
     );
-    let r = idecraft_database::rename_sequence_in(
+    let r = ferris_idea_database::rename_sequence_in(
         &script,
         profile.dialect,
         &q,
@@ -198,7 +198,7 @@ async fn a_renamed_sequence_follows_in_nextval() {
 #[tokio::test]
 async fn a_refused_derived_statement_rolls_everything_back() {
     let tag = std::process::id();
-    let dir = std::env::temp_dir().join(format!("idecraft-rf-tx-{tag}"));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-rf-tx-{tag}"));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let duck = dir.join("tx.duckdb");
@@ -209,9 +209,9 @@ async fn a_refused_derived_statement_rolls_everything_back() {
         format!("duckdb:{}", duck.display()),
     ];
     for var in [
-        "IDECRAFT_TEST_PG",
-        "IDECRAFT_TEST_MYSQL",
-        "IDECRAFT_TEST_MARIADB",
+        "FERRIS_IDEA_TEST_PG",
+        "FERRIS_IDEA_TEST_MYSQL",
+        "FERRIS_IDEA_TEST_MARIADB",
     ] {
         urls.extend(std::env::var(var).ok());
     }
@@ -277,10 +277,11 @@ async fn result(s: &Session, sql: &str) -> (Vec<String>, Vec<Vec<Option<String>>
 /// `pd-refactor.postgresql.sql` still run and return the same rows under the same column names.
 #[tokio::test]
 async fn a_renamed_with_query_still_runs() {
-    let Some((s, _)) = session("IDECRAFT_TEST_PG").await else {
+    let Some((s, _)) = session("FERRIS_IDEA_TEST_PG").await else {
         return;
     };
     let schema = format!("rf_cte_{}", std::process::id());
+    common::drop_leftovers(&s, &["rf_cte_"]).await;
     let _ = s
         .run_script(
             &format!("drop schema if exists {schema} cascade"),
@@ -313,7 +314,7 @@ async fn a_renamed_with_query_still_runs() {
     let script = queries.join(";\n");
     let r = rename(
         &script,
-        idecraft_database::Dialect::PostgreSql,
+        ferris_idea_database::Dialect::PostgreSql,
         &tables,
         "pd_note",
         Some("body"),

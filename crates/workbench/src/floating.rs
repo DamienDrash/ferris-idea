@@ -2,8 +2,8 @@
 //! tool window's header and content. The workbench keeps the content; this view draws it in its
 //! own window and tells the workbench when the user closes the window.
 
+use ferris_idea_ui::tool_windows::{Rect, ToolWindow};
 use gpui::{Context, Entity, IntoElement, Render, WeakEntity, Window, div, prelude::*, px};
-use idecraft_ui::tool_windows::{Rect, ToolWindow};
 
 use crate::palette::Palette;
 use crate::workbench_view::{WorkbenchView, c};

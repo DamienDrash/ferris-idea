@@ -2,7 +2,7 @@
 //! outline (`SPEC-0337` behaviour 1) and the keymap and Advanced Settings rows that match the search
 //! text.
 
-use idecraft_ui::keymap::{Keymap, Shortcut};
+use ferris_idea_ui::keymap::{Keymap, Shortcut};
 
 /// A page of the dialog.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -25,7 +25,10 @@ pub enum Page {
     CodeStyle,
     /// Editor › Natural Languages: dictionaries of the typo check (`SPEC-0159`).
     NaturalLanguages,
-    /// Editor › Inspections: IDECraft's inspections in the project's profile (`SPEC-0315`).
+    /// Editor › Natural Languages › Grammar and Style: where grammar and spelling are checked, per
+    /// file type and context, and the writing rules (`SPEC-0155` v8 behaviour 14).
+    Grammar,
+    /// Editor › Inspections: Ferris IDEA's inspections in the project's profile (`SPEC-0315`).
     Inspections,
     /// Plugins: installed plugins, install from disk, enable, disable, remove (SPEC-0126).
     Plugins,
@@ -48,7 +51,7 @@ pub enum Page {
 
 impl Page {
     /// Every page, in the order of the page list.
-    pub const ALL: [Page; 18] = [
+    pub const ALL: [Page; 19] = [
         Page::Appearance,
         Page::SystemSettings,
         Page::Notifications,
@@ -60,6 +63,7 @@ impl Page {
         Page::CodeStyle,
         Page::Inspections,
         Page::NaturalLanguages,
+        Page::Grammar,
         Page::Plugins,
         Page::VersionControl,
         Page::BuildTools,
@@ -82,6 +86,7 @@ impl Page {
             Page::EditorTabs => "Editor Tabs",
             Page::CodeStyle => "Code Style",
             Page::NaturalLanguages => "Natural Languages",
+            Page::Grammar => "Grammar and Style",
             Page::Inspections => "Inspections",
             Page::Plugins => "Plugins",
             Page::VersionControl => "Version Control",
@@ -97,7 +102,7 @@ impl Page {
     fn keywords(self) -> &'static str {
         match self {
             Page::Appearance => {
-                "theme look and feel dark light islands idecraft brand colour scheme color scheme"
+                "theme look and feel dark light islands ferris-idea brand colour scheme color scheme startup splash animation motion"
             }
             Page::SystemSettings => {
                 "system startup start-up reopen quit exit confirm autosave save focus window project"
@@ -122,6 +127,10 @@ impl Page {
             Page::NaturalLanguages => {
                 "natural languages spelling spell check typo dictionary hunspell grammar english grazie"
             }
+            Page::Grammar => {
+                "grammar style writing scope file type context comments documentation docstrings \
+                 commit messages string literals rules spelling typo repeated word article"
+            }
             Page::Inspections => {
                 "inspections inspection profile severity suppress warning weak error code analysis lint"
             }
@@ -136,7 +145,7 @@ impl Page {
             Page::Languages => "languages frameworks language server lsp install",
             Page::Terminal => "terminal shell tools zsh bash",
             Page::Ai => {
-                "ai assistant chat llm model endpoint openai ollama api key inline completion"
+                "ai assistant chat llm model endpoint openai anthropic claude code plan terminal ollama api key inline completion"
             }
         }
     }
@@ -150,6 +159,7 @@ impl Page {
                 "Editor color scheme",
                 "Sync with OS",
                 "Compact mode",
+                "Startup animation",
             ],
             Page::SystemSettings => &[
                 "Confirm before quitting",
@@ -164,7 +174,7 @@ impl Page {
                 "Code Insight",
                 "Semantic highlighting from the language server",
                 "Show parameter name hints",
-                "Show usages of types",
+                "Show usages of declarations",
                 "Show usages above the declaration (else at the line end)",
                 "Show code author",
                 "Code Folding",
@@ -198,6 +208,13 @@ impl Page {
                 "Serve MCP to local agents over HTTP",
                 "Terminal lines to attach",
                 "Allow agents and scripts to operate the window",
+                "Claude plan",
+            ],
+            Page::Grammar => &[
+                "Commit messages",
+                "Comments",
+                "Documentation",
+                "String literals",
             ],
             Page::Keymap
             | Page::EditorTabs
@@ -217,16 +234,16 @@ impl Page {
         let mut labels = self.fixed_labels().to_vec();
         match self {
             Page::Appearance => {
-                labels.extend(idecraft_ui::theme::ThemeId::ALL.iter().map(|t| t.name()))
+                labels.extend(ferris_idea_ui::theme::ThemeId::ALL.iter().map(|t| t.name()))
             }
             Page::EditorTabs => labels.extend(
-                tab_setting_rows(&idecraft_core::EditorTabSettings::default())
+                tab_setting_rows(&ferris_idea_core::EditorTabSettings::default())
                     .into_iter()
                     .map(|(label, _)| label),
             ),
-            Page::CodeStyle => labels.extend(idecraft_core::CODE_STYLE_LANGUAGES),
+            Page::CodeStyle => labels.extend(ferris_idea_core::CODE_STYLE_LANGUAGES),
             Page::Advanced => labels.extend(
-                idecraft_core::advanced_settings::ADVANCED
+                ferris_idea_core::advanced_settings::ADVANCED
                     .iter()
                     .map(|a| a.label),
             ),
@@ -248,7 +265,8 @@ impl Page {
             | Page::EditorTabs
             | Page::CodeStyle
             | Page::Inspections
-            | Page::NaturalLanguages => Some("Editor"),
+            | Page::NaturalLanguages
+            | Page::Grammar => Some("Editor"),
             Page::BuildTools => Some("Build, Execution, Deployment"),
             Page::Terminal | Page::Ai => Some("Tools"),
             _ => None,
@@ -263,7 +281,7 @@ pub enum Scope {
     Ide,
     /// Settings kept with the project and shared with its files.
     Project,
-    /// Nothing is stored: the page shows what IDECraft finds.
+    /// Nothing is stored: the page shows what Ferris IDEA finds.
     Found,
 }
 
@@ -272,9 +290,13 @@ impl Page {
     /// (`SPEC-0105` v9 behaviour 13).
     pub fn scope(self) -> (Scope, &'static str) {
         match self {
-            Page::Keymap => (Scope::Ide, "IDE · keymaps/IDECraft.toml"),
+            Page::Keymap => (Scope::Ide, "IDE · keymaps/FerrisIDEA.toml"),
             Page::Plugins => (Scope::Ide, "IDE · plugins folder"),
             Page::TrustedLocations => (Scope::Ide, "IDE · trusted-projects.toml"),
+            Page::Grammar => (
+                Scope::Ide,
+                "IDE · settings.toml for the scope; the rules are kept in the project's inspection profile",
+            ),
             Page::Inspections => (
                 Scope::Project,
                 "Project · .idea/inspectionProfiles/Project_Default.xml, shared with the project's files",
@@ -330,16 +352,16 @@ pub fn pages(query: &str) -> Vec<Page> {
 /// 5a).
 pub fn advanced_rows(
     query: &str,
-) -> Vec<&'static idecraft_core::advanced_settings::AdvancedSetting> {
-    idecraft_core::advanced_settings::rows(query)
+) -> Vec<&'static ferris_idea_core::advanced_settings::AdvancedSetting> {
+    ferris_idea_core::advanced_settings::rows(query)
 }
 
 /// The inspections the Inspections page lists for the dialog's search text `query`: all when the
 /// text is empty or names the page, else those whose name, id, short name or language contains
 /// every word (`SPEC-0315` behaviour 4). Sorted by language, then name.
-pub fn inspection_rows(query: &str) -> Vec<idecraft_languages::inspections::InspectionInfo> {
+pub fn inspection_rows(query: &str) -> Vec<ferris_idea_languages::inspections::InspectionInfo> {
     let q = query.trim().to_lowercase();
-    let all = idecraft_languages::inspections::catalogue();
+    let all = ferris_idea_languages::inspections::catalogue();
     if q.is_empty() || "inspections".contains(&q) || Page::Inspections.keywords().contains(&q) {
         return all;
     }
@@ -358,6 +380,61 @@ pub fn inspection_rows(query: &str) -> Vec<idecraft_languages::inspections::Insp
         .collect()
 }
 
+/// The columns of a file type's row on the Grammar and Style page (`SPEC-0155` v8 behaviour 14):
+/// the file type itself, then its contexts.
+pub const GRAMMAR_COLUMNS: [&str; 4] = ["Checked", "Comments", "Documentation", "String literals"];
+
+/// One row of the Grammar and Style page.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GrammarRow {
+    /// Commit messages.
+    CommitMessages,
+    /// A file type with its contexts.
+    FileType(&'static str),
+    /// A writing rule of the inspection profile (its id).
+    Rule(&'static str),
+}
+
+/// The rows of the Grammar and Style page in order: commit messages, every file type, the rules.
+pub fn grammar_rows() -> Vec<GrammarRow> {
+    let mut rows = vec![GrammarRow::CommitMessages];
+    rows.extend(
+        ferris_idea_languages::grazie::grammar_file_types()
+            .into_iter()
+            .map(GrammarRow::FileType),
+    );
+    rows.extend(
+        ferris_idea_languages::inspections::WRITING_RULES
+            .iter()
+            .map(|r| GrammarRow::Rule(r)),
+    );
+    rows
+}
+
+/// Turns the switch of `row` in `column` over (`SPEC-0155` v8 behaviour 14); `false` for a rule
+/// row, whose switch lives in the inspection profile.
+pub fn toggle_grammar(
+    g: &mut ferris_idea_core::GrammarSettings,
+    row: GrammarRow,
+    column: usize,
+) -> bool {
+    match row {
+        GrammarRow::CommitMessages => g.commit_messages = !g.commit_messages,
+        GrammarRow::FileType(ty) => {
+            let mut scope = g.scope(ty);
+            match column {
+                0 => scope.enabled = !scope.enabled,
+                1 => scope.comments = !scope.comments,
+                2 => scope.documentation = !scope.documentation,
+                _ => scope.string_literals = !scope.string_literals,
+            }
+            g.set_scope(ty, scope);
+        }
+        GrammarRow::Rule(_) => return false,
+    }
+    true
+}
+
 /// One row of the keymap page.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KeymapRow {
@@ -367,6 +444,49 @@ pub struct KeymapRow {
     pub title: String,
     /// Its shortcuts as shown, comma-separated; empty when it has none.
     pub shortcuts: String,
+    /// In the macOS keymap, a shortcut of it that macOS takes itself and what for
+    /// (`SPEC-0105` v12 behaviour 18, IMP-0544): the key never reaches Ferris IDEA.
+    pub system: Option<String>,
+}
+
+/// The chords macOS takes for itself before an application sees them, and what for
+/// (`SPEC-0105` v12 behaviour 18; the system's default shortcuts).
+const MACOS_RESERVED: [(&str, &str); 12] = [
+    ("control SPACE", "the previous input source"),
+    ("control alt SPACE", "the next input source"),
+    ("meta SPACE", "Spotlight"),
+    ("alt meta SPACE", "a Finder search window"),
+    ("meta TAB", "switching applications"),
+    ("shift meta 3", "screenshots"),
+    ("shift meta 4", "screenshots"),
+    ("shift meta 5", "screenshots"),
+    ("control UP", "Mission Control"),
+    ("control DOWN", "the application's windows"),
+    ("control LEFT", "moving between spaces"),
+    ("control RIGHT", "moving between spaces"),
+];
+
+/// What macOS takes `stroke` for, when it is one of its own chords (behaviour 18).
+pub fn macos_reserved(stroke: &ferris_idea_ui::keymap::Keystroke) -> Option<&'static str> {
+    MACOS_RESERVED.iter().find_map(|(text, what)| {
+        ferris_idea_ui::keymap::Keystroke::parse(text)
+            .ok()
+            .filter(|k| k == stroke)
+            .map(|_| *what)
+    })
+}
+
+/// The note of the keymap page for the first of `shortcuts` that macOS takes (behaviour 18):
+/// `⌃Space is taken by macOS (the previous input source)`.
+pub fn macos_reserved_note(shortcuts: &[Shortcut]) -> Option<String> {
+    shortcuts.iter().find_map(|s| match s {
+        Shortcut::Keyboard {
+            first,
+            second: None,
+        } => macos_reserved(first)
+            .map(|what| format!("{} is taken by macOS ({what})", s.display(true))),
+        _ => None,
+    })
 }
 
 /// Rows for the actions of `keymap` and `extra` (actions without shortcuts in the bundled keymap),
@@ -389,11 +509,16 @@ pub fn keymap_rows(keymap: &Keymap, extra: &[&str], query: &str) -> Vec<KeymapRo
                 .map(|s: &Shortcut| s.display(keymap.macos))
                 .collect::<Vec<_>>()
                 .join(", ");
-            let title = idecraft_languages::everywhere::action_title(&action).0;
+            let title = ferris_idea_languages::everywhere::action_title(&action).0;
+            let system = keymap
+                .macos
+                .then(|| macos_reserved_note(keymap.shortcuts(&action)))
+                .flatten();
             KeymapRow {
                 action,
                 title,
                 shortcuts,
+                system,
             }
         })
         .filter(|r| {
@@ -410,8 +535,8 @@ pub fn keymap_rows(keymap: &Keymap, extra: &[&str], query: &str) -> Vec<KeymapRo
 /// IDE layer of its own (Keymap, Plugins, Inspections, Build Tools, Languages, Trusted Locations).
 pub fn copy_page(
     page: Page,
-    from: &idecraft_core::IdeSettings,
-    to: &mut idecraft_core::IdeSettings,
+    from: &ferris_idea_core::IdeSettings,
+    to: &mut ferris_idea_core::IdeSettings,
 ) -> bool {
     match page {
         Page::Appearance => to.appearance = from.appearance.clone(),
@@ -443,6 +568,7 @@ pub fn copy_page(
         Page::NaturalLanguages => {
             to.editor.spelling_dictionary = from.editor.spelling_dictionary.clone()
         }
+        Page::Grammar => to.editor.grammar = from.editor.grammar.clone(),
         Page::CodeStyle => to.code_style = from.code_style.clone(),
         Page::VersionControl => {
             to.vcs = from.vcs.clone();
@@ -457,7 +583,7 @@ pub fn copy_page(
             to.ui.driver.external = from.ui.driver.external;
         }
         Page::Advanced => {
-            for a in idecraft_core::advanced_settings::ADVANCED {
+            for a in ferris_idea_core::advanced_settings::ADVANCED {
                 let _ = a.set(to, a.value(from));
             }
         }
@@ -474,8 +600,8 @@ pub fn copy_page(
 /// Whether the settings of page `page` differ between `a` and `b` (behaviour 8).
 pub fn page_differs(
     page: Page,
-    a: &idecraft_core::IdeSettings,
-    b: &idecraft_core::IdeSettings,
+    a: &ferris_idea_core::IdeSettings,
+    b: &ferris_idea_core::IdeSettings,
 ) -> bool {
     let mut x = a.clone();
     copy_page(page, b, &mut x) && x != *a
@@ -483,8 +609,8 @@ pub fn page_differs(
 
 /// Whether page `page` holds a setting changed from its default: the page list marks it with a
 /// dot (`SPEC-0105` v7 behaviour 9).
-pub fn page_modified(page: Page, ide: &idecraft_core::IdeSettings) -> bool {
-    page_differs(page, ide, &idecraft_core::IdeSettings::default())
+pub fn page_modified(page: Page, ide: &ferris_idea_core::IdeSettings) -> bool {
+    page_differs(page, ide, &ferris_idea_core::IdeSettings::default())
 }
 
 /// Whether `label`, drawn on the page, matches the search text `query`: the page marks it
@@ -501,8 +627,8 @@ pub fn advanced_page_rows(
     dialog: &str,
     own: &str,
     modified_only: bool,
-    ide: &idecraft_core::IdeSettings,
-) -> Vec<&'static idecraft_core::advanced_settings::AdvancedSetting> {
+    ide: &ferris_idea_core::IdeSettings,
+) -> Vec<&'static ferris_idea_core::advanced_settings::AdvancedSetting> {
     let own = own.trim().to_lowercase();
     advanced_rows(dialog)
         .into_iter()
@@ -551,7 +677,7 @@ pub fn page_rolls_itself(page: Page) -> bool {
 #[cfg(test)]
 mod page_settings_tests {
     use super::*;
-    use idecraft_core::IdeSettings;
+    use ferris_idea_core::IdeSettings;
 
     /// SPEC-0105 v6 AK-11: Revert and Restore defaults act on the page's settings only; a page
     /// with a changed setting is marked; the search marks matching labels.
@@ -597,7 +723,10 @@ mod page_settings_tests {
     fn advanced_rows_search_and_modified_only() {
         let mut ide = IdeSettings::default();
         let all = advanced_page_rows("", "", false, &ide);
-        assert_eq!(all.len(), idecraft_core::advanced_settings::ADVANCED.len());
+        assert_eq!(
+            all.len(),
+            ferris_idea_core::advanced_settings::ADVANCED.len()
+        );
         assert!(
             advanced_page_rows("", "", true, &ide).is_empty(),
             "nothing modified"
@@ -618,11 +747,52 @@ mod page_settings_tests {
 
 #[cfg(test)]
 mod tests {
+    /// SPEC-0105 v12 AK-20 (behaviour 18, OBS-0119 K5, IMP-0544): in the macOS keymap a shortcut
+    /// macOS takes is marked with what for; other chords and the default keymap are not.
+    #[test]
+    fn chords_macos_takes_are_marked() {
+        use ferris_idea_ui::keymap::Keystroke;
+        let k = |t: &str| Keystroke::parse(t).unwrap();
+        assert_eq!(
+            macos_reserved(&k("control SPACE")),
+            Some("the previous input source")
+        );
+        assert_eq!(macos_reserved(&k("meta SPACE")), Some("Spotlight"));
+        assert_eq!(macos_reserved(&k("meta shift SPACE")), None);
+        assert_eq!(macos_reserved(&k("control shift SPACE")), None);
+        let one = |t: &str| Shortcut::Keyboard {
+            first: k(t),
+            second: None,
+        };
+        assert_eq!(
+            macos_reserved_note(&[one("meta J"), one("control SPACE")]).as_deref(),
+            Some("⌃Space is taken by macOS (the previous input source)")
+        );
+        assert_eq!(macos_reserved_note(&[one("meta J")]), None);
+        // The bundled macOS keymap: basic completion on ⌃Space is marked, ⌘J is not.
+        let mac = Keymap::bundled_macos();
+        let rows = keymap_rows(&mac, &[], "CodeCompletion");
+        let basic = rows.iter().find(|r| r.action == "CodeCompletion").unwrap();
+        assert!(
+            basic
+                .system
+                .as_deref()
+                .is_some_and(|n| n.contains("input source"))
+        );
+        let template = keymap_rows(&mac, &[], "InsertLiveTemplate");
+        assert!(template.iter().all(|r| r.system.is_none()));
+        let default = Keymap::bundled_default();
+        assert!(
+            keymap_rows(&default, &[], "CodeCompletion")
+                .iter()
+                .all(|r| r.system.is_none())
+        );
+    }
 
     /// SPEC-0105 AK-15 (v9): every page says where its settings are kept.
     #[test]
     fn every_page_says_where_its_settings_are_kept() {
-        let mut probe = idecraft_core::IdeSettings::default();
+        let mut probe = ferris_idea_core::IdeSettings::default();
         for page in Page::ALL {
             let (scope, text) = page.scope();
             assert!(!text.is_empty(), "{page:?}");
@@ -632,7 +802,7 @@ mod tests {
                 "{page:?}"
             );
             // The pages with settings of the IDE layer of their own name `settings.toml`.
-            let own = copy_page(page, &idecraft_core::IdeSettings::default(), &mut probe);
+            let own = copy_page(page, &ferris_idea_core::IdeSettings::default(), &mut probe);
             assert_eq!(own, text.contains("settings.toml"), "{page:?}: {text}");
             if own {
                 assert_eq!(scope, Scope::Ide);
@@ -644,6 +814,34 @@ mod tests {
         assert_eq!(Page::Keymap.scope().0, Scope::Ide);
     }
     use super::*;
+
+    /// SPEC-0155/AK-19 (v8, OBS-0117 G6): the Grammar and Style rows and their switches.
+    #[test]
+    fn grammar_rows_and_switches() {
+        let rows = grammar_rows();
+        assert_eq!(rows[0], GrammarRow::CommitMessages);
+        assert!(rows.contains(&GrammarRow::FileType("Java")));
+        assert!(rows.contains(&GrammarRow::FileType("Plain text")));
+        assert_eq!(
+            rows.last(),
+            Some(&GrammarRow::Rule("grazie.mixed-spelling"))
+        );
+        let mut g = ferris_idea_core::GrammarSettings::default();
+        assert!(toggle_grammar(&mut g, GrammarRow::FileType("Java"), 3));
+        assert!(g.scope("Java").string_literals);
+        assert!(toggle_grammar(&mut g, GrammarRow::FileType("Java"), 3));
+        assert!(g.file_types.is_empty(), "back to the default, nothing kept");
+        assert!(toggle_grammar(&mut g, GrammarRow::FileType("Markdown"), 0));
+        assert!(!g.scope("Markdown").enabled);
+        assert!(toggle_grammar(&mut g, GrammarRow::CommitMessages, 0));
+        assert!(!g.commit_messages);
+        assert!(!toggle_grammar(&mut g, GrammarRow::Rule("grazie.typo"), 0));
+        let mut to = ferris_idea_core::IdeSettings::default();
+        let mut from = to.clone();
+        from.editor.grammar = g.clone();
+        assert!(copy_page(Page::Grammar, &from, &mut to));
+        assert_eq!(to.editor.grammar, g);
+    }
 
     /// SPEC-0105 v8 AK-13: the dialog takes the window's room (OBS-0062 S7: in a window 901
     /// points high it used about two thirds), within its limits.
@@ -700,6 +898,7 @@ mod tests {
         assert_eq!(pages("plugin"), [Page::Keymap, Page::Plugins]);
         assert_eq!(pages("font size"), [Page::Keymap, Page::Font]);
         assert!(pages("spelling").contains(&Page::NaturalLanguages));
+        assert!(pages("string literals").contains(&Page::Grammar));
         assert_eq!(pages("jdk"), [Page::Keymap, Page::BuildTools]);
         assert_eq!(pages("shell"), [Page::Keymap, Page::Terminal]);
         assert_eq!(pages("safe mode"), [Page::TrustedLocations, Page::Keymap]);
@@ -837,7 +1036,7 @@ mod tests {
         assert_eq!(advanced_rows("project_view.compact").len(), 1);
         assert_eq!(
             advanced_rows("").len(),
-            idecraft_core::advanced_settings::ADVANCED.len()
+            ferris_idea_core::advanced_settings::ADVANCED.len()
         );
         // The searches of the window self-test keep their pages (SPEC-0105 v5 AK-8).
         assert_eq!(pages("sync with os"), [Page::Appearance, Page::Keymap]);
@@ -847,8 +1046,10 @@ mod tests {
 
 /// The rows of Settings › Editor › Editor Tabs with their values as shown (`SPEC-0059` v9
 /// behaviour 17).
-pub fn tab_setting_rows(s: &idecraft_core::EditorTabSettings) -> Vec<(&'static str, String)> {
-    use idecraft_core::{ActivateOnClose, CloseButtonPlace, TabLimitRule, TabPlacement, TabRows};
+pub fn tab_setting_rows(s: &ferris_idea_core::EditorTabSettings) -> Vec<(&'static str, String)> {
+    use ferris_idea_core::{
+        ActivateOnClose, CloseButtonPlace, TabLimitRule, TabPlacement, TabRows,
+    };
     let on = |b: bool| if b { "☑" } else { "☐" }.to_owned();
     vec![
         (
@@ -924,8 +1125,10 @@ pub fn tab_setting_rows(s: &idecraft_core::EditorTabSettings) -> Vec<(&'static s
 
 /// Changes row `row` of the Editor Tabs page: a switch toggles, a choice moves by `step` (0 is
 /// forward), the limit changes by `step` within 1–100.
-pub fn change_tab_setting(s: &mut idecraft_core::EditorTabSettings, row: usize, step: i32) {
-    use idecraft_core::{ActivateOnClose, CloseButtonPlace, TabLimitRule, TabPlacement, TabRows};
+pub fn change_tab_setting(s: &mut ferris_idea_core::EditorTabSettings, row: usize, step: i32) {
+    use ferris_idea_core::{
+        ActivateOnClose, CloseButtonPlace, TabLimitRule, TabPlacement, TabRows,
+    };
     fn cycle<T: Copy + PartialEq>(all: &[T], now: T, step: i32) -> T {
         let n = all.len() as i32;
         let at = all.iter().position(|v| *v == now).unwrap_or(0) as i32;
@@ -963,7 +1166,7 @@ pub fn change_tab_setting(s: &mut idecraft_core::EditorTabSettings, row: usize, 
         11 => s.open_at_end = !s.open_at_end,
         12 => s.preview_tab = !s.preview_tab,
         13 => {
-            let (lo, hi) = idecraft_core::TAB_LIMITS;
+            let (lo, hi) = ferris_idea_core::TAB_LIMITS;
             s.limit = (s.limit as i64 + step as i64).clamp(lo as i64, hi as i64) as u32;
         }
         14 => {
@@ -995,7 +1198,7 @@ mod tab_settings_tests {
     /// SPEC-0059 v9 behaviour 17: the page lists every option and each row changes its setting.
     #[test]
     fn the_editor_tabs_page_changes_every_option() {
-        let mut s = idecraft_core::EditorTabSettings::default();
+        let mut s = ferris_idea_core::EditorTabSettings::default();
         let rows = tab_setting_rows(&s);
         assert_eq!(rows.len(), 16);
         assert_eq!(rows[13], ("Tab limit", "30".to_owned()));

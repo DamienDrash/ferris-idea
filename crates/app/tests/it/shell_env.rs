@@ -20,7 +20,7 @@ impl Setup {
     /// that puts the tool folder on `PATH`.
     fn new(name: &str) -> Self {
         let dir = std::env::temp_dir().canonicalize().unwrap().join(format!(
-            "idecraft-app-shellenv-{name}-{}",
+            "ferris-idea-app-shellenv-{name}-{}",
             std::process::id()
         ));
         let _ = std::fs::remove_dir_all(&dir);
@@ -45,10 +45,10 @@ impl Setup {
         Setup { dir }
     }
 
-    /// `idecraft call <project> <tool> [<json>]` with the bare system `PATH` and the stub as the
+    /// `ferris-idea call <project> <tool> [<json>]` with the bare system `PATH` and the stub as the
     /// user's shell.
     fn call(&self, switch: Option<&str>, tool: &str, arguments: Option<&str>) -> Output {
-        let mut cmd = Command::new(env!("CARGO_BIN_EXE_idecraft"));
+        let mut cmd = Command::new(env!("CARGO_BIN_EXE_ferris-idea"));
         cmd.arg("call").arg(self.dir.join("project")).arg(tool);
         if let Some(a) = arguments {
             cmd.arg(a);
@@ -56,12 +56,12 @@ impl Setup {
         cmd.env("PATH", "/usr/bin:/bin")
             .env("SHELL", self.dir.join("stubsh"))
             .env("HOME", self.dir.join("home"))
-            .env("IDECRAFT_CONFIG_DIR", self.dir.join("config"))
-            .env("IDECRAFT_LOG_DIR", self.dir.join("logs"))
-            .env_remove("IDECRAFT_TRUST_PROJECTS")
-            .env_remove("IDECRAFT_SHELL_ENV");
+            .env("FERRIS_IDEA_CONFIG_DIR", self.dir.join("config"))
+            .env("FERRIS_IDEA_LOG_DIR", self.dir.join("logs"))
+            .env_remove("FERRIS_IDEA_TRUST_PROJECTS")
+            .env_remove("FERRIS_IDEA_SHELL_ENV");
         if let Some(s) = switch {
-            cmd.env("IDECRAFT_SHELL_ENV", s);
+            cmd.env("FERRIS_IDEA_SHELL_ENV", s);
         }
         cmd.output().unwrap()
     }

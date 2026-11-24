@@ -400,7 +400,7 @@ cut either, so its text never reaches the clipboard.
 
 - **AK-10 (v3)** Selection by syntax in Java from inside `"Hello, "`: word, string content, string,
   binary expression, statement, whole line, the three body lines, the block, and back with
-  `EditorUnSelectWord` after a copy (unit tests `syntax_selection_stages` in `idecraft_languages` and
+  `EditorUnSelectWord` after a copy (unit tests `syntax_selection_stages` in `ferris_idea_languages` and
   `select_word_uses_the_given_stages`).
 - **AK-11 (v3)** Word stops at `=`, `.`, `(`, `)` and `;`, line end to next line start, line start to
   previous line end (unit test `word_stops_follow_punctuation_and_line_ends`).
@@ -527,47 +527,47 @@ as plain text.
 
 v4: not compared with the reference. Open there: on which side of the bracket the reference's
 matching-brace command leaves the caret, and what it does for a caret that is not at a bracket
-(IDECraft: nothing).
+(Ferris IDEA: nothing).
 
 v6: not compared with the reference. Open there: whether the reference keeps all carets and the
 column selection after undoing an edit made with them, and where its caret is after undoing a
-reformat, an optimize imports and a reload from disk (IDECraft: where it was before the step).
+reformat, an optimize imports and a reload from disk (Ferris IDEA: where it was before the step).
 
 v5: not compared with the reference. Open there: in which order it visits the words after those
-before the caret, whether it matches case, what belongs to a word in each language (IDECraft:
+before the caret, whether it matches case, what belongs to a word in each language (Ferris IDEA:
 letters, digits and `_` everywhere), whether it also takes words of files that are not open, and
 what the two commands do when used one after the other.
 
 v6: taken from the open platform's sources, not compared with the reference IDE.
 - `EditorCutLineEnd`: the open action puts an empty text on the clipboard when the caret is at
-  the end of the text; IDECraft leaves the clipboard alone (IMP-0405). Where the open platform
+  the end of the text; Ferris IDEA leaves the clipboard alone (IMP-0405). Where the open platform
   ends a row of joined cuts was not read in full (it keeps a flag per clipboard entry that other
-  parts of the editor clear, and it sees every text that reaches the clipboard); IDECraft ends
+  parts of the editor clear, and it sees every text that reaches the clipboard); Ferris IDEA ends
   it with anything but the same command at the same place and with the lost focus, and does not
   look at the system clipboard for it. Selections are dropped by the cut; the open action leaves a single caret's selection to
   the document change.
 - `EditorToggleInsertState`: how the reference draws the caret and whether its status bar names
   the mode was not looked up. Whether the reference still closes brackets in overwrite mode is
-  open; IDECraft does not.
+  open; Ferris IDEA does not.
 - `AutoIndentLines`: the open action asks the language's formatter for the indentation of each
   line, so it knows continuation lines, `case` labels, bodies without braces and languages
-  without braces. IDECraft uses the line rule of behaviour 16 and therefore puts a continuation
+  without braces. Ferris IDEA uses the line rule of behaviour 16 and therefore puts a continuation
   line under the start of its statement, leaves a body without braces unindented and does
   nothing in languages without braces. A caret column beyond the end of the next line is cut to
   that line's end (the open editor can keep it in virtual space).
 - `EditorContextInfo`: the open action shows the declaration's whole header, with its colours, as
-  a hint that also goes when the pointer moves; IDECraft shows the one line of the name in the
+  a hint that also goes when the pointer moves; Ferris IDEA shows the one line of the name in the
   plain text colour. Which elements count as declarations follows the breadcrumbs, not the
   reference's structure view.
 
 v8: compared side by side in OBS-0042 (2026-11-14).
 - **A save ends an undo step** (IMP-0407). In the reference one undo after typing, saving and
-  typing again takes back the text from both sides of the save. IDECraft keeps the step it has
+  typing again takes back the text from both sides of the save. Ferris IDEA keeps the step it has
   had since SPEC-0003 behaviour 8: undo stops at the saved text, so the state that was written
   to disk can always be reached again and an unmodified editor always shows the saved text.
-  Deliberate; IDECraft is not changed.
+  Deliberate; Ferris IDEA is not changed.
 - **A field takes back a run of typing, not one character.** After three characters typed into
-  the reference's search field one undo left two; IDECraft takes back the run, as its editor
+  the reference's search field one undo left two; Ferris IDEA takes back the run, as its editor
   does (behaviour 12), so fields and editors group typing by one rule. How the reference groups
   fast typing in a field, and what its other fields do, was not observed.
 - **Undo in an editor never reaches a file operation** (behaviour 29). Whether the reference's

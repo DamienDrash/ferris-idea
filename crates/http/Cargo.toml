@@ -1,5 +1,5 @@
 [package]
-name = "idecraft-http"
+name = "ferris-idea-http"
 description = "HTTP client: request files and sending"
 version.workspace = true
 edition.workspace = true

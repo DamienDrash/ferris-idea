@@ -3,7 +3,7 @@
 
 use std::collections::HashSet;
 
-use idecraft_languages::insight::CallNode;
+use ferris_idea_languages::insight::CallNode;
 
 /// Position of a node in the tree: child indices from the root (the root is `[]`).
 pub type NodePath = Vec<usize>;
@@ -116,7 +116,7 @@ pub fn row_detail(n: &CallNode) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use idecraft_languages::insight::{Location, Range};
+    use ferris_idea_languages::insight::{Location, Range};
 
     fn n(name: &str, children: Vec<CallNode>) -> CallNode {
         CallNode {

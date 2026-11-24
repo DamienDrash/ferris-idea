@@ -5,9 +5,9 @@
   ("Ja aber mit Warnhinweis für den User und die spätere KI damit diese selber entscheiden können")
 - **Context:** ADR-0016 gives plugins no network: a plugin is a pure function over text with two
   reviewed host functions for reading the open project. ADR-0020 keeps WebAssembly plugins as the
-  code route for database systems that have neither a wire protocol IDECraft speaks nor an ODBC
+  code route for database systems that have neither a wire protocol Ferris IDEA speaks nor an ODBC
   driver. Such a connector plugin implements the system's protocol itself and must open a TCP
-  connection to the server. Plugins come from third parties; IDECraft does not review their code. A
+  connection to the server. Plugins come from third parties; Ferris IDEA does not review their code. A
   plugin with general network access could send project files, passwords or anything it computes to
   any host. Agents will configure and use connections too (ADR-0023), so the risk must be visible to
   them in a form they can read, and an agent must not inherit a user's decision.
@@ -21,7 +21,7 @@ it. There is no other network access:
 - no name resolution of other names (the host resolves only the profile's host name itself);
 - no other port, also not on the same host.
 
-The plugin gets four host functions of module `idecraft`: `net_connect(target)`, `net_send`,
+The plugin gets four host functions of module `ferris-idea`: `net_connect(target)`, `net_send`,
 `net_recv` and `net_close`. `net_connect` takes the target as text `host:port`. The host compares it
 with the profile's host (case-insensitive) and port (equal). Anything else is refused with code `-2`
 and written to the audit log. The plugin never sees an address it did not get from the profile.
@@ -33,15 +33,15 @@ call. Every connection closes when the call ends.
 lexis the editor uses (`lexis`, default `postgresql`). The definition is data like any other
 (ADR-0020 decision 3); the module is code. Plugin connectors come only from the connectors folder or
 from import, so their status is always **User** or **Imported** (or **Beta** if one is ever built
-in). They are never Supported, because IDECraft does not test third-party code.
+in). They are never Supported, because Ferris IDEA does not test third-party code.
 
 **3. A warning before the first use, for people and agents.** Before a plugin first connects to a
-host, IDECraft shows a warning. It names:
+host, Ferris IDEA shows a warning. It names:
 - the plugin, its version and its author as the manifest states them (or "unknown author");
 - that the plugin gets network access to that host and port, and receives the connection's user
   name and password;
 - the connector's status (Beta, User or Imported);
-- that IDECraft does not review the plugin's code.
+- that Ferris IDEA does not review the plugin's code.
 
 The window shows this in a dialog with "Allow and connect" and "Cancel" (Cancel is the default).
 MCP returns the same content as a `warning` object, with `requires_grant`, in `list_connectors` and
@@ -56,7 +56,7 @@ Settings › Plugins and with MCP `revoke_plugin_network`. Removing a plugin, or
 
 **5. Agents need their own grant (ADR-0023 rule 7).** A user's grant covers the window only. An agent
 connects through a plugin only with a grant whose holder is `agent`. It gets one only by asking:
-MCP `grant_plugin_network` puts the full warning before the user in the IDECraft window. The user
+MCP `grant_plugin_network` puts the full warning before the user in the Ferris IDEA window. The user
 answers once (this session only) or always (stored as an agent grant); without a window nobody can
 answer and the agent gets nothing.
 
@@ -76,7 +76,7 @@ whether it may go without TLS; the audit says whether a connection had TLS. A pr
 TLS on inside its own messages reaches a server off the loopback only under `disable`.
 
 ## Consequences
-- Systems without a wire protocol IDECraft speaks and without ODBC become reachable through
+- Systems without a wire protocol Ferris IDEA speaks and without ODBC become reachable through
   community plugins, at interpreter speed.
 - The plugin still cannot read files beyond `project-read`, start programs, or reach anything but
   the server the user chose. What it does with the data on that one connection is its own business,

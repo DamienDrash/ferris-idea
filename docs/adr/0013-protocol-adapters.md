@@ -15,13 +15,13 @@
      add Streamable HTTP on localhost for the running GUI (M6.8); use the Tasks extension for long
      operations; take the workspace as an explicit parameter rather than relying on Roots; do not depend on
      Sampling.
-  3. **ACP:** IDECraft is an ACP *client* that hosts agents. `fs/*` and `terminal/*` callbacks map to
-     `workspace.*` and `execution.*` with the same permission checks as every other caller. IDECraft passes
+  3. **ACP:** Ferris IDEA is an ACP *client* that hosts agents. `fs/*` and `terminal/*` callbacks map to
+     `workspace.*` and `execution.*` with the same permission checks as every other caller. Ferris IDEA passes
      its own MCP server to the agent in `session/new`.
   4. **Agent adapter layer:** per agent type, a record of how it is connected (native ACP, ACP adapter,
      headless CLI) and which features are missing; missing permission callbacks force stricter isolation
      (own worktree, no network grant).
-  5. **A2A** (Agent2Agent, Linux Foundation) is not used for coordination inside IDECraft; an optional
+  5. **A2A** (Agent2Agent, Linux Foundation) is not used for coordination inside Ferris IDEA; an optional
      bridge for external agent systems may follow.
   6. Protocol libraries are added only when their milestone starts, after the licence check of
      `deny.toml`.

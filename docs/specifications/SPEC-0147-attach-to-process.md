@@ -40,7 +40,7 @@ restarting it, and leave it running afterwards.
    program. [STD]
 3a. **Java project (v2):** java-debug evaluates nothing in an attached JVM unless the attach
    request names the jdtls project: every expression is refused, a breakpoint with a condition
-   stops at every hit and a log message writes nothing. IDECraft therefore opens the sources that
+   stops at every hit and a log message writes nothing. Ferris IDEA therefore opens the sources that
    have breakpoints in the debugger's jdtls, asks it for the main classes of the workspace
    (at most 20 seconds while it imports) and names the project of a main class declared in one of
    these sources, else the one project all main classes are in. With several projects and no
@@ -55,7 +55,7 @@ restarting it, and leave it running afterwards.
 6. **MCP:** `debug_processes` lists the processes as in behaviour 1 (filter, limit; read-only).
    `debug_attach` takes `runtime`, `pid` or `port` (with `host`), breakpoints and a wait; it is a
    dry run by default that returns the attach request, and with `dry_run: false` needs the
-   `debug` right, is logged in `.idecraft/agent-log.jsonl` and returns a session for
+   `debug` right, is logged in `.ferris-idea/agent-log.jsonl` and returns a session for
    `debug_resume`, `debug_variables`, `debug_evaluate`. `debug_stop` says `detached: true` for
    it. [ADR-0008] **(v2)** `debug_attach` also takes `exception_breakpoints`, `exception_types`
    and `function_breakpoints` as `debug_start` does (SPEC-0146 behaviour 6), shows them in its
@@ -121,4 +121,4 @@ attach as a run configuration ("Remote JVM Debug"), reattaching to the last proc
 - **(v3)** A Go process in the list is attached to as a native program unless Go is chosen as
   described in behaviour 7; a Delve server on another machine is refused, because its port is not
   protected. Stop on a Delve server's session ends a server that takes one client only, with its
-  program; IDECraft cannot detach from it and leave it running.
+  program; Ferris IDEA cannot detach from it and leave it running.

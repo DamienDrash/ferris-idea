@@ -3,7 +3,7 @@
 //! their enabled state. Items carry keymap action ids where the action has one, so the menu shows
 //! the shortcut of the keymap in use; the workbench runs them.
 
-use idecraft_core::file_ops::NewKind;
+use ferris_idea_core::file_ops::NewKind;
 
 pub use crate::blame_model::{ANNOTATE, CLOSE_ANNOTATIONS, COPY_REVISION, SHOW_IN_GIT_LOG};
 
@@ -44,7 +44,7 @@ pub enum MenuEntry {
 pub struct MenuItem {
     /// The label.
     pub label: String,
-    /// The action id: a keymap action id where one exists, else an `IDECraft.*` id.
+    /// The action id: a keymap action id where one exists, else an `Ferris IDEA.*` id.
     pub action: String,
     /// Whether it can be chosen now.
     pub enabled: bool,
@@ -76,20 +76,20 @@ fn sub(label: &str, entries: Vec<MenuEntry>) -> MenuEntry {
 
 /// Action id of "New › <kind>".
 pub fn new_action(kind: NewKind) -> String {
-    format!("IDECraft.New.{}", kind.id())
+    format!("FerrisIDEA.New.{}", kind.id())
 }
 
 /// The kind of a "New › …" action id.
 pub fn new_kind(action: &str) -> Option<NewKind> {
-    NewKind::from_id(action.strip_prefix("IDECraft.New.")?)
+    NewKind::from_id(action.strip_prefix("FerrisIDEA.New.")?)
 }
 
 /// Copy the absolute path.
 pub const COPY_PATH: &str = "CopyPaths";
 /// Copy the path from the project folder.
-pub const COPY_RELATIVE_PATH: &str = "IDECraft.CopyRelativePath";
+pub const COPY_RELATIVE_PATH: &str = "FerrisIDEA.CopyRelativePath";
 /// Copy the file name.
-pub const COPY_FILE_NAME: &str = "IDECraft.CopyFileName";
+pub const COPY_FILE_NAME: &str = "FerrisIDEA.CopyFileName";
 /// Copy the path from the source folder (`SPEC-0332` v2 behaviour 13a).
 pub const COPY_SOURCE_ROOT_PATH: &str = crate::copy_path_model::SOURCE_ROOT_PATH;
 /// Copy the file's reference name with the caret's line (`SPEC-0332` v2 behaviour 13a).
@@ -125,7 +125,7 @@ pub const VCS_FILE_HISTORY: &str = "Vcs.ShowTabbedFileHistory";
 /// The diff of this file against HEAD (the keymap's action, v8 behaviour 14c).
 pub const VCS_SHOW_DIFF: &str = "Compare.SameVersion";
 /// Compare this file with a branch (v8 behaviour 14c).
-pub const VCS_COMPARE_BRANCH: &str = "IDECraft.Vcs.CompareWithBranch";
+pub const VCS_COMPARE_BRANCH: &str = "FerrisIDEA.Vcs.CompareWithBranch";
 /// The file items of the Git submenu, in order (v8 behaviour 14c).
 pub const VCS_FILE_ITEMS: [(&str, &str); 5] = [
     ("Commit File…", VCS_COMMIT_FILE),
@@ -140,9 +140,9 @@ pub const VCS_FILE_ITEMS: [(&str, &str); 5] = [
 pub fn clipboard_comparison(
     clipboard: Option<&str>,
     text: &str,
-) -> Option<Vec<idecraft_vcs::DiffRow>> {
+) -> Option<Vec<ferris_idea_vcs::DiffRow>> {
     let clip = clipboard.filter(|c| !c.is_empty())?;
-    Some(idecraft_vcs::side_by_side(clip, text))
+    Some(ferris_idea_vcs::side_by_side(clip, text))
 }
 
 /// The entries of "New" (behaviour 3): File and Directory, then the typed files.
@@ -157,7 +157,7 @@ pub fn new_entries() -> Vec<MenuEntry> {
     out
 }
 
-/// The Git submenu: what IDECraft carries out for a file today. `annotate` (`Some` for a file)
+/// The Git submenu: what Ferris IDEA carries out for a file today. `annotate` (`Some` for a file)
 /// adds Annotate with Git Blame, `Some(true)` while its annotations are shown (`SPEC-0277`
 /// behaviour 1); it is on even outside a repository, where it says why it cannot annotate
 /// (IMP-0278). A file also gets its commit, rollback, history, diff and branch comparison (v8
@@ -285,11 +285,11 @@ pub struct EditorTarget {
 /// Pin or unpin the tab (`SPEC-0059` v9 behaviour 20).
 pub const PIN_TAB: &str = "PinActiveEditorTab";
 /// Open the tab in a second editor window: not yet (v9 behaviour 18, out of scope).
-pub const OPEN_TAB_IN_NEW_WINDOW: &str = "IDECraft.OpenTabInNewWindow";
+pub const OPEN_TAB_IN_NEW_WINDOW: &str = "FerrisIDEA.OpenTabInNewWindow";
 /// Settings › Editor › Editor Tabs (v9 behaviour 17).
-pub const CONFIGURE_EDITOR_TABS: &str = "IDECraft.ConfigureEditorTabs";
+pub const CONFIGURE_EDITOR_TABS: &str = "FerrisIDEA.ConfigureEditorTabs";
 /// Why Open Tab in New Window is disabled (its tooltip).
-pub const NO_NEW_WINDOW: &str = "IDECraft has one editor window per project for now";
+pub const NO_NEW_WINDOW: &str = "Ferris IDEA has one editor window per project for now";
 
 /// What the menu of an editor tab needs to know (`SPEC-0059` v9 behaviour 18).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -575,7 +575,7 @@ impl RunNames {
 /// 0-based `caret_line` (behaviour 14a): `Class.main()` for a Java main class, the class for a
 /// test class, `method()` for Run inside a test method, else the file name.
 pub fn run_names(file_name: &str, text: &str, caret_line: Option<usize>) -> RunNames {
-    use idecraft_languages::jvm::{self, MarkerKind};
+    use ferris_idea_languages::jvm::{self, MarkerKind};
     let Some(lang) = jvm::Jvm::of(file_name) else {
         return RunNames::both(file_name);
     };
@@ -623,11 +623,11 @@ pub enum DbTarget {
 }
 
 /// Open the connection dialog for a new data source.
-pub const DB_NEW_SOURCE: &str = "IDECraft.Database.NewDataSource";
+pub const DB_NEW_SOURCE: &str = "FerrisIDEA.Database.NewDataSource";
 /// Open a query console on the selected data source.
 pub const DB_CONSOLE: &str = "Console.Open";
 /// Jump to the query console of the selected data source.
-pub const DB_JUMP_CONSOLE: &str = "IDECraft.Database.JumpToConsole";
+pub const DB_JUMP_CONSOLE: &str = "FerrisIDEA.Database.JumpToConsole";
 /// Read the schema again.
 pub const DB_REFRESH: &str = "Refresh";
 /// Properties of the connection, or the data of a table (F4).
@@ -644,11 +644,11 @@ pub const DB_RENAME: &str = "RenameElement";
 pub const DB_DIAGRAM: &str = "Sql.ShowErDiagram";
 /// The selected table's or view's definition as SQL in a read-only tab (`SPEC-0089` v5
 /// behaviour 11).
-pub const DB_DDL: &str = "IDECraft.Database.ShowDdl";
+pub const DB_DDL: &str = "FerrisIDEA.Database.ShowDdl";
 /// Compare the selected row's connection with another one (`SPEC-0110` v5 behaviour 9).
-pub const DB_COMPARE: &str = "IDECraft.Database.CompareSchemas";
+pub const DB_COMPARE: &str = "FerrisIDEA.Database.CompareSchemas";
 /// Compare the selected table or view with one other object (`SPEC-0110` v12 behaviour 18).
-pub const DB_COMPARE_OBJECTS: &str = "IDECraft.Database.CompareObjects";
+pub const DB_COMPARE_OBJECTS: &str = "FerrisIDEA.Database.CompareObjects";
 /// The plan of the statement at the caret (`SPEC-0110` behaviour 1).
 pub const SQL_EXPLAIN: &str = "Sql.ExplainPlan";
 /// The measured plan of the statement at the caret.
@@ -675,7 +675,7 @@ pub fn with_sql_entries(mut menu: Vec<MenuEntry>, sql: bool) -> Vec<MenuEntry> {
 }
 
 /// Send every request of the active request file (`SPEC-0096` v5 behaviour 8).
-pub const HTTP_RUN_ALL: &str = "IDECraft.HttpRunAllRequests";
+pub const HTTP_RUN_ALL: &str = "FerrisIDEA.HttpRunAllRequests";
 
 /// The editor's menu of a `.http` or `.rest` file gets Run All Requests in File after Reformat
 /// Code, behind a separator (`SPEC-0096` v6 behaviour 8); other files keep their menu.
@@ -746,27 +746,27 @@ pub fn database_menu(t: DbTarget) -> Vec<MenuEntry> {
 }
 
 /// Explain the terminal's selection, else its last command, with AI (`SPEC-0313` behaviour 4).
-pub const AI_EXPLAIN_TERMINAL: &str = "IDECraft.AiExplainTerminal";
+pub const AI_EXPLAIN_TERMINAL: &str = "FerrisIDEA.AiExplainTerminal";
 /// Attach the terminal's selection to the chat (`SPEC-0313` behaviour 2).
-pub const AI_ATTACH_SELECTION: &str = "IDECraft.AiAttachTerminalSelection";
+pub const AI_ATTACH_SELECTION: &str = "FerrisIDEA.AiAttachTerminalSelection";
 /// Attach the terminal's last command with output and exit code.
-pub const AI_ATTACH_COMMAND: &str = "IDECraft.AiAttachTerminalCommand";
+pub const AI_ATTACH_COMMAND: &str = "FerrisIDEA.AiAttachTerminalCommand";
 /// Attach the terminal's last lines.
-pub const AI_ATTACH_LINES: &str = "IDECraft.AiAttachTerminalLines";
+pub const AI_ATTACH_LINES: &str = "FerrisIDEA.AiAttachTerminalLines";
 /// Share the terminal tab with the chat, or stop (`SPEC-0313` behaviour 5).
-pub const AI_SHARE_TERMINAL: &str = "IDECraft.AiShareTerminal";
+pub const AI_SHARE_TERMINAL: &str = "FerrisIDEA.AiShareTerminal";
 /// Explain the Run console's output with AI.
-pub const AI_EXPLAIN_RUN: &str = "IDECraft.AiExplainRun";
+pub const AI_EXPLAIN_RUN: &str = "FerrisIDEA.AiExplainRun";
 /// Attach the Run console's output to the chat (`SPEC-0313` behaviour 3).
-pub const AI_ATTACH_RUN: &str = "IDECraft.AiAttachRun";
+pub const AI_ATTACH_RUN: &str = "FerrisIDEA.AiAttachRun";
 /// Explain the selected failed test with AI.
-pub const AI_EXPLAIN_TEST: &str = "IDECraft.AiExplainTest";
+pub const AI_EXPLAIN_TEST: &str = "FerrisIDEA.AiExplainTest";
 /// Attach the selected failed test to the chat.
-pub const AI_ATTACH_TEST: &str = "IDECraft.AiAttachTest";
+pub const AI_ATTACH_TEST: &str = "FerrisIDEA.AiAttachTest";
 /// Attach the problems of the Problems tool window to the chat.
-pub const AI_ATTACH_PROBLEMS: &str = "IDECraft.AiAttachProblems";
+pub const AI_ATTACH_PROBLEMS: &str = "FerrisIDEA.AiAttachProblems";
 /// Attach the working tree's diff to the chat.
-pub const AI_ATTACH_DIFF: &str = "IDECraft.AiAttachGitDiff";
+pub const AI_ATTACH_DIFF: &str = "FerrisIDEA.AiAttachGitDiff";
 
 /// What the terminal's context menu acts on (`SPEC-0313` behaviours 2, 4, 5).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -889,37 +889,37 @@ pub fn build_task_menu(task: bool, triggers: [bool; 5]) -> Vec<MenuEntry> {
 }
 
 /// Copy the value of the selected row of the Variables list (`SPEC-0091` v11 behaviour 23).
-pub const DEBUG_COPY_VALUE: &str = "IDECraft.Debug.CopyValue";
+pub const DEBUG_COPY_VALUE: &str = "FerrisIDEA.Debug.CopyValue";
 /// Copy the name of the selected row.
-pub const DEBUG_COPY_NAME: &str = "IDECraft.Debug.CopyName";
+pub const DEBUG_COPY_NAME: &str = "FerrisIDEA.Debug.CopyName";
 /// Put the selected row's expression into the expression field.
-pub const DEBUG_EVALUATE_ROW: &str = "IDECraft.Debug.EvaluateRow";
+pub const DEBUG_EVALUATE_ROW: &str = "FerrisIDEA.Debug.EvaluateRow";
 /// Add the selected row's expression to the watches.
-pub const DEBUG_WATCH_ROW: &str = "IDECraft.Debug.WatchRow";
+pub const DEBUG_WATCH_ROW: &str = "FerrisIDEA.Debug.WatchRow";
 /// Take the label off the selected row's object (v11 behaviour 24).
-pub const DEBUG_UNMARK: &str = "IDECraft.Debug.Unmark";
+pub const DEBUG_UNMARK: &str = "FerrisIDEA.Debug.Unmark";
 /// Copy the call stack (frame menu).
-pub const DEBUG_COPY_STACK: &str = "IDECraft.Debug.CopyStack";
+pub const DEBUG_COPY_STACK: &str = "FerrisIDEA.Debug.CopyStack";
 /// Prefix of the Smart Step Into items: the adapter's target id follows (v11 behaviour 18).
-pub const DEBUG_STEP_TARGET: &str = "IDECraft.Debug.StepTarget.";
+pub const DEBUG_STEP_TARGET: &str = "FerrisIDEA.Debug.StepTarget.";
 /// Open an Inspect tab on the selected row (`SPEC-0091` v12 behaviour 30).
-pub const DEBUG_INSPECT: &str = "IDECraft.Debug.Inspect";
+pub const DEBUG_INSPECT: &str = "FerrisIDEA.Debug.Inspect";
 /// Open a tab with the objects referring to the selected row's value (v12 behaviour 31).
-pub const DEBUG_REFERRING: &str = "IDECraft.Debug.Referring";
+pub const DEBUG_REFERRING: &str = "FerrisIDEA.Debug.Referring";
 /// Prefix of the "View as" items: the view's id follows (v12 behaviour 32).
-pub const DEBUG_VIEW: &str = "IDECraft.Debug.View.";
+pub const DEBUG_VIEW: &str = "FerrisIDEA.Debug.View.";
 /// Give the selected row's type a renderer (v12 behaviour 33).
-pub const DEBUG_RENDERER: &str = "IDECraft.Debug.Renderer";
+pub const DEBUG_RENDERER: &str = "FerrisIDEA.Debug.Renderer";
 /// Mute or unmute the renderers.
-pub const DEBUG_MUTE_RENDERERS: &str = "IDECraft.Debug.MuteRenderers";
+pub const DEBUG_MUTE_RENDERERS: &str = "FerrisIDEA.Debug.MuteRenderers";
 /// Prefix of the filter switches: `statics`, `synthetic` or `nulls` follows (v12 behaviour 34).
-pub const DEBUG_FILTER: &str = "IDECraft.Debug.Filter.";
+pub const DEBUG_FILTER: &str = "FerrisIDEA.Debug.Filter.";
 /// Add a field watchpoint on the selected field (`SPEC-0146` v3).
-pub const DEBUG_FIELD_WATCH: &str = "IDECraft.Debug.FieldWatch";
+pub const DEBUG_FIELD_WATCH: &str = "FerrisIDEA.Debug.FieldWatch";
 /// Resume every thread (v12 behaviour 27).
-pub const DEBUG_RESUME_ALL: &str = "IDECraft.Debug.ResumeAll";
+pub const DEBUG_RESUME_ALL: &str = "FerrisIDEA.Debug.ResumeAll";
 /// Pause every thread (v12 behaviour 27).
-pub const DEBUG_PAUSE_ALL: &str = "IDECraft.Debug.PauseAll";
+pub const DEBUG_PAUSE_ALL: &str = "FerrisIDEA.Debug.PauseAll";
 
 /// What the Debug window's menus depend on (`SPEC-0091` v11 behaviours 19, 21, 23, 24; v12).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -941,11 +941,11 @@ pub struct DebugTarget {
     /// A row is selected.
     pub row: bool,
     /// The selected row's view.
-    pub view: idecraft_debugger::ViewAs,
+    pub view: ferris_idea_debugger::ViewAs,
     /// The session's language: evaluated views exist for Java and Python.
-    pub lang: Option<idecraft_debugger::Lang>,
+    pub lang: Option<ferris_idea_debugger::Lang>,
     /// The filters of the Variables list (v12 behaviour 34).
-    pub filters: idecraft_debugger::extras::VarFilters,
+    pub filters: ferris_idea_debugger::extras::VarFilters,
     /// Whether the renderers are muted (v12 behaviour 33).
     pub renderers_muted: bool,
 }
@@ -1005,7 +1005,10 @@ pub fn debug_variable_menu(t: DebugTarget) -> Vec<MenuEntry> {
         out.push(item("Mark Object…", "Debugger.MarkObject", p && t.object));
     }
     // SPEC-0091 v12 behaviours 30–34, SPEC-0146 v3.
-    let evaluated = p && t.row && t.lang.is_some_and(|l| l != idecraft_debugger::Lang::Other);
+    let evaluated = p
+        && t.row
+        && t.lang
+            .is_some_and(|l| l != ferris_idea_debugger::Lang::Other);
     out.push(item("Inspect…", DEBUG_INSPECT, p && t.row));
     out.push(item(
         "Show Referring Objects…",
@@ -1015,15 +1018,16 @@ pub fn debug_variable_menu(t: DebugTarget) -> Vec<MenuEntry> {
     out.push(MenuEntry::Separator);
     // Only the views that fit the value, as in the reference (v13): numeric ones for a number,
     // the evaluated ones for an object.
-    let views = idecraft_debugger::ViewAs::ALL
+    let views = ferris_idea_debugger::ViewAs::ALL
         .into_iter()
         .filter(|v| {
-            *v == idecraft_debugger::ViewAs::Auto || if v.numeric() { t.number } else { !t.number }
+            *v == ferris_idea_debugger::ViewAs::Auto
+                || if v.numeric() { t.number } else { !t.number }
         })
         .map(|v| {
             let on = if v.numeric() {
                 p && t.number
-            } else if v == idecraft_debugger::ViewAs::Auto {
+            } else if v == ferris_idea_debugger::ViewAs::Auto {
                 p && t.row
             } else {
                 evaluated
@@ -1086,7 +1090,11 @@ pub fn step_target_menu(targets: &[(i64, String)]) -> Vec<MenuEntry> {
 
 /// The shortcut text a menu shows beside `action`: its first shortcut in `keymap`, the keymap in
 /// use, written for macOS when `macos` (`SPEC-0275` v5 behaviour 14a); empty when it has none.
-pub fn shortcut_label(action: &str, keymap: &idecraft_ui::keymap::Keymap, macos: bool) -> String {
+pub fn shortcut_label(
+    action: &str,
+    keymap: &ferris_idea_ui::keymap::Keymap,
+    macos: bool,
+) -> String {
     keymap.shortcut_label(action, macos)
 }
 
@@ -1171,8 +1179,8 @@ mod tests {
             row: true,
             number: true,
             field: true,
-            view: idecraft_debugger::ViewAs::Hex,
-            lang: Some(idecraft_debugger::Lang::Java),
+            view: ferris_idea_debugger::ViewAs::Hex,
+            lang: Some(ferris_idea_debugger::Lang::Java),
             ..paused
         });
         let hex = flatten(&number)
@@ -1180,12 +1188,12 @@ mod tests {
             .find(|i| i.label == "Hex")
             .unwrap();
         assert!(hex.enabled && hex.checked);
-        assert_eq!(hex.action, "IDECraft.Debug.View.hex");
+        assert_eq!(hex.action, "FerrisIDEA.Debug.View.hex");
         assert!(find(&number, "Add Field Watchpoint").unwrap().enabled);
         assert!(find(&number, "Renderer for This Type…").unwrap().enabled);
         let native = debug_variable_menu(DebugTarget {
             row: true,
-            lang: Some(idecraft_debugger::Lang::Other),
+            lang: Some(ferris_idea_debugger::Lang::Other),
             ..paused
         });
         let text = flatten(&native)
@@ -1197,7 +1205,7 @@ mod tests {
             .into_iter()
             .find(|i| i.label == "Show Static Fields")
             .unwrap();
-        assert_eq!(statics.action, "IDECraft.Debug.Filter.statics");
+        assert_eq!(statics.action, "FerrisIDEA.Debug.Filter.statics");
         let vars = debug_variable_menu(paused);
         assert!(find(&vars, "Mark Object…").is_some_and(|i| i.enabled));
         let marked = debug_variable_menu(DebugTarget {
@@ -1219,7 +1227,7 @@ mod tests {
         let steps = step_target_menu(&[(7, "twice(int)".into()), (8, "square(int)".into())]);
         assert_eq!(
             find(&steps, "square(int)").unwrap().action,
-            "IDECraft.Debug.StepTarget.8"
+            "FerrisIDEA.Debug.StepTarget.8"
         );
     }
 
@@ -1403,9 +1411,13 @@ mod tests {
             copy(&project_tree_menu(target)),
             [
                 row("Absolute Path", "CopyPaths", true),
-                row("Path From Project Root", "IDECraft.CopyRelativePath", true),
+                row(
+                    "Path From Project Root",
+                    "FerrisIDEA.CopyRelativePath",
+                    true
+                ),
                 row("Path From Source Root", "CopySourceRootPath", true),
-                row("File Name", "IDECraft.CopyFileName", true),
+                row("File Name", "FerrisIDEA.CopyFileName", true),
             ]
         );
         // The project folder is below no folder of the project.
@@ -1431,9 +1443,13 @@ mod tests {
             tab,
             [
                 row("Absolute Path", "CopyPaths", true),
-                row("Path From Project Root", "IDECraft.CopyRelativePath", true),
+                row(
+                    "Path From Project Root",
+                    "FerrisIDEA.CopyRelativePath",
+                    true
+                ),
                 row("Path From Source Root", "CopySourceRootPath", true),
-                row("File Name", "IDECraft.CopyFileName", true),
+                row("File Name", "FerrisIDEA.CopyFileName", true),
                 row("Path With Line Number", "CopyPathWithLineNumber", true),
                 row("Copy Reference", "CopyReference", true),
             ]
@@ -1598,7 +1614,7 @@ mod tests {
         assert!(super::clipboard_comparison(None, "a\n").is_none());
         assert!(super::clipboard_comparison(Some(""), "a\n").is_none());
         let rows = super::clipboard_comparison(Some("a\nb\n"), "a\nc\n").unwrap();
-        assert_eq!(rows, idecraft_vcs::side_by_side("a\nb\n", "a\nc\n"));
+        assert_eq!(rows, ferris_idea_vcs::side_by_side("a\nb\n", "a\nc\n"));
         assert!(rows.len() >= 2);
     }
 
@@ -1644,15 +1660,15 @@ mod tests {
     // SPEC-0275 v5 AK-20, SPEC-0028 v3.
     #[test]
     fn shortcut_labels_come_from_the_keymap() {
-        let mac = idecraft_ui::keymap::Keymap::bundled_macos();
+        let mac = ferris_idea_ui::keymap::Keymap::bundled_macos();
         assert_eq!(shortcut_label("RunClass", &mac, true), "⌃⇧R");
         assert_eq!(shortcut_label("DebugClass", &mac, true), "⌃⇧D");
-        let default = idecraft_ui::keymap::Keymap::bundled_default();
+        let default = ferris_idea_ui::keymap::Keymap::bundled_default();
         assert_eq!(
             shortcut_label("RunClass", &default, false),
             "Ctrl+Shift+F10"
         );
-        assert_eq!(shortcut_label("IDECraft.Nothing", &mac, true), "");
+        assert_eq!(shortcut_label("FerrisIDEA.Nothing", &mac, true), "");
     }
 
     #[test]

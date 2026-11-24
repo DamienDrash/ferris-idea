@@ -4,14 +4,14 @@ use std::path::PathBuf;
 
 use std::path::Path;
 
-use idecraft_core::{
+use ferris_idea_core::{
     NotOwn, OwnSources, Query, SearchPlace, SearchScope, Workspace, not_replaceable, search_scope,
     search_workspace,
 };
 
 #[test]
 fn find_in_files_with_mask_exclusions_and_limits() {
-    let root = std::env::temp_dir().join(format!("idecraft-search-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-search-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     for dir in ["src", "target", ".git"] {
         std::fs::create_dir_all(root.join(dir)).unwrap();
@@ -57,14 +57,15 @@ fn find_in_files_with_mask_exclusions_and_limits() {
 }
 
 /// A project with an own file, a virtual environment, installed dependencies, an ignored file,
-/// version control data and IDECraft's data; every file holds `needle`.
+/// version control data and Ferris IDEA's data; every file holds `needle`.
 fn mixed_project(tag: &str) -> PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-search-{tag}-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-search-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     for (file, text) in [
         (".git/HEAD", "ref: refs/heads/main\n"),
         (".git/needle.txt", "needle\n"),
-        (".idecraft/history/1", "needle\n"),
+        (".ferris-idea/history/1", "needle\n"),
         (".gitignore", "*.log\n"),
         ("src/own.py", "needle = 1\n"),
         ("src/notes.log", "needle\n"),
@@ -79,7 +80,7 @@ fn mixed_project(tag: &str) -> PathBuf {
     root
 }
 
-fn paths(search: &idecraft_core::WorkspaceSearch) -> Vec<String> {
+fn paths(search: &ferris_idea_core::WorkspaceSearch) -> Vec<String> {
     search
         .files
         .iter()
@@ -126,7 +127,7 @@ fn find_in_files_searches_only_the_own_sources() {
     });
     assert_eq!(masked.not_searched_counts(), (2, 0));
 
-    // With the option: everything but version control and IDECraft's data.
+    // With the option: everything but version control and Ferris IDEA's data.
     let everything = search(SearchScope {
         include_non_project: true,
         ..SearchScope::default()
@@ -245,9 +246,9 @@ fn replacing_stays_in_the_own_sources() {
     assert_eq!(check(".venv/lib/python3.12/site-packages/x.py", true), None);
     assert_eq!(check("node_modules/y.js", true), None);
     assert_eq!(check("src/notes.log", true), None);
-    // … never version control data, IDECraft's data or a file outside the project.
+    // … never version control data, Ferris IDEA's data or a file outside the project.
     assert_eq!(check(".git/needle.txt", true), Some(NotOwn::VersionControl));
-    assert_eq!(check(".idecraft/history/1", true), Some(NotOwn::IdeData));
+    assert_eq!(check(".ferris-idea/history/1", true), Some(NotOwn::IdeData));
     assert_eq!(
         check("node_modules/dep/.git/config", true),
         Some(NotOwn::Dependencies)

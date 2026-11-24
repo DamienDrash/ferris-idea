@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="RunManager" selected="HTTP Request.api | Liste">
+    <configuration name="api | Liste" type="HttpClient.HttpRequestRunConfigurationType" factoryName="HTTP Request" temporary="true" nameIsGenerated="true" environment="local" path="$PROJECT_DIR$/http/api.http" requestIdentifier="Liste" runType="Run single request">
+      <method v="2" />
+    </configuration>
+    <configuration name="api | by position" type="HttpClient.HttpRequestRunConfigurationType" factoryName="HTTP Request" path="$PROJECT_DIR$/http/api.http" index="2" runType="Run single request">
+      <method v="2" />
+    </configuration>
+    <configuration name="api | no name" type="HttpClient.HttpRequestRunConfigurationType" factoryName="HTTP Request" path="$PROJECT_DIR$/http/api.http" runType="Run single request">
+      <method v="2" />
+    </configuration>
+    <configuration name="outside" type="HttpClient.HttpRequestRunConfigurationType" factoryName="HTTP Request" path="$PROJECT_DIR$/../elsewhere.http" requestIdentifier="x" runType="Run single request">
+      <method v="2" />
+    </configuration>
+  </component>
+</project>

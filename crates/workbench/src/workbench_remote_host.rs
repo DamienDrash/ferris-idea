@@ -10,10 +10,10 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use ferris_idea_remote::{HostTerminal, RunTarget, TermOutput, TermPhase};
+use ferris_idea_session::ErrorCode;
+use ferris_idea_terminal::{LinkRead, PtyLink};
 use gpui::{Context, Entity, WeakEntity, Window, div, prelude::*};
-use idecraft_remote::{HostTerminal, RunTarget, TermOutput, TermPhase};
-use idecraft_session::ErrorCode;
-use idecraft_terminal::{LinkRead, PtyLink};
 use serde_json::{Value, json};
 
 use super::{WorkbenchView, c};
@@ -72,7 +72,7 @@ pub(super) struct HostState {
     /// Places to go to in remote documents that are still opening.
     pub pending_place: HashMap<PathBuf, PendingPlace>,
     /// The host's run configurations and whether its project is trusted (`run.configs`).
-    pub run_configs: Option<idecraft_core::RunConfigs>,
+    pub run_configs: Option<ferris_idea_core::RunConfigs>,
     pub trusted: Option<bool>,
     configs_loading: bool,
     /// Configurations are to be read again at the next look.
@@ -131,7 +131,7 @@ pub(super) fn host_tab_name(host: &str, existing: &[String]) -> String {
 }
 
 /// The message of a refused host request, with its hint.
-fn reason(e: &idecraft_session::RpcError) -> String {
+fn reason(e: &ferris_idea_session::RpcError) -> String {
     match &e.hint {
         Some(h) if !h.is_empty() => format!("{} ({h})", e.message),
         _ => e.message.clone(),
@@ -275,7 +275,8 @@ impl WorkbenchView {
                             .flatten()
                             .filter_map(|p| p.as_str().map(str::to_owned))
                             .collect();
-                        r.host.run_configs = Some(idecraft_core::RunConfigs { configs, problems });
+                        r.host.run_configs =
+                            Some(ferris_idea_core::RunConfigs { configs, problems });
                         r.host.trusted = v["trusted"].as_bool();
                         this.remote_take_run_configs(false);
                     }
@@ -306,7 +307,7 @@ impl WorkbenchView {
             r.host
                 .run_configs
                 .clone()
-                .unwrap_or_else(|| idecraft_core::RunConfigs {
+                .unwrap_or_else(|| ferris_idea_core::RunConfigs {
                     configs: Vec::new(),
                     problems: Vec::new(),
                 });
@@ -363,7 +364,7 @@ impl WorkbenchView {
         cx.notify();
         let task = cx
             .background_executor()
-            .spawn(async move { idecraft_remote::start_host_run(&live, &target) });
+            .spawn(async move { ferris_idea_remote::start_host_run(&live, &target) });
         cx.spawn(async move |this, cx| {
             let started = task.await;
             let _ = this.update(cx, |this, cx| {
@@ -443,7 +444,7 @@ impl WorkbenchView {
 
     fn remote_debug_planned(
         &mut self,
-        live: &idecraft_remote::LiveProject,
+        live: &ferris_idea_remote::LiveProject,
         plan: &serde_json::Value,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -529,7 +530,7 @@ impl WorkbenchView {
     /// Attaches the `runtime`'s debugger to `attach` on the host (`SPEC-0322` behaviours 10–15).
     pub(super) fn remote_attach(
         &mut self,
-        runtime: idecraft_debugger::Runtime,
+        runtime: ferris_idea_debugger::Runtime,
         attach: serde_json::Value,
         target_root: Option<String>,
         label: &str,
@@ -540,7 +541,7 @@ impl WorkbenchView {
             return;
         };
         // Go programs on a host are started under Delve, not attached to (SPEC-0147 v3).
-        if runtime == idecraft_debugger::Runtime::Go {
+        if runtime == ferris_idea_debugger::Runtime::Go {
             self.status = Some(
                 "Cannot attach: Go programs on a host are debugged by starting them, not by attaching"
                     .into(),
@@ -607,7 +608,7 @@ impl WorkbenchView {
     pub(super) fn remote_marker_menu(
         &mut self,
         path: &Path,
-        marker: idecraft_languages::jvm::RunMarker,
+        marker: ferris_idea_languages::jvm::RunMarker,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -857,7 +858,7 @@ impl WorkbenchView {
         let Some(live) = self.remote_project.as_ref().map(|r| r.live.clone()) else {
             return;
         };
-        let kind = idecraft_host_kind(port, &self.remote_known_command(port));
+        let kind = ferris_idea_host_kind(port, &self.remote_known_command(port));
         if kind == "debug" {
             self.status = Some(format!(
                 "Port {port} is a debug port: the debugger reaches it through the session, it is not forwarded"
@@ -888,18 +889,18 @@ impl WorkbenchView {
         cx.notify();
         let task = cx.background_executor().spawn(async move {
             let conn = live.host_connection().ok_or_else(|| {
-                idecraft_session::RpcError::new(
+                ferris_idea_session::RpcError::new(
                     ErrorCode::Unavailable,
                     format!("reconnecting to {}", live.host()),
                 )
             })?;
-            idecraft_remote::ports::forward(
+            ferris_idea_remote::ports::forward(
                 &conn,
                 &live.host(),
                 &live.folder(),
                 port,
                 None,
-                idecraft_remote::ports::Asker::User { confirmed },
+                ferris_idea_remote::ports::Asker::User { confirmed },
             )
         });
         cx.spawn(async move |this, cx| {
@@ -957,7 +958,7 @@ impl WorkbenchView {
 
     fn remote_ports_popup(&mut self, listed: &Value, window: &mut Window, cx: &mut Context<Self>) {
         let (host, folder) = self.remote_project().unwrap_or_default();
-        let forwards = idecraft_remote::ports::list(&host, &folder);
+        let forwards = ferris_idea_remote::ports::list(&host, &folder);
         let mut items = Vec::new();
         let mut actions: Vec<PortRow> = Vec::new();
         for f in &forwards {
@@ -1050,7 +1051,7 @@ impl WorkbenchView {
         let id = id.to_owned();
         let task = cx.background_executor().spawn(async move {
             let conn = live.host_connection();
-            idecraft_remote::ports::close(conn.as_ref(), &live.host(), &live.folder(), &id)
+            ferris_idea_remote::ports::close(conn.as_ref(), &live.host(), &live.folder(), &id)
         });
         cx.spawn(async move |this, cx| {
             let closed = task.await;
@@ -1126,7 +1127,7 @@ impl WorkbenchView {
             let _ = cx.update_window(handle, |_, window, cx| {
                 let _ = this.update(cx, |this, cx| {
                     let branches = listed.and_then(|v| {
-                        serde_json::from_value::<idecraft_vcs::Branches>(v)
+                        serde_json::from_value::<ferris_idea_vcs::Branches>(v)
                             .map_err(|e| e.to_string())
                     });
                     match branches {
@@ -1296,7 +1297,7 @@ impl WorkbenchView {
     pub(super) fn remote_apply_action(
         &mut self,
         ask: super::remote_project::RemoteAsk,
-        range: idecraft_languages::insight::Range,
+        range: ferris_idea_languages::insight::Range,
         title: String,
         cx: &mut Context<Self>,
     ) {
@@ -1362,7 +1363,7 @@ impl WorkbenchView {
         .detach();
     }
 
-    /// IDECraft's inspections of a remote document on the host (`lsp.inspect`).
+    /// Ferris IDEA's inspections of a remote document on the host (`lsp.inspect`).
     pub(super) fn remote_inspect(&mut self, path: &Path, cx: &mut Context<Self>) {
         let (Some(ask), Some(editor)) = (self.remote_ask(path), self.editors.get(path).cloned())
         else {
@@ -1460,7 +1461,7 @@ impl WorkbenchView {
 }
 
 /// The kind the host gives a port (`debug`, `database`, `service`; behaviour 25).
-fn idecraft_host_kind(port: u16, command: &str) -> &'static str {
+fn ferris_idea_host_kind(port: u16, command: &str) -> &'static str {
     let debug_programs = ["jdwp", "debugpy", "lldb-server", "gdbserver", "--inspect"];
     if debug_programs.iter().any(|p| command.contains(p))
         || (matches!(port, 5005 | 5678 | 9229) && command.is_empty())
@@ -1480,17 +1481,17 @@ enum PortRow {
 }
 
 /// The processes `dap.processes` listed, for the Attach to Process dialog.
-fn host_processes(list: &serde_json::Value) -> Vec<idecraft_debugger::Process> {
+fn host_processes(list: &serde_json::Value) -> Vec<ferris_idea_debugger::Process> {
     list["processes"]
         .as_array()
         .into_iter()
         .flatten()
         .filter_map(|p| {
-            Some(idecraft_debugger::Process {
+            Some(ferris_idea_debugger::Process {
                 pid: p["pid"].as_u64()? as u32,
                 name: p["name"].as_str()?.to_owned(),
                 command: p["command"].as_str().unwrap_or_default().to_owned(),
-                runtime: idecraft_debugger::Runtime::parse(p["runtime"].as_str()?)?,
+                runtime: ferris_idea_debugger::Runtime::parse(p["runtime"].as_str()?)?,
                 debug_port: p["debug_port"].as_u64().map(|n| n as u16),
             })
         })
@@ -1512,14 +1513,14 @@ mod tests {
 
     #[test]
     fn the_window_knows_debug_and_database_ports_before_it_asks() {
-        assert_eq!(idecraft_host_kind(5005, ""), "debug");
+        assert_eq!(ferris_idea_host_kind(5005, ""), "debug");
         assert_eq!(
-            idecraft_host_kind(8000, "python3 -m debugpy --listen"),
+            ferris_idea_host_kind(8000, "python3 -m debugpy --listen"),
             "debug"
         );
-        assert_eq!(idecraft_host_kind(5432, "postgres"), "database");
+        assert_eq!(ferris_idea_host_kind(5432, "postgres"), "database");
         assert_eq!(
-            idecraft_host_kind(8080, "python3 -m http.server"),
+            ferris_idea_host_kind(8080, "python3 -m http.server"),
             "service"
         );
     }

@@ -49,5 +49,5 @@ jobs:
         with:
           persist-credentials: false
       - run: rustup show
-      - run: cargo build -p idecraft
-      - run: target/debug/idecraft --version
+      - run: cargo build -p ferris-idea
+      - run: target/debug/ferris-idea --version

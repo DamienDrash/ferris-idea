@@ -1,6 +1,8 @@
 # SPEC-0122: Java and Kotlin in the editor — run markers, Optimize Imports, Generate
 
-- **Version:** 9 · **Date:** 2026-11-13 (v9: the questions behind the name and behind the Inline
+- **Version:** 10 · **Date:** 2026-11-23 (v10: Generate also lists Override, Implement and
+  Delegate Methods, Test… and Copyright, behaviours 3d and 3e, MCP `create_test`, behaviour 4a,
+  AK-25 and AK-26; OBS-0119 K2); 2026-11-13 (v9: the questions behind the name and behind the Inline
   Method variants have a limit, after which the server's name and the server's one action stay,
   behaviours 16 and 17, AK-24; window of 2026-11-13); 2026-11-13 (v8: Extract Constant and Extract Variable name what they
   introduce after its place, Inline Method offers its variants; OBS-0027 J1, J2); 2026-11-11 (v2: Generate puts the code where the caret is; hand test Nr. 49;
@@ -83,9 +85,36 @@ write the boilerplate — without a language server.
    class, or not a Java or Kotlin file), the status bar says so as a passing hint (SPEC-0070 v10
    behaviour 4b): it is gone as soon as the caret moves, another tab becomes active or one of the lists
    of behaviour 13 opens, and it does not come back. [OBS-0027 second window re-check, GEN]
+3d. **The rest of Generate (v10):** after the kinds of behaviour 3a the Java list goes on, in the
+   reference's order, with Override Methods… (always: every class can override `Object`'s
+   methods), Implement Methods… (when the class's declaration extends or implements a type, or is
+   abstract), Delegate Methods… (when the class has instance fields), Test… (unless the file is
+   named as a test, SPEC-0071 behaviour 15) and Copyright (when the project has a copyright
+   profile, SPEC-0155 v5 behaviour 11). Each row runs the action of the same name: the choosers of
+   behaviours 6 and 10, Test… of behaviour 3e, and Update Copyright for the file, which writes or
+   updates the notice as one undo step. A row is shown only where its action can start, so the
+   list never offers what would only answer with a refusal. Before v10 a class without fields
+   offered only Constructor and `toString()` (OBS-0119 K2). [OBS-0119, GEN]
+3e. **Test… (v10):** opens the test class of the class in the editor: the project's own, found by
+   its name among the project's files as Go to Test finds it (`XTest`, `XTests`), or else a file of
+   that name already in the test folder. Without one it creates `XTest` in the test folder — beside
+   `src/main/<language>/<package>` it is `src/test/<language>/<package>` (also in a module), beside
+   a top-level `src/<package>` it is `test/<package>`, otherwise the class's own folder — with the
+   class's package and an empty class body (`public` only when the build file names JUnit 4 and not
+   JUnit 5, since JUnit 4 needs it), never over an existing file and never through a link out of
+   the project; the new file goes into the Local History labelled "Create Test", opens, and the
+   caret stands on the empty line of its body. The status bar says whether it was opened or
+   created. Kotlin classes get a `.kt` test the same way. The reference's dialog for choosing a
+   framework, a superclass and methods to test is not offered: the empty class is what that dialog
+   writes by default. [GEN, OSS (SPEC-0071 naming rules)]
 4. **MCP:** `run_markers` (markers with line and the run configuration each starts),
    `optimize_imports` and `generate_code` (`kind`, `line`; both `dry_run` default true and refuse
    to write a file that changed meanwhile). [ADR-0008]
+4a. **MCP (v10):** `create_test` (`path`, `dry_run` default true) returns where the test class of
+   behaviour 3e is, whether it exists, its class name and the text of a new one; with
+   `dry_run=false` it writes a new class (the `write` right), never over a file. Override,
+   Implement and Delegate Methods are `override_methods` and `delegate_methods`, Copyright is
+   `update_copyright`. [ADR-0008]
 6. **Override and Implement Methods (v3):** `OverrideMethods` (⌃O) and `ImplementMethods` (⌃I) in a
    Java class ask jdtls which methods the class can override and which it must implement. A chooser
    with check boxes lists them grouped under their declaring type (a heading row per type, in the
@@ -100,7 +129,7 @@ write the boilerplate — without a language server.
    *Implement Members* (behaviour 15) is unchanged. [OBS-0027 item 3 (L30)]
 6b. **Return types (v7):** a row of either chooser reads `name(parameter types): return type`, the
    return type as the declaring type's source writes it (`void` included). jdtls does not send return
-   types, so IDECraft reads them from the source of the declaring type in the project: the open file
+   types, so Ferris IDEA reads them from the source of the declaring type in the project: the open file
    (as the editor holds it), else the `.java` file below the project folder whose `package` and type
    match the qualified name (a nested type in its outer type's file); folders called `target`,
    `build`, `out`, `bin`, `node_modules` and hidden ones are left out, at most 5000 files. A method is
@@ -195,7 +224,7 @@ write the boilerplate — without a language server.
       (`return super.name(args)`, `super.name`). One undo step.
     - *MCP:* `override_methods` takes `.kt` files; `add` matches the name or the row. [ADR-0008]
 16. **The name of an extracted constant or variable (v8, OBS-0027 J1):** jdtls names a constant
-    after its value (`_25` for `25`) and a variable often with one letter. In a Java file IDECraft
+    after its value (`_25` for `25`) and a variable often with one letter. In a Java file Ferris IDEA
     gives what the server's Extract Constant or Extract Variable (SPEC-0095 behaviour 2)
     introduced a name from the place of the selected expression, in the planned edits themselves:
     the declaration and every use carry it, the name popup that opens right after (SPEC-0095
@@ -227,7 +256,7 @@ write the boilerplate — without a language server.
 17. **Inline Method with a choice (v8, OBS-0027 J2):** jdtls offers one action `Inline Method`
     without options; what it does depends on the caret: on the name of a method's declaration it
     inlines every usage and removes the method, on a call it inlines that call and keeps the
-    method. For `Inline` (⌥⌘N) and `code_actions` with `inline` in a Java file, IDECraft lists in
+    method. For `Inline` (⌥⌘N) and `code_actions` with `inline` in a Java file, Ferris IDEA lists in
     place of that one action the variants it can do with it, in this order, the first marked as
     preferred: [OBS-0027 J2, STD]
     - `Inline Method: all usages, remove the method`: the server's action asked at the
@@ -248,7 +277,7 @@ write the boilerplate — without a language server.
     another file, or the server does not say where) the server's own action stays as it is and is
     applied at once, as before v8: on a call that is this usage only. `apply_code_action` takes
     the variants' titles; the server's own title `Inline Method` still works there and in ⌥↩ and
-    ⌃T, which list what the server sends. The titles are IDECraft's own wording. [ADR-0008]
+    ⌃T, which list what the server sends. The titles are Ferris IDEA's own wording. [ADR-0008]
 
     *A limit (v9):* finding the variants asks the server up to three more questions than its one
     action needed (the declaration, the usages, the action at the declaration); a search for
@@ -369,6 +398,19 @@ write the boilerplate — without a language server.
   after their time, on the declaration (the usages are asked) and on a call (the declaration is
   asked), the server's own action is what is listed, and the open question is withdrawn with
   `$/cancelRequest` (`java_refactor::tests::the_variants_give_way_when_the_server_is_silent`).
+- **AK-25 (v10, behaviour 3e)** Unit tests (`test_class::tests::{a_new_test_goes_into_the_test_root,
+  an_existing_test_is_found_and_tests_are_refused}`): the test folder for Maven, Gradle modules,
+  a top-level `src/` and a flat file, the package line, `public` for JUnit 4 alone; an existing
+  test by name or on disk is opened; a test file and another language are refused. MCP:
+  `create_test` (`crates/mcp/tests/it/protocol.rs::create_test_plans_and_writes_a_new_class`).
+- **AK-26 (v10, behaviours 3d and 3e)** In a window of the test harness, by keys
+  (`crates/workbench/tests/it/keymap_gaps_obs0119.rs::generate_lists_the_choosers_test_and_copyright`):
+  ⌘N in a class with fields that implements an interface, with a copyright profile, lists the
+  kinds, Override Methods…, Implement Methods…, Delegate Methods…, Test… and Copyright; `test`
+  Enter creates `src/test/java/shop/PersonTest.java`, opens it with the caret in the body; the
+  second time it opens the same file unchanged; Copyright writes the notice. A class without
+  supertype and without profile lists no Implement Methods… and no Copyright
+  (`java_generate_lists.rs`).
 
 ## Out of scope
 Generate's choosers for Kotlin (SPEC-0132), the reference's custom template editor, Javadoc options of Generate,
@@ -387,7 +429,7 @@ return types (jdtls does not send them); both since v7 (behaviours 6a, 6b), retu
 types with a source in the project; Lombok works only with the jar in the local caches and
 never in safe mode, because jdtls would run code of the project's dependency (IMP-0381).
 Generate asks two short lists in a row where the reference uses one dialog with options (v4); the
-templates are IDECraft's own fixed set, not the reference's editable ones. Delegate Methods leaves out
+templates are Ferris IDEA's own fixed set, not the reference's editable ones. Delegate Methods leaves out
 what every object has (v4). Not compared next to the reference yet. The lists filter their rows by a
 typed text and Show Context Actions imports from a shown hint at once (v5); neither was compared next to
 the reference (OBS-0027 L36, L37).
@@ -401,9 +443,9 @@ copy the documentation comment.
 v8 (OBS-0027 J1, J2): the extracted constant is `private` as jdtls writes it, where the reference
 writes `public`; the narrower visibility is kept on purpose (nothing outside the class uses a
 constant that was a literal a moment ago; widening is one edit). The reference proposes several
-names in a list and takes them from more places (the type, the expression's own words); IDECraft
+names in a list and takes them from more places (the type, the expression's own words); Ferris IDEA
 has one name from three places and else the server's. Inline Method: the reference asks in a
-dialog with a preview and can also inline usages in other files while keeping the method; IDECraft
+dialog with a preview and can also inline usages in other files while keeping the method; Ferris IDEA
 lists the variants as rows of the refactoring list, offers "all usages, keep the method" only
 while every usage is in the file, and offers no choice at all for a method declared in another
 file (then jdtls's single action: this usage at a call), because jdtls 1.64.0 has no option for it

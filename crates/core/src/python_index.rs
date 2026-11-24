@@ -63,17 +63,17 @@ pub fn parse_simple_names(json: &[u8]) -> Result<Vec<String>, String> {
     Ok(page.projects.into_iter().map(|p| p.name).collect())
 }
 
-/// IDECraft's user cache folder: `$XDG_CACHE_HOME/idecraft`, else `~/Library/Caches/idecraft` on
-/// macOS, else `~/.cache/idecraft`; `None` without `HOME`.
+/// Ferris IDEA's user cache folder: `$XDG_CACHE_HOME/ferris-idea`, else `~/Library/Caches/ferris-idea` on
+/// macOS, else `~/.cache/ferris-idea`; `None` without `HOME`.
 pub fn user_cache_dir() -> Option<PathBuf> {
     if let Some(d) = std::env::var_os("XDG_CACHE_HOME") {
-        return Some(PathBuf::from(d).join("idecraft"));
+        return Some(PathBuf::from(d).join("ferris-idea"));
     }
     let home = PathBuf::from(std::env::var_os("HOME")?);
     Some(if cfg!(target_os = "macos") {
-        home.join("Library/Caches/idecraft")
+        home.join("Library/Caches/ferris-idea")
     } else {
-        home.join(".cache/idecraft")
+        home.join(".cache/ferris-idea")
     })
 }
 
@@ -524,9 +524,9 @@ fn plan(
     }
 }
 
-/// [`Fetch`] over HTTPS with IDECraft's HTTP client (60 s per request, redirects followed).
+/// [`Fetch`] over HTTPS with Ferris IDEA's HTTP client (60 s per request, redirects followed).
 pub fn http_fetch(url: &str, accept: &str) -> Result<Fetched, String> {
-    let request = idecraft_http::ResolvedRequest {
+    let request = ferris_idea_http::ResolvedRequest {
         name: None,
         line: 0,
         method: "GET".into(),
@@ -534,13 +534,13 @@ pub fn http_fetch(url: &str, accept: &str) -> Result<Fetched, String> {
         headers: vec![
             ("Accept".into(), accept.to_owned()),
             ("Accept-Encoding".into(), "gzip".into()),
-            ("User-Agent".into(), "IDECraft".into()),
+            ("User-Agent".into(), "FerrisIDEA".into()),
         ],
         body: String::new(),
         unresolved: Vec::new(),
     };
     let response =
-        idecraft_http::send(&request, Duration::from_secs(60)).map_err(|e| e.to_string())?;
+        ferris_idea_http::send(&request, Duration::from_secs(60)).map_err(|e| e.to_string())?;
     let gzip = response
         .header("content-encoding")
         .is_some_and(|e| e.eq_ignore_ascii_case("gzip"));
@@ -584,7 +584,8 @@ mod tests {
     }
 
     fn temp(tag: &str) -> PathBuf {
-        let p = std::env::temp_dir().join(format!("idecraft-pyindex-{tag}-{}", std::process::id()));
+        let p =
+            std::env::temp_dir().join(format!("ferris-idea-pyindex-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&p);
         std::fs::create_dir_all(&p).unwrap();
         p

@@ -8,11 +8,11 @@ use std::ops::Range;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use ferris_idea_core::bookmarks::{Bookmark, Listed, MNEMONICS, mnemonic};
 use gpui::{
     Context, Entity, EventEmitter, FocusHandle, KeyDownEvent, UniformListScrollHandle, Window, div,
     prelude::*, px, uniform_list,
 };
-use idecraft_core::bookmarks::{Bookmark, Listed, MNEMONICS, mnemonic};
 
 use crate::EditorView;
 use crate::bookmarks_model::{GRID_COLUMNS, Node, Row, grid_step, parent, rows, tree};
@@ -582,7 +582,7 @@ impl BookmarksPopup {
                                 Some(m) => badge(Some(m), p),
                                 None => div().w(px(16.)).flex_none(),
                             })
-                            .child(icon(idecraft_ui::icons::file_icon(&row.name)))
+                            .child(icon(ferris_idea_ui::icons::file_icon(&row.name)))
                             .child(div().flex_none().child(format!(
                                 "{}:{}",
                                 row.name,
@@ -944,7 +944,7 @@ impl Render for BookmarksToolView {
                                     d.child(icon("nodes/module")).child(name.clone())
                                 }
                                 Node::File { name, folder, .. } => d
-                                    .child(icon(idecraft_ui::icons::file_icon(name)))
+                                    .child(icon(ferris_idea_ui::icons::file_icon(name)))
                                     .child(div().flex_none().child(name.clone()))
                                     .child(
                                         div()

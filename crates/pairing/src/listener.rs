@@ -1,4 +1,4 @@
-//! The listener of `idecraft serve --pair` (`SPEC-0321` behaviours 13–14, 17–19, 21): nothing but
+//! The listener of `ferris-idea serve --pair` (`SPEC-0321` behaviours 13–14, 17–19, 21): nothing but
 //! the two hybrid handshakes, a pairing window for one device, rate limits per address, and
 //! revocation that reaches live sessions within a second.
 
@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use idecraft_session::{Backend, Peer, Right};
+use ferris_idea_session::{Backend, Peer, Right};
 use zeroize::Zeroizing;
 
 use crate::channel::{Channel, Limits};
@@ -178,7 +178,7 @@ pub fn listen(
         .local_addr()
         .map_err(|e| ListenError::Bind(options.addr, e.to_string()))?;
     console.show(&format!(
-        "idecraft serve: listening on {addr}; only paired devices can connect"
+        "ferris-idea serve: listening on {addr}; only paired devices can connect"
     ));
     if !is_loopback(&addr) {
         console.show("warning: this listener is reachable from other machines on the network");

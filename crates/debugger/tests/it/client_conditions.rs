@@ -1,5 +1,5 @@
 //! SPEC-0178 AK-1 and AK-2: conditions, hit counts and logpoints against a fake adapter, evaluated
-//! by IDECraft when the adapter does not announce them and left to the adapter when it does.
+//! by Ferris IDEA when the adapter does not announce them and left to the adapter when it does.
 //!
 //! The fake adapter runs `for i in 1..=6 { line 4 }` and stops at line 4 whenever a breakpoint is
 //! set there; with capabilities it evaluates `i == N` itself. `evaluate` knows `i`, `i == N`,
@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use idecraft_debugger::{
+use ferris_idea_debugger::{
     CLIENT_SIDE_NOTE, DapClient, DebugSession, EvaluatedBy, Event, SourceBreakpoint, read_message,
     write_message,
 };
@@ -218,7 +218,7 @@ fn fake_adapter(source: PathBuf, capabilities: Value) -> (String, Log) {
 }
 
 fn source() -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("idecraft-conditions-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-conditions-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("Main.kt");
     std::fs::write(
@@ -232,7 +232,7 @@ fn source() -> PathBuf {
 fn start(
     capabilities: Value,
     breakpoint: SourceBreakpoint,
-) -> (DebugSession, Vec<idecraft_debugger::Breakpoint>, Log) {
+) -> (DebugSession, Vec<ferris_idea_debugger::Breakpoint>, Log) {
     let path = source();
     let (address, log) = fake_adapter(path.clone(), capabilities);
     let breakpoints = BTreeMap::from([(path.clone(), vec![breakpoint])]);
@@ -282,9 +282,9 @@ fn line(condition: Option<&str>, hit: Option<&str>, log: Option<&str>) -> Source
 }
 
 #[test]
-fn condition_evaluated_by_idecraft() {
+fn condition_evaluated_by_ferris_idea() {
     let (mut session, placed, log) = start(json!({}), line(Some("i == 3"), None, None));
-    assert_eq!(placed[0].evaluated_by, EvaluatedBy::IdeCraft);
+    assert_eq!(placed[0].evaluated_by, EvaluatedBy::FerrisIdea);
     assert_eq!(stops(&mut session), ["3"]);
     let set = sent(&log, "setBreakpoints");
     assert!(
@@ -297,7 +297,7 @@ fn condition_evaluated_by_idecraft() {
 }
 
 #[test]
-fn hit_conditions_evaluated_by_idecraft() {
+fn hit_conditions_evaluated_by_ferris_idea() {
     let (mut session, _, _) = start(json!({}), line(None, Some("3"), None));
     assert_eq!(stops(&mut session), ["3"]);
     let (mut session, _, _) = start(json!({}), line(None, Some("%2"), None));
@@ -409,7 +409,7 @@ fn unknown_hit_condition_is_refused() {
 }
 
 #[test]
-fn names_only_adapter_gets_conditions_evaluated_by_idecraft() {
+fn names_only_adapter_gets_conditions_evaluated_by_ferris_idea() {
     let names_only = json!({"namesOnly": true});
     let (mut session, _, _) = start(
         names_only.clone(),
@@ -439,7 +439,7 @@ fn names_only_adapter_gets_conditions_evaluated_by_idecraft() {
     let console = session.console().to_owned();
     assert!(
         console.contains(
-            "gave `unknown`, not true or false; IDECraft cannot evaluate it either: calls"
+            "gave `unknown`, not true or false; Ferris IDEA cannot evaluate it either: calls"
         ),
         "{console}"
     );

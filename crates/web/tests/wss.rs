@@ -6,12 +6,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use idecraft_session::room::RoomConfig;
-use idecraft_session::{Backend, BackendConfig, ClientSession, ErrorCode, Right, Transport};
-use idecraft_web::client::connect;
-use idecraft_web::http::SECURITY_HEADERS;
-use idecraft_web::tls::{client_config, client_config_with, load_server_config, provider};
-use idecraft_web::{Limits, Running, WebConfig, WebError, check_endpoint, listen};
+use ferris_idea_session::room::RoomConfig;
+use ferris_idea_session::{Backend, BackendConfig, ClientSession, ErrorCode, Right, Transport};
+use ferris_idea_web::client::connect;
+use ferris_idea_web::http::SECURITY_HEADERS;
+use ferris_idea_web::tls::{client_config, client_config_with, load_server_config, provider};
+use ferris_idea_web::{Limits, Running, WebConfig, WebError, check_endpoint, listen};
 use rcgen::{BasicConstraints, CertificateParams, DnType, IsCa, Issuer, KeyPair};
 use rustls::ClientConfig;
 use serde_json::json;
@@ -79,7 +79,7 @@ fn backend_for(f: &Fixture) -> Backend {
         peer: "local:test".into(),
         ..BackendConfig::default()
     });
-    idecraft_session::room::bind(&backend, RoomConfig::default());
+    ferris_idea_session::room::bind(&backend, RoomConfig::default());
     backend
 }
 
@@ -143,7 +143,7 @@ fn upgrade(port: u16, host: &str, origin: Option<&str>) -> String {
     )
 }
 
-fn open(transport: Transport, f: &Fixture) -> Result<ClientSession, idecraft_session::RpcError> {
+fn open(transport: Transport, f: &Fixture) -> Result<ClientSession, ferris_idea_session::RpcError> {
     ClientSession::open(transport, &f.project.display().to_string(), "t", "h", None)
 }
 
@@ -499,8 +499,8 @@ fn ak10_too_many_failures_block_the_address() {
 
 #[test]
 fn ak11_text_after_authentication_closes_and_message_boundaries_mean_nothing() {
+    use ferris_idea_session::frame::Frame;
     use futures_util::{SinkExt, StreamExt};
-    use idecraft_session::frame::Frame;
     use tokio_tungstenite::tungstenite::{Message, http::Request};
 
     let f = fixture();

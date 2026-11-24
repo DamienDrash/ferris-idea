@@ -1,6 +1,6 @@
 # SPEC-0001: Workspace
 
-- **Version:** 2 · **Date:** 2026-10-31 (v2: settings directory renamed from `.ridelab` to `.idecraft`)
+- **Version:** 2 · **Date:** 2026-10-31 (v2: settings directory renamed from `.ridelab` to `.ferris-idea`)
 - **Sources:** GEN (common behaviour of editors and IDEs that open a folder as a project)
 - **Feature matrix rows:** F-001
 
@@ -13,7 +13,7 @@ The user opens a directory as a workspace and sees its project files.
 3. The file list contains regular files below the root, as paths relative to the root, sorted. [GEN]
 4. Version-control metadata and common generated directories (`.git`, `.hg`, `.svn`, `target`, `node_modules`, `__pycache__`) and the IDE's own metadata directory are not listed. [GEN]
 5. Symbolic links are not followed (prevents cycles). [GEN]
-6. Workspace-specific settings live in `.idecraft/settings.toml` below the root and form the highest settings layer (SPEC-0002). A missing file is not an error. [GEN]
+6. Workspace-specific settings live in `.ferris-idea/settings.toml` below the root and form the highest settings layer (SPEC-0002). A missing file is not an error. [GEN]
 
 ## Acceptance criteria
 - **AK-1** Files are listed sorted and relative; excluded directories are absent.

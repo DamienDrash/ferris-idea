@@ -36,7 +36,7 @@ const LAUNCH: Duration = Duration::from_secs(120);
 /// The `initialize` arguments; child sessions are accepted for js-debug only.
 fn initialize_arguments(adapter_id: &str) -> Value {
     json!({
-        "clientID": "idecraft", "clientName": "IDECraft", "adapterID": adapter_id,
+        "clientID": "ferris-idea", "clientName": "Ferris IDEA", "adapterID": adapter_id,
         "linesStartAt1": true, "columnsStartAt1": true, "pathFormat": "path",
         "supportsRunInTerminalRequest": false, "locale": "en",
         "supportsStartDebuggingRequest": adapter_id.starts_with("pwa-"),
@@ -70,11 +70,12 @@ pub enum EvaluatedBy {
     /// The debug adapter (or there is nothing to evaluate).
     #[default]
     Adapter,
-    /// IDECraft, at each hit, because the adapter cannot.
-    IdeCraft,
+    /// Ferris IDEA, at each hit, because the adapter cannot.
+    #[serde(rename = "ferris-idea")]
+    FerrisIdea,
 }
 
-/// IDECraft's hint why a breakpoint in `path` may not be bound (`SPEC-0039` behaviour 8; the
+/// Ferris IDEA's hint why a breakpoint in `path` may not be bound (`SPEC-0039` behaviour 8; the
 /// window's tooltip when the adapter gives no reason, `SPEC-0127` v5 behaviour 14).
 pub fn unbound_hint(path: &Path) -> String {
     let resolved = std::fs::canonicalize(path).ok();
@@ -102,8 +103,8 @@ fn adapter_reason(b: &Value) -> Option<String> {
         .map(str::to_owned)
 }
 
-/// The note for the debug console when IDECraft evaluates breakpoints (`SPEC-0178` behaviour 6).
-pub const CLIENT_SIDE_NOTE: &str = "[IDECraft] The debug adapter cannot evaluate breakpoint conditions, hit counts or log messages; IDECraft evaluates them at each hit. This is slower: the program stops briefly every time such a line is reached.\n";
+/// The note for the debug console when Ferris IDEA evaluates breakpoints (`SPEC-0178` behaviour 6).
+pub const CLIENT_SIDE_NOTE: &str = "[Ferris IDEA] The debug adapter cannot evaluate breakpoint conditions, hit counts or log messages; Ferris IDEA evaluates them at each hit. This is slower: the program stops briefly every time such a line is reached.\n";
 
 /// A hit condition: `N`/`==N`, `>N`, `>=N`, `<N`, `<=N` or `%N` (`SPEC-0178` behaviour 3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -252,7 +253,7 @@ fn unanswered(value: &str) -> bool {
     value.is_empty() || value == "unknown"
 }
 
-/// What IDECraft evaluates itself for one line breakpoint (`SPEC-0178` behaviour 1).
+/// What Ferris IDEA evaluates itself for one line breakpoint (`SPEC-0178` behaviour 1).
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Kept {
     /// Adapter's id, to follow a line the adapter moves.
@@ -281,7 +282,7 @@ impl Kept {
             && self.rules == other.rules
     }
 
-    /// Whether the adapter left a condition, pass count or log message to IDECraft.
+    /// Whether the adapter left a condition, pass count or log message to Ferris IDEA.
     fn client_side(&self) -> bool {
         self.condition.is_some() || self.hit_condition.is_some() || self.log_message.is_some()
     }
@@ -289,6 +290,27 @@ impl Kept {
 
 fn canonical(path: &Path) -> PathBuf {
     std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
+/// Whether a js-debug stop (`body` of its `stopped` event) is js-debug's own module entry pause
+/// leaking through rather than a stop of the program. js-debug places an internal breakpoint at
+/// line 1, column 1 of every file with breakpoints; V8 binds it to the first breakable place,
+/// which for a file opening with a function declaration is that function's first statement. It
+/// resumes from that pause itself, but when the pause is handled before its own breakpoint is
+/// registered (seen under load) it reports it: as a `breakpoint` stop that hit no breakpoint, or
+/// as a `pause` "on debugger statement". Such a stop is the adapter's when no breakpoint of ours
+/// is on its line (`ours`) and the line has no `debugger` statement (`line_text`, the top frame's
+/// source line; unknown counts as having one).
+fn js_entry_leak(body: &Value, ours: bool, line_text: Option<&str>) -> bool {
+    let hit_none = body["hitBreakpointIds"]
+        .as_array()
+        .is_none_or(|ids| ids.is_empty());
+    let shape = match body["reason"].as_str() {
+        Some("breakpoint") => hit_none,
+        Some("pause") => hit_none && body["description"] == "Paused on debugger statement",
+        _ => false,
+    };
+    shape && !ours && line_text.is_some_and(|text| !text.contains("debugger"))
 }
 
 /// Replaces each `{expression}` of a log message with `value(expression)`.
@@ -350,7 +372,7 @@ pub struct SourceBreakpoint {
     /// Message to log instead of stopping; `{expr}` parts are evaluated.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub log_message: Option<String>,
-    /// What IDECraft does at a hit besides (`SPEC-0127` v3 behaviours 6–11).
+    /// What Ferris IDEA does at a hit besides (`SPEC-0127` v3 behaviours 6–11).
     #[serde(default, skip_serializing_if = "BreakpointRules::is_empty")]
     pub rules: BreakpointRules,
 }
@@ -367,7 +389,7 @@ pub enum Suspend {
     None,
 }
 
-/// What IDECraft does at a breakpoint's hit besides the adapter's condition, pass count and log
+/// What Ferris IDEA does at a breakpoint's hit besides the adapter's condition, pass count and log
 /// message (`SPEC-0127` v3 behaviours 6–11); all empty for a plain breakpoint.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, serde::Deserialize)]
 #[serde(default)]
@@ -544,7 +566,7 @@ pub struct FunctionBreakpoint {
     /// Stop on entry (`SPEC-0146` v6 behaviour 13); on by default.
     #[serde(default = "yes", skip_serializing_if = "is_true")]
     pub entry: bool,
-    /// Stop after the method returned, emulated by IDECraft with a step out (v6 behaviour 13).
+    /// Stop after the method returned, emulated by Ferris IDEA with a step out (v6 behaviour 13).
     #[serde(default, skip_serializing_if = "is_false")]
     pub exit: bool,
     /// Switched off: kept, not sent (v6 behaviour 14).
@@ -616,6 +638,16 @@ pub const EXCEPTION_LANGUAGES: [(&str, &str); 5] = [
     ("native", "Native"),
     ("go", "Go"),
 ];
+
+/// The exit code an adapter's `exited` event reports, when it is the program's. java-debug sends
+/// 0 whenever the JVM ends, whatever the process returned, so its code is not shown as the
+/// program's (`SPEC-0322` v7 behaviour 8).
+pub fn reported_exit_code(adapter_id: &str, code: Option<i64>) -> Option<i64> {
+    match adapter_id {
+        "java" | "java-debug" => None,
+        _ => code,
+    }
+}
 
 /// The exception language of adapter id `adapter_id` (behaviour 15).
 pub fn exception_language(adapter_id: &str) -> &'static str {
@@ -853,9 +885,9 @@ pub struct DebugSession {
     rebound: std::collections::BTreeSet<PathBuf>,
     /// Attached to a program that ran before (`SPEC-0147`): ending detaches, the program goes on.
     attached: bool,
-    /// Breakpoint parts IDECraft evaluates, per file with symbolic links resolved (`SPEC-0178`).
+    /// Breakpoint parts Ferris IDEA evaluates, per file with symbolic links resolved (`SPEC-0178`).
     kept: BTreeMap<PathBuf, Vec<Kept>>,
-    /// Whether the console already says that IDECraft evaluates breakpoints.
+    /// Whether the console already says that Ferris IDEA evaluates breakpoints.
     noted: bool,
     /// js-debug's process tree (`SPEC-0168` behaviour 2); `None` for other adapters.
     js: Option<JsTree>,
@@ -1201,7 +1233,7 @@ impl DebugSession {
         if !special.is_empty()
             && let Err(e) = session.set_special_breakpoints(special)
         {
-            session.output.push_str(&format!("[IDECraft] {e}\n"));
+            session.output.push_str(&format!("[Ferris IDEA] {e}\n"));
         }
         // kotlin-debug-adapter never answers `configurationDone`; `launch`'s answer is what counts.
         let done = session.client.send("configurationDone", json!({}))?;
@@ -1223,7 +1255,7 @@ impl DebugSession {
     /// debugpy drops a breakpoint condition that fails with a `NameError` without a word and
     /// goes on, and goes on after any other failure: its own setting (`setDebuggerProperty`,
     /// a request of debugpy beside the protocol) makes it say every failure in the console
-    /// and stop at that hit, as IDECraft does for the conditions it evaluates itself
+    /// and stop at that hit, as Ferris IDEA does for the conditions it evaluates itself
     /// (`SPEC-0039` v6 behaviour 3a, `SPEC-0178` behaviour 5). An adapter version that does
     /// not know the request keeps its own way.
     fn report_condition_errors(&mut self) {
@@ -1348,7 +1380,7 @@ impl DebugSession {
                     verified: bound && b["verified"].as_bool().unwrap_or(false),
                     line: Some(k.line),
                     requested_line: Some(requested),
-                    // IDECraft's reason for such a line, else the adapter's (SPEC-0132 v7
+                    // Ferris IDEA's reason for such a line, else the adapter's (SPEC-0132 v7
                     // behaviour 4e).
                     reason: if bound {
                         adapter_reason(b)
@@ -1356,7 +1388,7 @@ impl DebugSession {
                         why_unbindable(requested)
                     },
                     evaluated_by: if client {
-                        EvaluatedBy::IdeCraft
+                        EvaluatedBy::FerrisIdea
                     } else {
                         EvaluatedBy::Adapter
                     },
@@ -1367,12 +1399,12 @@ impl DebugSession {
         let key = canonical(path);
         // Hit counters go on while a breakpoint's rule stays the same (behaviour 7).
         let old = self.kept.remove(&key).unwrap_or_default();
-        // Kept as well: breakpoints with further options IDECraft applies at each hit (SPEC-0127
+        // Kept as well: breakpoints with further options Ferris IDEA applies at each hit (SPEC-0127
         // v3).
         let mut kept: Vec<Kept> = placed
             .iter()
             .zip(kept)
-            .filter(|(b, k)| b.evaluated_by == EvaluatedBy::IdeCraft || !k.rules.is_empty())
+            .filter(|(b, k)| b.evaluated_by == EvaluatedBy::FerrisIdea || !k.rules.is_empty())
             .map(|(_, mut k)| {
                 if let Some(o) = old.iter().find(|o| o.same_rule(&k)) {
                     k.hits = o.hits;
@@ -1453,7 +1485,7 @@ impl DebugSession {
                             if !self.refused_sources.contains(&source) {
                                 self.refused_sources.push(source.clone());
                                 self.note(&format!(
-                                    "[IDECraft] kotlin-debug-adapter did not take the breakpoints of {file} for the classes inside `{class}`; they stop only in code of `{class}` itself and of inner classes that are loaded already.\n",
+                                    "[Ferris IDEA] kotlin-debug-adapter did not take the breakpoints of {file} for the classes inside `{class}`; they stop only in code of `{class}` itself and of inner classes that are loaded already.\n",
                                 ));
                             }
                         }
@@ -1474,7 +1506,7 @@ impl DebugSession {
         let known = self.unbindable.remove(path).unwrap_or_default();
         for (line, why) in unbound.iter().filter(|u| !known.contains(u)) {
             self.note(&format!(
-                "[IDECraft] The breakpoint at {file}:{line} cannot stop the program: {why}.\n",
+                "[Ferris IDEA] The breakpoint at {file}:{line} cannot stop the program: {why}.\n",
             ));
         }
         let lines = unbound.iter().map(|(line, _)| *line).collect();
@@ -1845,7 +1877,7 @@ impl DebugSession {
     }
 
     /// Waits for the program to stop or end. Hits of breakpoints whose condition, hit count or log
-    /// message IDECraft evaluates are handled here and do not end the wait unless they stop
+    /// message Ferris IDEA evaluates are handled here and do not end the wait unless they stop
     /// (`SPEC-0178` behaviours 2–7).
     pub fn wait(&mut self, timeout: Duration) -> Result<Event, DapError> {
         let deadline = Instant::now() + timeout;
@@ -1892,6 +1924,9 @@ impl DebugSession {
                     continue;
                 }
             }
+            if event["event"] == "stopped" && self.adapter_entry_pause(&event["body"])? {
+                continue;
+            }
             if event["event"] == "stopped" && self.passes(&event["body"])? {
                 continue;
             }
@@ -1899,7 +1934,42 @@ impl DebugSession {
         }
     }
 
-    /// Evaluates a stop at a breakpoint kept by IDECraft; `true` when the program was continued.
+    /// js-debug's own module entry pause reported as a stop ([`js_entry_leak`]): the program is
+    /// continued and `true` returned. Not while a pause asked for by Ferris IDEA is pending.
+    fn adapter_entry_pause(&mut self, body: &Value) -> Result<bool, DapError> {
+        if self.js.is_none() || self.pausing || !js_entry_leak(body, false, Some("")) {
+            return Ok(false);
+        }
+        let thread = body["threadId"].as_i64().unwrap_or_default();
+        let frames = self.stack_trace(thread)?;
+        let Some(top) = frames.first() else {
+            return Ok(false);
+        };
+        let Some(path) = top.path.as_deref().map(canonical) else {
+            return Ok(false);
+        };
+        let line = u64::try_from(top.line).unwrap_or_default();
+        let ours = self
+            .requested
+            .iter()
+            .any(|(file, list)| canonical(file) == path && list.iter().any(|b| b.line == line))
+            || self.placed.iter().any(|(file, list)| {
+                canonical(file) == path && list.iter().any(|b| b.line == Some(line))
+            });
+        let text = std::fs::read_to_string(&path).ok().and_then(|source| {
+            usize::try_from(line)
+                .ok()
+                .and_then(|l| l.checked_sub(1))
+                .and_then(|i| source.lines().nth(i).map(str::to_owned))
+        });
+        if !js_entry_leak(body, ours, text.as_deref()) {
+            return Ok(false);
+        }
+        self.resume("continue", thread)?;
+        Ok(true)
+    }
+
+    /// Evaluates a stop at a breakpoint kept by Ferris IDEA; `true` when the program was continued.
     fn passes(&mut self, body: &Value) -> Result<bool, DapError> {
         if self.kept.is_empty() {
             return Ok(false);
@@ -1956,7 +2026,7 @@ impl DebugSession {
             };
             if let Some(why) = failed {
                 self.note(&format!(
-                    "[IDECraft] The condition `{condition}` at {place} could not be evaluated: {why}. Stopped there.\n"
+                    "[Ferris IDEA] The condition `{condition}` at {place} could not be evaluated: {why}. Stopped there.\n"
                 ));
                 return Ok(false);
             }
@@ -2017,7 +2087,7 @@ impl DebugSession {
                 if Lang::of_adapter(&self.adapter_id) != Lang::Java
                     && !std::mem::replace(&mut self.suspend_noted, true) =>
             {
-                self.note("[IDECraft] This debug adapter stops every thread at a breakpoint; stopping only the thread that hit it is not possible.\n");
+                self.note("[Ferris IDEA] This debug adapter stops every thread at a breakpoint; stopping only the thread that hit it is not possible.\n");
             }
             _ => {}
         }
@@ -2113,7 +2183,7 @@ impl DebugSession {
         Lang::of_adapter(&self.adapter_id)
     }
 
-    /// A condition's truth value: the adapter's answer, else IDECraft's own evaluation (`SPEC-0178`
+    /// A condition's truth value: the adapter's answer, else Ferris IDEA's own evaluation (`SPEC-0178`
     /// behaviours 4 and 4a).
     fn condition(&mut self, condition: &str, frame: i64) -> Result<bool, String> {
         let adapter = match self.evaluate(condition, frame) {
@@ -2126,16 +2196,16 @@ impl DebugSession {
         match expr::evaluate(condition, |path| self.lookup(path, frame)) {
             Ok(expr::Value::Bool(b)) => Ok(b),
             Ok(other) => Err(format!(
-                "{adapter}; IDECraft's own evaluation gave `{}`, not true or false",
+                "{adapter}; Ferris IDEA's own evaluation gave `{}`, not true or false",
                 other.text()
             )),
             Err(e) => Err(format!(
-                "{adapter}; IDECraft cannot evaluate it either: {e}"
+                "{adapter}; Ferris IDEA cannot evaluate it either: {e}"
             )),
         }
     }
 
-    /// A log message part as text: the adapter's answer, else IDECraft's own evaluation.
+    /// A log message part as text: the adapter's answer, else Ferris IDEA's own evaluation.
     fn value_text(&mut self, expression: &str, frame: i64) -> Result<String, String> {
         let adapter = match self.evaluate(expression, frame) {
             Ok(value) if !unanswered(&value) => return Ok(value),
@@ -2210,7 +2280,10 @@ impl DebugSession {
                 }
                 Event::Stopped(Stopped { reason, thread_id })
             }
-            Some("exited") => Event::Exited(event["body"]["exitCode"].as_i64()),
+            Some("exited") => Event::Exited(reported_exit_code(
+                &self.adapter_id,
+                event["body"]["exitCode"].as_i64(),
+            )),
             _ => {
                 // `terminated` may come without or before `exited`.
                 let code = self
@@ -2218,7 +2291,7 @@ impl DebugSession {
                     .wait_event(&["exited"], Duration::from_millis(500))
                     .ok()
                     .and_then(|e| e["body"]["exitCode"].as_i64());
-                Event::Exited(code)
+                Event::Exited(reported_exit_code(&self.adapter_id, code))
             }
         })
     }
@@ -2276,7 +2349,7 @@ impl DebugSession {
         }
     }
 
-    /// Adds IDECraft's own console line after what the adapter sent before it, so a logpoint's
+    /// Adds Ferris IDEA's own console line after what the adapter sent before it, so a logpoint's
     /// message stands where the program was (D17: they came after the program's later output).
     fn note(&mut self, text: &str) {
         self.collect_output();
@@ -2284,7 +2357,7 @@ impl DebugSession {
         self.transcript.push_str(text);
     }
 
-    /// Adds a line of IDECraft's own to the debug console (`SPEC-0322` behaviour 4).
+    /// Adds a line of Ferris IDEA's own to the debug console (`SPEC-0322` behaviour 4).
     pub fn add_console_note(&mut self, text: &str) {
         self.note(text);
     }
@@ -2422,7 +2495,7 @@ impl DebugSession {
         Ok(vars)
     }
 
-    /// Brings the variables of one answer of a JVM adapter into IDECraft's form (`SPEC-0091` v16
+    /// Brings the variables of one answer of a JVM adapter into Ferris IDEA's form (`SPEC-0091` v16
     /// behaviour 42): no `this` of a frame without a receiver, objects as `Type@id`, collections
     /// with their size, boxed values as their value. `counts` are the adapter's child counts in
     /// the variables' order. Sizes kotlin-debug-adapter does not give are read from the objects'
@@ -2566,7 +2639,7 @@ impl DebugSession {
                 self.all_paused = true;
             }
             Err(e) => self.note(&format!(
-                "[IDECraft] The other threads could not be suspended: {e}\n"
+                "[Ferris IDEA] The other threads could not be suspended: {e}\n"
             )),
         }
     }
@@ -2659,7 +2732,7 @@ impl DebugSession {
             }
         }
         self.note(&format!(
-            "[IDECraft] Step Out of Code Block: still in the block after {BLOCK_STEPS} steps\n"
+            "[Ferris IDEA] Step Out of Code Block: still in the block after {BLOCK_STEPS} steps\n"
         ));
         Ok(())
     }
@@ -2940,7 +3013,7 @@ impl DebugSession {
     }
 
     /// Steps into the call `target_id` of [`Self::step_in_targets`] and returns once the program
-    /// stopped there (`SPEC-0091` v11 behaviour 18): IDECraft steps into the line's calls one by
+    /// stopped there (`SPEC-0091` v11 behaviour 18): Ferris IDEA steps into the line's calls one by
     /// one and back out of each that is not the chosen method, until it is entered or the line is
     /// left, the same with every adapter whatever its own `stepIn` with `targetId` does. The stop
     /// is then read with [`Self::stopped_state`].
@@ -3258,6 +3331,43 @@ impl DebugSession {
 mod tests {
     use super::*;
 
+    /// SPEC-0322 v7 behaviour 8: java-debug's fixed 0 is not shown as the program's exit code.
+    #[test]
+    fn the_exit_code_of_java_debug_is_not_the_programs() {
+        assert_eq!(reported_exit_code("java", Some(0)), None);
+        assert_eq!(reported_exit_code("java-debug", Some(0)), None);
+        assert_eq!(reported_exit_code("lldb-dap", Some(3)), Some(3));
+        assert_eq!(reported_exit_code("dlv", Some(3)), Some(3));
+        assert_eq!(reported_exit_code("debugpy", None), None);
+    }
+
+    /// js-debug's module entry pause, reported under load at the first statement of a function
+    /// declared on line 1, is the adapter's; a stop at a breakpoint or a `debugger` statement of
+    /// the program is not.
+    #[test]
+    fn js_debug_entry_pause_is_told_apart() {
+        let line = Some("  const doubled = n * 2;");
+        let bare = json!({"reason": "breakpoint", "threadId": 0});
+        let empty = json!({"reason": "breakpoint", "hitBreakpointIds": [], "threadId": 0});
+        let statement = json!({"reason": "pause",
+                               "description": "Paused on debugger statement", "threadId": 0});
+        for body in [&bare, &empty, &statement] {
+            assert!(js_entry_leak(body, false, line), "{body}");
+            // One of our breakpoints on that line, a `debugger` there, or an unknown line: a stop.
+            assert!(!js_entry_leak(body, true, line), "{body}");
+            assert!(!js_entry_leak(body, false, Some("  debugger;")), "{body}");
+            assert!(!js_entry_leak(body, false, None), "{body}");
+        }
+        let hit = json!({"reason": "breakpoint", "hitBreakpointIds": [1], "threadId": 0});
+        let asked = json!({"reason": "pause", "description": "Paused", "threadId": 0});
+        let step = json!({"reason": "step", "threadId": 0});
+        let exception = json!({"reason": "exception", "threadId": 0});
+        let function = json!({"reason": "function breakpoint", "threadId": 0});
+        for body in [&hit, &asked, &step, &exception, &function] {
+            assert!(!js_entry_leak(body, false, line), "{body}");
+        }
+    }
+
     /// SPEC-0146 v6 AK-v6-1: each adapter's session gets its language's exception settings,
     /// the shared ones where its language has none, and only the method breakpoints that are on.
     #[test]
@@ -3482,11 +3592,11 @@ mod tests {
             line: Some(4),
             requested_line: None,
             reason: None,
-            evaluated_by: EvaluatedBy::IdeCraft,
+            evaluated_by: EvaluatedBy::FerrisIdea,
         };
         assert_eq!(
             serde_json::to_value(&placed).unwrap(),
-            json!({"id": 1, "verified": true, "line": 4, "evaluated_by": "idecraft"})
+            json!({"id": 1, "verified": true, "line": 4, "evaluated_by": "ferris-idea"})
         );
         // SPEC-0127 v5 behaviour 15: an unbound one names the line asked for and the reason.
         let unbound = Breakpoint {

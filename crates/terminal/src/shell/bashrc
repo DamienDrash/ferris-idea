@@ -1,35 +1,35 @@
-# IDECraft shell integration (SPEC-0206): the user's .bashrc, then OSC 133 prompt marks and OSC 7.
+# Ferris IDEA shell integration (SPEC-0206): the user's .bashrc, then OSC 133 prompt marks and OSC 7.
 [ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc"
-__idecraft_ran=
-__idecraft_in_prompt=
-__idecraft_prompt_start() {
+__ferris_idea_ran=
+__ferris_idea_in_prompt=
+__ferris_idea_prompt_start() {
   local s=$?
-  [ -n "$__idecraft_ran" ] && builtin printf '\033]133;D;%s\007' "$s"
-  __idecraft_ran=
+  [ -n "$__ferris_idea_ran" ] && builtin printf '\033]133;D;%s\007' "$s"
+  __ferris_idea_ran=
   builtin printf '\033]7;file://%s%s\007' "$HOSTNAME" "${PWD// /%20}"
   return $s
 }
-__idecraft_prompt_end() {
+__ferris_idea_prompt_end() {
   local s=$?
   case "$PS1" in
     *'\[\033]133;B\007\]') ;;
     *) PS1='\[\033]133;A\007\]'"$PS1"'\[\033]133;B\007\]' ;;
   esac
-  __idecraft_in_prompt=1
+  __ferris_idea_in_prompt=1
   return $s
 }
-__idecraft_preexec() {
-  case "$BASH_COMMAND" in __idecraft_*) return ;; esac
-  if [ -n "$__idecraft_in_prompt" ]; then
-    __idecraft_in_prompt=
-    __idecraft_ran=1
+__ferris_idea_preexec() {
+  case "$BASH_COMMAND" in __ferris_idea_*) return ;; esac
+  if [ -n "$__ferris_idea_in_prompt" ]; then
+    __ferris_idea_in_prompt=
+    __ferris_idea_ran=1
     builtin printf '\033]133;C\007'
   fi
 }
-__idecraft_user_debug=$(trap -p DEBUG | sed "s/^trap -- '\(.*\)' DEBUG$/\1/")
-if [ -n "$__idecraft_user_debug" ]; then
-  trap '__idecraft_preexec; eval "$__idecraft_user_debug"' DEBUG
+__ferris_idea_user_debug=$(trap -p DEBUG | sed "s/^trap -- '\(.*\)' DEBUG$/\1/")
+if [ -n "$__ferris_idea_user_debug" ]; then
+  trap '__ferris_idea_preexec; eval "$__ferris_idea_user_debug"' DEBUG
 else
-  trap '__idecraft_preexec' DEBUG
+  trap '__ferris_idea_preexec' DEBUG
 fi
-PROMPT_COMMAND="__idecraft_prompt_start${PROMPT_COMMAND:+;$PROMPT_COMMAND};__idecraft_prompt_end"
+PROMPT_COMMAND="__ferris_idea_prompt_start${PROMPT_COMMAND:+;$PROMPT_COMMAND};__ferris_idea_prompt_end"

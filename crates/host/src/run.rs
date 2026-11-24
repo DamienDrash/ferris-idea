@@ -8,8 +8,8 @@ use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use idecraft_core::{RunConfig, RunConfigs, RunEvent, add_detected, load_run_configs};
-use idecraft_session::{Backend, Call, ErrorCode, Right, RpcError, SessionHandle};
+use ferris_idea_core::{RunConfig, RunConfigs, RunEvent, add_detected, load_run_configs};
+use ferris_idea_session::{Backend, Call, ErrorCode, Right, RpcError, SessionHandle};
 use serde_json::{Value, json};
 
 use crate::ring::Output;
@@ -45,50 +45,50 @@ impl Runs {
     }
 }
 
-/// The configurations of `root`: `.idecraft/run.toml` and the ones detected from build files.
+/// The configurations of `root`: `.ferris-idea/run.toml` and the ones detected from build files.
 pub fn configurations(root: &Path) -> RunConfigs {
     let mut configs = load_run_configs(root);
-    if let Ok(ws) = idecraft_core::Workspace::open(root)
+    if let Ok(ws) = ferris_idea_core::Workspace::open(root)
         && let Ok(files) = ws.files()
     {
-        let model = idecraft_core::read_project(root, &files);
+        let model = ferris_idea_core::read_project(root, &files);
         // The reference IDE's configurations before the detected ones (SPEC-0049 v3 behaviour 13).
-        add_detected(&mut configs, idecraft_core::idea_run_configs(root));
-        add_detected(&mut configs, idecraft_core::suggest_run_configs(&model));
+        add_detected(&mut configs, ferris_idea_core::idea_run_configs(root));
+        add_detected(&mut configs, ferris_idea_core::suggest_run_configs(&model));
     }
     configs
 }
 
 /// What a run marker or ⌃⇧R stands for at `line` of `doc` with `text` (`SPEC-0097`).
 fn context_config(root: &Path, doc: &str, text: &str, line: usize) -> Option<RunConfig> {
-    let files = idecraft_core::Workspace::open(root).ok()?.files().ok()?;
-    let model = idecraft_core::read_project(root, &files);
-    if let Some(lang) = idecraft_languages::jvm::Jvm::of(doc) {
-        let markers = idecraft_languages::jvm::run_markers(lang, text);
+    let files = ferris_idea_core::Workspace::open(root).ok()?.files().ok()?;
+    let model = ferris_idea_core::read_project(root, &files);
+    if let Some(lang) = ferris_idea_languages::jvm::Jvm::of(doc) {
+        let markers = ferris_idea_languages::jvm::run_markers(lang, text);
         if let Some(m) = markers.iter().find(|m| m.line == line)
-            && let (idecraft_languages::jvm::MarkerKind::TestMethod, Some(method)) =
+            && let (ferris_idea_languages::jvm::MarkerKind::TestMethod, Some(method)) =
                 (&m.kind, &m.method)
         {
-            return idecraft_core::test_method_config(&model, doc, text, method);
+            return ferris_idea_core::test_method_config(&model, doc, text, method);
         }
     }
     // The test or suite around the line of a Vitest or Jest file (SPEC-0045 v4 behaviour 12).
-    if let Some(m) = idecraft_languages::js_tests::marker_at(doc, text, line)
-        && let Some(c) = idecraft_core::js_test_config(
+    if let Some(m) = ferris_idea_languages::js_tests::marker_at(doc, text, line)
+        && let Some(c) = ferris_idea_core::js_test_config(
             &model,
             doc,
             text,
             &m.class,
-            m.kind == idecraft_languages::jvm::MarkerKind::TestClass,
+            m.kind == ferris_idea_languages::jvm::MarkerKind::TestClass,
         )
     {
         return Some(c);
     }
-    idecraft_core::context_config(&model, doc, text)
+    ferris_idea_core::context_config(&model, doc, text)
 }
 
 pub(crate) fn trust_refusal(root: &Path) -> RpcError {
-    RpcError::new(ErrorCode::Denied, idecraft_core::trust::refusal(root))
+    RpcError::new(ErrorCode::Denied, ferris_idea_core::trust::refusal(root))
         .hint("trust the host project with run.trust (the window's trust banner)")
 }
 
@@ -154,34 +154,34 @@ pub fn bind(backend: &Backend, options: &HostOptions) {
         let c = configurations(&call.root);
         Ok(json!({
             "configs": c.configs, "problems": c.problems,
-            "trusted": idecraft_core::trust::allows_project_code(&call.root),
+            "trusted": ferris_idea_core::trust::allows_project_code(&call.root),
         }))
     });
     add(backend, "run", "run.trust", Right::Run, true, move |call| {
         let file = trust_file
             .clone()
-            .or_else(idecraft_core::trust::trust_file)
+            .or_else(ferris_idea_core::trust::trust_file)
             .ok_or_else(|| {
                 RpcError::new(ErrorCode::Unavailable, "no settings folder on the host")
             })?;
-        idecraft_core::trust::add_location(
+        ferris_idea_core::trust::add_location(
             &file,
             &call.root,
-            idecraft_core::trust::TrustKind::Project,
+            ferris_idea_core::trust::TrustKind::Project,
         )
         .map_err(internal)?;
         // Effective now, without reading the file again.
-        idecraft_core::trust::trust_for_process(&call.root);
+        ferris_idea_core::trust::trust_for_process(&call.root);
         Ok(json!({ "trusted": true }))
     });
     let r = Arc::clone(&runs);
     add(backend, "run", "run.start", Right::Run, true, move |call| {
         let root = call.root.clone();
-        if !idecraft_core::trust::allows_project_code(&root) {
+        if !ferris_idea_core::trust::allows_project_code(&root) {
             return Err(trust_refusal(&root));
         }
         let (configs, name) = requested_config(call)?;
-        let handle = idecraft_core::start_host_run(&root, &configs, &name).map_err(|e| {
+        let handle = ferris_idea_core::start_host_run(&root, &configs, &name).map_err(|e| {
             if e.contains("Safe mode") {
                 trust_refusal(&root)
             } else {
@@ -273,7 +273,7 @@ pub fn bind(backend: &Backend, options: &HostOptions) {
 }
 
 /// Turns a run's events into stream data and `run.event` notifications until it ends.
-fn follow(handle: idecraft_core::RunHandle, run: &Run, session: &SessionHandle, id: &str) {
+fn follow(handle: ferris_idea_core::RunHandle, run: &Run, session: &SessionHandle, id: &str) {
     while let Ok(event) = handle.events.recv() {
         match event {
             RunEvent::Started { name, command } => {

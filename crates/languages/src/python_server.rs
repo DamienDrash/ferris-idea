@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use serde::Serialize;
 use serde_json::{Value, json};
 
-use idecraft_core::{PythonSearch, selected_interpreter};
+use ferris_idea_core::{PythonSearch, selected_interpreter};
 
 /// Programs of the Python language servers that read `python.pythonPath`.
 pub const PYTHON_SERVERS: [&str; 2] = ["basedpyright-langserver", "pyright-langserver"];
@@ -184,7 +184,8 @@ mod tests {
 
     #[test]
     fn project_files_that_name_an_environment() {
-        let root = std::env::temp_dir().join(format!("idecraft-pyserver-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("ferris-idea-pyserver-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         assert_eq!(project_environment(&root), None);

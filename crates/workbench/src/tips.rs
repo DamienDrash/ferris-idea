@@ -1,12 +1,12 @@
 //! Tooltips on the window's controls (`SPEC-0294`): `.tip(declared!(AREA, "name"))` gives an element
 //! the tooltip of its declared control, `.tip_text(name, tip)` one made for this moment. Both draw
-//! the shared view of `idecraft_ui::tooltip`, note the control for the inspection (MCP
+//! the shared view of `ferris_idea_ui::tooltip`, note the control for the inspection (MCP
 //! `ui_tooltips`, window self-test) and mark it for the self-test's pointer.
 
+use ferris_idea_ui::tooltip::{self, Control, Tip, view::TooltipView};
 use gpui::{App, ParentElement, StatefulInteractiveElement};
-use idecraft_ui::tooltip::{self, Control, Tip, view::TooltipView};
 
-pub use idecraft_ui::declared;
+pub use ferris_idea_ui::declared;
 
 /// Whether shortcuts are written the macOS way.
 pub fn macos() -> bool {

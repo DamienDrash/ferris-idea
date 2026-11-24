@@ -367,7 +367,7 @@ pub(crate) async fn improve_name(
 
 // ------------------------------------------------------------------ inline (behaviour 17)
 
-/// Whether `title` is one of IDECraft's Inline Method variants for the Java `file`.
+/// Whether `title` is one of Ferris IDEA's Inline Method variants for the Java `file`.
 pub fn is_inline_choice(file: &Path, title: &str) -> bool {
     is_java(file) && [INLINE_ALL_REMOVE, INLINE_ALL_KEEP, INLINE_THIS].contains(&title)
 }

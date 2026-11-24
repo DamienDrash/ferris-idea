@@ -1,6 +1,6 @@
 # SPEC-0101: Resolving merge conflicts
 
-- **Version:** 7 · **Date:** 2026-11-14 (v7: the result column is an editable text with undo, sides are taken and ignored in the gutters, changed words are marked, F7 / ⇧F7 step through changes, Close asks before unapplied work is dropped; window check of 2026-11-14 and the points OBS-0009 lists for the reference's merge view; v6: binary files and files one side deleted take a whole side, left-over markers and a missing base are refused; found by driving real conflicts headless; v2: sides of a rebase, OBS-0009; v3: simple conflicts, opening by itself, finishing the operation; v4: the view closes when an operation leaves no conflict, hand tests 34 and 71, D15; v5: header never hides its buttons, an unmodified editor takes the result from disk; OBS-0022)
+- **Version:** 8 · **Date:** 2026-11-18 (v8: file tabs keep their width and roll instead of shrinking to a sliver, the note of Resolve Simple stays on one line in the header; behaviour 28, window check of 2026-11-18 M1; v7: the result column is an editable text with undo, sides are taken and ignored in the gutters, changed words are marked, F7 / ⇧F7 step through changes, Close asks before unapplied work is dropped; window check of 2026-11-14 and the points OBS-0009 lists for the reference's merge view; v6: binary files and files one side deleted take a whole side, left-over markers and a missing base are refused; found by driving real conflicts headless; v2: sides of a rebase, OBS-0009; v3: simple conflicts, opening by itself, finishing the operation; v4: the view closes when an operation leaves no conflict, hand tests 34 and 71, D15; v5: header never hides its buttons, an unmodified editor takes the result from disk; OBS-0022)
 - **Sources:** GEN (after a merge, rebase or cherry-pick stops with conflicts, the IDE lists the
   conflicted files and opens a three-column merge editor — your version, the result, their version —
   where each conflict takes one side or both, "Accept Left"/"Accept Right" take a side for all, and
@@ -11,7 +11,10 @@
   controls between the columns, stepping to the previous and next change, a counter of changes and
   conflicts, one step for the changes that do not conflict), OBS-0022 and OBS-0038 (side by side),
   SPEC-0003 and SPEC-0025 (text buffer, caret and selection the result column reuses), SPEC-0084 v2
-  behaviour 8 (changed words of a line pair)
+  behaviour 8 (changed words of a line pair); v8: GEN (tabs that do not fit roll; a status text in
+  a toolbar is cut with an ellipsis), window check of 2026-11-18 (M1: with data.bin and notes.txt
+  in a view about 1000 points wide the second tab showed only "n", and "1 simple conflict
+  resolved" ran over three lines into the column headers)
 - **Feature matrix rows:** F-075
 
 ## Purpose
@@ -42,19 +45,19 @@ Finish a stopped merge without leaving the IDE or editing conflict markers by ha
 6. **v3 – Resolve Simple:** the toolbar button "Resolve Simple" resolves every simple conflict of the
    shown file (SPEC-0037 v2 behaviour 8); the status says how many; the rest stay open. [GEN, OBS-0009]
 7. **v3 – Opens by itself:** when a merge, rebase, cherry-pick, pull, stash apply or Git: Continue started
-   in IDECraft stops with conflicts, the merge view opens on them. [OBS-0009]
+   in Ferris IDEA stops with conflicts, the merge view opens on them. [OBS-0009]
 8. **v3 – Finishing:** Apply on the last conflicted file of a waiting merge, rebase or cherry-pick runs Git:
    Continue — the merge commit gets Git's message (OBS-0009: no further question); a rebase replays the
    next commits and, if one stops again, the view shows the new conflicts. Without a waiting operation (a
    stash that did not apply cleanly) the view just closes. [OBS-0009, GEN]
-   **v4:** whenever a Git operation started in IDECraft ends — Continue, Abort or Skip from the branch
+   **v4:** whenever a Git operation started in Ferris IDEA ends — Continue, Abort or Skip from the branch
    popup or Search Everywhere, a merge, rebase or cherry-pick — and no conflicted file is left, an open
    merge view closes and the keys go back to the editor; if conflicts are left, it shows them anew.
    [GEN]
 9. **v3 – MCP:** `git_resolve_conflict` takes `take: "simple"`, which resolves the simple conflicts and is
    refused when conflicts would stay open (naming how many). [ADR-0008]
 
-10. **v5 – Header:** the file tabs of the header give way (cut at the right) so that the conflict count
+10. **v5 – Header:** the file tabs of the header give way (v8: as a row that rolls, behaviour 28) so that the conflict count
     and the buttons Resolve Simple, Accept Left, Accept Right, Apply and Close are always visible, also
     with a side tool window open; before v5 Apply and Close were pushed out of the window. [GEN,
     OBS-0022 L3]
@@ -171,10 +174,19 @@ Finish a stopped merge without leaving the IDE or editing conflict markers by ha
     secrets is refused as before unless the agent may read secrets (SPEC-0053 v6): neither the
     read nor `choices` gives any of its text. The tool works on the index; choices made in
     an open merge view and not applied are not visible to it. [ADR-0008, SPEC-0053 v6]
-27. **v7 – Non-conflicting changes in one step (stated):** IDECraft applies every change of the
+27. **v7 – Non-conflicting changes in one step (stated):** Ferris IDEA applies every change of the
     left side, of the right side and of both sides alike when the file opens (behaviour 2, SPEC-0037
     behaviour 2) — the user needs no step for it; behaviour 16 takes a single one back. [GEN,
     OBS-0009]
+28. **v8 – Header row:** the header is one row of 36 points. Each file tab keeps the width of its
+    name and is never squeezed; when the tabs do not fit, their row is cut at its right edge and
+    rolls sideways (wheel or trackpad), and choosing a file rolls its tab into view. The note of
+    Resolve Simple or a step ("1 simple conflict resolved") stands on one line between the tabs
+    and the count, takes only the room the tabs leave and ends with "…" when it is cut; it never
+    wraps and never covers the column headers. The count and the buttons keep their full width
+    (behaviour 10). The tabs and the note are nodes of the semantic tree (`merge-file-<n>`,
+    selected for the file shown, and `merge-note`). Until v7 the tabs shrank to slivers and the
+    note wrapped below the header. [GEN]
 
 ## Acceptance criteria
 - **AK-1** A real stopped merge: the three sides come from the index; resolving writes the file and
@@ -182,7 +194,7 @@ Finish a stopped merge without leaving the IDE or editing conflict markers by ha
   `conflicts_and_resolving_them`).
 - **AK-2** MCP: listing, dry run (file unchanged) and writing a hand-written result
   (`crates/mcp/tests/it/protocol.rs`: `conflict_tools_resolve_a_stopped_merge`).
-- **AK-3** In a real window (`idecraft ui --selftest`): a merge that stops with a conflict opens in the
+- **AK-3** In a real window (`ferris-idea ui --selftest`): a merge that stops with a conflict opens in the
   view with one open conflict; taking the right side and Apply writes it and clears the conflict.
 - **AK-5 (v2)** A stopped rebase names the branch being rebased, and its stage 2 is the target
   (`crates/vcs/tests/it/ops.rs`: `rebase_replays_and_continues_after_resolving`).
@@ -230,13 +242,20 @@ Finish a stopped merge without leaving the IDE or editing conflict markers by ha
   sides; `choices` resolves single conflicts; writing with a conflict left open is refused and
   changes nothing; a secret-named file is refused without any of its text (protocol test
   `conflict_tool_reads_the_result_and_takes_choices`).
-- **AK-20 (v7)** In a real window (`idecraft ui --selftest`, `merge_edit_steps`): in a stopped
+- **AK-20 (v7)** In a real window (`ferris-idea ui --selftest`, `merge_edit_steps`): in a stopped
   merge F7 reaches the conflict, typed keys change the result and resolve the conflict by hand, ⌘Z
   opens it again, ⇧F7 goes back, a click on `»` takes the left side and typing edits it, Escape
   asks and Escape again keeps the view, Apply writes exactly the edited text and finishes the
   merge; before Apply the file on disk still holds Git's markers. The clicks on `»` and Apply go by the
-  controls' test ids through the UI driver (`IDECRAFT_SELFTEST_DRIVER=1`, SPEC-0319 behaviour 44);
+  controls' test ids through the UI driver (`FERRIS_IDEA_SELFTEST_DRIVER=1`, SPEC-0319 behaviour 44);
   without it the group checks the keys and the question, closes the view and aborts its merge.
+- **AK-21 (v8)** In a window of the test harness (`crates/workbench/tests/it/merge_header_layout.rs`:
+  `header_keeps_tabs_whole_and_the_note_on_one_line`), with data.bin (whole side) and notes.txt
+  (one simple conflict), 1000 and 1200 points wide: both tabs are wider than 50 points and stand in
+  the header, the shown tab and Close are wholly in view; where the second tab is beyond the row's
+  edge the wheel rolls the row until it is wholly in view; after a click on it and on Resolve
+  Simple the note is one line high (a tab without its padding) and ends inside the header, the
+  tabs keep their width and Apply and Close stay wholly in view.
 
 ## Out of scope
 A conflicts list in the commit window, three-way merge of binary files, showing a binary side's
@@ -249,7 +268,7 @@ open merge view through MCP (behaviour 26 works on the index).
 
 ## Known deviations from the reference
 A side is taken or ignored per conflict in one step, which resolves it — the reference keeps a
-conflict open until both sides are handled and asks before saving one that is still open; IDECraft
+conflict open until both sides are handled and asks before saving one that is still open; Ferris IDEA
 offers Apply only when nothing is open (IMP-0039). "Both" is taking one side and then the other
 (v7), as in the reference, but the conflict is already resolved after the first. Changes that do not
 conflict are applied when the file opens instead of by a toolbar step (behaviour 27). Close asks

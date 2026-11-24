@@ -13,10 +13,10 @@ use crate::buildtools::{FolderInfo, FolderRole};
 pub const IDEA_DIR: &str = ".idea";
 
 /// Files in `.idea` that are not read: personal state and database tool settings (behaviour 7);
-/// of `workspace.xml` only the `RunManager` component is used (v3 behaviour 13).
+/// of `workspace.xml` only the `RunManager` component is used (v3 behaviour 13). The shared
+/// `dataSources.xml` is read since v7 (behaviour 18); its personal part never is.
 const NOT_READ: &[&str] = &[
     "workspace.xml",
-    "dataSources.xml",
     "dataSources.local.xml",
     "dataSources",
     "db-forest-config.xml",
@@ -180,6 +180,147 @@ pub struct IdeaProject {
     pub ipr: Option<String>,
     /// Run configurations, translated or with the reason why not (`SPEC-0049` v3 behaviour 13).
     pub run_configurations: Vec<crate::idearun::IdeaRun>,
+    /// The project's code style from `.idea/codeStyles`, read only (`SPEC-0049` v4 behaviour 17).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code_style: Option<IdeaCodeStyle>,
+    /// The data sources of `.idea/dataSources.xml`, offered or with the reason why not (`SPEC-0049`
+    /// v7 behaviour 18). Never connected, never added on their own.
+    pub data_sources: Vec<crate::ideadatasources::IdeaDataSource>,
+}
+
+/// The project's code style in `.idea/codeStyles` (`SPEC-0049` v4 behaviour 17): what the files
+/// write, nothing filled in. Since v6 it applies between `.editorconfig` and Code Style when
+/// switched on (`SPEC-0150` v6 behaviour 8, [`crate::project_code_style`]).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct IdeaCodeStyle {
+    /// Whether `codeStyleConfig.xml` turns on the project's own scheme (`USE_PER_PROJECT_SETTINGS`).
+    pub per_project: bool,
+    /// Whether the scheme applies to the editor and the formatters (`SPEC-0049` v6): as
+    /// [`IdeaCodeStyle::applies`] when it was read.
+    #[serde(rename = "applies")]
+    pub applied: bool,
+    /// The IDE scheme the project prefers instead (`PREFERRED_PROJECT_CODE_STYLE`); it lives in the
+    /// reference IDE's settings folder and is never read.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preferred_scheme: Option<String>,
+    /// The scheme file, project-relative, when there is one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    /// The scheme's right margin (`RIGHT_MARGIN`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub right_margin: Option<u32>,
+    /// Per-language settings in file order.
+    pub languages: Vec<IdeaLanguageStyle>,
+}
+
+/// The settings of one `codeStyleSettings` element (`SPEC-0049` v4 behaviour 17).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct IdeaLanguageStyle {
+    /// The reference's language id as written (`JAVA`, `XML`, `kotlin`, ...).
+    pub language: String,
+    /// `RIGHT_MARGIN`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub right_margin: Option<u32>,
+    /// `indentOptions/INDENT_SIZE`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub indent: Option<u32>,
+    /// `indentOptions/CONTINUATION_INDENT_SIZE`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub continuation_indent: Option<u32>,
+    /// `indentOptions/TAB_SIZE`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tab_size: Option<u32>,
+    /// `indentOptions/USE_TAB_CHARACTER`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub use_tabs: Option<bool>,
+}
+
+/// The `value` of the `option` child named `name`.
+fn option<'a>(e: &'a Element, name: &str) -> Option<&'a str> {
+    e.all("option")
+        .find(|o| o.attr("name") == Some(name))
+        .and_then(|o| o.attr("value"))
+}
+
+fn option_u32(e: &Element, name: &str) -> Option<u32> {
+    option(e, name).and_then(|v| v.trim().parse().ok())
+}
+
+/// `ProjectCodeStyleConfiguration`: the files in `.idea/codeStyles` have the component itself as
+/// their root, as the shared run configurations do; a `project` root holding it counts too.
+fn code_style_component(doc: &Element) -> Option<&Element> {
+    if doc.name == "component" {
+        (doc.attr("name") == Some("ProjectCodeStyleConfiguration")).then_some(doc)
+    } else {
+        doc.component("ProjectCodeStyleConfiguration")
+    }
+}
+
+/// The code style of `.idea/codeStyles` (`SPEC-0049` v4 behaviour 17): none when the folder holds
+/// neither file.
+fn read_code_style(root: &Path, problems: &mut Vec<String>) -> Option<IdeaCodeStyle> {
+    const CONFIG: &str = ".idea/codeStyles/codeStyleConfig.xml";
+    const SCHEME: &str = ".idea/codeStyles/Project.xml";
+    let config = read_xml(root, CONFIG, problems);
+    let scheme = read_xml(root, SCHEME, problems);
+    if config.is_none() && scheme.is_none() {
+        return None;
+    }
+    Some(code_style_of(
+        config.as_ref().and_then(code_style_component),
+        scheme.as_ref().and_then(code_style_component),
+        SCHEME,
+    ))
+}
+
+/// The code style of an `.ipr` project (`SPEC-0049` v9 behaviour 17): one
+/// `ProjectCodeStyleConfiguration` component in the `.ipr` holds both the switch and the scheme;
+/// none without it.
+fn ipr_code_style(doc: &Element, ipr: &str) -> Option<IdeaCodeStyle> {
+    let component = doc.component("ProjectCodeStyleConfiguration")?;
+    let mut style = code_style_of(Some(component), Some(component), ipr);
+    // Read and reported, not applied: formatting reads the folder format only (v9, gap CS3).
+    style.applied = false;
+    Some(style)
+}
+
+/// What the switch (`state` of `config`) and the scheme (`code_scheme` of `scheme`) write;
+/// `file` is reported as the scheme's file when there is a scheme.
+fn code_style_of(config: Option<&Element>, scheme: Option<&Element>, file: &str) -> IdeaCodeStyle {
+    let mut style = IdeaCodeStyle::default();
+    if let Some(state) = config.and_then(|c| c.first("state")) {
+        style.per_project = option(state, "USE_PER_PROJECT_SETTINGS") == Some("true");
+        style.preferred_scheme = option(state, "PREFERRED_PROJECT_CODE_STYLE")
+            .filter(|n| !n.is_empty())
+            .map(str::to_owned);
+    }
+    if let Some(cs) = scheme.and_then(|c| c.first("code_scheme")) {
+        style.file = Some(file.to_owned());
+        style.right_margin = option_u32(cs, "RIGHT_MARGIN");
+        for l in cs.all("codeStyleSettings") {
+            let Some(language) = l.attr("language") else {
+                continue;
+            };
+            let indent = l.first("indentOptions");
+            style.languages.push(IdeaLanguageStyle {
+                language: language.to_owned(),
+                right_margin: option_u32(l, "RIGHT_MARGIN"),
+                indent: indent.and_then(|i| option_u32(i, "INDENT_SIZE")),
+                continuation_indent: indent.and_then(|i| option_u32(i, "CONTINUATION_INDENT_SIZE")),
+                tab_size: indent.and_then(|i| option_u32(i, "TAB_SIZE")),
+                use_tabs: indent
+                    .and_then(|i| option(i, "USE_TAB_CHARACTER"))
+                    .map(|v| v == "true"),
+            });
+        }
+    }
+    style.applied = style.applies();
+    style
+}
+
+/// The code style of the project at `root`, problems left out (`SPEC-0150` v6 behaviour 8).
+pub(crate) fn idea_code_style(root: &Path) -> Option<IdeaCodeStyle> {
+    read_code_style(root, &mut Vec::new())
 }
 
 impl IdeaProject {
@@ -198,6 +339,48 @@ pub fn idea_run_configs(root: &Path) -> Vec<crate::run::RunConfig> {
     read_idea_project(root)
         .map(|p| p.run_configs())
         .unwrap_or_default()
+}
+
+/// What MCP `run_configuration` can start in `root` (`SPEC-0047` v7 behaviour 18): the
+/// configurations of `.ferris-idea/run.toml` followed by the translated ones of the reference IDE's
+/// project files whose names `run.toml` does not hold (the order of the window's run list, without
+/// the configurations detected from build files), and the reference's configuration `name` stands
+/// for when `run.toml` has no configuration of that name — translated or not. Nothing runs.
+pub fn startable_run_configs(
+    root: &Path,
+    name: &str,
+) -> (crate::run::RunConfigs, Option<crate::idearun::IdeaRun>) {
+    let mut configs = crate::run::load_run_configs(root);
+    let runs = read_idea_project(root)
+        .map(|p| p.run_configurations)
+        .unwrap_or_default();
+    let idea = if configs.configs.iter().any(|c| c.name == name) {
+        None
+    } else {
+        runs.iter().find(|r| r.name == name).cloned()
+    };
+    crate::run::add_detected(
+        &mut configs,
+        runs.into_iter().filter_map(|r| r.config).collect(),
+    );
+    (configs, idea)
+}
+
+/// Why `run_configuration_edit` refuses to change configuration `name` of `root` (`SPEC-0047` v7
+/// behaviour 18): only the reference IDE's project files hold it (`in_run_toml` is false), and
+/// Ferris IDEA never writes them. `None` when the name is not one of the reference's or `run.toml`
+/// holds it too.
+pub fn idea_read_only_refusal(root: &Path, name: &str, in_run_toml: bool) -> Option<String> {
+    if in_run_toml {
+        return None;
+    }
+    let project = read_idea_project(root)?;
+    let r = project.run_configurations.iter().find(|r| r.name == name)?;
+    Some(format!(
+        "{name} is read only: it comes from {}, a project file of the reference IDE, which Ferris IDEA does not change; add a configuration named {name} to {} to take its place in the run list",
+        r.source,
+        crate::run::RUN_FILE
+    ))
 }
 
 /// A folder the modules give a role (`SPEC-0049` v2 behaviour 11).
@@ -290,6 +473,8 @@ pub(crate) struct Element {
     pub(crate) name: String,
     attrs: Vec<(String, String)>,
     pub(crate) children: Vec<Element>,
+    /// The element's own text, entities resolved (`SPEC-0049` v7 behaviour 18 reads values from it).
+    pub(crate) text: String,
 }
 
 impl Element {
@@ -348,6 +533,33 @@ fn parse_xml(text: &str) -> Result<Element, String> {
                     Some(parent) => parent.children.push(done),
                     None => return Err("unbalanced end tag".to_owned()),
                 }
+            }
+            Event::Text(t) => {
+                let text = t.decode().map_err(|e| e.to_string())?;
+                stack.last_mut().expect("root").text.push_str(&text);
+            }
+            Event::CData(t) => {
+                let text = String::from_utf8_lossy(&t).into_owned();
+                stack.last_mut().expect("root").text.push_str(&text);
+            }
+            Event::GeneralRef(r) => {
+                let text = if r.is_char_ref() {
+                    r.resolve_char_ref()
+                        .map_err(|e| e.to_string())?
+                        .map(String::from)
+                        .unwrap_or_default()
+                } else {
+                    match &*r {
+                        b"lt" => "<",
+                        b"gt" => ">",
+                        b"amp" => "&",
+                        b"quot" => "\"",
+                        b"apos" => "'",
+                        _ => "",
+                    }
+                    .to_owned()
+                };
+                stack.last_mut().expect("root").text.push_str(&text);
             }
             Event::Eof => break,
             _ => {}
@@ -418,7 +630,7 @@ fn module_dir(rel: &str) -> String {
     }
 }
 
-fn read_xml(root: &Path, rel: &str, problems: &mut Vec<String>) -> Option<Element> {
+pub(crate) fn read_xml(root: &Path, rel: &str, problems: &mut Vec<String>) -> Option<Element> {
     let text = match std::fs::read_to_string(root.join(rel)) {
         Ok(t) => t,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return None,
@@ -639,6 +851,8 @@ pub fn read_idea_project(root: &Path) -> Option<IdeaProject> {
         folders: Vec::new(),
         ipr: ipr.clone(),
         run_configurations: Vec::new(),
+        code_style: None,
+        data_sources: Vec::new(),
     };
     // A component of the project: from the `.ipr`, or from its own file in `.idea`.
     let own = |rel: &str, problems: &mut Vec<String>| {
@@ -751,6 +965,12 @@ pub fn read_idea_project(root: &Path) -> Option<IdeaProject> {
 
     // Run configurations (v3 behaviour 13): shared ones first, then the personal `RunManager`
     // of `workspace.xml` or the `.iws`; nothing else of the personal state is used.
+    // Code style (v4 behaviour 17): `.idea/codeStyles`, or the component in the `.ipr` (v9).
+    let code_style = match (&ipr, &ipr_doc) {
+        (None, _) => read_code_style(root, &mut problems),
+        (Some(file), Some(doc)) => ipr_code_style(doc, file),
+        (Some(_), None) => None,
+    };
     let mut run_sources: Vec<(String, Element)> = Vec::new();
     match &ipr {
         Some(file) => {
@@ -795,6 +1015,11 @@ pub fn read_idea_project(root: &Path) -> Option<IdeaProject> {
     }
     project.run_configurations =
         crate::idearun::read_runs(root, &project, &run_sources, &mut problems);
+    project.code_style = code_style;
+    // Data sources (v7 behaviour 18): the shared file of the folder format only.
+    if ipr.is_none() {
+        project.data_sources = crate::ideadatasources::read_data_sources(root, &mut problems);
+    }
     project.problems = problems;
 
     if ipr.is_none()

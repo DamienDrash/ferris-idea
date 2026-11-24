@@ -1,6 +1,6 @@
 #!/bin/sh
 # Runs inside the Debian container started by build-backends.sh: installs the cross toolchains from
-# Debian packages and builds `idecraft-serve` for each of $TARGETS. The output lands in
+# Debian packages and builds `ferris-idea-serve` for each of $TARGETS. The output lands in
 # $OUT/<target>/ (default: dist/backends in the mounted source folder). With CHECK_ONLY=1 it runs
 # `cargo check` only, for machines too small to link a release build.
 set -eu
@@ -47,13 +47,13 @@ for t in $TARGETS; do
     *) features= ;;
   esac
   if [ "${CHECK_ONLY:-0}" = 1 ]; then
-    cargo check --locked -p idecraft-serve $features --target "$t"
+    cargo check --locked -p ferris-idea-serve $features --target "$t"
     continue
   fi
-  cargo build --locked --release -p idecraft-serve $features --target "$t"
+  cargo build --locked --release -p ferris-idea-serve $features --target "$t"
   mkdir -p "$OUT/$t"
   case "$t" in
-    *windows*) cp "$CARGO_TARGET_DIR/$t/release/idecraft-serve.exe" "$OUT/$t/" ;;
-    *) cp "$CARGO_TARGET_DIR/$t/release/idecraft-serve" "$OUT/$t/" ;;
+    *windows*) cp "$CARGO_TARGET_DIR/$t/release/ferris-idea-serve.exe" "$OUT/$t/" ;;
+    *) cp "$CARGO_TARGET_DIR/$t/release/ferris-idea-serve" "$OUT/$t/" ;;
   esac
 done

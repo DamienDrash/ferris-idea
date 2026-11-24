@@ -1,6 +1,6 @@
 [package]
-name = "idecraft-formats"
-description = "IDECraft exchange files: preview, import, export and sharing (SPEC-0303)"
+name = "ferris-idea-formats"
+description = "Ferris IDEA exchange files: preview, import, export and sharing (SPEC-0303)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,9 +9,9 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
-idecraft-core.workspace = true
-idecraft-database.workspace = true
-idecraft-ui.workspace = true
+ferris-idea-core.workspace = true
+ferris-idea-database.workspace = true
+ferris-idea-ui.workspace = true
 serde.workspace = true
 toml.workspace = true
 

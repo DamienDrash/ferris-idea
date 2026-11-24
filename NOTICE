@@ -1,5 +1,5 @@
-IDECraft
-Required Notice: Copyright 2026 Damien Frigewski (https://github.com/DamienDrash/idecraft)
+Ferris IDEA
+Required Notice: Copyright 2026 Damien Frigewski (https://github.com/DamienDrash/ferris-idea)
 
 Licensed under the PolyForm Shield License 1.0.0 (LICENSE.md,
 https://polyformproject.org/licenses/shield/1.0.0). The parts listed below are
@@ -16,7 +16,7 @@ License, Version 2.0 (LICENSES/Apache-2.0.txt). Its NOTICE reads:
 Every file and asset taken from that project is listed with source path and
 commit in docs/legal/PROVENANCE.md. Modified files carry a header saying so.
 The upstream files in crates/ui/keymaps/ and crates/ui/themes/ and the icons in
-crates/ui/icons/ (all folders except idecraft/) are unchanged copies and remain
+crates/ui/icons/ (all folders except ferris-idea/) are unchanged copies and remain
 under the Apache License, Version 2.0; the README of each folder names them.
 
 Font: JetBrains Mono (crates/workbench/fonts/), Copyright 2020 The JetBrains
@@ -24,7 +24,7 @@ Mono Project Authors (https://github.com/JetBrains/JetBrainsMono), SIL Open
 Font License 1.1 (LICENSES/OFL-1.1.txt).
 
 Spelling dictionary: the English (United States) Hunspell dictionary built into
-IDECraft (crates/languages/dictionaries/en_US.dic and en_US.aff), unchanged
+Ferris IDEA (crates/languages/dictionaries/en_US.dic and en_US.aff), unchanged
 from the LibreOffice dictionaries (https://github.com/LibreOffice/dictionaries,
 folder en, commit 4f1df64b2e8e14751aa7c2205d170ca016071315), made from SCOWL
 (http://wordlist.sourceforge.net). Copyright 2000-2018 by Kevin Atkinson, and
@@ -33,17 +33,32 @@ the files and gives every copyright notice and permission notice in full
 (SCOWL, VarCon, Ispell, WordNet, UKACD; the other sources are in the public
 domain).
 
-IDECraft is not affiliated with, endorsed by, or sponsored by JetBrains or the
+Spelling dictionary: the English (United Kingdom) Hunspell dictionary built
+into Ferris IDEA (crates/languages/dictionaries/en_GB-ise.dic and en_GB-ise.aff),
+unchanged from SCOWL release 2020.12.07 (hunspell-en_GB-ise-2020.12.07.zip,
+http://wordlist.aspell.net). Copyright 2000-2018 by Kevin Atkinson, and the
+other holders named in its README_en_GB-ise.txt, which lies unchanged beside
+the files and gives every copyright notice and permission notice in full
+(SCOWL, VarCon, Ispell, WordNet, UKACD; the other sources are in the public
+domain).
+
+Word frequency classes: crates/languages/dictionaries/en_frequency.txt, made
+from the size levels 10, 20 and 35 of SCOWL release 2020.12.07
+(http://wordlist.aspell.net), Copyright 2000-2018 by Kevin Atkinson and the
+other holders named in SCOWL-Copyright.txt, SCOWL's licence file, which lies
+unchanged beside it.
+
+Ferris IDEA is not affiliated with, endorsed by, or sponsored by JetBrains or the
 ArtCraft team; ArtCraft is a trademark of the ArtCraft Team.
 JetBrains, IntelliJ, IntelliJ IDEA and DataGrip are trademarks of JetBrains
-s.r.o.; no trademark rights are granted or claimed. The name IDECraft and its
+s.r.o.; no trademark rights are granted or claimed. The name Ferris IDEA and its
 logo: TRADEMARKS.md.
 
 Third-party Rust dependencies and native libraries, with their notices and
 licence texts: THIRD-PARTY-NOTICES.md.
 
 A third-party Rust crate kept in a folder under vendor/ with changes of
-IDECraft is not covered by the PolyForm Shield License: it stays under its own
+Ferris IDEA is not covered by the PolyForm Shield License: it stays under its own
 licence, whose text is in that folder with the crate's own notices. The
-IDECRAFT.md in the folder names the published version it was taken from and
+FERRIS_IDEA.md in the folder names the published version it was taken from and
 every change; THIRD-PARTY-NOTICES.md marks the crate as kept in vendor/.

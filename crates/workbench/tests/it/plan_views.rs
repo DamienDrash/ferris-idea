@@ -6,9 +6,9 @@
 
 #![cfg(target_os = "macos")]
 
+use ferris_idea_workbench::plan_view_model::{FlameMetric, PlanMode};
+use ferris_idea_workbench::{WorkbenchView, semantics};
 use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext, point, px};
-use idecraft_workbench::plan_view_model::{FlameMetric, PlanMode};
-use idecraft_workbench::{WorkbenchView, semantics};
 
 const QUERY: &str = "select c.name, o.id from customers c join orders o on o.customer_id = c.id;\n";
 
@@ -27,10 +27,12 @@ fn sqlite(db: &std::path::Path, sql: &str) -> bool {
 /// Two SQLite connections: `shop` with `customers` and `orders`, `copy` with `customers` and a
 /// table `extra` that `shop` lacks. `None` without the `sqlite3` program.
 fn workspace(tag: &str, query: &str) -> Option<std::path::PathBuf> {
-    let root =
-        std::env::temp_dir().join(format!("idecraft-planviews-{tag}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!(
+        "ferris-idea-planviews-{tag}-{}",
+        std::process::id()
+    ));
     let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir_all(root.join(".idecraft")).unwrap();
+    std::fs::create_dir_all(root.join(".ferris-idea")).unwrap();
     let (shop, copy) = (root.join("shop.db"), root.join("copy.db"));
     let made = sqlite(
         &shop,
@@ -46,7 +48,7 @@ fn workspace(tag: &str, query: &str) -> Option<std::path::PathBuf> {
         return None;
     }
     std::fs::write(
-        root.join(".idecraft/connections.toml"),
+        root.join(".ferris-idea/connections.toml"),
         format!(
             "[[connection]]\nid = \"shop\"\nname = \"shop\"\ndialect = \"sqlite\"\npath = \"{}\"\n\n\
              [[connection]]\nid = \"copy\"\nname = \"copy\"\ndialect = \"sqlite\"\npath = \"{}\"\n",
@@ -307,7 +309,7 @@ fn the_head_stays_and_the_diagram_fits(cx: &mut TestAppContext) {
             let (w, h) = v.plan_area();
             let (m, zoom) = v.plan_diagram_zoom().unwrap();
             let (w, h) = (w - 24., h - 8.);
-            let fit = idecraft_database::er_layout::fit_zoom(m.width, m.height, w, h);
+            let fit = ferris_idea_database::er_layout::fit_zoom(m.width, m.height, w, h);
             let inside = m.width * zoom <= w + 0.5 && m.height * zoom <= h + 0.5;
             ((w, h), zoom, fit, inside)
         })
@@ -316,7 +318,7 @@ fn the_head_stays_and_the_diagram_fits(cx: &mut TestAppContext) {
     // top step whole in view.
     let (area, zoom, fit, _) = fitted(cx);
     assert!(area.0 > 0. && area.1 > 0., "the area is measured");
-    let readable = idecraft_workbench::plan_view_model::READABLE_ZOOM;
+    let readable = ferris_idea_workbench::plan_view_model::READABLE_ZOOM;
     assert!(
         (zoom - fit.clamp(readable, 1.)).abs() < 1e-3,
         "zoom {zoom}, fit {fit} in {area:?}"
@@ -330,7 +332,7 @@ fn the_head_stays_and_the_diagram_fits(cx: &mut TestAppContext) {
     click(cx, "plan-zoom-fit");
     assert_eq!(
         services.read_with(cx, |v, _| v.plan_diagram_zoom_mode()),
-        idecraft_workbench::plan_view_model::DiagramZoom::Fit
+        ferris_idea_workbench::plan_view_model::DiagramZoom::Fit
     );
     let (area, zoom, fit, inside) = fitted(cx);
     assert!(
@@ -339,8 +341,9 @@ fn the_head_stays_and_the_diagram_fits(cx: &mut TestAppContext) {
     );
     assert!(inside, "the diagram is inside {area:?} at {zoom}");
     let steps = services.read_with(cx, |v, _| {
-        v.plan()
-            .map_or(0, |p| idecraft_workbench::plan_view_model::steps(p).len())
+        v.plan().map_or(0, |p| {
+            ferris_idea_workbench::plan_view_model::steps(p).len()
+        })
     });
     assert!(steps >= 9, "{steps} steps");
     for i in 0..steps {

@@ -1,9 +1,9 @@
 # SPEC-0337: Appearance & Behavior, System Settings, Notifications and Advanced Settings
 
-- **Version:** 2 · **Date:** 2026-11-15 (v2: Advanced Settings with its own search and "Show modified only", behaviour 5b, OBS-0062 S5)
+- **Version:** 3 · **Date:** 2026-11-18 (v3: with the setting off a start without a folder shows the Welcome window of SPEC-0355, behaviour 2); 2026-11-15 (v2: Advanced Settings with its own search and "Show modified only", behaviour 5b, OBS-0062 S5)
 - **Sources:** OBS-0048 (outline of the settings dialog next to the reference: the reference groups
   Appearance, System Settings, Notifications, Path Variables and Trusted Locations under one
-  group "Appearance & Behavior" and has a top-level page of advanced settings; IDECraft showed
+  group "Appearance & Behavior" and has a top-level page of advanced settings; Ferris IDEA showed
   Appearance at the top without a group and Trusted Locations under Build, Execution,
   Deployment; the Appearance page of the reference chooses the editor colour scheme apart from
   the theme and can override the UI font, S1–S3); GEN (desktop IDEs offer, on a page of system
@@ -32,22 +32,22 @@ changed and reset in the dialog, not only in the file.
    (SPEC-0278 behaviour 8). [OBS-0048 S1, S2]
 2. **System Settings** (`[system]` in `settings.toml`), each a switch that Enter, Space or a
    click changes, applied and saved at once:
-   - **Confirm before quitting** (`confirm_quit`, off): Quit IDECraft from ⌘Q or the
+   - **Confirm before quitting** (`confirm_quit`, off): Quit Ferris IDEA from ⌘Q or the
      application menu with nothing unsaved and nothing running asks first, in the question
-     drawn in the window in front (SPEC-0261 behaviour 5): "Quit IDECraft?" with Quit (the
+     drawn in the window in front (SPEC-0261 behaviour 5): "Quit Ferris IDEA?" with Quit (the
      default, Return) and Cancel (Escape). Quit quits only if still nothing is pending;
      otherwise the window says what became pending and stays open. With pending work the
      question of SPEC-0261 behaviour 2 is asked as before, never two questions. `quit_ide`,
-     `idecraft quit` and signals are not asked: they carry their own decision and right
+     `ferris-idea quit` and signals are not asked: they carry their own decision and right
      (SPEC-0261 behaviours 7, 11, SPEC-0262), so automation is never stopped by this question
      (IMP-0002). [GEN]
-   - **Reopen the last project at start-up** (`reopen_last_project`, on): IDECraft started
-     without a folder (Dock, Finder, `idecraft launch`) opens the most recent project that still
-     exists, as before (SPEC-0094 behaviour 8). Off, it shows the folder chooser instead. A
+   - **Reopen the last project at start-up** (`reopen_last_project`, on): Ferris IDEA started
+     without a folder (Dock, Finder, `ferris-idea launch`) opens the most recent project that still
+     exists, as before (SPEC-0094 behaviour 8). Off, it shows (v3) the Welcome window (SPEC-0355) instead of the folder chooser. A
      folder named on the command line opens either way. The project's trust is checked as for
      every opened project (SPEC-0278). [GEN]
    - **Save files when the window loses the focus** (`save_on_frame_deactivation`, off): when
-     a project window stops being the active window (another application or another IDECraft
+     a project window stops being the active window (another application or another Ferris IDEA
      window comes to the front), its editors with unsaved changes are saved as Save All saves
      them (the on-save edits of SPEC-0129 behaviour 4, local history, the changed-on-disk
      check; a remote project's files on the host, SPEC-0317 behaviour 10). A file that cannot
@@ -61,7 +61,7 @@ changed and reset in the dialog, not only in the file.
    happen (security first). The page says so. [GEN, SPEC-0061 v17]
 4. **Appearance: editor colour scheme** (`appearance.editor_scheme`, empty): a row "Editor
    color scheme" after the themes. Left/Right, Enter, Space or a click move through "Same as
-   theme" and the bundled schemes IDECraft Dark, IDECraft Light, Islands Dark, Dark and Light
+   theme" and the bundled schemes Ferris IDEA Dark, Ferris IDEA Light, Islands Dark, Dark and Light
    (SPEC-0060 behaviour 1). Editors, consoles, diffs and the terminal draw with the chosen
    scheme at once in every window, the rest of the window with the theme's colours; "Same as
    theme" (the stored empty value) uses the theme's own scheme, as before. An unknown stored
@@ -76,7 +76,7 @@ changed and reset in the dialog, not only in the file.
    - `ai.attachment_chars`, "Largest chat attachment" (number of characters, 1 000–200 000 in
      steps of 1 000, default 24 000; SPEC-0313 behaviour 7);
    - `database.report_url`, "Address for database problem reports" (text: empty for
-     IDECraft's issue template, `off` for copying only, else an `https://` address with
+     Ferris IDEA's issue template, `off` for copying only, else an `https://` address with
      `{title}` and `{body}`; SPEC-0301).
    Enter, Space or a click switch a switch; Left/Right change a number; Enter on a text row
    puts the focus in a field below the list, where Enter applies (an invalid address is refused
@@ -130,7 +130,7 @@ changed and reset in the dialog, not only in the file.
 - **AK-5** Window test (`crates/workbench/tests/it/settings_pages.rs`), with a settings file of
   its own: the page list starts with Appearance & Behavior and its four pages; Space on the
   System Settings rows switches and saves them; with "Confirm before quitting" on, Quit with
-  nothing pending draws "Quit IDECraft?" and Cancel keeps the window; with "Save files when
+  nothing pending draws "Quit Ferris IDEA?" and Cancel keeps the window; with "Save files when
   the window loses the focus" on, deactivating the window saves a modified file, off it stays
   modified; Notifications off keeps a failure but not an informational note; Advanced
   Settings: the search "packages" leaves one row, Space switches it, Delete resets it; an
@@ -148,7 +148,7 @@ changed and reset in the dialog, not only in the file.
   "report" typed into the page's search narrows it.
 
 ## Out of scope
-Path Variables: IDECraft resolves only `$PROJECT_DIR$` and `$MODULE_DIR$` when it imports
+Path Variables: Ferris IDEA resolves only `$PROJECT_DIR$` and `$MODULE_DIR$` when it imports
 `.iml` files (SPEC-0049) and has no user-defined path variables in run configurations or paths;
 the page comes with such a mechanism (planned). Autosave after a time without typing; the
 default folder for new projects; the further pages of Appearance & Behavior (Menus and
@@ -159,20 +159,20 @@ colour-blindness adjustment).
 
 ## Known deviations from the reference
 - **Saving on focus loss is off by default.** The reference saves when its window loses the
-  focus unless switched off. IDECraft saves only on ⌘S, Save All and before quitting unless the
+  focus unless switched off. Ferris IDEA saves only on ⌘S, Save All and before quitting unless the
   user switches it on: a file written without being asked starts build watchers, dev servers
   and test runners on half-typed code, and an agent reading the file sees text the user has
   not finished. Unsaved text is never lost: quitting and closing a window ask (SPEC-0261,
   SPEC-0094 behaviour 7), and local history keeps saved states.
-- **Confirm before quitting is off by default** (IMP-0002): IDECraft asks only when there is
+- **Confirm before quitting is off by default** (IMP-0002): Ferris IDEA asks only when there is
   something to lose; the switch adds the question for the user's own quits, never for
   automation.
 - **A project always opens in a window of its own.** The reference can open a project in the
-  current window or ask; IDECraft opens every project in its own window and brings an open
+  current window or ask; Ferris IDEA opens every project in its own window and brings an open
   one to the front (SPEC-0094 behaviour 2).
-- **Notifications** are the status bar's notes; IDECraft has no balloons, so the reference's
+- **Notifications** are the status bar's notes; Ferris IDEA has no balloons, so the reference's
   per-group display choices (balloon, sticky, log only) and sounds have nothing to act on.
 - **No UI font override.** The window's controls are laid out with fixed pixel sizes, so a
   different UI font family or size would cut or overlap labels; the option waits for the
   change to scalable metrics that UI zoom needs as well (OBS-0048).
-- **Advanced Settings** lists IDECraft's own low-level settings, not the reference's.
+- **Advanced Settings** lists Ferris IDEA's own low-level settings, not the reference's.

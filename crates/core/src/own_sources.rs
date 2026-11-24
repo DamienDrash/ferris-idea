@@ -28,7 +28,7 @@ pub enum NotOwn {
     SymbolicLink,
     /// Data of a version control system (`.git`).
     VersionControl,
-    /// Data of an IDE (`.idecraft`, `.idea`).
+    /// Data of an IDE (`.ferris-idea`, `.idea`).
     IdeData,
     /// A virtual environment or the packages of an interpreter (`.venv`, `site-packages`).
     VirtualEnvironment,
@@ -60,7 +60,7 @@ impl NotOwn {
 }
 
 const VERSION_CONTROL: &[&str] = &[".git", ".hg", ".svn", ".jj", "CVS"];
-const IDE_DATA: &[&str] = &[".idecraft", ".idea"];
+const IDE_DATA: &[&str] = &[".ferris-idea", ".idea"];
 const ENVIRONMENTS: &[&str] = &[
     ".venv",
     "venv",
@@ -270,7 +270,7 @@ pub struct LeftOut {
 pub struct Listing {
     /// The project's own files, relative to the project folder and sorted.
     pub files: Vec<PathBuf>,
-    /// What is not the project's own, sorted by path. Version control data and IDECraft's own
+    /// What is not the project's own, sorted by path. Version control data and Ferris IDEA's own
     /// data are not named: nothing lists them ([`OwnSources::everything`] neither).
     pub left_out: Vec<LeftOut>,
 }
@@ -292,10 +292,10 @@ impl Listing {
 }
 
 /// Whether a folder of this name is listed by nothing, whatever is asked for: version control data
-/// and IDECraft's own data (the local history's copies of the files).
+/// and Ferris IDEA's own data (the local history's copies of the files).
 pub(crate) fn never_listed(name: &std::ffi::OsStr) -> bool {
     name.to_str()
-        .is_some_and(|n| is_fixed_name(n, VERSION_CONTROL) || is_fixed_name(n, &[".idecraft"]))
+        .is_some_and(|n| is_fixed_name(n, VERSION_CONTROL) || is_fixed_name(n, &[".ferris-idea"]))
 }
 
 /// The rule for one project folder.
@@ -865,7 +865,7 @@ impl OwnSources {
 
     /// Every file below `below` (a folder or a file relative to the project folder; the whole
     /// project when `None`), the project's own or not, sorted: what is searched on purpose
-    /// (`SPEC-0029` v2 behaviour 8). Only version control data and IDECraft's own data below the
+    /// (`SPEC-0029` v2 behaviour 8). Only version control data and Ferris IDEA's own data below the
     /// starting place are not entered; symbolic links are not followed. The caller decides whether
     /// `below` may be read at all ([`OwnSources::not_own`]: not outside the project, not behind a
     /// symbolic link).
@@ -911,7 +911,7 @@ mod tests {
     impl TempDir {
         fn new(tag: &str) -> Self {
             let path =
-                std::env::temp_dir().join(format!("idecraft-own-{tag}-{}", std::process::id()));
+                std::env::temp_dir().join(format!("ferris-idea-own-{tag}-{}", std::process::id()));
             let _ = std::fs::remove_dir_all(&path);
             std::fs::create_dir_all(&path).unwrap();
             Self(path.canonicalize().unwrap())
@@ -1084,7 +1084,7 @@ mod tests {
         );
         assert_eq!(why("../elsewhere.py"), Some(NotOwn::OutsideProject));
         assert_eq!(
-            own.not_own(&std::env::temp_dir().join("idecraft-own-elsewhere.py")),
+            own.not_own(&std::env::temp_dir().join("ferris-idea-own-elsewhere.py")),
             Some(NotOwn::OutsideProject)
         );
         assert_eq!(
@@ -1098,7 +1098,7 @@ mod tests {
     fn listing_names_what_was_left_out() {
         let dir = TempDir::new("listing");
         dir.write(".git/HEAD", "ref: refs/heads/main\n");
-        dir.write(".idecraft/history/1", "");
+        dir.write(".ferris-idea/history/1", "");
         dir.write(".gitignore", "*.log\n/src/generated/\n");
         dir.write("src/main.py", "");
         dir.write("src/run.log", "");
@@ -1126,7 +1126,7 @@ mod tests {
                 ("src/generated".to_owned(), true, NotOwn::Ignored),
                 ("src/run.log".to_owned(), false, NotOwn::Ignored),
             ],
-            "version control and IDECraft's data are not named"
+            "version control and Ferris IDEA's data are not named"
         );
         // One place: the rules of the folders above still count, what lies elsewhere is not named.
         let src = own.listing(Some(Path::new("src")));
@@ -1145,7 +1145,7 @@ mod tests {
         assert_eq!(file.files, [PathBuf::from("src/main.py")]);
         assert!(own.listing(Some(Path::new(".venv/lib"))).files.is_empty());
         assert!(own.listing(Some(Path::new("missing"))).files.is_empty());
-        // Everything: all but version control and IDECraft's data.
+        // Everything: all but version control and Ferris IDEA's data.
         let names = |v: Vec<PathBuf>| v.iter().map(|p| slashes(p)).collect::<Vec<_>>();
         assert_eq!(
             names(own.everything(None)),
@@ -1367,7 +1367,7 @@ mod tests {
             (".GIT", VERSION_CONTROL),
             ("cvs", VERSION_CONTROL),
             (".Idea", IDE_DATA),
-            (".IDECRAFT", IDE_DATA),
+            (".FERRIS-IDEA", IDE_DATA),
             (".VENV", ENVIRONMENTS),
             ("Site-Packages", ENVIRONMENTS),
             ("TARGET", OUTPUT),
@@ -1382,7 +1382,7 @@ mod tests {
             }
         }
         assert!(never_listed(std::ffi::OsStr::new(".Git")));
-        assert!(never_listed(std::ffi::OsStr::new(".IDECraft")));
+        assert!(never_listed(std::ffi::OsStr::new(".Ferris-IDEA")));
         assert!(!never_listed(std::ffi::OsStr::new(".idea")));
         // By the path alone, nothing on disk: the reason does not depend on the file system.
         let dir = TempDir::new("names");

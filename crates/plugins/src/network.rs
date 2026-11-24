@@ -182,7 +182,7 @@ impl Target {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Holder {
-    /// The user in the IDECraft window.
+    /// The user in the Ferris IDEA window.
     User,
     /// Agents over MCP.
     Agent,
@@ -298,7 +298,7 @@ pub struct NetAccess {
     pub target: Target,
     /// Whose grant this call uses.
     pub holder: Holder,
-    /// Audit file; none writes no audit (never used by IDECraft itself).
+    /// Audit file; none writes no audit (never used by Ferris IDEA itself).
     pub audit: Option<PathBuf>,
     /// What the connection's SSL mode allows (`SPEC-0314` v2 behaviour 10).
     pub tls: NetTls,
@@ -667,7 +667,7 @@ pub struct NetworkWarning {
     pub host: Option<String>,
     /// Target port, if a connection is picked.
     pub port: Option<u16>,
-    /// Always false: IDECraft does not review plugin code.
+    /// Always false: Ferris IDEA does not review plugin code.
     pub reviewed: bool,
     /// Always true: the plugin receives the connection's user and password.
     pub receives_credentials: bool,
@@ -682,15 +682,15 @@ pub struct NetworkWarning {
 /// What the status of a plugin connector means, for the warning.
 pub fn status_meaning(status: &str) -> String {
     match status {
-        "beta" => "Beta: built into IDECraft, but not tested against a real server".into(),
+        "beta" => "Beta: built into Ferris IDEA, but not tested against a real server".into(),
         "user" => {
-            "User: a definition from your connectors folder; IDECraft makes no statement about it"
+            "User: a definition from your connectors folder; Ferris IDEA makes no statement about it"
                 .into()
         }
         "imported" => {
-            "Imported: brought in from a file or link; IDECraft makes no statement about it".into()
+            "Imported: brought in from a file or link; Ferris IDEA makes no statement about it".into()
         }
-        "supported" => "Supported: tested by IDECraft against a real server".into(),
+        "supported" => "Supported: tested by Ferris IDEA against a real server".into(),
         other => other.to_owned(),
     }
 }
@@ -731,7 +731,7 @@ pub fn network_warning(
             }
         ),
         format!("Its connector “{connector}” is {}.", status_meaning(status)),
-        "IDECraft does not review the code of plugins. Allow it only if you trust the author."
+        "Ferris IDEA does not review the code of plugins. Allow it only if you trust the author."
             .into(),
     ];
     let text = std::iter::once(title.clone())
@@ -971,7 +971,7 @@ mod tests {
 
     fn temp(name: &str) -> PathBuf {
         let d = std::env::temp_dir().join(format!(
-            "idecraft-net-{name}-{}-{:?}",
+            "ferris-idea-net-{name}-{}-{:?}",
             std::process::id(),
             std::thread::current().id()
         ));
@@ -1065,24 +1065,24 @@ mod tests {
 
     /// [`probe`] connecting through the host function `connect`.
     fn probe_through(connect: &str) -> Vec<u8> {
-        let manifest = r#"{"name":"Net probe","version":"1.0","author":"IDECraft tests","permissions":["profile-network"],"actions":[{"id":"connect","title":"Connect","kind":"connector"}]}"#;
+        let manifest = r#"{"name":"Net probe","version":"1.0","author":"Ferris IDEA tests","permissions":["profile-network"],"actions":[{"id":"connect","title":"Connect","kind":"connector"}]}"#;
         let wat = format!(
             r#"(module
-  (import "idecraft" "{connect}" (func $connect (param i32 i32) (result i32)))
-  (import "idecraft" "net_send" (func $send (param i32 i32 i32) (result i32)))
-  (import "idecraft" "net_recv" (func $recv (param i32 i32) (result i64)))
-  (import "idecraft" "net_close" (func $close (param i32) (result i32)))
+  (import "ferris-idea" "{connect}" (func $connect (param i32 i32) (result i32)))
+  (import "ferris-idea" "net_send" (func $send (param i32 i32 i32) (result i32)))
+  (import "ferris-idea" "net_recv" (func $recv (param i32 i32) (result i64)))
+  (import "ferris-idea" "net_close" (func $close (param i32) (result i32)))
   (memory (export "memory") 1)
   (global $next (mut i32) (i32.const 1024))
   (data (i32.const 0) "{data}")
   (data (i32.const 600) "ping")
-  (func (export "idecraft_alloc") (param $n i32) (result i32)
+  (func (export "ferris_idea_alloc") (param $n i32) (result i32)
     (local $p i32)
     (local.set $p (global.get $next))
     (global.set $next (i32.add (global.get $next) (local.get $n)))
     (local.get $p))
-  (func (export "idecraft_manifest") (result i64) (i64.const {len}))
-  (func (export "idecraft_run") (param i32 i32 i32 i32) (result i64)
+  (func (export "ferris_idea_manifest") (result i64) (i64.const {len}))
+  (func (export "ferris_idea_run") (param i32 i32 i32 i32) (result i64)
     (local $h i32) (local $r i64)
     (local.set $h (call $connect (local.get 2) (local.get 3)))
     (if (i32.lt_s (local.get $h) (i32.const 0))
@@ -1119,7 +1119,7 @@ mod tests {
         // SPEC-0314 AK-2.
         let dir = temp("reach");
         let plugin = Plugin::from_bytes(&dir.join("netprobe.wasm"), &probe()).unwrap();
-        assert_eq!(plugin.manifest.author, "IDECraft tests");
+        assert_eq!(plugin.manifest.author, "Ferris IDEA tests");
         let (port, server) = pong_server();
         let target = Target::new("127.0.0.1", port);
         let access = |holder| crate::Access {
@@ -1193,7 +1193,7 @@ mod tests {
         };
         assert_eq!(
             (w.plugin.as_str(), w.author.as_str()),
-            ("Net probe", "IDECraft tests")
+            ("Net probe", "Ferris IDEA tests")
         );
         assert_eq!((w.host.as_deref(), w.port), (Some("127.0.0.1"), Some(9)));
         grant_network(&dir, "netprobe", &target, Holder::User).unwrap();
@@ -1227,7 +1227,7 @@ mod tests {
         assert!(w.lines[2].contains("Imported"));
         assert!(
             w.text
-                .contains("IDECraft does not review the code of plugins")
+                .contains("Ferris IDEA does not review the code of plugins")
         );
         assert!(!w.reviewed && w.receives_credentials);
         let none = network_warning(None, "x", "X", "user", None);
@@ -1420,7 +1420,7 @@ mod tests {
             &probe_through("net_connect_tls"),
         )
         .unwrap();
-        let ours = test_pki("IDECraft plugin test CA");
+        let ours = test_pki("Ferris IDEA plugin test CA");
         let ca = dir.join("ca.pem");
         std::fs::write(&ca, &ours.ca_pem).unwrap();
         let other = dir.join("other-ca.pem");

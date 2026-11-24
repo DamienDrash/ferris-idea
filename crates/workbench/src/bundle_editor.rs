@@ -1,8 +1,8 @@
 //! The resource bundle editor (`SPEC-0212`): the keys of a bundle's `.properties` files in a list,
 //! one value field per locale for the selected key; values are written back by the workbench.
 
+use ferris_idea_languages::properties::Bundle;
 use gpui::{Context, Entity, EventEmitter, FocusHandle, KeyDownEvent, Window, div, prelude::*, px};
-use idecraft_languages::properties::Bundle;
 
 use crate::editor_view::EditorView;
 use crate::palette::Palette;

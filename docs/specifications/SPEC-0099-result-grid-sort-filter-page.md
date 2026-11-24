@@ -75,7 +75,7 @@ Find the rows that matter in a result without writing another query.
   and labels (unit tests `grid::tests` in `crates/database`).
 - **AK-2** MCP: sorting descending with an unknown column, the second page of one row, a filter
   (`crates/mcp/tests/it/protocol.rs`, SQLite part).
-- **AK-3** In a real window (`idecraft ui --selftest`): two clicks on "name" sort descending, the filter
+- **AK-3** In a real window (`ferris-idea ui --selftest`): two clicks on "name" sort descending, the filter
   "ada" keeps one row ("1 row (filtered from 2)"), a 1200-row result shows "1–500 of 1200" and its last
   page starts at 1001.
 - **AK-4** By hand: clicking headers, ⇧-click, typing a filter and paging next to the reference.
@@ -106,10 +106,10 @@ loaded, editing cells in the transposed, tree or text view (F-055), reordering a
 search field inside the value list.
 
 ## Known deviations from the reference
-The reference sorts and filters by re-running the query on the server by default; IDECraft sorts and
+The reference sorts and filters by re-running the query on the server by default; Ferris IDEA sorts and
 filters the rows the console already loaded, so nothing runs again and statements with side effects
 are never repeated. The filter is a text search instead of a `WHERE` clause. Compared side by side in OBS-0026: the reference
-sorts and counts a console result over the first 500 rows only, IDECraft over all loaded rows; the
-reference reaches the transposed view through a view menu, IDECraft through a toolbar switch. **v3:**
+sorts and counts a console result over the first 500 rows only, Ferris IDEA over all loaded rows; the
+reference reaches the transposed view through a view menu, Ferris IDEA through a toolbar switch. **v3:**
 the value list counts over every loaded row, where the reference counted the first 500 (IMP-0012); the
 views are three buttons in the toolbar instead of an eye menu.

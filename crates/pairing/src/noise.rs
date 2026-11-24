@@ -28,7 +28,7 @@ const MAX_FINAL_PAYLOAD: usize = 512;
 
 /// The prologue for `initiator` connecting to `responder` (`window`, `serve`, `device`).
 pub fn prologue(initiator: &str, responder: &str) -> String {
-    format!("idecraft-session/{PROTOCOL_MAJOR};pq=ML-KEM-1024;{initiator}>{responder}")
+    format!("idecraft-session/{PROTOCOL_MAJOR};pq=ML-KEM-1024;{initiator}>{responder}") // rebrand:keep (protocol label)
 }
 
 /// Why a handshake failed. Never names key material.
@@ -42,7 +42,7 @@ pub enum HandshakeError {
     #[error("the connection ended during the handshake: {0}")]
     Io(String),
     /// A message that is not part of the two hybrid handshakes.
-    #[error("not an IDECraft handshake (message 1 has {0} bytes)")]
+    #[error("not a Ferris IDEA handshake (message 1 has {0} bytes)")]
     NotAHandshake(usize),
     /// The KEM part is missing or invalid.
     #[error("the post-quantum part of the handshake is missing or invalid")]
@@ -113,7 +113,7 @@ pub fn pairing_key(code: &str) -> Zeroizing<[u8; 32]> {
     let normal = crate::code::normalize(code);
     let mut out = Zeroizing::new([0u8; 32]);
     Hkdf::<Sha256>::new(None, normal.as_bytes())
-        .expand(b"idecraft-pair-v2", out.as_mut())
+        .expand(b"idecraft-pair-v2", out.as_mut()) // rebrand:keep (protocol label)
         .unwrap_or_default();
     out
 }
@@ -130,7 +130,7 @@ fn psk3(
     if let Some(p) = pair {
         ikm.extend_from_slice(p);
     }
-    let info = format!("idecraft-pq-v1{pattern}{prologue}");
+    let info = format!("idecraft-pq-v1{pattern}{prologue}"); // rebrand:keep (protocol label)
     let mut out = Zeroizing::new([0u8; 32]);
     Hkdf::<Sha256>::new(Some(h2), &ikm)
         .expand(info.as_bytes(), out.as_mut())
@@ -140,7 +140,7 @@ fn psk3(
 
 /// The six digits both sides compare after a pairing handshake (`ADR-0025` §2).
 pub fn sas(hash: &[u8], responder: &[u8; 32], initiator: &[u8; 32], device: &str) -> String {
-    let mut info = b"idecraft-sas-v1".to_vec();
+    let mut info = b"idecraft-sas-v1".to_vec(); // rebrand:keep (protocol label)
     info.extend_from_slice(fingerprint(responder).as_bytes());
     info.extend_from_slice(fingerprint(initiator).as_bytes());
     info.extend_from_slice(device.as_bytes());

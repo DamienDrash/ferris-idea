@@ -18,7 +18,7 @@ before = ["prepare"]
 #[test]
 fn configurations_are_listed_and_previewed_without_running() {
     let p = Project::empty();
-    p.write(".idecraft/run.toml", RUN_TOML);
+    p.write(".ferris-idea/run.toml", RUN_TOML);
     let mut ide = Ide::stdio(&p);
     let list = ide.ok("run_configurations", json!({}));
     assert_eq!(list["problems"], json!([]), "{list}");
@@ -33,17 +33,17 @@ fn configurations_are_listed_and_previewed_without_running() {
 }
 
 /// SPEC-0278 behaviours 5, 10–14: an untrusted project runs nothing, even with the `run` right;
-/// `idecraft trust add` trusts it, `idecraft trust remove` takes trust away.
+/// `ferris-idea trust add` trusts it, `ferris-idea trust remove` takes trust away.
 #[test]
 fn an_untrusted_project_runs_nothing_until_trusted() {
     let p = Project::empty();
-    p.write(".idecraft/run.toml", RUN_TOML).grant(&["run"]);
+    p.write(".ferris-idea/run.toml", RUN_TOML).grant(&["run"]);
     let root = p.root.to_str().unwrap();
     {
         let mut ide = Ide::stdio_trusted(&p, false);
         let state = ide.ok("project_trust", json!({}));
         assert_eq!(state["trusted"], false, "{state}");
-        assert_eq!(state["findings"][0]["file"], ".idecraft/run.toml");
+        assert_eq!(state["findings"][0]["file"], ".ferris-idea/run.toml");
         let why = ide.refused(
             "run_configuration",
             json!({"name": "greet", "dry_run": false}),
@@ -76,7 +76,7 @@ fn an_untrusted_project_runs_nothing_until_trusted() {
 #[test]
 fn with_the_run_right_the_chain_runs_in_order() {
     let p = Project::empty();
-    p.write(".idecraft/run.toml", RUN_TOML).grant(&["run"]);
+    p.write(".ferris-idea/run.toml", RUN_TOML).grant(&["run"]);
     let mut ide = Ide::stdio(&p);
     let r = ide.ok(
         "run_configuration",
@@ -88,13 +88,13 @@ fn with_the_run_right_the_chain_runs_in_order() {
         "{r}"
     );
     // Runs are logged for the user.
-    assert!(p.read(".idecraft/agent-log.jsonl").contains("greet"));
+    assert!(p.read(".ferris-idea/agent-log.jsonl").contains("greet"));
 }
 
 #[test]
 fn invalid_files_are_problems() {
     let p = Project::empty();
-    p.write(".idecraft/run.toml", "[[run]]\nname = \"a\"\ncommand = []\n\n[[run]]\nname = \"b\"\ncommand = [\"x\"]\nbefore = [\"missing\"]\n");
+    p.write(".ferris-idea/run.toml", "[[run]]\nname = \"a\"\ncommand = []\n\n[[run]]\nname = \"b\"\ncommand = [\"x\"]\nbefore = [\"missing\"]\n");
     let mut ide = Ide::stdio(&p);
     let list = ide.ok("run_configurations", json!({}));
     assert!(!list["problems"].as_array().unwrap().is_empty(), "{list}");

@@ -1,7 +1,7 @@
 //! Performance budgets of `SPEC-0260` and their check.
 //!
 //! The budgets live in `budgets.toml` next to this crate; the headless harness
-//! (`idecraft-bench run`) and the nightly window job (`scripts/perf-window.sh`) both write flat
+//! (`ferris-idea-bench run`) and the nightly window job (`scripts/perf-window.sh`) both write flat
 //! metric maps (`name → number`) and check them here, so one file states every bar.
 
 use std::collections::BTreeMap;

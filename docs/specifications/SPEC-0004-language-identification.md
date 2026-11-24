@@ -1,6 +1,15 @@
 # SPEC-0004: Language identification
 
-- **Version:** 9 · **Date:** 2026-11-16 (v9: F-030 check without a screen — an Emacs or Vim
+- **Version:** 13 · **Date:** 2026-11-23 (v13: a `.iml` module file shows the open module-file icon
+  of `intellij-community` (`fileTypes/ideaModule`, Apache-2.0) instead of Ferris IDEA's own drawing,
+  behaviour 15, AK-22, OBS-0093 T2); 2026-11-18 (v12: OBS-0090 L1–L3 — a file that opens as plain text
+  shows the text icon whatever its name, the unknown icon only for a file that does not open,
+  behaviour 15; `.gitignore`, `.dockerignore` and the other ignore files have an ignore icon of
+  Ferris IDEA's own, and `.iml` module files a module icon (OBS-0093 T2); Makefiles and ignore files comment lines without a grammar, behaviour 23;
+  AK-19 to AK-21); 2026-11-18 (v11: `.properties` files are the language Properties,
+  behaviour 22, AK-18 — OBS-0091 P2); 2026-11-17 (v10: a file without extension that starts with an XML
+  declaration or an HTML doctype is XML or HTML, behaviour 21, AK-17 — F-030 check without a
+  screen, second round); 2026-11-16 (v9: F-030 check without a screen — an Emacs or Vim
   modeline names the language, behaviour 18; a hashbang line or modeline typed and saved takes
   effect at once, behaviour 19; the status bar names the file type and opens Override File Type,
   behaviour 20; IMP-0495, IMP-0496; v8: every other typed filter and the merge result take
@@ -23,7 +32,15 @@
   types has icons, narrows as one types and selects the exact match), GEN v9 (the modeline forms
   of Vim — `vi:`, `vim:`, `ex:` with `ft=`, `filetype=`, `syntax=` in the first or last five
   lines — and of Emacs — `-*- mode: … -*-` on the first line, the second after `#!`; a status bar
-  that names the file type and changes it on a click, as common editors do)
+  that names the file type and changes it on a click, as common editors do), OBS v11 (OBS-0091:
+  the reference names a `.properties` file's type Properties in the status bar and colours it;
+  Ferris IDEA showed Plain Text), STD v11 (the `.properties` format of `java.util.Properties.load`:
+  `#` and `!` start a comment line), OBS v12 (OBS-0090:
+  the reference shows plain text files without extension or with an unknown one with the text
+  icon, `.gitignore` and `.dockerignore` with an ignore icon; Comment with Line Comment writes
+  `# ` in a Makefile and `#` without a space in `.gitignore`), OSS v13 (`JetBrains/intellij-community`
+  at `d4018fb`: the module file type's icon is the platform icon `IdeaModule`, the New UI asset
+  `platform/icons/src/expui/fileTypes/ideaModule.svg`; asset taken unchanged, PROVENANCE.md)
 - **Feature matrix rows:** F-030
 
 ## Purpose
@@ -56,7 +73,7 @@ Decide which language service handles a file.
    paths of regular files (v9: read with the modeline, behaviour 18); the answer is kept until
    the file's modification time changes. [GEN]
 10. **File name patterns (v5):** a project keeps its own associations in
-   `.idecraft/file-types.toml`, table `patterns`: a pattern on the file name (`*` any run of
+   `.ferris-idea/file-types.toml`, table `patterns`: a pattern on the file name (`*` any run of
    characters, `?` one character, compared ignoring case) and the LSP id of its language, or
    `text` for plain text. A matching pattern wins over behaviours 1, 2, 8 and 9; a pattern without
    wildcards wins over one with them, then the longer pattern. [DOC, GEN]
@@ -95,7 +112,7 @@ Decide which language service handles a file.
    `language`: an LSP id or `text`), `revert` (`path`), `associate` (`pattern`, `language`),
    `dissociate` (`pattern`). The four changing actions report what would change with `dry_run`
    (default true); `dry_run: false` needs the `write` right and is logged in
-   `.idecraft/agent-log.jsonl`. An unknown language is refused with the list of ids; a path outside
+   `.ferris-idea/agent-log.jsonl`. An unknown language is refused with the list of ids; a path outside
    the workspace is refused. `detect_language` follows behaviours 9–11 for a workspace path.
    [ADR-0008]
 
@@ -105,10 +122,28 @@ Decide which language service handles a file.
    that language's icon, plain text the text icon; a file decided by its name keeps the icon of
    its name (`.gitignore`, images and archives have icons of their own). A language without an
    icon of its own shows the text icon, never the unknown one. A file with an override carries a
-   small mark of IDECraft's own drawing on the lower right of its icon. The decision is kept per
+   small mark of Ferris IDEA's own drawing on the lower right of its icon. The decision is kept per
    file for at most a second and forgotten at once after one of the actions of behaviour 13. Java
    and Kotlin files whose language stays Java or Kotlin keep the icon of their primary
    declaration (SPEC-0131 v3 behaviour 7). [OBS, GEN]
+   - **v11 – Plain text and binary files:** a file whose name gives no icon of its own (no
+     extension, or one Ferris IDEA does not know: `data`, `Makefile`, `notes.data`, `tools.cmake`)
+     shows the text icon when it opens as text, and the unknown icon only when it does not: a
+     binary file (a NUL among its first 8 KiB, read as SPEC-0336 behaviour 11 reads), a file
+     larger than an editor takes (20 MiB) or one that cannot be read. Only such files are read,
+     and only their first 8 KiB, kept with the decision for a second. A remote project's files
+     keep the icon of their name. Before v11 every such file showed the unknown icon (OBS-0090
+     L1).
+   - **v11 – Ignore files:** `.gitignore`, `.dockerignore`, `.ignore`, `.npmignore`,
+     `.prettierignore`, `.eslintignore`, `.stylelintignore`, `.helmignore`, `.gcloudignore`,
+     `.vscodeignore` and `.hgignore` show an ignore icon of Ferris IDEA's own drawing (lines of
+     patterns and a crossed-out circle), as the reference shows one ignore icon for `.gitignore`
+     and `.dockerignore`. Before v11 they showed the Git icon (OBS-0090 L3). [OBS]
+   - **v11 – Module files:** a `.iml` file (a module of the reference's project format, SPEC-0049)
+     shows a module icon instead of the XML icon; it stays XML for highlighting. The reference
+     shows a module icon (OBS-0093 T2). [OBS] **v13:** the icon is the module-file icon of the open
+     New UI icon set (`fileTypes/ideaModule`, Apache-2.0, unchanged), which the open platform
+     gives its module file type; v12 showed an own drawing (a page with a building block). [OSS]
 16. **Offered where it applies (v6):** Find Action offers "Override File Type" only while one of
    the target files (behaviour 13) has no override, and "Revert File Type Override" only while one
    has an override; with no target file neither is offered. The tab menu and the Project tree's
@@ -128,8 +163,8 @@ Decide which language service handles a file.
    (SPEC-0089 v5 behaviour 10: a typed letter opens it, letters extend it) and the typed filter of
    the Spring tool window (SPEC-0115 v5 behaviour 15) take committed text in the same way; their
    keys (↑/↓, Enter, Escape, ⌫, shortcuts with ⌘/⌃/⌥) keep their meaning. The Project tree has no
-   speed search in IDECraft, so nothing changes there. [GEN]
-17b. **v8 – Every typed filter:** the rule of behaviour 17 holds wherever IDECraft builds text from
+   speed search in Ferris IDEA, so nothing changes there. [GEN]
+17b. **v8 – Every typed filter:** the rule of behaviour 17 holds wherever Ferris IDEA builds text from
    typing outside an editor or input field: the Git log's commit filter, the search of its menus,
    the branches pane's filter, the name of a new branch and the name field of the commit menu
    (SPEC-0086); the Structure popup and tool window (SPEC-0079); the intentions list of ⌥↩
@@ -148,7 +183,7 @@ Decide which language service handles a file.
    compared ignoring case and an Emacs `-mode` suffix; besides each language's LSP id and name,
    the common short names count (`py`, `sh`, `bash`, `zsh`, `shell-script`, `js`, `js2`, `ts`,
    `c++`, `nxml`, `md`, `gfm`, `conf-toml`, `less-css`, `ess-r`, `kt`, `rs`, `yml`). A mode that is
-   no language of IDECraft (`perl`) decides nothing. At most the first and the last 1 KiB of a
+   no language of Ferris IDEA (`perl`) decides nothing. At most the first and the last 1 KiB of a
    regular file are read, a start holding a NUL byte counts as no text, and the answer is kept
    until the file's modification time changes. A name that gives a language is never overruled
    by a modeline (the name costs no read). `file_type` reports the source `modeline`; the icon
@@ -162,6 +197,40 @@ Decide which language service handles a file.
    one; a `.tsx` file `TypeScript`), following every change of behaviours 12, 13 and 19 at once.
    A click on it opens the list of Override File Type (behaviour 13) for the editor's file; the
    tooltip is "File Type". A remote project shows no such widget. [GEN]
+21. **v10 – The markup a file starts with:** a file whose name has no extension and gives no
+    language (behaviours 1, 2, 8), and whose text names none by a modeline or hashbang
+    (behaviours 18, 9), is XML when its first line that is not empty — after a byte order mark
+    and leading white space — begins with an XML declaration (`<?xml` followed by white space or
+    `?`), and HTML when it begins, in any case, with `<!DOCTYPE html` or `<html` (followed by
+    white space, `>` or the end). Nothing else counts: `<?xml-stylesheet …?>`, another element
+    (`<svg …>`), or markup further down leave the file plain text, and a name with an extension
+    (`notes.txt` with an HTML example) stays as its name says. It is read with the modeline, from
+    the same first 1 KiB of absolute paths of regular files, kept until the modification time
+    changes, and takes effect after a save like behaviour 19. MCP `file_type` reports it with
+    `source: "prolog"`, and `detect_language` returns its language; the Project tree and the tabs show the
+    language's icon as for a hashbang (behaviour 15). Before v10 such files (`config` holding XML
+    from a tool, `page` saved from a browser) were plain text (F-030 check without a screen,
+    2026-11-17). [GEN, STD: XML 1.0 §2.8, HTML doctype]
+22. **v11 – Properties:** `.properties` files are the language Properties (title `Properties`,
+    LSP id `properties`, as common editors name it; the LSP specification lists none). Its line
+    comment token is `#` (behaviour 7; `!` comment lines are read as comments too, SPEC-0155
+    behaviour 4) and it has no block comment. It has no language server and no grammar library;
+    its colours come from Ferris IDEA's own lexer (SPEC-0155 v5 behaviour 12). Its icon is the
+    properties icon the tree already showed for these files. Override File Type and file name
+    patterns offer it like any other language (behaviours 10–13), so a `.cfg` written in this
+    format can be shown as Properties. [OBS, STD, GEN]
+
+23. **v12 – Line comments without a grammar:** Comment with Line Comment (⌘/, SPEC-0056) works in
+    files that have no language but whose name gives a comment syntax:
+    - `Makefile`, `GNUmakefile`, `makefile` and `*.mk` (any case of the extension): `# ` — the
+      token and a space at the first column; uncommenting removes `#` and one space after it if
+      there is one.
+    - The ignore files of behaviour 15 and `.gitignore`: `#` without a space, removed the same
+      way.
+    The editor, MCP `editor_action` (`toggle_comment`) and `editor_keystrokes` use the same
+    tokens. The files stay plain text without highlighting; a language with a grammar for them is
+    not covered yet. A file with a language (also by an override or pattern) takes that
+    language's token. Before v12 ⌘/ did nothing in these files (OBS-0090 L2). [OBS]
 
 ## Acceptance criteria
 - **AK-1** Priority languages (Python, SQL, JS, TS, Java) are detected from their extensions.
@@ -233,23 +302,54 @@ Decide which language service handles a file.
   with real keys changes nothing before ⌘S and makes it Python after, text kept and not modified;
   a real click on the status bar widget opens the list, `plain text` and Enter save the override
   and the widget says `Plain Text`.
+- **AK-17 (v10, behaviour 21)** Unit test `file_types::tests::the_prolog_names_xml_and_html`: the XML
+  declaration with a byte order mark and leading blank lines, the HTML doctype in either case and
+  `<html …>`; `<?xml-stylesheet`, `<htmlx>`, `<svg>`, markup after text and an empty file give
+  nothing; a modeline decides before the markup; `detect` on files without extension gives XML and
+  HTML with source `prolog`, a `.txt` file does not.
+
+- **AK-18 (v11, behaviour 22)** Unit tests `tests::properties_language` (`a.properties` and
+  `Messages_de.PROPERTIES` are Properties with `#` and the title and id of behaviour 22) and
+  `file_type_icons::tests::every_language_has_an_icon`; window test
+  `f081_properties_grammar::properties_files_are_coloured_and_commented` (status bar `Properties`,
+  ⌘/ writes `#`).
+- **AK-19 (v12, behaviour 15)** Unit tests `file_type_icons::tests::plain_text_files_show_the_text_icon`
+  (`data` with JSON, `Makefile`, `notes.data`, `tools.cmake`, an empty file and `notes.txt` show the
+  text icon; a file with NUL bytes and a missing file the unknown icon) and
+  `icons::tests::every_icon_has_both_variants_and_files_map_to_bundled_icons` (`.gitignore`,
+  `.dockerignore`, `.ignore`, `.npmignore` have the ignore icon in light and dark, `shop.iml` the
+  module icon).
+- **AK-22 (v13, behaviour 15)** Unit test `icons::tests::module_files_have_the_open_module_icon`:
+  `shop.iml` and `APP.IML` map to `fileTypes/ideaModule`, which is bundled in light and dark;
+  `shop.xml` keeps `fileTypes/xml`. The window test of SPEC-0275 AK-49 sees the icon on the row.
+- **AK-20 (v12, behaviour 23)** Unit tests `tests::makefiles_and_ignore_files_have_a_line_comment`
+  in `crates/languages` (the names and tokens, other files none, a language's own token first)
+  and `actions::tests::comments` in `crates/editor` (`# ` inserts `# all:`, removes `# ` and `#`;
+  `#` inserts and removes without a space).
+- **AK-21 (v12)** Window test `plain_text_icons_and_comments_without_a_grammar` in
+  `crates/workbench/tests/it/file_types.rs`: the icons of behaviour 15 in the tree and on the tab,
+  ⌘/ in `Makefile` gives `# all:` and ⌘Z takes it back, in `.gitignore` and `.dockerignore` `#`
+  without a space.
 
 ## Out of scope (v5)
 A Settings page that lists and edits the patterns (they are edited through Associate with File
 Type, the file and MCP); patterns of the whole IDE; ignored files and folders; file types of
-one's own with keywords; detection from the content beyond the hashbang line.
+one's own with keywords; detection from the content beyond the hashbang line (v10: and the
+markup a file without extension starts with, behaviour 21).
 
 ## Known deviations from the reference (v5)
-The reference keeps file name patterns for the whole IDE in its settings; IDECraft keeps them,
-like the overrides, in the project (`.idecraft/file-types.toml`), so they travel with the project
-and agents see the same as the window. (v6) The override mark is IDECraft's own drawing, not the
+The reference keeps file name patterns for the whole IDE in its settings; Ferris IDEA keeps them,
+like the overrides, in the project (`.ferris-idea/file-types.toml`), so they travel with the project
+and agents see the same as the window. (v6) The override mark is Ferris IDEA's own drawing, not the
 reference's arrow. Compared side by side in OBS-0052 (G1–G4 closed in v6). (v9) Editor modelines
 (behaviour 18) and the file type in the status bar (behaviour 20) go beyond what the reference
 documents (IMP-0495, IMP-0496); neither was compared side by side yet.
 
 ## Not covered yet (v9, F-030 check without a screen)
 `Makefile`, `CMakeLists.txt` and `.gitignore` have no language: each needs a language of its own
-with a grammar for highlighting (a new dependency, its licence checked first). Binary files are
+with a grammar for highlighting (a new dependency, its licence checked first). (v11) Their line
+comments work without one (behaviour 22); in the reference `CMakeLists.txt` is plain text too
+(OBS-0090). Binary files are
 not opened (SPEC-0336 behaviour 3 says why in the status bar); an image viewer and a hex view are
 features of their own. Files larger than 20 MiB open whole and stay editable (SPEC-0260 budgets
 for 50 MB files) instead of the reference's read-only view in parts.

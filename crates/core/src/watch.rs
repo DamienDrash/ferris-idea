@@ -208,7 +208,7 @@ pub fn watch(
     let (tx, rx) = mpsc::channel();
     let flag = Arc::clone(&stop);
     std::thread::Builder::new()
-        .name("idecraft-watch".into())
+        .name("ferris-idea-watch".into())
         .spawn(move || {
             while !flag.load(Ordering::SeqCst) {
                 std::thread::sleep(interval);

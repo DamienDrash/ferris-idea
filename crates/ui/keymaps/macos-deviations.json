@@ -21,18 +21,18 @@
     "reason": "Sync of the changed build files has its key in the reference from the Maven and Gradle plugins, not from the keymap files."
   },
   {
+    "action": "FerrisIDEA.Database.ShowDdl",
+    "change": "add",
+    "shortcut": "alt shift meta D",
+    "decided_by": "SPEC-0089",
+    "reason": "An action of Ferris IDEA's own: the key of Edit Source already opens the properties in the Database tool window."
+  },
+  {
     "action": "Hotswap",
     "change": "add",
     "shortcut": "control alt shift F9",
     "decided_by": "SPEC-0091",
-    "reason": "Reload Changed Classes has no key in the keymap files; IDECraft gives it a free one."
-  },
-  {
-    "action": "IDECraft.Database.ShowDdl",
-    "change": "add",
-    "shortcut": "alt shift meta D",
-    "decided_by": "SPEC-0089",
-    "reason": "An action of IDECraft's own: the key of Edit Source already opens the properties in the Database tool window."
+    "reason": "Reload Changed Classes has no key in the keymap files; Ferris IDEA gives it a free one."
   },
   {
     "action": "MaximizeEditorInSplit",
@@ -81,21 +81,21 @@
     "change": "add",
     "shortcut": "shift meta T",
     "decided_by": "SPEC-0059",
-    "reason": "Reopen Closed Tab has no key in the keymap files; it takes the key of Go to Test, which yields the chord and runs from the Navigate menu and Find Action (SPEC-0071), and of the Services action, which IDECraft does not carry out."
+    "reason": "Reopen Closed Tab has no key in the keymap files; it takes the key of Go to Test, which yields the chord and runs from the Navigate menu and Find Action (SPEC-0071), and of the Services action, which Ferris IDEA does not carry out."
   },
   {
     "action": "StepOutOfBlock",
     "change": "add",
     "shortcut": "control alt shift F10",
     "decided_by": "SPEC-0091",
-    "reason": "Step Out of Code Block has no key in the keymap files; IDECraft gives it a free one."
+    "reason": "Step Out of Code Block has no key in the keymap files; Ferris IDEA gives it a free one."
   },
   {
     "action": "ToggleInSelection",
     "change": "add",
     "shortcut": "control alt E",
     "decided_by": "SPEC-0028",
-    "reason": "The find bar's search in selection under IDECraft's id shares the key the keymap files give to the same command, ToggleFindInSelection."
+    "reason": "The find bar's search in selection under Ferris IDEA's id shares the key the keymap files give to the same command, ToggleFindInSelection."
   },
   {
     "action": "UsageView.Exclude",

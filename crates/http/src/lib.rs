@@ -1,4 +1,4 @@
-//! HTTP client for IDECraft.
+//! HTTP client for Ferris IDEA.
 //!
 //! Implements `SPEC-0046`: request files (`.http`) with variables, environment files (`SPEC-0102`), and sending
 //! requests over HTTP/1.1 with TLS from the system library (`native-tls`).

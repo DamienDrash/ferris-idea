@@ -5,7 +5,7 @@
 use std::path::Path;
 use std::process::{Command, Stdio};
 
-use idecraft_session::{ErrorCode, RpcError};
+use ferris_idea_session::{ErrorCode, RpcError};
 use serde_json::Value;
 
 use super::{Group, run_error, wait_line};

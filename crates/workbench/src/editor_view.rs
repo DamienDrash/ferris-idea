@@ -8,18 +8,18 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use ferris_idea_editor::{Caret, Carets, Clipboard, EditorState};
+use ferris_idea_languages::LanguageId;
+use ferris_idea_languages::folding::Outline;
+use ferris_idea_languages::syntax::SyntaxDocument;
+use ferris_idea_ui::keymap::Keystroke;
+use ferris_idea_vcs::{LineChange, LineChangeKind, line_changes};
 use gpui::{
     App, Bounds, ClipboardItem, Context, ElementInputHandler, EntityInputHandler, FocusHandle,
     Focusable, Font, Hsla, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, Pixels,
     ScrollWheelEvent, ShapedLine, TextRun, UTF16Selection, Window, canvas, div, fill, font, point,
     prelude::*, px, rgb, size,
 };
-use idecraft_editor::{Caret, Carets, Clipboard, EditorState};
-use idecraft_languages::LanguageId;
-use idecraft_languages::folding::Outline;
-use idecraft_languages::syntax::SyntaxDocument;
-use idecraft_ui::keymap::Keystroke;
-use idecraft_vcs::{LineChange, LineChangeKind, line_changes};
 
 use crate::diagnostics_model::{self, Problem, Severity};
 use crate::layout::{self, DisplayLine};
@@ -68,7 +68,7 @@ fn editor_font() -> Font {
 /// style, its colour or the text colour `text` (`SPEC-0290` behaviour 4).
 fn styled_run(
     len: usize,
-    style: &idecraft_ui::theme::TextStyle,
+    style: &ferris_idea_ui::theme::TextStyle,
     base: &Font,
     text: u32,
 ) -> TextRun {
@@ -106,7 +106,7 @@ fn styled_run(
 /// The text runs of a line of `len` bytes from its sorted, non-overlapping `coloured` byte ranges;
 /// the text between them in the plain font and the text colour `text`.
 fn line_runs(
-    coloured: &[(Range<usize>, idecraft_ui::theme::TextStyle)],
+    coloured: &[(Range<usize>, ferris_idea_ui::theme::TextStyle)],
     len: usize,
     base: &Font,
     text: u32,
@@ -140,11 +140,11 @@ fn line_runs(
 /// The syntax styles of the line `line` (char range of the buffer) shown as `display`, by display
 /// byte, from the highlight `spans` of the painted range (`SPEC-0027`).
 fn syntax_runs(
-    spans: &[idecraft_languages::syntax::Span],
+    spans: &[ferris_idea_languages::syntax::Span],
     line: Range<usize>,
     display: &DisplayLine,
     p: &Palette,
-) -> Vec<(Range<usize>, idecraft_ui::theme::TextStyle)> {
+) -> Vec<(Range<usize>, ferris_idea_ui::theme::TextStyle)> {
     spans
         .iter()
         .filter(|s| s.end > line.start && s.start < line.end)
@@ -157,15 +157,15 @@ fn syntax_runs(
 }
 
 /// One drawn line, kept for hit testing and the input method's candidate window.
-/// IDECraft's own inspections of a parsed text as problems (`SPEC-0098` behaviour 3); words of the
+/// Ferris IDEA's own inspections of a parsed text as problems (`SPEC-0098` behaviour 3); words of the
 /// project dictionary are no typos (`SPEC-0163`).
 fn tree_problems(doc: &SyntaxDocument, path: Option<&std::path::Path>) -> Vec<Problem> {
-    let found = idecraft_languages::inspections::inspect(doc);
+    let found = ferris_idea_languages::inspections::inspect(doc);
     let found = match path {
         Some(p) => {
-            let found = idecraft_languages::project_dictionary::filter(p, doc.text(), found);
+            let found = ferris_idea_languages::project_dictionary::filter(p, doc.text(), found);
             // The project's inspection profile (SPEC-0098 v3 behaviour 9, SPEC-0315).
-            idecraft_languages::inspection_profile::filter(p, found)
+            ferris_idea_languages::inspection_profile::filter(p, found)
         }
         None => found,
     };
@@ -175,7 +175,7 @@ fn tree_problems(doc: &SyntaxDocument, path: Option<&std::path::Path>) -> Vec<Pr
 /// Findings with byte offsets in `text` as problems with char ranges.
 fn own_problems(
     text: &str,
-    mut findings: Vec<idecraft_languages::inspections::Finding>,
+    mut findings: Vec<ferris_idea_languages::inspections::Finding>,
 ) -> Vec<Problem> {
     findings.sort_by_key(|f| f.start);
     // Byte offsets to char offsets in one pass.
@@ -189,7 +189,7 @@ fn own_problems(
     let mut own = Vec::new();
     for f in findings {
         // "No highlighting, only fix" (SPEC-0315 v2 behaviour 7): the fix stays in ⌥↩.
-        if f.level == idecraft_languages::inspections::Level::Info {
+        if f.level == ferris_idea_languages::inspections::Level::Info {
             continue;
         }
         let start = at(f.start);
@@ -197,14 +197,14 @@ fn own_problems(
         own.push(Problem {
             range: start..end_chars.max(start + 1),
             severity: match f.level {
-                idecraft_languages::inspections::Level::Error => Severity::Error,
-                idecraft_languages::inspections::Level::Warning => Severity::Warning,
-                idecraft_languages::inspections::Level::Weak
-                | idecraft_languages::inspections::Level::Info => Severity::Weak,
+                ferris_idea_languages::inspections::Level::Error => Severity::Error,
+                ferris_idea_languages::inspections::Level::Warning => Severity::Warning,
+                ferris_idea_languages::inspections::Level::Weak
+                | ferris_idea_languages::inspections::Level::Info => Severity::Weak,
             },
-            message: format!("IDECraft: {}", f.message),
+            message: format!("Ferris IDEA: {}", f.message),
             inspection: Some(f.id),
-            unused: idecraft_languages::inspections::is_unused(f.id),
+            unused: ferris_idea_languages::inspections::is_unused(f.id),
             code: None,
         });
     }
@@ -233,7 +233,7 @@ struct ProjectCheck {
     /// Shown problems, moved by edits until the next result.
     problems: Vec<Problem>,
     /// The findings with their fixes, as byte ranges of the text of `revision`.
-    findings: Vec<idecraft_languages::inspections::Finding>,
+    findings: Vec<ferris_idea_languages::inspections::Finding>,
     /// The text revision `findings` belong to.
     revision: u64,
     /// Cancels the running step.
@@ -380,6 +380,9 @@ struct LastLayout {
     /// x where the annotation column ends; the editor's left edge without annotations
     /// (`SPEC-0277` behaviour 2).
     annotation_x: Pixels,
+    /// x where the column of profile costs ends, right of the annotations (`SPEC-0120` v5
+    /// behaviour 10); `annotation_x` without costs.
+    costs_x: Pixels,
     /// Folded one-line methods drawn: line, text colours in the placeholder, brace backgrounds
     /// (`SPEC-0083` v3 behaviour 7).
     one_line_folds: Vec<(usize, usize, usize)>,
@@ -392,12 +395,23 @@ struct LastLayout {
     gutter_tips: Vec<(Bounds<Pixels>, GutterIcon)>,
     /// Author hints drawn: where, line and text (`SPEC-0292` v4 behaviours 7c, 7e).
     author_hints: Vec<(Bounds<Pixels>, usize, String)>,
+    /// Usage counts drawn, at the line's end or on a row above: where and the declaration's line
+    /// (`SPEC-0292` v8 behaviour 15).
+    usage_hits: Vec<(Bounds<Pixels>, usize)>,
     /// Widths of the carets drawn, in pixels (`SPEC-0057` v6 behaviour 25).
     caret_widths: Vec<f32>,
     /// Pills drawn behind parameter name hints: line and colour (`SPEC-0291` v9 behaviour 4b).
     hint_pills: Vec<(usize, u32)>,
+    /// Colour swatches drawn: square, colour as `0xRRGGBBAA`, 0-based line (`SPEC-0042` v27
+    /// behaviour 48).
+    swatches: Vec<(Bounds<Pixels>, u32, usize)>,
 }
 
+#[path = "editor_comment_marks.rs"]
+mod comment_marks;
+#[path = "editor_profile_costs.rs"]
+mod profile_costs;
+pub use profile_costs::profile_cost_id;
 #[path = "editor_gutter_focus.rs"]
 mod gutter_focus;
 
@@ -416,6 +430,8 @@ enum GutterIcon {
     Framework(usize),
     /// A bookmark on a 0-based line (`SPEC-0331` behaviour 14).
     Bookmark(usize),
+    /// The swatch of a colour written on a 0-based line (`SPEC-0042` v27 behaviour 48).
+    Color(usize),
 }
 
 impl GutterIcon {
@@ -427,9 +443,21 @@ impl GutterIcon {
             | Self::Fold(l, _)
             | Self::Declaration(l)
             | Self::Framework(l)
-            | Self::Bookmark(l) => l,
+            | Self::Bookmark(l)
+            | Self::Color(l) => l,
         }
     }
+}
+
+/// A colour written on a line, shown as a swatch in the gutter (`SPEC-0042` v27 behaviour 48).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct Swatch {
+    /// 0-based line.
+    line: usize,
+    /// The colour as `0xRRGGBBAA`.
+    rgba: u32,
+    /// The colour as written.
+    text: String,
 }
 
 /// What a view shows of a document besides its text, handed to its other view
@@ -487,12 +515,15 @@ pub enum EditorEvent {
     BreakpointsChanged,
     /// Edit the breakpoint on this line (0-based): a right click on it (`SPEC-0127` behaviour 2).
     EditBreakpoint(usize),
+    /// ⌥-click (Alt-click) on this line's number (0-based): switch its breakpoint off or on, or
+    /// set a temporary one (`SPEC-0127` v15 behaviour 31).
+    AltClickBreakpoint(usize),
     /// Edits that concern the bookmarked lines of this file: the workbench moves the project's
     /// bookmarks with them (`SPEC-0331` behaviours 5–7).
-    BookmarkEdits(Vec<idecraft_core::bookmarks::LineEdit>),
+    BookmarkEdits(Vec<ferris_idea_core::bookmarks::LineEdit>),
     /// The text changed by these edits; another view of the same file adopts the buffer
     /// (`SPEC-0112` behaviour 3).
-    Edited(Vec<idecraft_editor::Edit>),
+    Edited(Vec<ferris_idea_editor::Edit>),
     /// The file was saved; another view of it adopts the saved state.
     Saved,
     /// Save All was chosen in this editor (`SPEC-0058` v4 behaviour 12): the window saves every
@@ -529,11 +560,36 @@ pub enum EditorEvent {
     /// A click on a declaration's author hint: show or hide the annotations of this view
     /// (`SPEC-0292` v4 behaviour 7e).
     ToggleAnnotations,
+    /// A click on the usage count of the declaration on this line (0-based): open Find Usages for
+    /// it (`SPEC-0292` v8 behaviour 15).
+    UsagesOf(usize),
     /// A line for the status bar, e.g. that no gutter icon is drawn (`SPEC-0058` v5 behaviour 13).
     Note(String),
+    /// A click on the profile cost of this 0-based line: show its function in the profiler
+    /// (`SPEC-0120` v5 behaviour 10).
+    ProfileLine(usize),
+    /// A click on the room's comment mark of this 0-based line: open its threads (`SPEC-0323` v8
+    /// behaviour 54).
+    RoomComments(usize),
 }
 
 impl gpui::EventEmitter<EditorEvent> for EditorView {}
+
+/// A problem of the editor with its start and end as 0-based line and character (`SPEC-0358`
+/// behaviour 16).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProblemSpan {
+    /// Line and character where it starts.
+    pub start: (usize, usize),
+    /// Line and character where it ends.
+    pub end: (usize, usize),
+    /// How serious it is.
+    pub severity: crate::diagnostics_model::Severity,
+    /// It marks unused code.
+    pub unused: bool,
+    /// The message, with its source in front.
+    pub message: String,
+}
 
 /// An editor on one buffer.
 pub struct EditorView {
@@ -543,10 +599,10 @@ pub struct EditorView {
     /// Syntax tree; `None` while a background re-parse holds it.
     syntax: Option<SyntaxDocument>,
     /// Buffer edits not yet applied to the syntax tree.
-    syntax_edits: Vec<idecraft_editor::Edit>,
+    syntax_edits: Vec<ferris_idea_editor::Edit>,
     parsing: bool,
     /// Colour runs (display byte range, colour) by line text, shown while the tree is re-parsed.
-    colors: HashMap<String, Vec<(Range<usize>, idecraft_ui::theme::TextStyle)>>,
+    colors: HashMap<String, Vec<(Range<usize>, ferris_idea_ui::theme::TextStyle)>>,
     focus: FocusHandle,
     scroll_y: f32,
     view_height: f32,
@@ -561,7 +617,7 @@ pub struct EditorView {
     marked: Option<Range<usize>>,
     dragging: bool,
     /// Line and column where an ⌥-drag column selection started (`SPEC-0130`).
-    column_drag: Option<idecraft_editor::Position>,
+    column_drag: Option<ferris_idea_editor::Position>,
     /// The button that drags the column selection: the primary or the middle one (`SPEC-0130` v3
     /// behaviour 6).
     column_button: MouseButton,
@@ -571,7 +627,11 @@ pub struct EditorView {
     column_mode: bool,
     /// Corner, moving corner (columns may lie past the line end) and the caret offset the last
     /// rectangle left, so ⇧-arrows go on from it while the carets stay as it made them.
-    column_block: Option<(idecraft_editor::Position, idecraft_editor::Position, usize)>,
+    column_block: Option<(
+        ferris_idea_editor::Position,
+        ferris_idea_editor::Position,
+        usize,
+    )>,
     last: LastLayout,
     /// Input that arrived and was not drawn yet (for latency measurements).
     pending_input: Option<Instant>,
@@ -590,6 +650,15 @@ pub struct EditorView {
     occurrences: crate::occurrence_model::Occurrences,
     /// Counts buffer changes, so observers can tell an edit from a redraw.
     revision: u64,
+    /// Other people's carets and selections in this document (`SPEC-0323` v5 behaviour 32).
+    remote_carets: Vec<crate::room_model::RemoteCaret>,
+    /// The room's comment marks of this document and where the last frame drew them (`SPEC-0323`
+    /// v8 behaviour 53).
+    comment_marks: Vec<crate::room_comments_model::CommentMark>,
+    comment_hits: Vec<(Bounds<Pixels>, crate::room_comments_model::CommentMark)>,
+    /// Counts key presses and mouse presses in this editor: the window tells the user's own moves
+    /// from its own (`SPEC-0323` v5 behaviour 35).
+    input_count: u64,
     /// The symbol path at the caret for the breadcrumbs, with the revision, caret and parsed text
     /// length it was computed for (`SPEC-0061` v3 behaviour 5a).
     symbol_path: std::cell::RefCell<((u64, usize, usize), Vec<String>)>,
@@ -603,9 +672,9 @@ pub struct EditorView {
     remote_document: bool,
     /// Save All belongs to the project window (`SPEC-0058` v4 behaviour 12): the editor asks it
     /// with [`EditorEvent::SaveAll`] instead of saving only itself. Off for an editor of its own
-    /// (`idecraft edit`), which saves its file.
+    /// (`ferris-idea edit`), which saves its file.
     save_all_in_window: bool,
-    /// IDECraft's inspection findings for a remote document, from the host (`SPEC-0318` v2
+    /// Ferris IDEA's inspection findings for a remote document, from the host (`SPEC-0318` v2
     /// detail 9): they stand instead of the window's own.
     host_problems: Vec<Problem>,
     /// The read-only state was set for a library source and does not follow the file's
@@ -615,11 +684,11 @@ pub struct EditorView {
     /// (`SPEC-0149` v5 behaviour 11).
     unchecked: bool,
     /// The encoding the file was read in and is written in (`SPEC-0336` behaviour 11).
-    encoding: idecraft_core::file_properties::FileEncoding,
+    encoding: ferris_idea_core::file_properties::FileEncoding,
     /// The state of the encoding choices when the disk was last looked at.
     choice_generation: u64,
     /// The text of a read-only file, put back after any edit.
-    frozen: Option<idecraft_editor::TextBuffer>,
+    frozen: Option<ferris_idea_editor::TextBuffer>,
     /// A password field: shows a dot per character and never copies its text (`SPEC-0108`).
     masked: bool,
     /// Lines (0-based) with a breakpoint, sorted; they move with edits (`SPEC-0091` behaviour 1).
@@ -629,7 +698,7 @@ pub struct EditorView {
     /// Breakpoints are muted: drawn grey (`SPEC-0194` v3 behaviour 8).
     breakpoints_muted: bool,
     /// Tooltips of breakpoints with properties, by 0-based line (`SPEC-0294` behaviour 4).
-    breakpoint_tips: std::collections::BTreeMap<usize, idecraft_ui::tooltip::Tip>,
+    breakpoint_tips: std::collections::BTreeMap<usize, ferris_idea_ui::tooltip::Tip>,
     /// 0-based lines of breakpoints the running debug session did not bind: drawn hollow
     /// (`SPEC-0127` v5 behaviour 14).
     breakpoints_unbound: std::collections::BTreeSet<usize>,
@@ -655,9 +724,9 @@ pub struct EditorView {
     breakpoints_moved: bool,
     /// The bookmarks of this file as the project keeps them, and the file's name there
     /// (`SPEC-0331` behaviour 14). They move with edits; the workbench hears of every edit.
-    bookmarks: (String, idecraft_core::bookmarks::Bookmarks),
+    bookmarks: (String, ferris_idea_core::bookmarks::Bookmarks),
     /// Edits since the last event about them, while the file has bookmarks.
-    bookmark_edits: Vec<idecraft_core::bookmarks::LineEdit>,
+    bookmark_edits: Vec<ferris_idea_core::bookmarks::LineEdit>,
     /// The buffer is being taken over from another view of the file: that view reports the edits.
     adopting: bool,
     /// Lines (0-based) with a ▶ run marker (`SPEC-0122`).
@@ -666,12 +735,16 @@ pub struct EditorView {
     declaration_marks: crate::decl_marks_model::DeclMarks,
     /// Marks of beans and injection points, in a lane of their own (`SPEC-0115` v5 behaviour 14).
     framework_marks: crate::decl_marks_model::DeclMarks,
+    /// The colours written in a stylesheet or an HTML file, the first of each line, for the
+    /// swatches in the gutter, with the text revision and language they were read for
+    /// (`SPEC-0042` v27 behaviour 48).
+    swatches: ((u64, Option<String>), Vec<Swatch>),
     /// Resolved configuration values shown in place of their placeholders (`SPEC-0115` v5
     /// behaviour 13).
     value_folds: crate::value_fold_model::ValueFolds,
     /// The file's entry in the registry of open documents, which mirrors the text for MCP tools
     /// (`SPEC-0220` behaviour 2); `None` without a path. Dropping it unregisters the view.
-    document: Option<idecraft_editor::documents::OpenDocument>,
+    document: Option<ferris_idea_editor::documents::OpenDocument>,
     /// File text as last read from or written to disk, to notice changes by others (behaviour 9).
     disk: Option<String>,
     /// Workspace whose local history records saves (behaviour 9).
@@ -689,7 +762,7 @@ pub struct EditorView {
     /// Modification time and size seen by the last disk check, to skip unchanged files cheaply.
     disk_stamp: Option<(std::time::SystemTime, u64)>,
     /// Problems from the language server, shifted along with edits (SPEC-0070).
-    /// Problems shown: those of the language server and IDECraft's own inspections, by position.
+    /// Problems shown: those of the language server and Ferris IDEA's own inspections, by position.
     problems: Vec<Problem>,
     /// The highlighting level of the file (`SPEC-0070` v6 behaviour 11).
     highlight: diagnostics_model::HighlightLevel,
@@ -697,7 +770,7 @@ pub struct EditorView {
     hidden_by_level: usize,
     /// The language server's problems.
     server_problems: Vec<Problem>,
-    /// Findings of IDECraft's own inspections for the parsed text (`SPEC-0098`).
+    /// Findings of Ferris IDEA's own inspections for the parsed text (`SPEC-0098`).
     own_problems: Vec<Problem>,
     /// Findings of framework models, e.g. Spring beans (`SPEC-0115`).
     framework_problems: Vec<Problem>,
@@ -705,17 +778,17 @@ pub struct EditorView {
     project: ProjectCheck,
     /// Findings of plugins' inspections (`SPEC-0166`).
     plugin_problems: Vec<Problem>,
-    /// A plugin's file type for a file without a language of IDECraft's own (`SPEC-0210`), and
+    /// A plugin's file type for a file without a language of Ferris IDEA's own (`SPEC-0210`), and
     /// its spans for a revision of the text.
-    plugin_file_type: Option<idecraft_plugins::FileType>,
-    plugin_spans: (u64, Vec<idecraft_languages::syntax::Span>),
+    plugin_file_type: Option<ferris_idea_plugins::FileType>,
+    plugin_spans: (u64, Vec<ferris_idea_languages::syntax::Span>),
     /// Folded regions (`SPEC-0083`).
     folds: crate::fold_model::Folds,
     /// The language server's semantic tokens, moved by edits until the next answer (`SPEC-0290`).
     /// The SQL dialect of a `.sql` file and the char ranges of its block comments by the
     /// splitter's rules (`SPEC-0005` v5 behaviour 19).
-    sql_dialect: Option<idecraft_database::Dialect>,
-    sql_comments: Vec<std::ops::Range<usize>>,
+    sql_dialect: Option<ferris_idea_database::Dialect>,
+    sql_layer: Vec<(std::ops::Range<usize>, Option<&'static str>)>,
     semantic: crate::semantic_model::SemanticSpans,
     /// The language server's parameter name hints, moved by edits (`SPEC-0291`).
     hints: crate::inlay_model::Hints,
@@ -740,10 +813,15 @@ pub struct EditorView {
     /// behaviour 23).
     first_stroke: Option<Keystroke>,
     /// The file's EditorConfig properties (`SPEC-0137`).
-    editorconfig: idecraft_core::editorconfig::EditorConfig,
+    editorconfig: ferris_idea_core::editorconfig::EditorConfig,
     /// What the `.editorconfig` files above the file held when they were read last
     /// (`SPEC-0137` v2 behaviour 2b).
     editorconfig_stamp: Vec<Option<u64>>,
+    /// The project's own code scheme for the file's language, when it sets the indentation
+    /// (`SPEC-0150` v6 behaviour 8).
+    project_indent: Option<ferris_idea_core::IndentStyle>,
+    /// The project scheme's right margin for the file's language (`SPEC-0150` v6 behaviour 8).
+    project_margin: Option<u32>,
     /// Columns a tab advances to.
     tab_width: usize,
     /// Successful saves so far, so the workbench can ask for fresh diagnostics.
@@ -755,6 +833,12 @@ pub struct EditorView {
     remap_stale: bool,
     /// The annotation under the pointer: its line and the pointer in window coordinates.
     annotation_hover: Option<(usize, gpui::Point<Pixels>)>,
+    /// Costs of the profile shown, for this file (`SPEC-0120` v5 behaviour 10).
+    profile_costs: Option<std::sync::Arc<crate::profile_lines_model::FileCosts>>,
+    /// The revision the text was last compared with the profiled one at, and the answer.
+    profile_match: Option<(u64, bool)>,
+    /// Where the last frame drew the costs, by 0-based line.
+    profile_hits: Vec<(Bounds<Pixels>, usize)>,
     /// The problem under the pointer (its start) and whether its popup was asked for
     /// (`SPEC-0078` v2 behaviour 5).
     problem_hover: Option<(usize, bool)>,
@@ -775,8 +859,11 @@ impl EditorView {
         state.buffer.track_changes();
         let path_text = path.as_ref().map(|_| text.to_owned());
         let language = path.as_deref().and_then(LanguageId::detect);
-        state.comment = language
-            .and_then(LanguageId::line_comment)
+        // A Makefile or an ignore file comments lines without a language (SPEC-0004 v12
+        // behaviour 23).
+        state.comment = path
+            .as_deref()
+            .and_then(|p| ferris_idea_languages::line_comment_of(language, p))
             .map(str::to_owned);
         // Block comments, statements and paste indentation know the language (SPEC-0056 v3,
         // SPEC-0057 v3).
@@ -790,9 +877,9 @@ impl EditorView {
             .is_some_and(|e| e == "tsx");
         // A large file gets its tree on a background thread and shows plain text until then; a
         // very large one stays plain text.
-        let background = text.len() > idecraft_languages::syntax::BACKGROUND_PARSE_BYTES;
+        let background = text.len() > ferris_idea_languages::syntax::BACKGROUND_PARSE_BYTES;
         let tree_language =
-            language.filter(|_| text.len() <= idecraft_languages::syntax::MAX_SYNTAX_BYTES);
+            language.filter(|_| text.len() <= ferris_idea_languages::syntax::MAX_SYNTAX_BYTES);
         let syntax = tree_language
             .filter(|_| !background)
             .and_then(|l| SyntaxDocument::new(l, tsx, text).ok());
@@ -827,11 +914,18 @@ impl EditorView {
             remapping: false,
             remap_stale: false,
             annotation_hover: None,
+            profile_costs: None,
+            profile_match: None,
+            profile_hits: Vec::new(),
             problem_hover: None,
             doc_hover: None,
             highlights: Vec::new(),
             occurrences: crate::occurrence_model::Occurrences::default(),
             revision: 0,
+            remote_carets: Vec::new(),
+            comment_marks: Vec::new(),
+            comment_hits: Vec::new(),
+            input_count: 0,
             symbol_path: Default::default(),
             field: false,
             read_only: false,
@@ -841,7 +935,7 @@ impl EditorView {
             locked: false,
             unchecked: false,
             encoding: Default::default(),
-            choice_generation: idecraft_core::file_properties::choice_generation(),
+            choice_generation: ferris_idea_core::file_properties::choice_generation(),
             frozen: None,
             masked: false,
             breakpoints: Vec::new(),
@@ -863,6 +957,7 @@ impl EditorView {
             run_markers: Vec::new(),
             declaration_marks: Default::default(),
             framework_marks: Default::default(),
+            swatches: Default::default(),
             value_folds: Default::default(),
             document: None,
             disk: path_text,
@@ -885,7 +980,7 @@ impl EditorView {
             folds: crate::fold_model::Folds::default(),
             semantic: crate::semantic_model::SemanticSpans::default(),
             sql_dialect: None,
-            sql_comments: Vec::new(),
+            sql_layer: Vec::new(),
             hints: crate::inlay_model::Hints::default(),
             authors: crate::authors_model::AuthorHints::default(),
             pending_bar: None,
@@ -898,6 +993,8 @@ impl EditorView {
             saves: 0,
             editorconfig: Default::default(),
             editorconfig_stamp: Vec::new(),
+            project_indent: None,
+            project_margin: None,
             tab_width: crate::layout::TAB_WIDTH,
         };
         if let Some(language) = tree_language.filter(|_| background) {
@@ -907,8 +1004,8 @@ impl EditorView {
         view.refresh_inspections();
         view.fold_on_open(cx);
         view.document = view.path.as_ref().map(|path| {
-            idecraft_editor::documents::OpenDocument::open(
-                idecraft_editor::documents::DocumentRegistry::global(),
+            ferris_idea_editor::documents::OpenDocument::open(
+                ferris_idea_editor::documents::DocumentRegistry::global(),
                 path,
                 view.state.buffer.snapshot(),
             )
@@ -926,7 +1023,7 @@ impl EditorView {
         }
     }
 
-    /// Runs IDECraft's own inspections again (after the project dictionary changed, `SPEC-0163`).
+    /// Runs Ferris IDEA's own inspections again (after the project dictionary changed, `SPEC-0163`).
     pub fn reinspect(&mut self, cx: &mut Context<Self>) {
         self.refresh_inspections();
         self.check_project(cx);
@@ -997,7 +1094,7 @@ impl EditorView {
             let found = cx
                 .background_executor()
                 .spawn(async move {
-                    idecraft_languages::reference_index::editor_unused_of(
+                    ferris_idea_languages::reference_index::editor_unused_of(
                         &root, &rel, &snapshot, &cancel,
                     )
                     .map(|found| (found, snapshot))
@@ -1022,7 +1119,10 @@ impl EditorView {
 
     /// The findings of the project's unused declarations at byte offset `at` of the current text,
     /// with their fixes (`SPEC-0098` v12 behaviour 26); none while they belong to an older text.
-    pub fn project_findings_at(&self, at: usize) -> Vec<idecraft_languages::inspections::Finding> {
+    pub fn project_findings_at(
+        &self,
+        at: usize,
+    ) -> Vec<ferris_idea_languages::inspections::Finding> {
         if self.project.revision != self.revision {
             return Vec::new();
         }
@@ -1038,11 +1138,11 @@ impl EditorView {
     /// (`SPEC-0137` behaviour 2); saving follows the rest.
     pub fn reload_editorconfig(&mut self) {
         self.editorconfig_stamp = match &self.path {
-            Some(path) if !self.field => idecraft_core::editorconfig::change_stamp(path),
+            Some(path) if !self.field => style_stamp(path),
             _ => Vec::new(),
         };
         let config = match &self.path {
-            Some(path) if !self.field => idecraft_core::editorconfig::editorconfig_for(path),
+            Some(path) if !self.field => ferris_idea_core::editorconfig::editorconfig_for(path),
             _ => Default::default(),
         };
         // Code Style gives what `.editorconfig` leaves open (SPEC-0150 behaviour 2).
@@ -1050,9 +1150,38 @@ impl EditorView {
             Some(path) if !self.field => {
                 crate::fonts::code_style().indent_for(crate::fonts::code_style_language(path))
             }
-            _ => idecraft_core::CodeStyleSettings::default_indent("Default"),
+            _ => ferris_idea_core::CodeStyleSettings::default_indent("Default"),
         };
-        self.state.indent = config.indent_unit().unwrap_or_else(|| style.unit());
+        // The project's own scheme comes between `.editorconfig` and Code Style (SPEC-0150 v6
+        // behaviour 8).
+        let project = match &self.path {
+            Some(path) if !self.field && !self.remote_document => {
+                ferris_idea_core::project_code_style::ProjectStyle::for_file(
+                    path,
+                    None,
+                    crate::fonts::code_style_language(path),
+                )
+            }
+            _ => Default::default(),
+        };
+        self.project_indent = project.indent_over(style);
+        self.project_margin = project.right_margin;
+        let style = self.project_indent.unwrap_or(style);
+        // The file's own indentation comes before Code Style (SPEC-0150 v5 behaviour 7).
+        let detected = (!self.field && self.path.is_some())
+            .then(|| {
+                let buffer = &self.state.buffer;
+                let head = (0..buffer.len_lines().min(1000))
+                    .filter_map(|i| buffer.line(i))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                ferris_idea_core::indent_detect::detect(&head)
+            })
+            .flatten();
+        self.state.indent = config
+            .indent_unit()
+            .or(detected)
+            .unwrap_or_else(|| style.unit());
         self.tab_width = config.tab_width().unwrap_or(style.tab as usize);
         // Convert Indents measures with the file's tab width (SPEC-0332 behaviour 11).
         self.state.tab_width = self.tab_width;
@@ -1060,12 +1189,12 @@ impl EditorView {
     }
 
     /// The file's EditorConfig properties.
-    pub fn editorconfig(&self) -> &idecraft_core::editorconfig::EditorConfig {
+    pub fn editorconfig(&self) -> &ferris_idea_core::editorconfig::EditorConfig {
         &self.editorconfig
     }
 
     /// Reads the `.editorconfig` files again when one above the file was created, changed or
-    /// deleted since they were read last, by IDECraft or another program (`SPEC-0137` v2
+    /// deleted since they were read last, by Ferris IDEA or another program (`SPEC-0137` v2
     /// behaviour 2b); true when it did. The text is not touched.
     pub fn check_editorconfig(&mut self) -> bool {
         let Some(path) = self
@@ -1075,7 +1204,7 @@ impl EditorView {
         else {
             return false;
         };
-        if idecraft_core::editorconfig::change_stamp(path) == self.editorconfig_stamp {
+        if style_stamp(path) == self.editorconfig_stamp {
             return false;
         }
         self.reload_editorconfig();
@@ -1089,7 +1218,23 @@ impl EditorView {
         if self.field {
             return None;
         }
-        margin_column(&self.editorconfig, &crate::fonts::code_style())
+        margin_column(
+            &self.editorconfig,
+            &crate::fonts::code_style(),
+            self.project_margin,
+        )
+    }
+
+    /// The indentation Reformat Code passes to the formatter, `(tabSize, insertSpaces)`: the
+    /// `.editorconfig`'s, else the project scheme's, else what the editor indents with
+    /// (`SPEC-0150` v6 behaviour 8).
+    pub fn reformat_indent(&self) -> (u32, bool) {
+        reformat_indent(
+            &self.editorconfig,
+            self.project_indent,
+            &self.state.indent,
+            self.tab_width,
+        )
     }
 
     /// The indent unit one Tab inserts here.
@@ -1172,7 +1317,7 @@ impl EditorView {
         self.marked = None;
         self.scroll_y = 0.0;
         self.revision += 1;
-        self.refresh_sql_comments();
+        self.refresh_sql_layer();
         self.publish_document();
         self.remap_annotations(cx);
         cx.notify();
@@ -1251,7 +1396,7 @@ impl EditorView {
             cx.notify();
         }
         let small =
-            self.state.buffer.len_chars() <= idecraft_languages::occurrences::MAX_TEXT_BYTES;
+            self.state.buffer.len_chars() <= ferris_idea_languages::occurrences::MAX_TEXT_BYTES;
         let on_name = automatic && small && self.name_at_caret().is_some();
         self.occurrences
             .due(now, automatic && small, on_name, ready)
@@ -1311,7 +1456,7 @@ impl EditorView {
     pub fn take_occurrences(
         &mut self,
         request: &crate::occurrence_model::Request,
-        found: Option<&[idecraft_languages::occurrences::Occurrence]>,
+        found: Option<&[ferris_idea_languages::occurrences::Occurrence]>,
         cx: &mut Context<Self>,
     ) -> (
         crate::occurrence_model::Taken,
@@ -1322,7 +1467,7 @@ impl EditorView {
         let marks = found.filter(|_| revision == self.revision).map(|found| {
             crate::occurrence_model::marks_of(found, |line, character| {
                 buffer
-                    .position_to_offset(idecraft_editor::Position::new(
+                    .position_to_offset(ferris_idea_editor::Position::new(
                         line as usize,
                         character as usize,
                     ))
@@ -1406,7 +1551,7 @@ impl EditorView {
     pub fn set_declaration_marks(
         &mut self,
         revision: u64,
-        marks: &[idecraft_languages::ts_structure::DeclarationMark],
+        marks: &[ferris_idea_languages::ts_structure::DeclarationMark],
         cx: &mut Context<Self>,
     ) {
         if revision != self.revision {
@@ -1433,14 +1578,72 @@ impl EditorView {
         }
     }
 
-    /// The width of both lanes of marks: the declarations' and, left of it, the frameworks'.
+    /// The width of the lanes of marks: the declarations', left of it the frameworks', and left
+    /// of that the colour swatches' (`SPEC-0042` v27 behaviour 48).
     fn marks_width(&self) -> Pixels {
         let framework = if self.field || self.framework_marks.is_empty() {
             px(0.0)
         } else {
             px(RUN_WIDTH)
         };
-        self.declaration_width() + framework
+        self.declaration_width() + framework + self.swatch_width()
+    }
+
+    /// The width of the lane of colour swatches: there while the file has a colour.
+    fn swatch_width(&self) -> Pixels {
+        if self.field || self.swatches.1.is_empty() {
+            px(0.0)
+        } else {
+            px(RUN_WIDTH)
+        }
+    }
+
+    /// Reads the colours of the text again when it or its language changed since the last read
+    /// (`SPEC-0042` v27 behaviour 48).
+    fn refresh_swatches(&mut self) {
+        let key = (self.revision, self.state.language.clone());
+        if self.swatches.0 == key {
+            return;
+        }
+        let found = match key.1.as_deref() {
+            Some(language)
+                if !self.field && ferris_idea_languages::css_colors::has_colors(language) =>
+            {
+                let text = self.state.buffer.text();
+                let mut found: Vec<Swatch> = Vec::new();
+                for c in ferris_idea_languages::css_colors::document_colors(language, &text) {
+                    if found.last().is_none_or(|s| s.line != c.line) {
+                        found.push(Swatch {
+                            line: c.line,
+                            rgba: c.rgba,
+                            text: c.text,
+                        });
+                    }
+                }
+                found
+            }
+            _ => Vec::new(),
+        };
+        self.swatches = (key, found);
+    }
+
+    /// The colour swatch shown on a 0-based line, if any.
+    fn swatch_at(&self, line: usize) -> Option<&Swatch> {
+        let all = &self.swatches.1;
+        all.binary_search_by_key(&line, |s| s.line)
+            .ok()
+            .map(|i| &all[i])
+    }
+
+    /// The colour swatches drawn in the last frame: 0-based line and colour as `0xRRGGBBAA`,
+    /// each left of the line numbers' right edge, in the gutter (`SPEC-0042` v27 behaviour 48).
+    pub fn color_swatches(&self) -> Vec<(usize, u32)> {
+        self.last
+            .swatches
+            .iter()
+            .filter(|(b, _, _)| b.origin.x + b.size.width <= self.last.gutter_x)
+            .map(|(_, rgba, line)| (*line, *rgba))
+            .collect()
     }
 
     /// Shows the marks of beans and injection points and the resolved configuration values of
@@ -1611,7 +1814,7 @@ impl EditorView {
     /// others say they are plain line breakpoints.
     pub fn set_breakpoint_tips(
         &mut self,
-        tips: std::collections::BTreeMap<usize, idecraft_ui::tooltip::Tip>,
+        tips: std::collections::BTreeMap<usize, ferris_idea_ui::tooltip::Tip>,
     ) {
         self.breakpoint_tips = tips;
     }
@@ -1643,7 +1846,7 @@ impl EditorView {
 
     /// The tooltips of the gutter icons drawn on 0-based `line` in the last frame, left to right
     /// (`EditorShowGutterIconTooltip`, `SPEC-0294` v5 behaviour 12).
-    pub fn gutter_tips_on_line(&self, line: usize) -> Vec<idecraft_ui::tooltip::Tip> {
+    pub fn gutter_tips_on_line(&self, line: usize) -> Vec<ferris_idea_ui::tooltip::Tip> {
         let mut on: Vec<_> = self
             .last
             .gutter_tips
@@ -1662,13 +1865,13 @@ impl EditorView {
     }
 
     /// The name and the tooltip of a gutter icon (`SPEC-0294` behaviour 4).
-    fn gutter_icon_tip(&self, icon: GutterIcon) -> (String, idecraft_ui::tooltip::Tip) {
+    fn gutter_icon_tip(&self, icon: GutterIcon) -> (String, ferris_idea_ui::tooltip::Tip) {
         match icon {
             GutterIcon::Run(line) => (
                 format!("gutter-run-{}", line + 1),
                 match self.request_tip(line) {
                     Some(tip) => tip,
-                    None => idecraft_ui::tooltip::run_marker(
+                    None => ferris_idea_ui::tooltip::run_marker(
                         &crate::keymaps::current(),
                         crate::tips::macos(),
                     ),
@@ -1677,18 +1880,18 @@ impl EditorView {
             GutterIcon::Breakpoint(line) => (
                 format!("gutter-breakpoint-{}", line + 1),
                 self.breakpoint_tips.get(&line).cloned().unwrap_or_else(|| {
-                    idecraft_ui::tooltip::breakpoint(
-                        idecraft_ui::tooltip::BreakpointFacts::default(),
+                    ferris_idea_ui::tooltip::breakpoint(
+                        ferris_idea_ui::tooltip::BreakpointFacts::default(),
                     )
                 }),
             ),
             GutterIcon::Fold(line, folded) => (
                 format!("gutter-fold-{}", line + 1),
-                idecraft_ui::tooltip::fold_mark(folded),
+                ferris_idea_ui::tooltip::fold_mark(folded),
             ),
             GutterIcon::Bookmark(line) => (
                 format!("gutter-bookmark-{}", line + 1),
-                idecraft_ui::tooltip::Tip {
+                ferris_idea_ui::tooltip::Tip {
                     title: "Bookmark".into(),
                     details: self
                         .bookmark_at(line)
@@ -1705,15 +1908,28 @@ impl EditorView {
             ),
             GutterIcon::Declaration(line) => (
                 format!("gutter-declaration-{}", line + 1),
-                idecraft_ui::tooltip::Tip::plain(
+                ferris_idea_ui::tooltip::Tip::plain(
                     self.declaration_marks
                         .at(line)
                         .map_or(String::new(), |m| m.tip.clone()),
                 ),
             ),
+            GutterIcon::Color(line) => (
+                format!("gutter-color-{}", line + 1),
+                ferris_idea_ui::tooltip::Tip::plain(self.swatch_at(line).map_or(
+                    String::new(),
+                    |s| {
+                        format!(
+                            "{} ({})",
+                            s.text,
+                            ferris_idea_languages::css_colors::hex(s.rgba)
+                        )
+                    },
+                )),
+            ),
             GutterIcon::Framework(line) => (
                 format!("gutter-framework-{}", line + 1),
-                idecraft_ui::tooltip::Tip::plain(
+                ferris_idea_ui::tooltip::Tip::plain(
                     self.framework_marks
                         .at(line)
                         .map_or(String::new(), |m| m.tip.clone()),
@@ -1727,7 +1943,7 @@ impl EditorView {
     pub fn set_bookmarks(
         &mut self,
         file: String,
-        bookmarks: idecraft_core::bookmarks::Bookmarks,
+        bookmarks: ferris_idea_core::bookmarks::Bookmarks,
         cx: &mut Context<Self>,
     ) {
         if self.bookmarks.0 != file || self.bookmarks.1 != bookmarks {
@@ -1737,17 +1953,17 @@ impl EditorView {
     }
 
     /// The bookmarks shown in the gutter, newest first.
-    pub fn bookmarks(&self) -> &[idecraft_core::bookmarks::Bookmark] {
+    pub fn bookmarks(&self) -> &[ferris_idea_core::bookmarks::Bookmark] {
         self.bookmarks.1.list()
     }
 
     /// The bookmark on the 0-based `line`.
-    fn bookmark_at(&self, line: usize) -> Option<&idecraft_core::bookmarks::Bookmark> {
+    fn bookmark_at(&self, line: usize) -> Option<&ferris_idea_core::bookmarks::Bookmark> {
         self.bookmarks.1.at(&self.bookmarks.0, line)
     }
 
     /// `edit`, already applied to the buffer, as the bookmarked lines see it.
-    fn line_edit(&self, edit: &idecraft_editor::Edit) -> idecraft_core::bookmarks::LineEdit {
+    fn line_edit(&self, edit: &ferris_idea_editor::Edit) -> ferris_idea_core::bookmarks::LineEdit {
         let buffer = &self.state.buffer;
         let at = buffer
             .offset_to_position(edit.offset.min(buffer.len_chars()))
@@ -1758,7 +1974,7 @@ impl EditorView {
             text.chars().take(column).all(char::is_whitespace)
         });
         let after = edit.offset + edit.inserted.chars().count();
-        idecraft_core::bookmarks::LineEdit {
+        ferris_idea_core::bookmarks::LineEdit {
             line,
             head_blank,
             tail_empty: buffer.char_at(after).is_none_or(|c| c == '\n' || c == '\r'),
@@ -2176,10 +2392,10 @@ impl EditorView {
     /// The custom regions of the file between comment markers, in the order of their lines
     /// (`SPEC-0083` v9 behaviour 24): the ones the syntax tree gives for folding; none for
     /// plain text and until the file is parsed.
-    pub fn custom_regions(&self) -> Vec<idecraft_languages::folding::CustomRegion> {
+    pub fn custom_regions(&self) -> Vec<ferris_idea_languages::folding::CustomRegion> {
         self.syntax
             .as_ref()
-            .map(|doc| idecraft_languages::folding::custom_regions(&doc.folding()))
+            .map(|doc| ferris_idea_languages::folding::custom_regions(&doc.folding()))
             .unwrap_or_default()
     }
 
@@ -2235,7 +2451,7 @@ impl EditorView {
             return false;
         }
         let old = self.state.buffer.text();
-        let edits = idecraft_editor::reformat::reformat_edits(&old, new);
+        let edits = ferris_idea_editor::reformat::reformat_edits(&old, new);
         if edits.is_empty() {
             return false;
         }
@@ -2245,12 +2461,15 @@ impl EditorView {
             .carets()
             .iter()
             .map(|c| {
-                let map = |o| idecraft_editor::reformat::map_offset(&old, &edits, o);
+                let map = |o| ferris_idea_editor::reformat::map_offset(&old, &edits, o);
                 Caret::select(map(c.anchor), map(c.head))
             })
             .collect();
-        let primary =
-            idecraft_editor::reformat::map_offset(&old, &edits, self.state.carets.primary().head);
+        let primary = ferris_idea_editor::reformat::map_offset(
+            &old,
+            &edits,
+            self.state.carets.primary().head,
+        );
         let top = self.state.buffer.top_step();
         self.replace_ranges(&edits, cx);
         let len = self.state.buffer.len_chars();
@@ -2338,10 +2557,10 @@ impl EditorView {
     }
 
     /// Highlights and comments the file as a plugin's file type (`SPEC-0210` behaviour 3); only for
-    /// files without a language of IDECraft's own, `None` to stop.
+    /// files without a language of Ferris IDEA's own, `None` to stop.
     pub fn set_plugin_file_type(
         &mut self,
-        file_type: Option<idecraft_plugins::FileType>,
+        file_type: Option<ferris_idea_plugins::FileType>,
         cx: &mut Context<Self>,
     ) {
         let own = self.path.as_deref().and_then(LanguageId::detect);
@@ -2351,7 +2570,11 @@ impl EditorView {
         }
         self.state.comment = match &file_type {
             Some(t) => t.line_comment.clone(),
-            None => own.and_then(LanguageId::line_comment).map(str::to_owned),
+            None => self
+                .path
+                .as_deref()
+                .and_then(|p| ferris_idea_languages::line_comment_of(own, p))
+                .map(str::to_owned),
         };
         self.plugin_file_type = file_type;
         self.plugin_spans = (u64::MAX, Vec::new());
@@ -2371,7 +2594,7 @@ impl EditorView {
 
     /// The tooltip of the run mark of the request at 0-based `line` of a request file: "Send GET
     /// url" (`SPEC-0096` v4 behaviour 6).
-    fn request_tip(&self, line: usize) -> Option<idecraft_ui::tooltip::Tip> {
+    fn request_tip(&self, line: usize) -> Option<ferris_idea_ui::tooltip::Tip> {
         if !self
             .path
             .as_deref()
@@ -2379,10 +2602,10 @@ impl EditorView {
         {
             return None;
         }
-        let file = idecraft_http::parse(&self.state.buffer.text());
+        let file = ferris_idea_http::parse(&self.state.buffer.text());
         let r = file.requests.iter().find(|r| r.line == line + 1)?;
         Some(
-            idecraft_ui::tooltip::Tip::plain(format!("Send {} {}", r.method, r.url))
+            ferris_idea_ui::tooltip::Tip::plain(format!("Send {} {}", r.method, r.url))
                 .with_detail("Click to send the request"),
         )
     }
@@ -2392,27 +2615,32 @@ impl EditorView {
     fn plugin_spans_in(
         &mut self,
         range: std::ops::Range<usize>,
-    ) -> Option<Vec<idecraft_languages::syntax::Span>> {
-        // A request file is coloured by IDECraft itself (`SPEC-0096` v4 behaviour 5).
+    ) -> Option<Vec<ferris_idea_languages::syntax::Span>> {
+        // A request file is coloured by Ferris IDEA itself (`SPEC-0096` v4 behaviour 5).
         let request = self.plugin_file_type.is_none()
             && self
                 .path
                 .as_deref()
                 .is_some_and(crate::http_model::is_request_file);
-        if self.plugin_file_type.is_none() && !request {
+        // A properties file is coloured by Ferris IDEA's own lexer (SPEC-0155 v5 behaviour 12).
+        let properties = self.plugin_file_type.is_none()
+            && !request
+            && self.path.as_deref().and_then(LanguageId::detect) == Some(LanguageId::Properties);
+        if self.plugin_file_type.is_none() && !request && !properties {
             return None;
         }
         if self.plugin_spans.0 != self.revision {
             let text = self.state.buffer.text();
             let spans = match &self.plugin_file_type {
-                Some(file_type) => idecraft_plugins::highlight(file_type, &text)
+                Some(file_type) => ferris_idea_plugins::highlight(file_type, &text)
                     .into_iter()
-                    .map(|(r, kind)| idecraft_languages::syntax::Span {
+                    .map(|(r, kind)| ferris_idea_languages::syntax::Span {
                         start: r.start,
                         end: r.end,
                         kind: kind.capture().to_owned(),
                     })
                     .collect(),
+                None if properties => ferris_idea_languages::properties::highlight(&text),
                 None => crate::http_model::spans(&text),
             };
             self.plugin_spans = (self.revision, spans);
@@ -2459,35 +2687,38 @@ impl EditorView {
         cx.notify();
     }
 
-    /// The SQL dialect of the file, for comments that nest (`SPEC-0005` v5 behaviour 19); `None`
-    /// for other files.
+    /// The SQL dialect of the file, whose lexis colours it over the syntax tree (`SPEC-0005` v5
+    /// behaviour 19, v7 behaviour 20); `None` for other files.
     pub fn set_sql_dialect(
         &mut self,
-        dialect: Option<idecraft_database::Dialect>,
+        dialect: Option<ferris_idea_database::Dialect>,
         cx: &mut Context<Self>,
     ) {
         if self.sql_dialect != dialect {
             self.sql_dialect = dialect;
-            self.refresh_sql_comments();
+            self.refresh_sql_layer();
             cx.notify();
         }
     }
 
-    /// Reads the block comments of a SQL file again after its text changed.
-    fn refresh_sql_comments(&mut self) {
-        self.sql_comments = match self.sql_dialect {
-            Some(d) => crate::sql_editor_model::nested_comment_ranges(&self.state.buffer.text(), d),
+    /// Reads the SQL file's text again by its dialect's lexis after the text changed.
+    fn refresh_sql_layer(&mut self) {
+        self.sql_layer = match self.sql_dialect {
+            Some(d) => crate::sql_editor_model::dialect_layer(&self.state.buffer.text(), d),
             None => Vec::new(),
         };
     }
 
-    /// `spans` of the char range `range` with the SQL file's block comments coloured as such.
+    /// `spans` of the char range `range` with the SQL file's dialect laid over them.
     fn comment_spans(
         &self,
-        spans: Vec<idecraft_languages::syntax::Span>,
+        spans: Vec<ferris_idea_languages::syntax::Span>,
         range: std::ops::Range<usize>,
-    ) -> Vec<idecraft_languages::syntax::Span> {
-        crate::sql_editor_model::with_comments(spans, &self.sql_comments, range)
+    ) -> Vec<ferris_idea_languages::syntax::Span> {
+        if self.sql_dialect.is_none() {
+            return spans;
+        }
+        crate::sql_editor_model::with_dialect(spans, &self.sql_layer, range)
     }
 
     /// Shows the language server's semantic tokens for the text of `revision` (`SPEC-0290`
@@ -2495,7 +2726,7 @@ impl EditorView {
     pub fn set_semantic_tokens(
         &mut self,
         revision: u64,
-        tokens: &[idecraft_languages::semantic::SemanticToken],
+        tokens: &[ferris_idea_languages::semantic::SemanticToken],
         cx: &mut Context<Self>,
     ) -> bool {
         if revision != self.revision {
@@ -2504,7 +2735,7 @@ impl EditorView {
         let buffer = &self.state.buffer;
         let spans = crate::semantic_model::SemanticSpans::from_tokens(tokens, |l| {
             buffer
-                .position_to_offset(idecraft_editor::Position::new(l as usize, 0))
+                .position_to_offset(ferris_idea_editor::Position::new(l as usize, 0))
                 .ok()
         });
         if spans != self.semantic {
@@ -2519,7 +2750,7 @@ impl EditorView {
     pub fn set_parameter_hints(
         &mut self,
         revision: u64,
-        hints: &[idecraft_languages::inlay::ParameterHint],
+        hints: &[ferris_idea_languages::inlay::ParameterHint],
         cx: &mut Context<Self>,
     ) -> bool {
         if revision != self.revision {
@@ -2528,7 +2759,7 @@ impl EditorView {
         let buffer = &self.state.buffer;
         let hints = crate::inlay_model::Hints::from_hints(hints, |l| {
             buffer
-                .position_to_offset(idecraft_editor::Position::new(l as usize, 0))
+                .position_to_offset(ferris_idea_editor::Position::new(l as usize, 0))
                 .ok()
         });
         if hints != self.hints {
@@ -2544,7 +2775,7 @@ impl EditorView {
     pub fn set_usage_counts(
         &mut self,
         revision: u64,
-        counts: &[idecraft_languages::usages::UsageCount],
+        counts: &[ferris_idea_languages::usages::UsageCount],
         cx: &mut Context<Self>,
     ) -> bool {
         if revision != self.revision {
@@ -2566,7 +2797,7 @@ impl EditorView {
     pub fn set_code_authors(
         &mut self,
         revision: u64,
-        authors: &[idecraft_vcs::CodeAuthor],
+        authors: &[ferris_idea_vcs::CodeAuthor],
         cx: &mut Context<Self>,
     ) -> bool {
         if revision != self.revision {
@@ -2722,7 +2953,7 @@ impl EditorView {
     /// The text of change `index` at HEAD (`SPEC-0064` v3 behaviours 6–7).
     pub fn change_old_text(&self, index: usize) -> Option<String> {
         let base = self.base.as_deref()?;
-        Some(idecraft_vcs::old_text(base, self.changes.get(index)?))
+        Some(ferris_idea_vcs::old_text(base, self.changes.get(index)?))
     }
 
     /// Takes back change `index`: its lines get their HEAD text, as one undo step and without
@@ -2739,7 +2970,7 @@ impl EditorView {
             return false;
         };
         let text = self.state.buffer.text();
-        let reverted = idecraft_vcs::revert_change(&base, &text, change);
+        let reverted = ferris_idea_vcs::revert_change(&base, &text, change);
         self.replace_text(&reverted, cx)
     }
 
@@ -2792,6 +3023,30 @@ impl EditorView {
     /// Texts the last frame drew at the end of lines (`SPEC-0292` v2 behaviour 4).
     pub fn painted_line_end_texts(&self) -> &[(usize, String)] {
         &self.last.line_end_texts
+    }
+
+    /// Opens Find Usages for the declaration whose count stands at `line`, as a click on the count
+    /// does (`SPEC-0292` v8 behaviour 15).
+    pub fn open_usages_at(&mut self, line: usize, cx: &mut Context<Self>) {
+        if self.folds.above().iter().any(|(l, _)| *l == line) {
+            cx.emit(EditorEvent::UsagesOf(line));
+        }
+    }
+
+    /// Lines of the declarations whose counts the last frame drew (`SPEC-0292` v8 behaviour 15).
+    pub fn painted_usage_lines(&self) -> Vec<usize> {
+        self.last.usage_hits.iter().map(|(_, l)| *l).collect()
+    }
+
+    /// The first and last line the view shows (0-based), for counting the visible declarations
+    /// first (`SPEC-0292` v8 behaviour 12).
+    pub fn visible_lines(&self) -> (usize, usize) {
+        let rows = (self.view_height / line_height()).ceil().max(1.0) as usize;
+        let first_row = (self.scroll_y / line_height()).floor().max(0.0) as usize;
+        let last_line = self.state.buffer.len_lines().saturating_sub(1);
+        let first = self.folds.line_of_row(first_row).min(last_line);
+        let last = self.folds.line_of_row(first_row + rows).min(last_line);
+        (first, last.max(first))
     }
 
     /// The pieces of `line`'s text the last frame drew in an italic font, in order, neighbouring
@@ -2881,7 +3136,7 @@ impl EditorView {
     pub fn syntax_style_at(
         &self,
         offset: usize,
-    ) -> Option<(String, idecraft_ui::theme::TextStyle)> {
+    ) -> Option<(String, ferris_idea_ui::theme::TextStyle)> {
         let doc = self
             .syntax
             .as_ref()
@@ -2920,7 +3175,7 @@ impl EditorView {
     /// Shows the language server's diagnostics for the current text (SPEC-0070 behaviour 2).
     pub fn set_diagnostics(
         &mut self,
-        diagnostics: &[idecraft_languages::lsp::Diagnostic],
+        diagnostics: &[ferris_idea_languages::lsp::Diagnostic],
         cx: &mut Context<Self>,
     ) {
         let buffer = &self.state.buffer;
@@ -2933,7 +3188,7 @@ impl EditorView {
             },
             |l| {
                 buffer
-                    .position_to_offset(idecraft_editor::Position::new(l, 0))
+                    .position_to_offset(ferris_idea_editor::Position::new(l, 0))
                     .unwrap_or(buffer.len_chars())
             },
         );
@@ -2989,7 +3244,7 @@ impl EditorView {
         self.hidden_by_level
     }
 
-    /// Runs IDECraft's own inspections on the parsed text (`SPEC-0098` behaviour 3); only when the
+    /// Runs Ferris IDEA's own inspections on the parsed text (`SPEC-0098` behaviour 3); only when the
     /// syntax tree matches the buffer.
     fn refresh_inspections(&mut self) {
         self.own_problems = match &self.syntax {
@@ -3003,7 +3258,7 @@ impl EditorView {
                     return;
                 };
                 let plain = self.state.buffer.text();
-                let findings = idecraft_languages::inspections::inspect_text(&path, &plain);
+                let findings = ferris_idea_languages::inspections::inspect_text(&path, &plain);
                 own_problems(&plain, findings)
             }
         };
@@ -3160,6 +3415,25 @@ impl EditorView {
             .collect()
     }
 
+    /// The problems with their start and end as 0-based line and character, for Claude Code
+    /// (`SPEC-0358` behaviour 16).
+    pub fn problem_spans(&self) -> Vec<ProblemSpan> {
+        let at = |offset: usize| {
+            let line = self.line_of(offset);
+            (line, offset.saturating_sub(self.line_start(line)))
+        };
+        self.problems
+            .iter()
+            .map(|p| ProblemSpan {
+                start: at(p.range.start),
+                end: at(p.range.end),
+                severity: p.severity,
+                unused: p.unused,
+                message: p.message.clone(),
+            })
+            .collect()
+    }
+
     /// Successful saves so far.
     pub fn saves(&self) -> u64 {
         self.saves
@@ -3167,7 +3441,7 @@ impl EditorView {
 
     /// Moves problem ranges along with an edit so they stay on their text until fresh diagnostics
     /// arrive; problems inside replaced text are dropped (behaviour 2).
-    fn shift_problems(&mut self, edit: &idecraft_editor::Edit) {
+    fn shift_problems(&mut self, edit: &ferris_idea_editor::Edit) {
         let removed = edit.deleted.chars().count();
         let inserted = edit.inserted.chars().count();
         let end = edit.offset + removed;
@@ -3281,7 +3555,7 @@ impl EditorView {
     /// language features report them) as one undo step (SPEC-0074 behaviour 3).
     pub fn apply_text_edits(
         &mut self,
-        edits: &[idecraft_languages::rename::Edit],
+        edits: &[ferris_idea_languages::rename::Edit],
         cx: &mut Context<Self>,
     ) {
         if self.read_only {
@@ -3318,7 +3592,7 @@ impl EditorView {
     /// The document's text and undo history, to keep when this editor of the file closes
     /// (`SPEC-0057` v8 behaviour 31): only of a local file without unsaved changes whose history
     /// holds a step and no refactoring across files.
-    pub fn history_to_keep(&self) -> Option<idecraft_editor::TextBuffer> {
+    pub fn history_to_keep(&self) -> Option<ferris_idea_editor::TextBuffer> {
         let buffer = &self.state.buffer;
         if self.path.is_none()
             || self.remote_document
@@ -3334,7 +3608,7 @@ impl EditorView {
     /// Continues the history `kept` when an editor of this file closed, if this editor holds
     /// exactly its text and has no history of its own yet; returns whether it does (`SPEC-0057`
     /// v8 behaviour 31).
-    pub fn adopt_history(&mut self, kept: idecraft_editor::TextBuffer) -> bool {
+    pub fn adopt_history(&mut self, kept: ferris_idea_editor::TextBuffer) -> bool {
         let buffer = &self.state.buffer;
         if buffer.top_step().is_some()
             || buffer.redo_step().is_some()
@@ -3375,6 +3649,29 @@ impl EditorView {
     /// Number of buffer changes so far.
     pub fn revision(&self) -> u64 {
         self.revision
+    }
+
+    /// Shows other people's carets and selections (`SPEC-0323` v5 behaviour 32); redraws only
+    /// when they changed.
+    pub fn set_remote_carets(
+        &mut self,
+        carets: Vec<crate::room_model::RemoteCaret>,
+        cx: &mut Context<Self>,
+    ) {
+        if self.remote_carets != carets {
+            self.remote_carets = carets;
+            cx.notify();
+        }
+    }
+
+    /// Other people's carets as drawn.
+    pub fn remote_carets(&self) -> &[crate::room_model::RemoteCaret] {
+        &self.remote_carets
+    }
+
+    /// Key and mouse presses in this editor so far (`SPEC-0323` v5 behaviour 35).
+    pub fn input_count(&self) -> u64 {
+        self.input_count
     }
 
     /// Text of the primary selection when it lies within one line (the find bar starts with it).
@@ -3477,7 +3774,7 @@ impl EditorView {
     /// behaviours 2 and 6); the lines are mapped onto the buffer in the background.
     pub fn set_annotations(
         &mut self,
-        blame: Option<Arc<idecraft_vcs::HeadBlame>>,
+        blame: Option<Arc<ferris_idea_vcs::HeadBlame>>,
         cx: &mut Context<Self>,
     ) {
         self.annotation_hover = None;
@@ -3615,9 +3912,9 @@ impl EditorView {
             line: pos.line + 1,
             column: pos.column + 1,
             line_ending: match self.state.buffer.line_ending() {
-                idecraft_editor::LineEnding::Lf => "LF".into(),
-                idecraft_editor::LineEnding::CrLf => "CRLF".into(),
-                idecraft_editor::LineEnding::Cr => "CR".into(),
+                ferris_idea_editor::LineEnding::Lf => "LF".into(),
+                ferris_idea_editor::LineEnding::CrLf => "CRLF".into(),
+                ferris_idea_editor::LineEnding::Cr => "CR".into(),
             },
             encoding: self.encoding.label(),
             indent: self.state.indent.clone(),
@@ -3697,8 +3994,8 @@ impl EditorView {
     /// (`SPEC-0112` behaviour 3). Emits nothing, so two views do not echo each other.
     pub fn adopt(
         &mut self,
-        buffer: &idecraft_editor::TextBuffer,
-        edits: &[idecraft_editor::Edit],
+        buffer: &ferris_idea_editor::TextBuffer,
+        edits: &[ferris_idea_editor::Edit],
         cx: &mut Context<Self>,
     ) {
         let mut buffer = buffer.clone();
@@ -3730,10 +4027,15 @@ impl EditorView {
 
     /// Bookkeeping after the buffer changed by `edits`: problems, folds and breakpoints move,
     /// the syntax tree and the change markers follow.
-    fn edited(&mut self, edits: Vec<idecraft_editor::Edit>, reveal: bool, cx: &mut Context<Self>) {
+    fn edited(
+        &mut self,
+        edits: Vec<ferris_idea_editor::Edit>,
+        reveal: bool,
+        cx: &mut Context<Self>,
+    ) {
         if !edits.is_empty() {
             self.revision += 1;
-            self.refresh_sql_comments();
+            self.refresh_sql_layer();
             // A running check of the project's unused declarations is for the old text
             // (SPEC-0098 v12 behaviour 26).
             self.project.cancel();
@@ -3939,7 +4241,7 @@ impl EditorView {
         line: usize,
         text: &str,
         p: &Palette,
-    ) -> Vec<(std::ops::Range<usize>, idecraft_ui::theme::TextStyle)> {
+    ) -> Vec<(std::ops::Range<usize>, ferris_idea_ui::theme::TextStyle)> {
         let Some(doc) = self
             .syntax
             .as_ref()
@@ -4027,7 +4329,7 @@ impl EditorView {
     fn line_start(&self, line: usize) -> usize {
         self.state
             .buffer
-            .position_to_offset(idecraft_editor::Position::new(line, 0))
+            .position_to_offset(ferris_idea_editor::Position::new(line, 0))
             .unwrap_or(self.state.buffer.len_chars())
     }
 
@@ -4059,7 +4361,7 @@ impl EditorView {
             return true;
         }
         let bound = keymap.actions_for(stroke, None);
-        let ids: Vec<String> = idecraft_editor::editor_first(&bound)
+        let ids: Vec<String> = ferris_idea_editor::editor_first(&bound)
             .into_iter()
             .map(str::to_owned)
             .collect();
@@ -4164,7 +4466,7 @@ impl EditorView {
                         .is_some_and(|c| c.text == text);
                     // Text copied elsewhere joins the paste history (SPEC-0057 v3 behaviour 20).
                     if !self.masked {
-                        idecraft_editor::paste_history::PasteHistory::global().record(&text);
+                        ferris_idea_editor::paste_history::PasteHistory::global().record(&text);
                     }
                     if !same {
                         self.state.clipboard = Some(Clipboard {
@@ -4237,7 +4539,7 @@ impl EditorView {
                 if self.masked {
                     return true;
                 }
-                if !idecraft_editor::expand_word_continues(&self.state) {
+                if !ferris_idea_editor::expand_word_continues(&self.state) {
                     self.state.other_words = self.other_open_words();
                 }
             }
@@ -4260,7 +4562,7 @@ impl EditorView {
             self.state.structure = self.selection_stages();
         }
         let step = self.state.buffer.top_step();
-        let done = idecraft_editor::perform(&mut self.state, id);
+        let done = ferris_idea_editor::perform(&mut self.state, id);
         // Cut up to Line End fills the clipboard only when it cut something (SPEC-0057 v6
         // behaviour 24).
         let cut = id == "EditorCutLineEnd" && self.state.buffer.top_step() != step;
@@ -4278,7 +4580,7 @@ impl EditorView {
                 && let Some(c) = &self.state.clipboard
             {
                 cx.write_to_clipboard(ClipboardItem::new_string(c.text.clone()));
-                idecraft_editor::paste_history::PasteHistory::global().record(&c.text);
+                ferris_idea_editor::paste_history::PasteHistory::global().record(&c.text);
             }
             if self.state.viewport.first_line != first_line {
                 self.scroll_y =
@@ -4294,7 +4596,7 @@ impl EditorView {
     /// for Cyclic Expand Word (`SPEC-0057` v5 behaviour 23). A field has no such source, and a
     /// text over the size limit offers none.
     fn other_open_words(&self) -> Vec<String> {
-        use idecraft_editor::documents::DocumentRegistry;
+        use ferris_idea_editor::documents::DocumentRegistry;
         if self.field {
             return Vec::new();
         }
@@ -4303,8 +4605,8 @@ impl EditorView {
             .list()
             .into_iter()
             .filter(|d| Some(&d.path) != own.as_ref())
-            .filter(|d| d.text.len_bytes() <= idecraft_editor::EXPAND_WORD_MAX)
-            .flat_map(|d| idecraft_editor::words_of(&d.text.to_string()))
+            .filter(|d| d.text.len_bytes() <= ferris_idea_editor::EXPAND_WORD_MAX)
+            .flat_map(|d| ferris_idea_editor::words_of(&d.text.to_string()))
             .collect()
     }
 
@@ -4329,7 +4631,7 @@ impl EditorView {
         }
         let language = self.path.as_deref().and_then(LanguageId::detect)?;
         let text = self.state.buffer.text();
-        if text.len() > idecraft_languages::syntax::MAX_SYNTAX_BYTES {
+        if text.len() > ferris_idea_languages::syntax::MAX_SYNTAX_BYTES {
             return None;
         }
         let tsx = self
@@ -4342,7 +4644,7 @@ impl EditorView {
             .map(|d| f(&d))
     }
 
-    /// Checks the text or not: a library source is read, not checked, so it shows neither IDECraft's
+    /// Checks the text or not: a library source is read, not checked, so it shows neither Ferris IDEA's
     /// own inspections nor diagnostics of any other source (`SPEC-0149` v5 behaviour 11).
     pub fn set_unchecked(&mut self, on: bool) {
         self.unchecked = on;
@@ -4371,7 +4673,7 @@ impl EditorView {
         let Some(path) = &self.path else {
             return;
         };
-        let Ok(read_only) = idecraft_core::file_properties::is_read_only(path) else {
+        let Ok(read_only) = ferris_idea_core::file_properties::is_read_only(path) else {
             return;
         };
         if read_only != self.read_only {
@@ -4390,20 +4692,21 @@ impl EditorView {
     }
 
     /// The encoding the file is read and written in (`SPEC-0336` behaviour 11).
-    pub fn encoding(&self) -> idecraft_core::file_properties::FileEncoding {
+    pub fn encoding(&self) -> ferris_idea_core::file_properties::FileEncoding {
         self.encoding
     }
 
     /// Sets the encoding the text was read in and saving writes (`SPEC-0336` behaviours 11, 12).
-    pub fn set_encoding(&mut self, encoding: idecraft_core::file_properties::FileEncoding) {
+    pub fn set_encoding(&mut self, encoding: ferris_idea_core::file_properties::FileEncoding) {
         self.encoding = encoding;
-        self.choice_generation = idecraft_core::file_properties::choice_generation();
+        self.choice_generation = ferris_idea_core::file_properties::choice_generation();
     }
 
     /// The file's text read from disk in its encoding, which becomes the editor's (`SPEC-0336`
     /// behaviour 11); `None` when it cannot be read as text.
     fn read_disk(&mut self) -> Option<String> {
-        let file = idecraft_core::file_properties::read_text(self.path.as_deref()?, None).ok()?;
+        let file =
+            ferris_idea_core::file_properties::read_text(self.path.as_deref()?, None).ok()?;
         self.set_encoding(file.encoding);
         Some(file.text)
     }
@@ -4412,14 +4715,16 @@ impl EditorView {
     /// behaviour 8). Returns how many line breaks changed; `None` for a read-only text.
     pub fn convert_line_separators(
         &mut self,
-        target: idecraft_core::file_properties::LineSeparator,
+        target: ferris_idea_core::file_properties::LineSeparator,
         cx: &mut Context<Self>,
     ) -> Option<usize> {
         if self.read_only {
             return None;
         }
-        let (text, changed) =
-            idecraft_core::file_properties::convert_separators(&self.state.buffer.text(), target);
+        let (text, changed) = ferris_idea_core::file_properties::convert_separators(
+            &self.state.buffer.text(),
+            target,
+        );
         if changed > 0 {
             self.replace_text(&text, cx);
         }
@@ -4433,11 +4738,11 @@ impl EditorView {
     /// characters were replaced.
     pub fn save_in_encoding(
         &mut self,
-        encoding: idecraft_core::file_properties::FileEncoding,
+        encoding: ferris_idea_core::file_properties::FileEncoding,
         lossy: bool,
         cx: &mut Context<Self>,
     ) -> Result<usize, String> {
-        use idecraft_core::file_properties as fp;
+        use ferris_idea_core::file_properties as fp;
         let path = self
             .path
             .clone()
@@ -4484,7 +4789,7 @@ impl EditorView {
             return;
         };
         if let (Ok(mut history), Ok(relative)) = (
-            idecraft_core::LocalHistory::open(root),
+            ferris_idea_core::LocalHistory::open(root),
             path.strip_prefix(root),
         ) {
             let _ = history.record(&relative.to_string_lossy().replace('\\', "/"));
@@ -4534,7 +4839,7 @@ impl EditorView {
         let at = |(line, column): (usize, usize)| {
             self.state
                 .buffer
-                .position_to_offset(idecraft_editor::Position::new(line, column))
+                .position_to_offset(ferris_idea_editor::Position::new(line, column))
                 .ok()
         };
         let mut found = Vec::new();
@@ -4552,9 +4857,9 @@ impl EditorView {
             found.push(Problem {
                 range: start..end.max(start + 1),
                 severity,
-                message: format!("IDECraft: {message}"),
-                inspection: idecraft_languages::inspections::known_id(id),
-                unused: idecraft_languages::inspections::is_unused(id),
+                message: format!("Ferris IDEA: {message}"),
+                inspection: ferris_idea_languages::inspections::known_id(id),
+                unused: ferris_idea_languages::inspections::is_unused(id),
                 code: None,
             });
         }
@@ -4636,8 +4941,10 @@ impl EditorView {
         if id == self.state.language {
             return false;
         }
-        self.state.comment = language
-            .and_then(LanguageId::line_comment)
+        self.state.comment = self
+            .path
+            .as_deref()
+            .and_then(|p| ferris_idea_languages::line_comment_of(language, p))
             .map(str::to_owned);
         self.state.block_comment = language
             .and_then(LanguageId::block_comment)
@@ -4650,12 +4957,12 @@ impl EditorView {
             .and_then(|p| p.extension())
             .is_some_and(|e| e == "tsx");
         let tree_language =
-            language.filter(|_| text.len() <= idecraft_languages::syntax::MAX_SYNTAX_BYTES);
+            language.filter(|_| text.len() <= ferris_idea_languages::syntax::MAX_SYNTAX_BYTES);
         self.syntax_edits.clear();
         self.colors.clear();
         self.syntax = None;
         match tree_language {
-            Some(l) if text.len() > idecraft_languages::syntax::BACKGROUND_PARSE_BYTES => {
+            Some(l) if text.len() > ferris_idea_languages::syntax::BACKGROUND_PARSE_BYTES => {
                 self.parse_in_background(l, tsx, text, cx);
             }
             Some(l) => {
@@ -4701,7 +5008,7 @@ impl EditorView {
             .offset_to_position(caret)
             .ok()
             .map(|p| p.line);
-        let edits = idecraft_core::editorconfig::save_edits(
+        let edits = ferris_idea_core::editorconfig::save_edits(
             &text,
             &self.editorconfig,
             settings.strip_trailing_spaces,
@@ -4740,7 +5047,7 @@ impl EditorView {
         let mut history = self
             .history_root
             .as_deref()
-            .and_then(|root| Some((idecraft_core::LocalHistory::open(root).ok()?, root)));
+            .and_then(|root| Some((ferris_idea_core::LocalHistory::open(root).ok()?, root)));
         let relative = history.as_ref().and_then(|(_, root)| {
             path.strip_prefix(root)
                 .ok()
@@ -4792,7 +5099,7 @@ impl EditorView {
             .and_then(|m| Some((m.modified().ok()?, m.len())));
         // The text of a file that is read-only is replaced like any other.
         if self.frozen.is_some() {
-            self.frozen = Some(idecraft_editor::TextBuffer::from_text(&now));
+            self.frozen = Some(ferris_idea_editor::TextBuffer::from_text(&now));
         }
         if self.state.buffer.text() != now || self.state.buffer.is_modified() {
             self.reload_buffer(&now);
@@ -4850,7 +5157,7 @@ impl EditorView {
         // (`SPEC-0336` behaviour 13).
         if stamp.is_some()
             && stamp == self.disk_stamp
-            && self.choice_generation == idecraft_core::file_properties::choice_generation()
+            && self.choice_generation == ferris_idea_core::file_properties::choice_generation()
         {
             return;
         }
@@ -4862,17 +5169,17 @@ impl EditorView {
             return;
         }
         match self.state.buffer.reconcile(&now) {
-            idecraft_editor::Reconcile::Unchanged => {}
-            idecraft_editor::Reconcile::Reload => {
+            ferris_idea_editor::Reconcile::Unchanged => {}
+            ferris_idea_editor::Reconcile::Reload => {
                 // A read-only file's text is replaced, not put back.
                 if self.frozen.is_some() {
-                    self.frozen = Some(idecraft_editor::TextBuffer::from_text(&now));
+                    self.frozen = Some(ferris_idea_editor::TextBuffer::from_text(&now));
                 }
                 self.reload_buffer(&now);
                 self.note = Some("Reloaded: the file changed on disk.".into());
                 self.after_change(false, cx);
             }
-            idecraft_editor::Reconcile::Conflict => {
+            ferris_idea_editor::Reconcile::Conflict => {
                 self.note = Some(
                     "The file changed on disk and here: saving overwrites the disk version.".into(),
                 );
@@ -5037,6 +5344,14 @@ impl EditorView {
             }
             return;
         }
+        // A click on a comment mark of the room opens its threads (SPEC-0323 v8 behaviour 54).
+        // A click on a line's profile cost shows its function (SPEC-0120 v5 behaviour 10).
+        if event.click_count == 1 && self.profile_cost_click(event.position, cx) {
+            return;
+        }
+        if event.click_count == 1 && self.comment_mark_click(event.position, cx) {
+            return;
+        }
         // A click on a change marker opens its bar (SPEC-0064 v3 behaviour 6).
         if event.click_count == 1
             && let Some(index) = self.marker_change_at(event.position)
@@ -5048,6 +5363,20 @@ impl EditorView {
                 return;
             };
             cx.emit(EditorEvent::ChangeMarker(index, at));
+            cx.stop_propagation();
+            return;
+        }
+        // A click on a usage count opens Find Usages for its declaration (SPEC-0292 v8
+        // behaviour 15).
+        if event.click_count == 1
+            && let Some(line) = self
+                .last
+                .usage_hits
+                .iter()
+                .find(|(b, _)| b.contains(&event.position))
+                .map(|(_, line)| *line)
+        {
+            self.open_usages_at(line, cx);
             cx.stop_propagation();
             return;
         }
@@ -5073,8 +5402,9 @@ impl EditorView {
         let declaration_w = self.declaration_width();
         // A click on the mark of a bean or an injection point goes to the other side of the
         // wiring (SPEC-0115 v5 behaviour 14); its lane is left of the declarations'.
-        if marks_w > declaration_w
-            && event.position.x >= self.last.gutter_x - px(FOLD_WIDTH) - run_w - marks_w
+        if marks_w > declaration_w + self.swatch_width()
+            && event.position.x
+                >= self.last.gutter_x - px(FOLD_WIDTH) - run_w - marks_w + self.swatch_width()
             && event.position.x < self.last.gutter_x - px(FOLD_WIDTH) - run_w - declaration_w
             && let Some(line) = self
                 .last
@@ -5139,6 +5469,12 @@ impl EditorView {
                 })
                 .map(|p| p.line)
         {
+            // ⌥-click switches the breakpoint off or on, or sets a temporary one (SPEC-0127 v15
+            // behaviour 31); the workbench holds the properties.
+            if event.modifiers.alt {
+                cx.emit(EditorEvent::AltClickBreakpoint(line));
+                return;
+            }
             self.toggle_breakpoint(line, cx);
             return;
         }
@@ -5190,7 +5526,7 @@ impl EditorView {
         match event.click_count {
             2 => {
                 *carets = Carets::new(at);
-                idecraft_editor::perform(&mut self.state, "EditorSelectWord");
+                ferris_idea_editor::perform(&mut self.state, "EditorSelectWord");
             }
             3 => *carets = Carets::from_carets(vec![Caret::select(line_start, next_line)]),
             _ if caret_click => {
@@ -5325,10 +5661,10 @@ impl EditorView {
     /// Line and column under a window position, from the last frame; columns go on past the end
     /// of a line (one per character width of the monospace font), lines stop at the first and last
     /// visible ones.
-    fn column_at(&self, position: gpui::Point<Pixels>) -> idecraft_editor::Position {
+    fn column_at(&self, position: gpui::Point<Pixels>) -> ferris_idea_editor::Position {
         let lines = &self.last.lines;
         let Some(first) = lines.first() else {
-            return idecraft_editor::Position::new(0, 0);
+            return ferris_idea_editor::Position::new(0, 0);
         };
         let painted = lines
             .iter()
@@ -5343,15 +5679,15 @@ impl EditorView {
         let column = (f32::from(position.x - painted.origin.x) / width)
             .round()
             .max(0.0);
-        idecraft_editor::Position::new(painted.line, column as usize)
+        ferris_idea_editor::Position::new(painted.line, column as usize)
     }
 
     /// A selection on every line from `from` to `to` (0-based line and column), between the two
     /// columns; lines shorter than that get a caret at their end (`SPEC-0130` behaviour 2).
     pub fn column_select(
         &mut self,
-        from: idecraft_editor::Position,
-        to: idecraft_editor::Position,
+        from: ferris_idea_editor::Position,
+        to: ferris_idea_editor::Position,
         cx: &mut Context<Self>,
     ) {
         self.state.carets.block(&self.state.buffer, from, to);
@@ -5423,7 +5759,7 @@ impl EditorView {
                 .map_or(text.len(), |(b, _)| b);
             let around = doc.definitions_around(byte);
             let show =
-                idecraft_languages::syntax::context_declaration(&around, first_visible, shown)
+                ferris_idea_languages::syntax::context_declaration(&around, first_visible, shown)
                     .map(|d| d.line);
             (around.is_empty(), show)
         });
@@ -5505,13 +5841,13 @@ impl EditorView {
         let last = self.state.buffer.len_lines().saturating_sub(1);
         let to = match id {
             "EditorLeftWithSelection" => {
-                idecraft_editor::Position::new(to.line, to.column.saturating_sub(1))
+                ferris_idea_editor::Position::new(to.line, to.column.saturating_sub(1))
             }
-            "EditorRightWithSelection" => idecraft_editor::Position::new(to.line, to.column + 1),
+            "EditorRightWithSelection" => ferris_idea_editor::Position::new(to.line, to.column + 1),
             "EditorUpWithSelection" => {
-                idecraft_editor::Position::new(to.line.saturating_sub(1), to.column)
+                ferris_idea_editor::Position::new(to.line.saturating_sub(1), to.column)
             }
-            _ => idecraft_editor::Position::new((to.line + 1).min(last), to.column),
+            _ => ferris_idea_editor::Position::new((to.line + 1).min(last), to.column),
         };
         self.column_select(from, to, cx);
         self.reveal_line(to.line);
@@ -5533,6 +5869,7 @@ impl EditorView {
     /// Shapes the visible lines and records where everything goes (called before painting).
     fn prepare(&mut self, bounds: Bounds<Pixels>, window: &mut Window) -> Frame {
         self.view_height = f32::from(bounds.size.height);
+        self.refresh_swatches();
         // The marks of the usages go in the frame in which the caret leaves the symbol
         // (SPEC-0295 behaviour 7).
         if !self.field {
@@ -5590,7 +5927,7 @@ impl EditorView {
             underline: None,
             strikethrough: None,
         };
-        let styled = |len: usize, style: &idecraft_ui::theme::TextStyle| {
+        let styled = |len: usize, style: &ferris_idea_ui::theme::TextStyle| {
             styled_run(len, style, &base, p.text)
         };
         let digits = layout::gutter_digits(total);
@@ -5604,6 +5941,20 @@ impl EditorView {
             }
             _ => px(0.0),
         };
+        // The profile's costs right of it (SPEC-0120 v5 behaviour 10).
+        let profile_w = match self.profile_width_chars() {
+            0 => px(0.0),
+            chars => digit_width * chars as f32 + px(2.0 * ANNOTATION_PADDING),
+        };
+        let profile_marks: std::collections::HashMap<usize, String> = if profile_w > px(0.0) {
+            self.profile_costs
+                .as_ref()
+                .map(|c| c.lines.iter().map(|l| (l.line, l.label.clone())).collect())
+                .unwrap_or_default()
+        } else {
+            Default::default()
+        };
+        self.profile_hits.clear();
         let gutter = if self.field {
             px(0.0)
         } else {
@@ -5612,6 +5963,8 @@ impl EditorView {
                 + self.run_width()
                 + self.marks_width()
                 + annotation_w
+                + profile_w
+                + self.comment_width()
         };
         let run_w = self.run_width();
         let marks_w = self.marks_width();
@@ -5711,6 +6064,7 @@ impl EditorView {
         let arrows_shown = !self.fold_arrows_on_hover || self.pointer_inside;
         let mut caret_widths = Vec::new();
         let mut line_end_texts = Vec::new();
+        let mut usage_hits = Vec::new();
         let mut author_hints = Vec::new();
         let mut hint_pills = Vec::new();
         let mut gutter_tips = Vec::new();
@@ -5734,10 +6088,12 @@ impl EditorView {
                     &[run(label.len(), colour)],
                     None,
                 );
-                frame.inline_values.push((
-                    point(origin.x + digit_width * indent as f32, origin.y),
-                    shaped_label,
+                let at = point(origin.x + digit_width * indent as f32, origin.y);
+                usage_hits.push((
+                    Bounds::new(at, size(shaped_label.width, px(line_height()))),
+                    line,
                 ));
+                frame.inline_values.push((at, shaped_label));
                 painted.push(PaintedLine {
                     line,
                     display: DisplayLine::new(""),
@@ -5766,7 +6122,7 @@ impl EditorView {
             let line_end = line_start + text.chars().count();
             // Colour runs over display bytes: from the tree when it is current, else the colours
             // last seen for a line with the same text.
-            let coloured: Vec<(Range<usize>, idecraft_ui::theme::TextStyle)> = if fresh {
+            let coloured: Vec<(Range<usize>, ferris_idea_ui::theme::TextStyle)> = if fresh {
                 let c = syntax_runs(&spans, line_start..line_end, &display, p);
                 self.colors.insert(text.clone(), c.clone());
                 c
@@ -6000,6 +6356,23 @@ impl EditorView {
                     ));
                 }
             }
+            // The line's profile cost, right-aligned in its column (SPEC-0120 v5 behaviour 10).
+            if let Some(label) = profile_marks.get(&line) {
+                let colour = p.scheme_color("ANNOTATIONS_COLOR").unwrap_or(p.line_number);
+                let shaped = text_system.shape_line(
+                    label.clone().into(),
+                    font_size,
+                    &[run(label.len(), colour)],
+                    None,
+                );
+                let left = bounds.origin.x + annotation_w;
+                let x = left + profile_w - px(ANNOTATION_PADDING) - shaped.width;
+                self.profile_hits.push((
+                    Bounds::new(point(left, origin.y), size(profile_w, px(line_height()))),
+                    line,
+                ));
+                frame.profile_texts.push((point(x, origin.y), shaped));
+            }
             // Breakpoint and execution lines get their scheme background; a breakpoint shows as a
             // red dot over the line number (SPEC-0091 behaviours 1 and 4).
             let has_breakpoint = self.breakpoints.binary_search(&line).is_ok();
@@ -6116,6 +6489,25 @@ impl EditorView {
                     GutterIcon::Declaration(line),
                 ));
             }
+            if let Some(s) = self.swatch_at(line).filter(|_| !self.field) {
+                // A filled square in the colour, in the lane left of the other marks
+                // (`SPEC-0042` v27 behaviour 48).
+                let lane = self.swatch_width();
+                let left = bounds.origin.x + gutter - px(FOLD_WIDTH) - run_w - marks_w;
+                let d = px(10.0);
+                let square = Bounds::new(
+                    point(
+                        left + (lane - d) / 2.0,
+                        origin.y + (px(line_height()) - d) / 2.0,
+                    ),
+                    size(d, d),
+                );
+                frame.swatches.push((square, s.rgba, line));
+                gutter_tips.push((
+                    Bounds::new(point(left, origin.y), size(lane, px(line_height()))),
+                    GutterIcon::Color(line),
+                ));
+            }
             if let Some(m) = self.framework_marks.at(line).filter(|_| !self.field) {
                 // The green of the platform's run icon: a bean is something that runs.
                 let mark = text_system.shape_line(
@@ -6124,8 +6516,9 @@ impl EditorView {
                     &[run(m.glyph.len(), 0x5fb865)],
                     None,
                 );
-                let lane = marks_w - self.declaration_width();
-                let left = bounds.origin.x + gutter - px(FOLD_WIDTH) - run_w - marks_w;
+                let lane = marks_w - self.declaration_width() - self.swatch_width();
+                let left = bounds.origin.x + gutter - px(FOLD_WIDTH) - run_w - marks_w
+                    + self.swatch_width();
                 frame.fold_marks.push((
                     point(left + (lane - mark.width) / 2.0, origin.y + px(1.0)),
                     mark,
@@ -6271,7 +6664,7 @@ impl EditorView {
                     let label = self
                         .folds
                         .shown_placeholder(line)
-                        .unwrap_or(idecraft_languages::folding::ELLIPSIS)
+                        .unwrap_or(ferris_idea_languages::folding::ELLIPSIS)
                         .to_owned();
                     let source = self.state.buffer.line(line).unwrap_or_default();
                     let trimmed = source.trim_end();
@@ -6348,6 +6741,13 @@ impl EditorView {
                 );
                 let (x, end) = place_at_line_end(line_end_x, digit_width * 2.0, shaped_label.width);
                 line_end_x = end;
+                usage_hits.push((
+                    Bounds::new(
+                        point(x, origin.y),
+                        size(shaped_label.width, px(line_height())),
+                    ),
+                    line,
+                ));
                 frame.inline_values.push((point(x, origin.y), shaped_label));
                 line_end_texts.push((line, label.to_owned()));
             }
@@ -6404,17 +6804,18 @@ impl EditorView {
                 if x1 <= x0 {
                     x1 = x0 + digit_width;
                 }
-                let key = match q.severity {
-                    Severity::Error => "ERRORS_ATTRIBUTES",
-                    Severity::Warning => "WARNING_ATTRIBUTES",
-                    Severity::Weak => "WEAK_WARNING_ATTRIBUTES",
-                };
-                let color = p.problem_mark(key);
-                frame.underlines.push((
-                    point(origin.x + x0, origin.y + px(line_height() - 3.0)),
-                    x1 - x0,
-                    color,
-                ));
+                let at = point(origin.x + x0, origin.y + px(line_height() - 3.0));
+                match diagnostics_model::underline(q) {
+                    diagnostics_model::Underline::Wavy(key) => {
+                        frame.underlines.push((at, x1 - x0, p.problem_mark(key)));
+                    }
+                    // The other English variant and mixed spelling (SPEC-0155 v7 behaviour 7).
+                    diagnostics_model::Underline::Dotted(key) => {
+                        frame
+                            .dotted_underlines
+                            .push((at, x1 - x0, p.problem_mark(key)));
+                    }
+                }
             }
 
             // Usages of the symbol at the caret on this line, under the find results
@@ -6486,6 +6887,74 @@ impl EditorView {
             if line == caret_line && primary.is_empty() && !self.field {
                 frame.caret_row = Some(origin.y);
             }
+            // Other people's selections and carets in their colours, with a name label while
+            // they move (`SPEC-0323` v5 behaviour 32).
+            for rc in &self.remote_carets {
+                let dim = if rc.away { 0.5 } else { 1.0 };
+                let mut tint = color(rc.rgb);
+                if let Some(sel) = &rc.selection
+                    && sel.start <= line_end
+                    && sel.end > line_start
+                {
+                    let from = sel.start.max(line_start) - line_start;
+                    let to = sel.end.min(line_end) - line_start;
+                    let x0 = shaped.x_for_index(display.byte_of(from));
+                    let mut x1 = shaped.x_for_index(display.byte_of(to));
+                    if sel.end > line_end {
+                        x1 += digit_width;
+                    }
+                    tint.a = 0.25 * dim;
+                    frame.remote_selections.push((
+                        Bounds::new(
+                            point(origin.x + x0, origin.y),
+                            size(x1 - x0, px(line_height())),
+                        ),
+                        tint,
+                    ));
+                }
+                if rc.caret < line_start || rc.caret > line_end {
+                    continue;
+                }
+                let x = origin.x + shaped.x_for_index(display.byte_of(rc.caret - line_start));
+                tint.a = dim;
+                frame.remote_carets.push((
+                    Bounds::new(point(x, origin.y), size(px(2.0), px(line_height()))),
+                    tint,
+                ));
+                if rc.label > 0.0 {
+                    let small = font_size * 0.8;
+                    let name: gpui::SharedString = rc.name.clone().into();
+                    let mut white = color(0xffffff);
+                    white.a = rc.label * dim;
+                    let label = text_system.shape_line(
+                        name.clone(),
+                        small,
+                        &[TextRun {
+                            len: name.len(),
+                            font: base.clone(),
+                            color: white,
+                            background_color: None,
+                            underline: None,
+                            strikethrough: None,
+                        }],
+                        None,
+                    );
+                    let h = px(line_height() * 0.8);
+                    let above = origin.y - h;
+                    let y = if above < bounds.origin.y {
+                        origin.y + px(line_height())
+                    } else {
+                        above
+                    };
+                    let mut bg = color(rc.rgb);
+                    bg.a = rc.label * dim;
+                    frame.remote_labels.push((
+                        Bounds::new(point(x, y), size(label.width + px(8.0), h)),
+                        bg,
+                        label,
+                    ));
+                }
+            }
             // A hint stands on a rounded pill of its scheme background (SPEC-0291 v9 behaviour
             // 4b); the inline completion moves the hints after the caret.
             if let Some(bg) = p.key_style("INLINE_PARAMETER_HINT").background {
@@ -6512,26 +6981,48 @@ impl EditorView {
                 italic,
             });
         }
+        // The room's comment marks, right of the annotations (SPEC-0323 v8 behaviour 53).
+        self.layout_comment_marks(
+            &painted,
+            bounds.origin.x + annotation_w + profile_w,
+            font_size,
+            &mut frame,
+            window,
+        );
         if gutter_tips != self.last.gutter_tips {
             self.gutter_moved = true;
         }
         frame.gutter_focus = self.focused_gutter_bounds(&gutter_tips);
+        // Each usage count is a control of its own for the self-test and the UI driver, named
+        // after its declaration's line, counted from 1 (SPEC-0292 v8 behaviour 15).
+        for (b, line) in &usage_hits {
+            crate::hit_targets::record(window, &usage_count_id(*line), *b);
+        }
         self.last = LastLayout {
             lines: painted,
             gutter_x: bounds.origin.x + gutter,
             origin: bounds.origin,
             bounds,
             annotation_x: bounds.origin.x + annotation_w,
+            costs_x: bounds.origin.x + annotation_w + profile_w,
             one_line_folds,
             placeholders,
             line_end_texts,
             gutter_tips,
             author_hints,
+            usage_hits,
             caret_widths,
             hint_pills,
+            swatches: frame.swatches.clone(),
         };
         frame
     }
+}
+
+/// The test id of the usage count of the declaration on `line` (counted from 0): `usage-count-`
+/// and the line counted from 1, as the editor shows it (SPEC-0292 v8 behaviour 15).
+pub fn usage_count_id(line: usize) -> String {
+    format!("usage-count-{}", line + 1)
 }
 
 /// What one frame paints.
@@ -6552,12 +7043,14 @@ struct Frame {
     /// Age colours and labels of the annotation column (`SPEC-0277`).
     annotation_cells: Vec<(Bounds<Pixels>, u32)>,
     annotation_texts: Vec<(gpui::Point<Pixels>, ShapedLine)>,
+    /// The profile's costs in their column (`SPEC-0120` v5 behaviour 10).
+    profile_texts: Vec<(gpui::Point<Pixels>, ShapedLine)>,
     numbers: Vec<(gpui::Point<Pixels>, ShapedLine)>,
     lines: Vec<(gpui::Point<Pixels>, ShapedLine)>,
     /// Usages of the symbol at the caret with their kinds (`SPEC-0295` behaviour 4).
     occurrences: Vec<(
         Bounds<Pixels>,
-        idecraft_languages::occurrences::OccurrenceKind,
+        ferris_idea_languages::occurrences::OccurrenceKind,
     )>,
     /// Find results (`SPEC-0065` behaviour 5).
     highlights: Vec<Bounds<Pixels>>,
@@ -6567,12 +7060,24 @@ struct Frame {
     breakpoints: Vec<(Bounds<Pixels>, crate::debug_model::BreakpointLook, bool)>,
     /// Bookmark squares in the gutter with their mnemonic (`SPEC-0331` behaviour 14).
     bookmarks: Vec<(Bounds<Pixels>, Option<ShapedLine>)>,
+    /// Colour swatches in the gutter: square, colour as `0xRRGGBBAA`, 0-based line
+    /// (`SPEC-0042` v27 behaviour 48).
+    swatches: Vec<(Bounds<Pixels>, u32, usize)>,
+    /// The room's comment marks: box, count, colour (`SPEC-0323` v8 behaviour 53).
+    comment_marks: Vec<(Bounds<Pixels>, Option<ShapedLine>, u32)>,
     /// The breakpoints are muted: grey.
     breakpoints_muted: bool,
     /// Wavy underlines of problems: start, width, colour (`SPEC-0070`).
     underlines: Vec<(gpui::Point<Pixels>, Pixels, u32)>,
+    /// Dotted underlines of spelling hints: start, width, colour (`SPEC-0155` v7 behaviour 7).
+    dotted_underlines: Vec<(gpui::Point<Pixels>, Pixels, u32)>,
     selections: Vec<Bounds<Pixels>>,
     carets: Vec<Bounds<Pixels>>,
+    /// Other people's selections and carets with their colours, and their name labels: box,
+    /// colour, opacity, text (`SPEC-0323` v5 behaviour 32).
+    remote_selections: Vec<(Bounds<Pixels>, Hsla)>,
+    remote_carets: Vec<(Bounds<Pixels>, Hsla)>,
+    remote_labels: Vec<(Bounds<Pixels>, Hsla, ShapedLine)>,
     /// The carets are blocks: overwrite mode (`SPEC-0057` v6 behaviour 25).
     block_carets: bool,
     /// Painted line index and display byte range being composed.
@@ -6640,11 +7145,17 @@ fn paint(frame: Frame, focused: bool, window: &mut Window, cx: &mut App) {
     for s in &frame.selections {
         window.paint_quad(fill(*s, color(p.selection)));
     }
+    for (s, tint) in &frame.remote_selections {
+        window.paint_quad(fill(*s, *tint));
+    }
     for (bounds, rgb) in &frame.markers {
         window.paint_quad(fill(*bounds, color(*rgb)));
     }
     for (bounds, rgb) in &frame.annotation_cells {
         window.paint_quad(fill(*bounds, color(*rgb)));
+    }
+    for (origin, shaped) in &frame.profile_texts {
+        let _ = shaped.paint(*origin, px(line_height()), window, cx);
     }
     for (origin, shaped) in &frame.annotation_texts {
         let _ = shaped.paint(*origin, px(line_height()), window, cx);
@@ -6721,6 +7232,16 @@ fn paint(frame: Frame, focused: bool, window: &mut Window, cx: &mut App) {
                 .corner_radii(px(3.0)),
         );
     }
+    for (square, rgba, _) in &frame.swatches {
+        // A thin frame keeps a colour close to the background visible.
+        window.paint_quad(
+            fill(*square, gpui::rgba(*rgba))
+                .border_widths(px(1.0))
+                .border_color(color(p.line_number))
+                .corner_radii(px(2.0)),
+        );
+    }
+    comment_marks::paint(&frame.comment_marks, window, cx);
     for (square, letter) in &frame.bookmarks {
         window.paint_quad(fill(*square, color(p.accent.rgb)).corner_radii(px(3.0)));
         if let Some(letter) = letter {
@@ -6778,6 +7299,20 @@ fn paint(frame: Frame, focused: bool, window: &mut Window, cx: &mut App) {
             },
         );
     }
+    // Dots of 1 px every 2 px, a little below the wavy line's middle.
+    for (origin, width, rgb) in &frame.dotted_underlines {
+        let mut x = px(0.0);
+        while x < *width {
+            window.paint_quad(fill(
+                Bounds::new(
+                    point(origin.x + x, origin.y + px(1.0)),
+                    size(px(1.0), px(1.0)),
+                ),
+                color(*rgb),
+            ));
+            x += px(2.0);
+        }
+    }
     for (i, range) in &frame.composition {
         if let Some((origin, shaped)) = frame.lines.get(*i) {
             let from = shaped.x_for_index(range.start);
@@ -6801,6 +7336,18 @@ fn paint(frame: Frame, focused: bool, window: &mut Window, cx: &mut App) {
         for c in &frame.carets {
             window.paint_quad(fill(*c, caret));
         }
+    }
+    for (c, tint) in &frame.remote_carets {
+        window.paint_quad(fill(*c, *tint));
+    }
+    for (b, bg, label) in &frame.remote_labels {
+        window.paint_quad(fill(*b, *bg).corner_radii(px(3.0)));
+        let _ = label.paint(
+            point(b.origin.x + px(4.0), b.origin.y),
+            b.size.height,
+            window,
+            cx,
+        );
     }
 }
 
@@ -6886,7 +7433,7 @@ impl EntityInputHandler for EditorView {
                 }
             }
             // Plain typing goes through the editor commands (pairs, all carets).
-            None => idecraft_editor::type_text(&mut self.state, text),
+            None => ferris_idea_editor::type_text(&mut self.state, text),
         }
         self.marked = None;
         self.after_change(true, cx);
@@ -6986,6 +7533,13 @@ impl Render for EditorView {
                     this.leave_doc_hover(cx);
                 }
             }))
+            // Every press counts as the user's own (`SPEC-0323` v5 behaviour 35).
+            .capture_key_down(cx.listener(|this, _: &gpui::KeyDownEvent, _, _| {
+                this.input_count += 1;
+            }))
+            .capture_any_mouse_down(cx.listener(|this, _: &gpui::MouseDownEvent, _, _| {
+                this.input_count += 1;
+            }))
             .on_key_down(cx.listener(Self::on_key_down))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
             .on_mouse_down(MouseButton::Right, cx.listener(Self::on_right_mouse_down))
@@ -7037,6 +7591,8 @@ impl Render for EditorView {
             )
             .children(card)
             .children(tips)
+            .children(self.comment_tip_overlays())
+            .children(self.profile_cost_overlays())
             .children(context)
     }
 }
@@ -7099,14 +7655,14 @@ pub(crate) enum SaveOutcome {
 /// (local history).
 pub(crate) fn write_buffer(
     path: &std::path::Path,
-    buffer: &mut idecraft_editor::TextBuffer,
+    buffer: &mut ferris_idea_editor::TextBuffer,
     disk: &mut Option<String>,
     overwrite_armed: &mut bool,
-    document: Option<&idecraft_editor::documents::OpenDocument>,
-    encoding: idecraft_core::file_properties::FileEncoding,
+    document: Option<&ferris_idea_editor::documents::OpenDocument>,
+    encoding: ferris_idea_core::file_properties::FileEncoding,
     record: &mut dyn FnMut(),
 ) -> SaveOutcome {
-    use idecraft_core::file_properties as fp;
+    use ferris_idea_core::file_properties as fp;
     let on_disk = fp::read_text(path, None).ok().map(|f| f.text);
     if let (Some(known), Some(now)) = (disk.as_ref(), &on_disk)
         && known != now
@@ -7146,7 +7702,7 @@ pub(crate) fn write_buffer(
 
 /// Whether a secondary click at char offset `at` keeps the selections (`SPEC-0275` v20 behaviour
 /// 14b): it lies on a selected range, its first and its last character included.
-fn menu_keeps_selection(carets: &[idecraft_editor::Caret], at: usize) -> bool {
+fn menu_keeps_selection(carets: &[ferris_idea_editor::Caret], at: usize) -> bool {
     carets.iter().any(|c| {
         let r = c.range();
         !c.is_empty() && r.start <= at && at <= r.end
@@ -7166,22 +7722,57 @@ pub fn method_diamond(dot: Bounds<Pixels>) -> [gpui::Point<Pixels>; 4] {
     ]
 }
 
-/// The right margin's column for a file with `config` under Code Style `style`
-/// (`SPEC-0137` v2 behaviour 2a).
+/// The right margin's column for a file with `config` under Code Style `style` and the
+/// project scheme's margin `project` (`SPEC-0137` v2 behaviour 2a, `SPEC-0150` v6 behaviour 8).
 fn margin_column(
-    config: &idecraft_core::editorconfig::EditorConfig,
-    style: &idecraft_core::CodeStyleSettings,
+    config: &ferris_idea_core::editorconfig::EditorConfig,
+    style: &ferris_idea_core::CodeStyleSettings,
+    project: Option<u32>,
 ) -> Option<u32> {
     match config.right_margin() {
         Some(column) => column.map(|c| c as u32),
-        None => style.show_right_margin.then_some(style.right_margin),
+        None => style
+            .show_right_margin
+            .then_some(project.unwrap_or(style.right_margin)),
+    }
+}
+
+/// What the `.editorconfig` files and the project's scheme files above `path` hold now.
+fn style_stamp(path: &std::path::Path) -> Vec<Option<u64>> {
+    let mut stamp = ferris_idea_core::editorconfig::change_stamp(path);
+    stamp.extend(ferris_idea_core::project_code_style::change_stamp(path));
+    stamp
+}
+
+/// Reformat's `(tabSize, insertSpaces)` (`SPEC-0150` v6 behaviour 8): `.editorconfig`, else the
+/// project's scheme, else the editor's indent `unit` with `tab_width` — the file's detected
+/// indentation does not override the scheme here.
+fn reformat_indent(
+    config: &ferris_idea_core::editorconfig::EditorConfig,
+    project: Option<ferris_idea_core::IndentStyle>,
+    unit: &str,
+    tab_width: usize,
+) -> (u32, bool) {
+    if config.indent_unit().is_none()
+        && let Some(p) = project
+    {
+        return if p.use_tabs {
+            (config.tab_width().map_or(p.tab, |w| w as u32), false)
+        } else {
+            (p.indent.max(1), true)
+        };
+    }
+    if unit == "\t" {
+        (tab_width as u32, false)
+    } else {
+        (unit.chars().count().max(1) as u32, true)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::menu_keeps_selection;
-    use idecraft_editor::Caret;
+    use ferris_idea_editor::Caret;
 
     /// SPEC-0291 v9 AK-9: the pill is a pixel wider than the label on each side and stays inside
     /// its line.
@@ -7205,7 +7796,7 @@ mod tests {
     /// Code Style decides.
     #[test]
     fn the_right_margin_follows_max_line_length() {
-        use idecraft_core::editorconfig::{EditorConfig, Setting};
+        use ferris_idea_core::editorconfig::{EditorConfig, Setting};
         let config = |value: Option<&str>| {
             let mut c = EditorConfig::default();
             if let Some(value) = value {
@@ -7220,23 +7811,97 @@ mod tests {
             }
             c
         };
-        let shown = idecraft_core::CodeStyleSettings {
+        let shown = ferris_idea_core::CodeStyleSettings {
             right_margin: 120,
             show_right_margin: true,
             ..Default::default()
         };
-        let hidden = idecraft_core::CodeStyleSettings {
+        let hidden = ferris_idea_core::CodeStyleSettings {
             show_right_margin: false,
             ..shown.clone()
         };
-        assert_eq!(super::margin_column(&config(Some("20")), &shown), Some(20));
-        assert_eq!(super::margin_column(&config(Some("20")), &hidden), Some(20));
-        assert_eq!(super::margin_column(&config(Some("off")), &shown), None);
-        assert_eq!(super::margin_column(&config(None), &shown), Some(120));
-        assert_eq!(super::margin_column(&config(None), &hidden), None);
         assert_eq!(
-            super::margin_column(&config(Some("wide")), &shown),
+            super::margin_column(&config(Some("20")), &shown, None),
+            Some(20)
+        );
+        assert_eq!(
+            super::margin_column(&config(Some("20")), &hidden, None),
+            Some(20)
+        );
+        assert_eq!(
+            super::margin_column(&config(Some("off")), &shown, None),
+            None
+        );
+        assert_eq!(super::margin_column(&config(None), &shown, None), Some(120));
+        assert_eq!(super::margin_column(&config(None), &hidden, None), None);
+        assert_eq!(
+            super::margin_column(&config(Some("wide")), &shown, None),
             Some(120)
+        );
+        // SPEC-0150 v6 AK-10: the project scheme's margin between `.editorconfig` and Code Style.
+        assert_eq!(
+            super::margin_column(&config(None), &shown, Some(100)),
+            Some(100)
+        );
+        assert_eq!(
+            super::margin_column(&config(Some("20")), &shown, Some(100)),
+            Some(20)
+        );
+        assert_eq!(
+            super::margin_column(&config(None), &hidden, Some(100)),
+            None
+        );
+    }
+
+    /// SPEC-0150 v6 AK-10 (behaviour 8): Reformat passes the `.editorconfig`'s indentation, else
+    /// the project scheme's over the detected one, else the editor's.
+    #[test]
+    fn reformat_takes_the_project_scheme_over_the_detected_indentation() {
+        use ferris_idea_core::editorconfig::{EditorConfig, Setting};
+        let with = |pairs: &[(&str, &str)]| {
+            let mut c = EditorConfig::default();
+            for (k, v) in pairs {
+                c.properties.insert(
+                    (*k).into(),
+                    Setting {
+                        value: (*v).into(),
+                        file: ".editorconfig".into(),
+                        line: 1,
+                    },
+                );
+            }
+            c
+        };
+        let two = ferris_idea_core::IndentStyle {
+            indent: 2,
+            tab: 4,
+            use_tabs: false,
+        };
+        let none = with(&[]);
+        // The editor detected four spaces; the scheme says two.
+        assert_eq!(
+            super::reformat_indent(&none, Some(two), "    ", 4),
+            (2, true)
+        );
+        assert_eq!(super::reformat_indent(&none, None, "    ", 4), (4, true));
+        assert_eq!(super::reformat_indent(&none, None, "\t", 8), (8, false));
+        let tabs = ferris_idea_core::IndentStyle {
+            use_tabs: true,
+            ..two
+        };
+        assert_eq!(
+            super::reformat_indent(&none, Some(tabs), "  ", 4),
+            (4, false)
+        );
+        assert_eq!(
+            super::reformat_indent(&with(&[("tab_width", "6")]), Some(tabs), "  ", 4),
+            (6, false)
+        );
+        // An `.editorconfig` indentation (which the editor took) wins over the scheme.
+        let three = with(&[("indent_size", "3")]);
+        assert_eq!(
+            super::reformat_indent(&three, Some(two), "   ", 4),
+            (3, true)
         );
     }
 
@@ -7279,7 +7944,7 @@ mod tests {
 #[cfg(test)]
 mod caret_tests {
     use super::*;
-    use idecraft_editor::{EditorState, perform, type_text};
+    use ferris_idea_editor::{EditorState, perform, type_text};
 
     const SHAPES: &str = "struct Shape {\n    virtual int area() const = 0;\n};\nstruct Square : Shape {\n    int area() const override { return side * side; }\n};\nint total = add(s.area(), 1);\n";
 
@@ -7368,8 +8033,8 @@ mod caret_tests {
 #[cfg(test)]
 mod colour_role_tests {
     use super::{DisplayLine, Palette, SyntaxDocument, syntax_runs};
-    use idecraft_languages::LanguageId;
-    use idecraft_ui::theme::ThemeId;
+    use ferris_idea_languages::LanguageId;
+    use ferris_idea_ui::theme::ThemeId;
 
     /// SPEC-0027 AK-14 (v11) through the editor's own path: in `Islands Dark` the loop counter's
     /// runs carry the underline in the effect colour, the parameter that never changes does not.
@@ -7405,7 +8070,7 @@ mod colour_role_tests {
         assert!(!style_at(name).underline);
     }
 
-    /// SPEC-0027 v7 AK-8 through the editor's own path: the visible lines are highlighted as a
+    /// SPEC-0027 v7 AK-10 through the editor's own path: the visible lines are highlighted as a
     /// range and each line takes its styles from the palette of `Dark`, as `paint` does; SQL
     /// built-ins come out in the function-declaration colour, italic.
     #[test]
@@ -7483,11 +8148,12 @@ mod ghost_tests {
 #[cfg(test)]
 mod save_tests {
     use super::{SaveOutcome, write_buffer};
-    use idecraft_editor::TextBuffer;
-    use idecraft_editor::documents::{DocumentRegistry, OpenDocument};
+    use ferris_idea_editor::TextBuffer;
+    use ferris_idea_editor::documents::{DocumentRegistry, OpenDocument};
 
     fn fixture(name: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("idecraft-save-{name}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("ferris-idea-save-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("note.txt");
@@ -7567,12 +8233,12 @@ mod save_tests {
 #[cfg(test)]
 mod file_property_tests {
     use super::{SaveOutcome, write_buffer};
-    use idecraft_core::file_properties::{Charset, FileEncoding, read_text};
-    use idecraft_editor::TextBuffer;
+    use ferris_idea_core::file_properties::{Charset, FileEncoding, read_text};
+    use ferris_idea_editor::TextBuffer;
 
     fn fixture(name: &str, bytes: &[u8]) -> std::path::PathBuf {
         let dir = std::env::temp_dir().join(format!(
-            "idecraft-editor-file-properties-{name}-{}",
+            "ferris-idea-editor-file-properties-{name}-{}",
             std::process::id()
         ));
         let _ = std::fs::remove_dir_all(&dir);
@@ -7679,14 +8345,14 @@ mod file_property_tests {
 mod static_call_tests {
     use super::*;
     use crate::palette::ThemeId;
-    use idecraft_languages::insight::Encoding;
-    use idecraft_ui::theme::KeyFamily;
+    use ferris_idea_languages::insight::Encoding;
+    use ferris_idea_ui::theme::KeyFamily;
 
     /// `Inventory.java` of the test project `cmp-java-ij` (OBS-0079, OBS-0084).
     const INVENTORY: &str = "package lab.inventory;\n\nimport java.util.List;\n\npublic final class Inventory {\n    public record Item(String sku, String name, int qty, int unitPriceCents) {\n        int totalCents() {\n            return qty * unitPriceCents;\n        }\n    }\n\n    public static int totalValue(List<Item> items) {\n        return items.stream().mapToInt(Item::totalCents).sum();\n    }\n\n    public static void main(String[] args) {\n        System.out.println(totalValue(List.of(new Item(\"A-1\", \"Bolt\", 3, 25))));\n    }\n}\n";
 
     /// The answer to `textDocument/semanticTokens/full` for [`INVENTORY`], recorded from the
-    /// jdtls 1.64 IDECraft starts for the project (2026-11-17, OBS-0084 L2).
+    /// jdtls 1.64 Ferris IDEA starts for the project (2026-11-17, OBS-0084 L2).
     const LIVE_DATA: [u64; 225] = [
         0, 8, 3, 0, 0, 0, 4, 9, 0, 0, 2, 7, 4, 0, 4096, 0, 5, 4, 0, 4096, 0, 5, 4, 2, 5184, 2, 0,
         6, 11, 0, 0, 7, 5, 11, 0, 0, 6, 5, 11, 0, 0, 6, 9, 1, 84, 1, 4, 6, 11, 0, 0, 7, 6, 11, 0,
@@ -7748,7 +8414,7 @@ mod static_call_tests {
     #[test]
     fn static_calls_in_the_text_colour_are_shaped_in_italics() {
         let (types, modifiers) = legend();
-        let tokens = idecraft_languages::semantic::decode(
+        let tokens = ferris_idea_languages::semantic::decode(
             &LIVE_DATA,
             &types,
             &modifiers,

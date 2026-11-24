@@ -1,4 +1,4 @@
-# IDECraft as an AI-native development platform — long-term vision and target architecture
+# Ferris IDEA as an AI-native development platform — long-term vision and target architecture
 
 - **Status:** planned (future). Active work starts only after quality gate QG-1
   ([ADR-0015](../adr/0015-quality-gate-ai-native.md)).
@@ -6,13 +6,13 @@
 - **Related:** [readiness and gap analysis](READINESS.md) · [future milestones](FUTURE_MILESTONES.md) ·
   ADR-0012 to ADR-0015 · [ARCHITECTURE.md](../../ARCHITECTURE.md) · ADR-0008 (MCP server) · SPEC-0053 (agent rights)
 
-The classical IDE comes first. IDECraft's current goal is unchanged: a complete, stable and fast Rust
+The classical IDE comes first. Ferris IDEA's current goal is unchanged: a complete, stable and fast Rust
 IDE with the relevant functions of IntelliJ IDEA Ultimate (ROADMAP.md M0–M7). This
 document describes where the platform goes afterwards. It does not delay or narrow the classical work.
 
 ## 1. Product vision
 
-IDECraft is a fully usable classical IDE and, in addition, a platform in which people and AI agents work
+Ferris IDEA is a fully usable classical IDE and, in addition, a platform in which people and AI agents work
 as equals: on one project, on several projects, alone or in teams coordinated by a human or an
 authorised AI Project Owner.
 
@@ -78,7 +78,7 @@ GPUI entities and in the MCP server's struct ([readiness](READINESS.md) A1, A2).
   processes — with limits and cancellation.
 - **Event stream:** typed events (document changed, diagnostics, process output, task state, approval
   requested) that the GUI and agents subscribe to.
-- **Modes of operation:** in-process with the GUI; `idecraft serve` without GUI for agents and CI; one
+- **Modes of operation:** in-process with the GUI; `ferris-idea serve` without GUI for agents and CI; one
   GUI attached to a running core (later).
 
 ### 2.2 IDE Capability API
@@ -109,7 +109,7 @@ calls and GUI actions are adapters over it.
 - **Effects declared:** `read`, `write`, `vcs-write`, `run`, `network`, `debug`, `remote`, … — the
   permission check uses this declaration, not the caller's identity alone.
 - **Preview → apply:** every write capability supports a dry run that returns exactly what would change;
-  apply refuses when the target changed since the preview (the pattern IDECraft already uses).
+  apply refuses when the target changed since the preview (the pattern Ferris IDEA already uses).
 - **Diagnostics:** results carry structured diagnostics (severity, location, code), not prose.
 - **Errors:** a stable error code set (`not_found`, `permission_denied`, `conflict`, `invalid_input`,
   `unavailable`, `timeout`, `cancelled`, `internal`) plus a human message.
@@ -128,12 +128,12 @@ State of the specifications checked on 2026-10-31:
 
 | Adapter | Direction | Specification state | Plan and limits |
 |---|---|---|---|
-| **MCP server** | agents call IDECraft | latest revision `2026-07-28`: stateless (no `initialize`, `server/discover`, no protocol sessions), stdio and Streamable HTTP, OAuth 2.1 for HTTP, tools with `outputSchema`/`structuredContent`, progress and cancellation in core, **Tasks moved to the extension `io.modelcontextprotocol/tasks`**, **Roots and Sampling deprecated**. Official Rust SDK `rmcp` supports it. ([spec](https://modelcontextprotocol.io/specification/latest), [changelog](https://modelcontextprotocol.io/specification/2026-07-28/changelog)) | Exists (stdio and Streamable HTTP on localhost for the running window, 167 tools on `rmcp`, 2026-11-03). Next: tool list generated from the capability registry; long operations via the Tasks extension; workspace passed as an explicit parameter (Roots is deprecated); no Sampling dependency. |
-| **ACP client** (Agent Client Protocol) | IDECraft hosts coding agents | stable protocol version `1` (v2 draft), JSON-RPC over stdio with the agent as subprocess; client side answers `fs/*`, `terminal/*`, `session/request_permission`; agents receive MCP servers in `session/new`. Rust crates `agent-client-protocol`, `agent-client-protocol-schema`. ([intro](https://agentclientprotocol.com/overview/introduction), [protocol](https://agentclientprotocol.com/protocol/overview)) | IDECraft acts as ACP *client*: file and terminal callbacks map to `workspace.*` and `execution.*` (with the same permission checks); IDECraft passes its own MCP server to the agent in `session/new`, so the agent gets the full capability set. |
-| **CLI** | scripts, CI, humans in a shell | own | `idecraft <domain> <verb> --json` over the capability layer, plus `idecraft serve`. Today's hand-written commands remain. |
+| **MCP server** | agents call Ferris IDEA | latest revision `2026-07-28`: stateless (no `initialize`, `server/discover`, no protocol sessions), stdio and Streamable HTTP, OAuth 2.1 for HTTP, tools with `outputSchema`/`structuredContent`, progress and cancellation in core, **Tasks moved to the extension `io.modelcontextprotocol/tasks`**, **Roots and Sampling deprecated**. Official Rust SDK `rmcp` supports it. ([spec](https://modelcontextprotocol.io/specification/latest), [changelog](https://modelcontextprotocol.io/specification/2026-07-28/changelog)) | Exists (stdio and Streamable HTTP on localhost for the running window, 167 tools on `rmcp`, 2026-11-03). Next: tool list generated from the capability registry; long operations via the Tasks extension; workspace passed as an explicit parameter (Roots is deprecated); no Sampling dependency. |
+| **ACP client** (Agent Client Protocol) | Ferris IDEA hosts coding agents | stable protocol version `1` (v2 draft), JSON-RPC over stdio with the agent as subprocess; client side answers `fs/*`, `terminal/*`, `session/request_permission`; agents receive MCP servers in `session/new`. Rust crates `agent-client-protocol`, `agent-client-protocol-schema`. ([intro](https://agentclientprotocol.com/overview/introduction), [protocol](https://agentclientprotocol.com/protocol/overview)) | Ferris IDEA acts as ACP *client*: file and terminal callbacks map to `workspace.*` and `execution.*` (with the same permission checks); Ferris IDEA passes its own MCP server to the agent in `session/new`, so the agent gets the full capability set. |
+| **CLI** | scripts, CI, humans in a shell | own | `ferris-idea <domain> <verb> --json` over the capability layer, plus `ferris-idea serve`. Today's hand-written commands remain. |
 | **SDK** | external Rust integrations | own | a versioned crate exposing the capability types and a client; published only with GO-4. |
 | **Remote** | remote agents, remote workspaces | MCP Streamable HTTP + OAuth 2.1; ACP remote transport is work in progress upstream | opt-in only (ADR-0008: local by default); TLS and authentication mandatory; no remote access without explicit grant. |
-| **Agent-to-agent** | between agents | A2A 1.0 (Linux Foundation; agent card, task, message, artifact) | not needed inside IDECraft (IDECraft's own task graph and message log coordinate); optional bridge for external agent systems later. Note the name clash: IBM's *Agent Communication Protocol* merged into A2A in 2025 and is unrelated to the Agent *Client* Protocol. |
+| **Agent-to-agent** | between agents | A2A 1.0 (Linux Foundation; agent card, task, message, artifact) | not needed inside Ferris IDEA (Ferris IDEA's own task graph and message log coordinate); optional bridge for external agent systems later. Note the name clash: IBM's *Agent Communication Protocol* merged into A2A in 2025 and is unrelated to the Agent *Client* Protocol. |
 
 **Agents named in the brief** (state 2026-10-31, to be re-checked when M11 starts):
 
@@ -144,7 +144,7 @@ State of the specifications checked on 2026-10-31:
 | Gemini CLI | `-p`, JSON output; MCP | native (`gemini --acp`) | Google replaced Gemini CLI by Antigravity CLI for unpaid tiers (2026-06); Antigravity has no native ACP as far as known (unverified) |
 | Other ACP agents, local models, own agents | ACP or MCP-capable runners | per agent | local models through a local runner that speaks ACP or through an own agent built on the SDK |
 
-Consequence: IDECraft cannot assume that every agent speaks every protocol. The **agent adapter layer**
+Consequence: Ferris IDEA cannot assume that every agent speaks every protocol. The **agent adapter layer**
 records per agent which protocol is used (native ACP, ACP adapter, headless CLI with JSON output) and
 which features are missing (e.g. no permission callback → the agent runs only in an isolated worktree
 without network rights).
@@ -209,7 +209,7 @@ Messages are records in the project store, not chat inside one model's context w
 artefacts) and a schema. Agents receive them through the capability layer (`agent.messages.*`) and the
 event stream; any agent can be replaced mid-task because the history lives outside it.
 
-Protocols: inside IDECraft, the own message store plus MCP/ACP for tool access is enough. A2A becomes
+Protocols: inside Ferris IDEA, the own message store plus MCP/ACP for tool access is enough. A2A becomes
 relevant only for exchanging tasks with external agent systems; its task and artefact model maps onto the
 task graph.
 
@@ -247,7 +247,7 @@ Every edge carries **origin** (which analyser, test or participant), **version**
 statements from a model are stored only as *hypotheses* with their source until a deterministic check or a
 human confirms them. Deleting or invalidating a source invalidates what depends on it.
 
-The graph is built from what IDECraft already computes (project model, LSP symbols, schema introspection,
+The graph is built from what Ferris IDEA already computes (project model, LSP symbols, schema introspection,
 Git log, test reports); it adds no new analyser of its own in the first step.
 
 ## 6. Security and cost control
@@ -262,7 +262,7 @@ One model for humans and agents, extending SPEC-0053:
 - secrets only in the OS keychain or an external vault, never in project files, logs or model context;
 - sandboxed execution for agent processes where the OS allows it; resource limits (time, memory,
   processes, disk);
-- audit log of every effect with actor and session (extension of `.idecraft/agent-log.jsonl`);
+- audit log of every effect with actor and session (extension of `.ferris-idea/agent-log.jsonl`);
 - rate limits per agent and capability;
 - **central budget management:** token and cost budgets per agent, task, project and time window; a hard
   stop when a budget is exhausted; maximum parallel agent sessions per project and in total;

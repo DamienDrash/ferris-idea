@@ -1,0 +1,6 @@
+### Liste
+GET {{host}}/v1/users
+Authorization: Bearer {{token}}
+
+### Ich
+GET {{host}}/v1/me

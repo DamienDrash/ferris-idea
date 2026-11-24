@@ -1,15 +1,15 @@
 //! A path to a file opens the file's project and the file in an editor (`SPEC-0094` v7 AK-17).
-//! Seen in the window check of 2026-11-15: `idecraft ui <folder>/queries/file.sql` opened a window
+//! Seen in the window check of 2026-11-15: `ferris-idea ui <folder>/queries/file.sql` opened a window
 //! whose project root was the file, shown in the Project tree as a folder, and no editor.
 
 #![cfg(target_os = "macos")]
 
+use ferris_idea_workbench::project_windows::{RecentProjectsFile, open_project, workbenches};
 use gpui::{Focusable, TestAppContext};
-use idecraft_workbench::project_windows::{RecentProjectsFile, open_project, workbenches};
 
 /// A Git repository with `queries/file.sql` and `queries/other.sql`.
 fn repository() -> std::path::PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-ofp-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-ofp-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join(".git")).unwrap();
     std::fs::create_dir_all(root.join("queries")).unwrap();
@@ -39,7 +39,8 @@ fn shown(cx: &mut TestAppContext) -> (std::path::PathBuf, Option<std::path::Path
 /// file in the active, focused tab; a second file of the project opens in that window.
 #[gpui::test]
 fn a_file_opens_its_project_and_itself(cx: &mut TestAppContext) {
-    let recent = std::env::temp_dir().join(format!("idecraft-ofp-recent-{}", std::process::id()));
+    let recent =
+        std::env::temp_dir().join(format!("ferris-idea-ofp-recent-{}", std::process::id()));
     cx.update(|cx| cx.set_global(RecentProjectsFile(recent.clone())));
     let root = repository();
     let file = root.join("queries/file.sql");

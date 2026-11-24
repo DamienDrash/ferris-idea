@@ -32,10 +32,10 @@ impl Kind {
     }
 }
 
-/// The init script that adds `idecraftDownloadSources` to every project of a Gradle build: it asks
+/// The init script that adds `ferrisIdeaDownloadSources` to every project of a Gradle build: it asks
 /// Gradle for the sources and Javadoc artifacts of the components on the resolvable classpaths
-/// (`-PidecraftKinds=sources,javadoc`) and prints what it found.
-pub const GRADLE_SOURCES_SCRIPT: &str = r#"// IDECraft: downloads the sources and documentation of the libraries (SPEC-0149 v3 behaviour 10).
+/// (`-PferrisIdeaKinds=sources,javadoc`) and prints what it found.
+pub const GRADLE_SOURCES_SCRIPT: &str = r#"// Ferris IDEA: downloads the sources and documentation of the libraries (SPEC-0149 v3 behaviour 10).
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.api.artifacts.result.ResolvedArtifactResult
 import org.gradle.jvm.JvmLibrary
@@ -43,12 +43,12 @@ import org.gradle.language.base.artifact.SourcesArtifact
 import org.gradle.language.java.artifact.JavadocArtifact
 
 allprojects { p ->
-    p.tasks.register('idecraftDownloadSources') { t ->
+    p.tasks.register('ferrisIdeaDownloadSources') { t ->
         if (t.metaClass.respondsTo(t, 'notCompatibleWithConfigurationCache', String)) {
             t.notCompatibleWithConfigurationCache('reads the configurations when it runs')
         }
         t.doLast {
-            def kinds = (p.findProperty('idecraftKinds') ?: 'sources').toString().split(',') as List
+            def kinds = (p.findProperty('ferrisIdeaKinds') ?: 'sources').toString().split(',') as List
             def types = []
             if (kinds.contains('sources')) types << SourcesArtifact
             if (kinds.contains('javadoc')) types << JavadocArtifact
@@ -59,7 +59,7 @@ allprojects { p ->
                         if (comp.id instanceof ModuleComponentIdentifier) ids << comp.id
                     }
                 } catch (Exception e) {
-                    println "IDECRAFT-ERROR ${c.name}: ${e.message}"
+                    println "FERRIS_IDEA-ERROR ${c.name}: ${e.message}"
                 }
             }
             if (ids.isEmpty() || types.isEmpty()) return
@@ -71,12 +71,12 @@ allprojects { p ->
                 types.each { ty ->
                     def kind = ty == SourcesArtifact ? 'sources' : 'javadoc'
                     def found = comp.getArtifacts(ty).findAll { it instanceof ResolvedArtifactResult }
-                    if (found.isEmpty()) println "IDECRAFT-MISSING ${kind} ${comp.id.displayName}"
-                    found.each { a -> println "IDECRAFT-FOUND ${kind} ${comp.id.displayName} ${a.file}" }
+                    if (found.isEmpty()) println "FERRIS_IDEA-MISSING ${kind} ${comp.id.displayName}"
+                    found.each { a -> println "FERRIS_IDEA-FOUND ${kind} ${comp.id.displayName} ${a.file}" }
                 }
             }
             result.components.findAll { !result.resolvedComponents.contains(it) }.each { comp ->
-                println "IDECRAFT-ERROR ${comp.id.displayName}: ${comp.failure?.message}"
+                println "FERRIS_IDEA-ERROR ${comp.id.displayName}: ${comp.failure?.message}"
             }
         }
     }
@@ -140,7 +140,7 @@ pub fn download_commands(
         builds.push(build.root_dir.clone());
         let script = crate::buildtasks::write_init_script(
             root,
-            "idecraft-sources.gradle",
+            "ferris-idea-sources.gradle",
             GRADLE_SOURCES_SCRIPT,
         )?;
         let dir = if build.root_dir == "." {
@@ -159,8 +159,8 @@ pub fn download_commands(
             "--console=plain".to_owned(),
             "--init-script".to_owned(),
             script.display().to_string(),
-            "-PidecraftKinds=sources,javadoc".to_owned(),
-            "idecraftDownloadSources".to_owned(),
+            "-PferrisIdeaKinds=sources,javadoc".to_owned(),
+            "ferrisIdeaDownloadSources".to_owned(),
         ];
         out.push(Download {
             dir: build.root_dir,
@@ -423,8 +423,10 @@ mod tests {
     use super::*;
 
     fn tmp(name: &str) -> PathBuf {
-        let d =
-            std::env::temp_dir().join(format!("idecraft-jvmsources-{name}-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!(
+            "ferris-idea-jvmsources-{name}-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
@@ -472,8 +474,11 @@ mod tests {
         assert_eq!(gradle.len(), 1, "once per build");
         assert!(gradle[0].command[0].ends_with("g/gradlew"));
         assert_eq!(gradle[0].command[1], "--offline");
-        assert_eq!(gradle[0].command.last().unwrap(), "idecraftDownloadSources");
-        let script = root.join(".idecraft/gradle/idecraft-sources.gradle");
+        assert_eq!(
+            gradle[0].command.last().unwrap(),
+            "ferrisIdeaDownloadSources"
+        );
+        let script = root.join(".ferris-idea/gradle/ferris-idea-sources.gradle");
         assert!(
             std::fs::read_to_string(script)
                 .unwrap()

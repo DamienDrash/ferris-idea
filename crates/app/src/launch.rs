@@ -1,4 +1,4 @@
-//! Where `idecraft launch` starts, and when a binary counts as started from its app bundle
+//! Where `ferris-idea launch` starts, and when a binary counts as started from its app bundle
 //! (`SPEC-0282` behaviours 6–7).
 
 use std::path::{Path, PathBuf};
@@ -37,7 +37,7 @@ pub fn opens_window(args: &[String]) -> bool {
     match args {
         [cmd, ..] if cmd == "launch" => true,
         [cmd, rest @ ..] if cmd == "ui" => !rest.iter().any(|a| a == "--selftest"),
-        [cmd, path] if cmd == "open" => idecraft_core::format::is_exchange_file(Path::new(path)),
+        [cmd, path] if cmd == "open" => ferris_idea_core::format::is_exchange_file(Path::new(path)),
         _ => false,
     }
 }
@@ -47,7 +47,7 @@ pub fn opens_window(args: &[String]) -> bool {
 /// the most recent project that is still a folder; `None` means asking the user.
 pub fn start_folder(given: Option<&Path>, recent: &[PathBuf], reopen: bool) -> Option<PathBuf> {
     given
-        .map(|p| match idecraft_core::project_root::open_target(p) {
+        .map(|p| match ferris_idea_core::project_root::open_target(p) {
             Ok(target) => target.root,
             Err(_) => p.to_path_buf(),
         })
@@ -67,15 +67,15 @@ mod tests {
     #[test]
     fn bundle_executables_are_recognised() {
         assert!(in_app_bundle(Path::new(
-            "/Applications/IDECraft.app/Contents/MacOS/idecraft"
+            "/Applications/FerrisIDEA.app/Contents/MacOS/ferris-idea"
         )));
         assert!(in_app_bundle(Path::new(
-            "target/bundle/macos/IDECraft.app/Contents/MacOS/idecraft"
+            "target/bundle/macos/FerrisIDEA.app/Contents/MacOS/ferris-idea"
         )));
-        assert!(!in_app_bundle(Path::new("/usr/local/bin/idecraft")));
-        assert!(!in_app_bundle(Path::new("target/release/idecraft")));
-        assert!(!in_app_bundle(Path::new("/x/Contents/MacOS/idecraft")));
-        assert!(!in_app_bundle(Path::new("idecraft")));
+        assert!(!in_app_bundle(Path::new("/usr/local/bin/ferris-idea")));
+        assert!(!in_app_bundle(Path::new("target/release/ferris-idea")));
+        assert!(!in_app_bundle(Path::new("/x/Contents/MacOS/ferris-idea")));
+        assert!(!in_app_bundle(Path::new("ferris-idea")));
     }
 
     #[test]
@@ -107,7 +107,7 @@ mod tests {
 
     #[test]
     fn the_given_folder_wins_then_the_most_recent_existing_project() {
-        let dir = std::env::temp_dir().join(format!("idecraft-launch-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-launch-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let gone = dir.join("gone");
         let given = Path::new("/somewhere");
@@ -129,12 +129,12 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
-    /// SPEC-0094 v7 AK-16: `idecraft launch <file>` starts in the file's project, here the Git
+    /// SPEC-0094 v7 AK-16: `ferris-idea launch <file>` starts in the file's project, here the Git
     /// repository above the file's folder, never in the file.
     #[test]
     fn a_file_starts_in_its_project() {
         let dir = std::env::temp_dir()
-            .join(format!("idecraft-launch-file-{}", std::process::id()))
+            .join(format!("ferris-idea-launch-file-{}", std::process::id()))
             .join("repo");
         std::fs::create_dir_all(dir.join(".git")).unwrap();
         std::fs::create_dir_all(dir.join("queries")).unwrap();
@@ -152,14 +152,14 @@ mod tests {
     #[test]
     fn start_folder_follows_reopen_last_project() {
         let dir =
-            std::env::temp_dir().join(format!("idecraft-launch-reopen-{}", std::process::id()));
+            std::env::temp_dir().join(format!("ferris-idea-launch-reopen-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let recent = std::slice::from_ref(&dir);
         assert_eq!(start_folder(None, recent, true), Some(dir.clone()));
         assert_eq!(
             start_folder(None, recent, false),
             None,
-            "the folder chooser"
+            "the Welcome window (SPEC-0355 behaviour 1)"
         );
         assert_eq!(
             start_folder(Some(&dir), &[], false),

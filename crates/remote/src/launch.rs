@@ -1,6 +1,6 @@
 //! The one start point of the system `ssh` (ADR-0025 v5 section 1a).
 //!
-//! Every SSH path of IDECraft — remote host commands and files, the backend and `idecraft serve`,
+//! Every SSH path of Ferris IDEA — remote host commands and files, the backend and `ferris-idea serve`,
 //! the SSH terminal, database tunnels, Docker over SSH, the Docker Compose CLI and Git — gets its
 //! `ssh` from [`SshCommand`]: the program, the client check (a local `ssh` without a post-quantum
 //! key exchange is refused before anything starts), the shared options first, the route over jump
@@ -23,7 +23,7 @@ pub const SSH_PROGRAM: &str = "ssh";
 pub enum SshPurpose {
     /// Commands and files on a remote host (`SPEC-0121`).
     Host,
-    /// The backend and `idecraft serve` (`SPEC-0158`, `SPEC-0317`).
+    /// The backend and `ferris-idea serve` (`SPEC-0158`, `SPEC-0317`).
     Serve,
     /// An interactive login or a run in a terminal tab.
     Terminal,
@@ -116,7 +116,7 @@ impl SshCommand {
     }
 
     /// Extra arguments before the destination (`-F <config>` and the like); a `-J` among them is
-    /// replaced by IDECraft's own route.
+    /// replaced by Ferris IDEA's own route.
     pub fn extra(mut self, extra: &[String]) -> Self {
         self.extra.extend(extra.iter().cloned());
         self
@@ -136,7 +136,12 @@ impl SshCommand {
     /// jump host with the same options; `ProxyCommand=none` without one; a `ProxyCommand` of the
     /// user's own refused unless allowed), the caller's options, port, login, extra arguments,
     /// `--`, the destination and the remote command.
-    pub fn build(self, destination: &str) -> Result<SshLine, RemoteError> {
+    /// For one of Ferris IDEA's own hosts (`user@alias` too) without a `-F` among the extra
+    /// arguments, `-F <Ferris IDEA's file>` comes first among them (`SPEC-0121` v5 behaviour 1b).
+    pub fn build(mut self, destination: &str) -> Result<SshLine, RemoteError> {
+        if let Some(own) = crate::own_hosts::own_config_for(destination, &self.extra) {
+            self.extra.splice(0..0, ["-F".to_owned(), own]);
+        }
         let connects = self.purpose.connects();
         if connects {
             crate::pq::check_client(&self.program)?;
@@ -187,8 +192,10 @@ impl SshCommand {
     }
 
     /// `GIT_SSH_COMMAND` for Git over SSH: a private stand-in that applies the shared options,
-    /// the route over jump hosts and the one exception for Azure DevOps (`crate::pq_git`). It
-    /// replaces a `GIT_SSH_COMMAND` or `core.sshCommand` of the user.
+    /// the route over jump hosts and the one exception for Azure DevOps (`crate::pq_git`), and
+    /// `-F <Ferris IDEA's file>` for Ferris IDEA's own aliases by the rule of [`SshCommand::build`]
+    /// (`SPEC-0121` v6 behaviour 1b). It replaces a `GIT_SSH_COMMAND` or `core.sshCommand` of the
+    /// user.
     pub fn git_ssh_command() -> String {
         crate::pq_git::git_ssh_command()
     }
@@ -279,6 +286,53 @@ mod tests {
         assert_eq!(&a[a.len() - 4..], ["-J", "a", "--", "box"]);
     }
 
+    /// `-F <Ferris IDEA's file>` for its own aliases only, also as `user@alias`, and not when the
+    /// caller names a `-F` (`SPEC-0121` v5 behaviour 1b).
+    #[test]
+    fn own_hosts_get_ferris_ideas_file_and_nothing_else_does() {
+        let _lock = crate::own_hosts::test_lock();
+        let dir =
+            std::env::temp_dir().join(format!("ferris-idea-launch-own-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let files = crate::HostFiles::in_folders(&dir.join("settings"), &dir.join("home"));
+        let own = crate::OwnHost {
+            alias: "ferris-idea-own-launch".into(),
+            hostname: "127.0.0.1".into(),
+            ..Default::default()
+        };
+        crate::add_host(&files, &own, false).unwrap();
+        crate::set_host_files(Some(files.clone()));
+        let args = |dest: &str, extra: &[String]| {
+            SshCommand::new(SshPurpose::Describe)
+                .args(["-G"])
+                .extra(extra)
+                .build(dest)
+                .unwrap()
+                .args()
+                .to_vec()
+        };
+        let file = files.own.display().to_string();
+        let with = args("ferris-idea-own-launch", &[]);
+        assert!(
+            with.windows(2).any(|w| w == ["-F", file.as_str()]),
+            "{with:?}"
+        );
+        let user_at = args("me@ferris-idea-own-launch", &["-v".into()]);
+        let f = user_at.iter().position(|a| a == "-F").unwrap();
+        assert!(f < user_at.iter().position(|a| a == "-v").unwrap());
+        assert!(!args("ferris-idea-other", &[]).iter().any(|a| a == "-F"));
+        let given = args("ferris-idea-own-launch", &["-F".into(), "/t/cfg".into()]);
+        assert_eq!(given.iter().filter(|a| *a == "-F").count(), 1);
+        assert!(given.windows(2).any(|w| w == ["-F", "/t/cfg"]));
+        crate::set_host_files(None);
+        assert!(
+            !args("ferris-idea-own-launch", &[])
+                .iter()
+                .any(|a| a == "-F")
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn a_missing_client_is_refused_before_anything_starts() {
         let e = SshCommand::new(SshPurpose::Host)
@@ -295,7 +349,7 @@ mod tests {
             .port(Some(2222))
             .login(Some("ops"))
             .remote(["true"])
-            .build("idecraft-no-such-host.invalid")
+            .build("ferris-idea-no-such-host.invalid")
         else {
             eprintln!("skipped: no ssh with a post-quantum key exchange");
             return;
@@ -311,7 +365,7 @@ mod tests {
         assert!(kex < pin && pin < own, "{a:?}");
         assert_eq!(
             &a[a.len() - 3..],
-            ["--", "idecraft-no-such-host.invalid", "true"]
+            ["--", "ferris-idea-no-such-host.invalid", "true"]
         );
         assert_eq!(line.argv()[0], "ssh");
     }

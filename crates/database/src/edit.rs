@@ -48,6 +48,9 @@ pub struct EditTarget {
     /// Columns identifying a row.
     pub key: Vec<String>,
     columns: Vec<String>,
+    /// The declared type of each column, in the order of `columns`: numbers are written and
+    /// compared as numbers (`SPEC-0017` v2 behaviour 7).
+    types: Vec<String>,
 }
 
 impl EditTarget {
@@ -73,12 +76,63 @@ impl EditTarget {
             dialect,
             key,
             columns: table.columns.iter().map(|c| c.name.clone()).collect(),
+            types: table.columns.iter().map(|c| c.data_type.clone()).collect(),
         })
+    }
+
+    /// How the values of column `name` are compared: as text, or as a number of a kind.
+    fn number_kind(&self, name: &str) -> Option<NumberKind> {
+        let at = self.columns.iter().position(|c| c == name)?;
+        number_kind(self.types.get(at)?, self.dialect)
+    }
+
+    /// `value` of column `name` as SQL: a number literal for a numeric column whose value reads
+    /// as a number, else a string literal (or `NULL`).
+    fn value_sql(&self, name: &str, value: &Option<String>) -> String {
+        match (
+            self.number_kind(name),
+            value.as_deref().and_then(number_literal),
+        ) {
+            (Some(_), Some(number)) if self.dialect != Dialect::Sqlite => number.to_owned(),
+            _ => literal(value, self.dialect),
+        }
+    }
+
+    /// NULL-safe equality of column `name` with the value that was loaded.
+    fn same_value(&self, name: &str, old: &Option<String>) -> String {
+        let d = self.dialect;
+        let number = match (
+            self.number_kind(name),
+            old.as_deref().and_then(number_literal),
+        ) {
+            // MySQL and MariaDB send a FLOAT with six significant digits (16777216 as
+            // `16777200`): the loaded text is compared with the server's own text of the value,
+            // which is all the user saw.
+            (Some(NumberKind::Single), Some(number)) if d.mysql_like() => {
+                return format!("CAST({} AS CHAR) <=> '{number}'", quote_identifier(name, d));
+            }
+            (Some(kind), Some(number)) if d != Dialect::Sqlite => Some(match kind {
+                NumberKind::Exact => number.to_owned(),
+                // A float is compared with the loaded text converted to the column's own
+                // precision: 0.1 as a single-precision float is not 0.1 as a double.
+                single_or_double => {
+                    format!("CAST({number} AS {})", float_type(single_or_double, d))
+                }
+            }),
+            _ => None,
+        };
+        same_value(name, old, number, d)
     }
 
     /// Whether the table has column `name`.
     pub fn has_column(&self, name: &str) -> bool {
         self.columns.iter().any(|c| c == name)
+    }
+
+    /// The declared type of column `name`, if known.
+    pub fn column_type(&self, name: &str) -> Option<&str> {
+        let at = self.columns.iter().position(|c| c == name)?;
+        self.types.get(at).map(String::as_str)
     }
 
     fn check_columns<'a>(
@@ -230,16 +284,19 @@ impl EditSet {
         let table = quote_identifier(&self.target.table, d);
         match change {
             Change::Update { key, cells } => {
+                let t = &self.target;
                 let set: Vec<String> = cells
                     .iter()
-                    .map(|(c, _, new)| format!("{} = {}", quote_identifier(c, d), literal(new, d)))
+                    .map(|(c, _, new)| {
+                        format!("{} = {}", quote_identifier(c, d), t.value_sql(c, new))
+                    })
                     .collect();
-                let mut conditions = key_conditions(key, d);
+                let mut conditions = key_conditions(t, key);
                 conditions.extend(
                     cells
                         .iter()
-                        .filter(|(c, ..)| !self.target.key.contains(c))
-                        .map(|(c, old, _)| same_value(c, old, d)),
+                        .filter(|(c, ..)| !t.key.contains(c))
+                        .map(|(c, old, _)| t.same_value(c, old)),
                 );
                 format!(
                     "UPDATE {table} SET {} WHERE {}",
@@ -250,7 +307,10 @@ impl EditSet {
             Change::Insert { values } => {
                 let columns: Vec<String> =
                     values.iter().map(|(c, _)| quote_identifier(c, d)).collect();
-                let literals: Vec<String> = values.iter().map(|(_, v)| literal(v, d)).collect();
+                let literals: Vec<String> = values
+                    .iter()
+                    .map(|(c, v)| self.target.value_sql(c, v))
+                    .collect();
                 format!(
                     "INSERT INTO {table} ({}) VALUES ({})",
                     columns.join(", "),
@@ -258,8 +318,8 @@ impl EditSet {
                 )
             }
             Change::Delete { key, loaded } => {
-                let mut conditions = key_conditions(key, d);
-                conditions.extend(loaded.iter().map(|(c, old)| same_value(c, old, d)));
+                let mut conditions = key_conditions(&self.target, key);
+                conditions.extend(loaded.iter().map(|(c, old)| self.target.same_value(c, old)));
                 format!("DELETE FROM {table} WHERE {}", conditions.join(" AND "))
             }
         }
@@ -508,14 +568,116 @@ pub fn literal(value: &Option<String>, dialect: Dialect) -> String {
     out
 }
 
-fn key_conditions(key: &Values, d: Dialect) -> Vec<String> {
+fn key_conditions(target: &EditTarget, key: &Values) -> Vec<String> {
     key.iter()
-        .map(|(c, v)| format!("{} = {}", quote_identifier(c, d), literal(v, d)))
+        .map(|(c, v)| {
+            format!(
+                "{} = {}",
+                quote_identifier(c, target.dialect),
+                target.value_sql(c, v)
+            )
+        })
         .collect()
 }
 
-/// NULL-safe equality with the loaded value.
-fn same_value(column: &str, old: &Option<String>, d: Dialect) -> String {
+/// What kind of number a column holds (`SPEC-0017` v2 behaviour 7).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum NumberKind {
+    /// Integers and decimals: compared exactly with a number literal.
+    Exact,
+    /// A single-precision float.
+    Single,
+    /// A double-precision float.
+    Double,
+}
+
+/// The kind of number a column of declared type `data_type` holds in `dialect`, or `None` for
+/// any other type. The type's arguments and attributes (`(8,2)`, `unsigned`, `IDENTITY(1,1)`)
+/// are ignored.
+fn number_kind(data_type: &str, dialect: Dialect) -> Option<NumberKind> {
+    let lower = data_type.to_ascii_lowercase();
+    let base = lower.split('(').next().unwrap_or_default().trim();
+    let first = base.split_whitespace().next().unwrap_or_default();
+    Some(match first {
+        "int" | "integer" | "smallint" | "bigint" | "tinyint" | "mediumint" | "int2" | "int4"
+        | "int8" | "serial" | "smallserial" | "bigserial" | "serial2" | "serial4" | "serial8"
+        | "decimal" | "numeric" | "number" | "dec" | "fixed" | "money" | "smallmoney"
+        | "hugeint" | "uhugeint" | "utinyint" | "usmallint" | "uinteger" | "ubigint" => {
+            NumberKind::Exact
+        }
+        // Oracle's FLOAT is a decimal NUMBER with binary precision.
+        "float" if dialect == Dialect::Oracle => NumberKind::Exact,
+        "float" if dialect == Dialect::SqlServer => {
+            // FLOAT(n) with n up to 24 is SQL Server's REAL.
+            match lower
+                .split_once('(')
+                .and_then(|(_, rest)| rest.split(')').next())
+                .and_then(|n| n.trim().parse::<u32>().ok())
+            {
+                Some(n) if n <= 24 => NumberKind::Single,
+                _ => NumberKind::Double,
+            }
+        }
+        "real" if dialect.mysql_like() => NumberKind::Double,
+        "float" | "float4" | "real" | "binary_float" => NumberKind::Single,
+        "double" | "float8" | "binary_double" => NumberKind::Double,
+        _ => return None,
+    })
+}
+
+/// The type a float literal is converted to before comparing, in `dialect`.
+fn float_type(kind: NumberKind, dialect: Dialect) -> &'static str {
+    let single = kind == NumberKind::Single;
+    match dialect {
+        Dialect::PostgreSql if single => "real",
+        Dialect::PostgreSql => "double precision",
+        Dialect::SqlServer if single => "real",
+        Dialect::SqlServer => "float",
+        Dialect::Oracle if single => "BINARY_FLOAT",
+        Dialect::Oracle => "BINARY_DOUBLE",
+        _ if single => "FLOAT",
+        _ => "DOUBLE",
+    }
+}
+
+/// `text` when it is a plain number literal every dialect reads the same way: an optional sign,
+/// digits with at most one decimal point (at least one digit), an optional exponent. Anything
+/// else (`NaN`, `Infinity`, `$1.50`, `1,5`) gives `None` and stays a string literal.
+fn number_literal(text: &str) -> Option<&str> {
+    let b = text.as_bytes();
+    let mut i = usize::from(matches!(b.first(), Some(b'+' | b'-')));
+    let (mut digits, mut point) = (0, false);
+    while let Some(&c) = b.get(i) {
+        match c {
+            b'0'..=b'9' => digits += 1,
+            b'.' if !point => point = true,
+            _ => break,
+        }
+        i += 1;
+    }
+    if digits == 0 {
+        return None;
+    }
+    if matches!(b.get(i), Some(b'e' | b'E')) {
+        i += 1;
+        if matches!(b.get(i), Some(b'+' | b'-')) {
+            i += 1;
+        }
+        let start = i;
+        while b.get(i).is_some_and(u8::is_ascii_digit) {
+            i += 1;
+        }
+        if i == start {
+            return None;
+        }
+    }
+    (i == b.len()).then_some(text)
+}
+
+/// NULL-safe equality with the loaded value; `number` is the value as a number expression when
+/// the column holds numbers.
+fn same_value(column: &str, old: &Option<String>, number: Option<String>, d: Dialect) -> String {
+    let value = number.unwrap_or_else(|| literal(old, d));
     let op = match d {
         Dialect::PostgreSql | Dialect::DuckDb => "IS NOT DISTINCT FROM",
         Dialect::MySql | Dialect::MariaDb => "<=>",
@@ -526,16 +688,14 @@ fn same_value(column: &str, old: &Option<String>, d: Dialect) -> String {
             return format!("{} IS NULL", quote_identifier(column, d));
         }
         Dialect::SqlServer => "=",
-        // Oracle has no NULL-safe operator; `DECODE` treats two NULLs as equal (SPEC-0135).
+        // Oracle has no NULL-safe operator; `DECODE` treats two NULLs as equal (SPEC-0135). It
+        // compares in the type of the value after the column, so a number must stay a number:
+        // as text Oracle writes 0.05 as `.05` (SPEC-0017 v2 behaviour 7).
         Dialect::Oracle => {
-            return format!(
-                "DECODE({}, {}, 1, 0) = 1",
-                quote_identifier(column, d),
-                literal(old, d)
-            );
+            return format!("DECODE({}, {value}, 1, 0) = 1", quote_identifier(column, d));
         }
     };
-    format!("{} {op} {}", quote_identifier(column, d), literal(old, d))
+    format!("{} {op} {value}", quote_identifier(column, d))
 }
 
 /// The table a result can be edited in (`SPEC-0107` behaviour 1): the single table of a plain
@@ -823,6 +983,141 @@ mod tests {
             ["UPDATE \"item\" SET \"note\" = 'x' WHERE \"sku\" = 'A-1' \
               AND DECODE(\"note\", NULL, 1, 0) = 1"]
         );
+    }
+
+    /// A table with numeric columns, typed as `dialect`'s catalogue spells them.
+    fn priced(types: [&str; 3], dialect: Dialect) -> EditSet {
+        let mut t = item();
+        t.columns = ["id", "price", "weight"]
+            .iter()
+            .zip(types)
+            .map(|(name, ty)| Column {
+                data_type: ty.into(),
+                ..column(name, *name != "id")
+            })
+            .collect();
+        t.primary_key = vec!["id".into()];
+        EditSet::new(EditTarget::new(&t, dialect).unwrap())
+    }
+
+    fn price_row(price: Option<&str>, weight: Option<&str>) -> Values {
+        row(&[("id", Some("7")), ("price", price), ("weight", weight)])
+    }
+
+    /// SPEC-0017 v2 AK-8 (OBS-0120 X1): numbers are written and compared as numbers in every
+    /// dialect, floats in the column's own precision; text that is no number stays a string.
+    #[test]
+    fn numbers_are_compared_as_numbers() {
+        let mut o = priced(
+            ["NUMBER(10)", "NUMBER(8,2)", "BINARY_FLOAT"],
+            Dialect::Oracle,
+        );
+        o.set_cell(
+            &price_row(Some("0.05"), Some("1.5")),
+            "price",
+            Some("0.07".into()),
+        )
+        .unwrap();
+        o.set_cell(&price_row(Some("0.05"), Some("1.5")), "weight", None)
+            .unwrap();
+        assert_eq!(
+            o.sql(),
+            [
+                "UPDATE \"item\" SET \"price\" = 0.07, \"weight\" = NULL WHERE \"id\" = 7 \
+              AND DECODE(\"price\", 0.05, 1, 0) = 1 \
+              AND DECODE(\"weight\", CAST(1.5 AS BINARY_FLOAT), 1, 0) = 1"
+            ]
+        );
+        let mut m = priced(
+            ["int", "decimal(38,10) unsigned", "float"],
+            Dialect::MariaDb,
+        );
+        m.set_cell(
+            &price_row(Some("-12.5"), Some("0.1")),
+            "weight",
+            Some("2".into()),
+        )
+        .unwrap();
+        m.set_cell(&price_row(Some("-12.5"), Some("0.1")), "price", None)
+            .unwrap();
+        assert_eq!(
+            m.sql(),
+            [
+                "UPDATE `item` SET `weight` = 2, `price` = NULL WHERE `id` = 7 \
+              AND CAST(`weight` AS CHAR) <=> '0.1' AND `price` <=> -12.5"
+            ]
+        );
+        let mut p = priced(["integer", "numeric(8,2)", "real"], Dialect::PostgreSql);
+        p.delete_row(&price_row(None, Some("1e-05"))).unwrap();
+        assert_eq!(
+            p.sql(),
+            [
+                "DELETE FROM \"item\" WHERE \"id\" = 7 AND \"price\" IS NOT DISTINCT FROM NULL \
+              AND \"weight\" IS NOT DISTINCT FROM CAST(1e-05 AS real)"
+            ]
+        );
+        let mut t = priced(
+            ["int IDENTITY(1,1)", "decimal(38,0)", "float"],
+            Dialect::SqlServer,
+        );
+        t.set_cell(
+            &price_row(Some("4"), Some("0.1")),
+            "price",
+            Some("5".into()),
+        )
+        .unwrap();
+        t.insert_row(row(&[("price", Some("1.25")), ("weight", Some("NaN"))]))
+            .unwrap();
+        assert_eq!(
+            t.sql(),
+            [
+                "UPDATE [item] SET [price] = 5 WHERE [id] = 7 AND [price] = 4",
+                "INSERT INTO [item] ([price], [weight]) VALUES (1.25, N'NaN')",
+            ]
+        );
+        // SQLite compares by column affinity and keeps its string literals.
+        let mut l = priced(["INTEGER", "NUMERIC", "REAL"], Dialect::Sqlite);
+        l.set_cell(&price_row(Some("0.05"), None), "price", Some("1".into()))
+            .unwrap();
+        assert_eq!(
+            l.sql(),
+            ["UPDATE \"item\" SET \"price\" = '1' WHERE \"id\" = '7' AND \"price\" IS '0.05'"]
+        );
+    }
+
+    #[test]
+    fn number_kinds_and_literals() {
+        use NumberKind::{Double, Exact, Single};
+        let kind = number_kind;
+        assert_eq!(kind("numeric(8,2)", Dialect::PostgreSql), Some(Exact));
+        assert_eq!(kind("double precision", Dialect::PostgreSql), Some(Double));
+        assert_eq!(kind("bigint unsigned", Dialect::MySql), Some(Exact));
+        assert_eq!(kind("real", Dialect::MySql), Some(Double));
+        assert_eq!(kind("FLOAT", Dialect::Oracle), Some(Exact));
+        assert_eq!(kind("float", Dialect::SqlServer), Some(Double));
+        assert_eq!(kind("float(24)", Dialect::SqlServer), Some(Single));
+        assert_eq!(kind("real", Dialect::SqlServer), Some(Single));
+        assert_eq!(kind("BINARY_DOUBLE", Dialect::Oracle), Some(Double));
+        assert_eq!(kind("varchar(10)", Dialect::MySql), None);
+        assert_eq!(kind("interval", Dialect::PostgreSql), None);
+        for good in [
+            "0",
+            "-0.05",
+            "+3",
+            ".5",
+            "5.",
+            "1e-05",
+            "1.5E+10",
+            "123456789012345678901234567890.1234567",
+        ] {
+            assert_eq!(number_literal(good), Some(good), "{good}");
+        }
+        for bad in [
+            "", "-", ".", "NaN", "Infinity", "1,5", "$1.50", "1e", "1.2.3", "0x10", "1 OR 1=1",
+            "1;",
+        ] {
+            assert_eq!(number_literal(bad), None, "{bad}");
+        }
     }
 
     #[test]

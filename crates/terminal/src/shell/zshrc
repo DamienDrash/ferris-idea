@@ -1,29 +1,29 @@
-# IDECraft shell integration (SPEC-0206): the user's .zshrc, then OSC 133 prompt marks and OSC 7.
-ZDOTDIR=$IDECRAFT_USER_ZDOTDIR
+# Ferris IDEA shell integration (SPEC-0206): the user's .zshrc, then OSC 133 prompt marks and OSC 7.
+ZDOTDIR=$FERRIS_IDEA_USER_ZDOTDIR
 # The system's zshrc ran while ZDOTDIR named these files: history goes to the user's folder.
-[[ $HISTFILE == "$IDECRAFT_ZDOTDIR/.zsh_history" ]] && HISTFILE=$ZDOTDIR/.zsh_history
+[[ $HISTFILE == "$FERRIS_IDEA_ZDOTDIR/.zsh_history" ]] && HISTFILE=$ZDOTDIR/.zsh_history
 [[ -f $ZDOTDIR/.zshrc ]] && builtin source "$ZDOTDIR/.zshrc"
 # Login shells read .zlogin from the user's folder from here on.
-unset IDECRAFT_ZDOTDIR IDECRAFT_USER_ZDOTDIR
-__idecraft_ran=
-__idecraft_b=$'%{\e]133;B\a%}'
-__idecraft_precmd() {
+unset FERRIS_IDEA_ZDOTDIR FERRIS_IDEA_USER_ZDOTDIR
+__ferris_idea_ran=
+__ferris_idea_b=$'%{\e]133;B\a%}'
+__ferris_idea_precmd() {
   local s=$?
-  [[ -n $__idecraft_ran ]] && builtin printf '\033]133;D;%s\007' "$s"
-  __idecraft_ran=
+  [[ -n $__ferris_idea_ran ]] && builtin printf '\033]133;D;%s\007' "$s"
+  __ferris_idea_ran=
   builtin printf '\033]7;file://%s%s\007' "$HOST" "${PWD// /%20}"
   builtin printf '\033]133;A\007'
   return $s
 }
 # Last, after hooks that rebuild the prompt: mark where the command starts.
-__idecraft_prompt_end() {
+__ferris_idea_prompt_end() {
   local s=$?
-  [[ $PS1 == *"$__idecraft_b" ]] || PS1="$PS1$__idecraft_b"
+  [[ $PS1 == *"$__ferris_idea_b" ]] || PS1="$PS1$__ferris_idea_b"
   return $s
 }
 # The command line goes along percent-encoded byte by byte (`cmdline_url`): the line editor may
 # not show all of it (a terminal of fewer than three rows scrolls one line sideways).
-__idecraft_preexec() {
+__ferris_idea_preexec() {
   builtin emulate -L zsh
   builtin local LC_ALL=C c u= i
   if (( ${#1} <= 4096 )); then
@@ -38,8 +38,8 @@ __idecraft_preexec() {
   else
     builtin printf '\033]133;C\007'
   fi
-  __idecraft_ran=1
+  __ferris_idea_ran=1
 }
 # First, so that it sees the command's status.
-precmd_functions=(__idecraft_precmd $precmd_functions __idecraft_prompt_end)
-preexec_functions=($preexec_functions __idecraft_preexec)
+precmd_functions=(__ferris_idea_precmd $precmd_functions __ferris_idea_prompt_end)
+preexec_functions=($preexec_functions __ferris_idea_preexec)

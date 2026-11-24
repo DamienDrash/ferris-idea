@@ -10,10 +10,10 @@ use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
-use idecraft_pairing::{Side, Store, fingerprint};
+use ferris_idea_pairing::{Side, Store, fingerprint};
 
 /// Set by the parent to the private bus it started; the child refuses to run without it.
-const PRIVATE_BUS: &str = "IDECRAFT_TEST_PRIVATE_BUS";
+const PRIVATE_BUS: &str = "FERRIS_IDEA_TEST_PRIVATE_BUS";
 
 struct Daemons(Vec<Child>);
 
@@ -51,9 +51,9 @@ fn private_env(cmd: &mut Command, root: &Path, bus: &str) {
 #[test]
 fn secret_service_on_a_private_bus() {
     if !found("dbus-daemon") || !found("gnome-keyring-daemon") {
-        // CI installs both and sets IDECRAFT_REQUIRE_TOOLS, so there a missing one fails.
+        // CI installs both and sets FERRIS_IDEA_REQUIRE_TOOLS, so there a missing one fails.
         assert!(
-            std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+            ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
             "dbus-daemon and gnome-keyring-daemon are required"
         );
         eprintln!("skipped: dbus-daemon or gnome-keyring-daemon is not installed");
@@ -94,7 +94,7 @@ fn secret_service_on_a_private_bus() {
     let mut keyring = keyring.spawn().unwrap();
     {
         let mut stdin = keyring.stdin.take().unwrap();
-        stdin.write_all(b"idecraft-test-only").unwrap();
+        stdin.write_all(b"ferris-idea-test-only").unwrap();
     }
     daemons.0.push(keyring);
 
@@ -150,7 +150,7 @@ fn secret_service_child() {
     );
 
     let home = std::path::PathBuf::from(std::env::var_os("HOME").unwrap());
-    let dir = home.join("config/idecraft/remote");
+    let dir = home.join("config/ferris-idea/remote");
     let store = Store::open_secret_service(Side::Serve, &dir).unwrap();
     assert!(
         store.describe().contains("Secret Service"),

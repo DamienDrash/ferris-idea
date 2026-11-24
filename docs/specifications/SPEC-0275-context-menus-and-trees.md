@@ -1,6 +1,8 @@
 # SPEC-0275: Context menus, new files and shared tree behaviour
 
-- **Version:** 21 · **Date:** 2026-11-15 (v21: `create_file` takes `text` and is a dry run unless `dry_run: false`, behaviour 13, SPEC-0006 v54); 2026-11-15 (v20: a secondary click inside a selection keeps it and the caret, behaviour 14b — OBS-0051 L8); 2026-11-14 (v19.1: outside a tree `+` and `*` are typed, behaviour 32, from the window self-test of 15:15: the terminal lost the `+` of `echo $((40+2))`); 2026-11-14 (v19: the first and the last row of a list — Home and End, and the keymap's `List-selectFirstRow` and `List-selectLastRow` — decided in one place for the lists with keyboard selection, and `List-selectFirstRowExtendSelection` and `List-selectLastRowExtendSelection` in the Project tree, behaviours 47 and 48, AK-42 and AK-43; seventh package of docs/research/KEYMAP_COVERAGE.md; v18: Show Source (`ViewSource`) opens the selection of the Project tree or of the Find tool window without moving the focus, and Copy… (`CopyElement`) copies the selected file under a new name, behaviours 45 and 46, AK-40 and AK-41; sixth package of docs/research/KEYMAP_COVERAGE.md; v17: the New popup opens with its first entry chosen, behaviour 44); 2026-11-14 (v16: the file operations of the project tree can be undone and redone from the tree, with a question first; a deleted item is kept inside the project's `.idecraft` folder for it; the MCP tool `file_operation_undo`; behaviours 37–43, AK-34 to AK-38, OBS-0042; v15: Path From Source Root among the tree's copy entries, behaviour 1, SPEC-0332 v2; v14: a click inside a popup never reaches what lies under it, behaviour 28b, AK-33; window check of 2026-11-14: a click on a row of Quick Switch Scheme also moved the editor's caret); 2026-11-13 (v13: the tree keys are keymap actions, Expand All and Collapse All of the focused tree, File Path, New in the same place and Open in Right Split, behaviours 32–36, docs/research/KEYMAP_COVERAGE.md; v12: a Maven or Gradle module in a sub-folder of a project without a build file of its own has its folder roles and compacted packages, SPEC-0048 v7 behaviour 10a; v11: packages are compacted and new files get their package also in source folders recognised from the files of a project without a build file, OBS-0031 finding T1, behaviours 3, 30 and 31; v10: packages in source folders compacted to one row, the option "Compact Middle Packages" and the MCP tool `project_tree`, OBS-0024 L3, behaviours 30 and 31); 2026-11-06 (v9: a submenu near the window edge moves into the window, behaviour 29; v2: Cut, Copy and Paste of files, behaviours 17–23;
+- **Version:** 25 · **Date:** 2026-11-23 (v25: the package icon is the open package node icon of
+  `intellij-community` (`nodes/package`, Apache-2.0) instead of Ferris IDEA's own drawing, and a module
+  file shows the open module-file icon, behaviour 30, AK-49, OBS-0093 T1 and T2); 2026-11-19 (v24: the icon of each Project tree row is in the window's semantic tree, named by its icon, so a driver tells a package, a module file and a folder apart, behaviour 30, AK-48, OBS-0093 T1 and T2); 2026-11-18 (v23: a package in a source or test folder has a package icon of Ferris IDEA's own in the Project tree, behaviour 30, AK-47, OBS-0093 T1); 2026-11-18 (v22: Move (F6) from the Project tree moves the tree's selection, a file or a folder, and is a step of the history, behaviour 49, AK-45; the checks of behaviour 40 run before the question, behaviour 38, AK-46; OBS-0088 U1, U3); 2026-11-15 (v21: `create_file` takes `text` and is a dry run unless `dry_run: false`, behaviour 13, SPEC-0006 v54); 2026-11-15 (v20: a secondary click inside a selection keeps it and the caret, behaviour 14b — OBS-0051 L8); 2026-11-14 (v19.1: outside a tree `+` and `*` are typed, behaviour 32, from the window self-test of 15:15: the terminal lost the `+` of `echo $((40+2))`); 2026-11-14 (v19: the first and the last row of a list — Home and End, and the keymap's `List-selectFirstRow` and `List-selectLastRow` — decided in one place for the lists with keyboard selection, and `List-selectFirstRowExtendSelection` and `List-selectLastRowExtendSelection` in the Project tree, behaviours 47 and 48, AK-42 and AK-43; seventh package of docs/research/KEYMAP_COVERAGE.md; v18: Show Source (`ViewSource`) opens the selection of the Project tree or of the Find tool window without moving the focus, and Copy… (`CopyElement`) copies the selected file under a new name, behaviours 45 and 46, AK-40 and AK-41; sixth package of docs/research/KEYMAP_COVERAGE.md; v17: the New popup opens with its first entry chosen, behaviour 44); 2026-11-14 (v16: the file operations of the project tree can be undone and redone from the tree, with a question first; a deleted item is kept inside the project's `.ferris-idea` folder for it; the MCP tool `file_operation_undo`; behaviours 37–43, AK-34 to AK-38, OBS-0042; v15: Path From Source Root among the tree's copy entries, behaviour 1, SPEC-0332 v2; v14: a click inside a popup never reaches what lies under it, behaviour 28b, AK-33; window check of 2026-11-14: a click on a row of Quick Switch Scheme also moved the editor's caret); 2026-11-13 (v13: the tree keys are keymap actions, Expand All and Collapse All of the focused tree, File Path, New in the same place and Open in Right Split, behaviours 32–36, docs/research/KEYMAP_COVERAGE.md; v12: a Maven or Gradle module in a sub-folder of a project without a build file of its own has its folder roles and compacted packages, SPEC-0048 v7 behaviour 10a; v11: packages are compacted and new files get their package also in source folders recognised from the files of a project without a build file, OBS-0031 finding T1, behaviours 3, 30 and 31; v10: packages in source folders compacted to one row, the option "Compact Middle Packages" and the MCP tool `project_tree`, OBS-0024 L3, behaviours 30 and 31); 2026-11-06 (v9: a submenu near the window edge moves into the window, behaviour 29; v2: Cut, Copy and Paste of files, behaviours 17–23;
   v3: several selected items in the project tree, the package of a pasted Java or Kotlin file,
   behaviours 24–27; v4: every popup closes on a click outside or when the window loses the focus,
   behaviour 28; v5: the editor's run and debug items name the class and method that run and show the
@@ -47,7 +49,9 @@
   makes it again; a deleted file comes back with its content; the tab of a file that goes
   closes), GEN (file managers undo file operations; a kept copy is restored only where it came
   from), SPEC-0044 (Local History and its folder), SPEC-0057 v8 behaviour 29 (where undo goes),
-  SPEC-0053 (agent rights), ADR-0008, CLAUDE.md rule 12 (the more secure option)
+  SPEC-0053 (agent rights), ADR-0008, CLAUDE.md rule 12 (the more secure option);
+  v25: OSS (`JetBrains/intellij-community` at `d4018fb`: the platform gives a package the icon
+  `Package`, New UI asset `platform/icons/src/expui/nodes/package.svg`, already bundled unchanged)
 - **Feature matrix rows:** F-001 (project tree), F-011 (undo and redo of file operations), F-002 (editor), F-020 (project tree), F-050 (database tree)
 
 ## Purpose
@@ -141,9 +145,9 @@ way. Agents create, rename and delete files over MCP with the same rules.
     submenu (the file manager with the file selected, a terminal in the file's folder), Local
     History, Compare with Clipboard and Git. Compare with Clipboard opens the diff view with the
     clipboard text on the left and the selection (the whole file without one) on the right; with
-    an empty clipboard it only says so in the status bar. Items whose action IDECraft cannot carry
+    an empty clipboard it only says so in the status bar. Items whose action Ferris IDEA cannot carry
     out for the file (Generate outside Java and Kotlin) say why in the status bar. The menu does not
-    list kinds of runs or diagrams IDECraft lacks. [OBS-0011, OSS, GEN]
+    list kinds of runs or diagrams Ferris IDEA lacks. [OBS-0011, OSS, GEN]
 14c. **(v8) Git submenu of the editor and the project tree's file:** in this order: Annotate with
     Git Blame (Close Annotations while shown), then Commit File… (opens the Commit tool
     window with only this file ticked), Rollback… (asks whether to roll the file back to HEAD),
@@ -214,10 +218,10 @@ way. Agents create, rename and delete files over MCP with the same rules.
     background, with the language server's edits for the move (for Java the package statement,
     imports and qualified references in other files) applied together with the move; open files
     change through their editors; the Local History records it as behaviour 22 says. Wherever the
-    server's edits leave the moved file's package line as it was, IDECraft rewrites the line to the
+    server's edits leave the moved file's package line as it was, Ferris IDEA rewrites the line to the
     package of the new folder (as in behaviour 3: replaced, added before the first line of code, or
     removed in a source root's top folder) — but only when the line matched the package of the old
-    folder, so a source layout IDECraft does not recognise is never "corrected". Kotlin servers in use offer no edits for a move, so for Kotlin only the
+    folder, so a source layout Ferris IDEA does not recognise is never "corrected". Kotlin servers in use offer no edits for a move, so for Kotlin only the
     package line follows and references in other files are not updated: rewriting imports by name
     without the server's knowledge of the symbols could change unrelated code. A Java or Kotlin file
     pasted under another name, and a copied one, get the package line of their folder too (no
@@ -271,7 +275,7 @@ way. Agents create, rename and delete files over MCP with the same rules.
     `util.deep`, OBS-0031 finding T1) a package
     — a folder below such a folder — that holds nothing but one sub-folder shares its row with that
     sub-folder. The row is named with dots (`lab.shop.core`) and stands one level below the source
-    folder. The reference showed `lab.shop.core` as one row below the source folder where IDECraft
+    folder. The reference showed `lab.shop.core` as one row below the source folder where Ferris IDEA
     showed three nested folders. [OBS-0024 item 1, L3]
     - **Where a row ends:** at a package that holds a file, more than one sub-folder, or nothing
       (an empty innermost package is part of the row). So `lab/shop/core` and `lab/shop/app` give
@@ -304,6 +308,20 @@ way. Agents create, rename and delete files over MCP with the same rules.
       from outside, a file created in a package in the middle splits the row there and both parts
       stay expanded as far as the row was; a first sub-folder in an empty innermost package
       lengthens the row. [GEN]
+    - **Package icon (v23):** a package — a folder without a role of its own below a source or
+      test folder, compacted or not — shows a package icon of Ferris IDEA's own drawing (a box)
+      instead of the folder icon; the source folder itself, folders with a role and folders in
+      resource folders keep theirs. Before v23 packages showed the plain folder icon; the
+      reference shows a package icon of its own (OBS-0093 T1). [OBS-0093] **v25:** the icon is
+      the package node icon of the open New UI icon set (`nodes/package`, Apache-2.0, unchanged),
+      which the open platform gives a package; v23 and v24 showed an own drawing. A module file
+      shows the open module-file icon `fileTypes/ideaModule` (SPEC-0004 v13). [OSS]
+    - **The icon in the semantic tree (v24):** the icon of every row — package, module file
+      (`.iml`, SPEC-0004 v12 behaviour 15), folder role, folder or file — is a node of the window's
+      semantic tree (SPEC-0319 behaviour 1): role image, its name the icon's key (for example
+      `ferris-idea/package`, `ferris-idea/module`, `ferris-idea/sourceRoot`), test id `tree-icon-<row
+      name>`. A driver and the window tests read which icon a row shows without looking at
+      pixels. It is recorded only while the tree is wanted (SPEC-0319 behaviour 7). [GEN]
     - **Option:** the Project tool window's ⋮ menu starts with "Compact Middle Packages", ticked
       while on; on by default, as in the reference (its default settings showed the compacted
       row). It is kept in the IDE settings as `project_view.compact_middle_packages` and applies to
@@ -373,14 +391,14 @@ way. Agents create, rename and delete files over MCP with the same rules.
     made in its Project tree, newest last: New (a file of any kind, a folder, also several
     folders on the way of `a/b/c.txt`, behaviours 3–4), Rename (behaviour 5), Paste of copied
     items (behaviour 19), Paste of cut items (a move, behaviours 20–21, with the package line
-    of behaviour 26) and Delete (behaviours 6 and 25). An operation on several selected items
+    of behaviour 26), (v22) Move (F6, behaviour 49) and Delete (behaviours 6 and 25). An operation on several selected items
     is one step. A new operation drops the steps that were undone and not redone. The history
     holds the last 100 steps, lives in memory and ends with the project window.
     Not in the history: a cut Java or Kotlin file that moves as the Move refactoring (behaviour
     26; its text edits are steps of the editors, SPEC-0193), operations in a remote project
     (SPEC-0317), operations made by the agents' file tools (`create_file`, `rename_file`,
     `move_file`, `copy_file`, `delete_file`: they do not go through the window) and anything
-    done outside IDECraft. [OBS-0042, GEN]
+    done outside Ferris IDEA. [OBS-0042, GEN]
 38. **v16 – Undo and redo from the tree:** while the Project tree has the keyboard focus,
     `$Undo` (⌘Z) and `$Redo` (⇧⌘Z) — by key or from the Edit menu — mean the
     newest step of this history that is not undone, and the step undone last (SPEC-0057 v8
@@ -389,7 +407,13 @@ way. Agents create, rename and delete files over MCP with the same rules.
     ("Undo New File "notes/a.txt"? The file is taken out of the project and its tab closes.").
     Its buttons are the action (Undo or Redo; Return) and Cancel (Escape); Cancel changes
     nothing and the step stays where it is. While the question is shown no other key reaches
-    the window. [OBS-0042; the wording is IDECraft's own]
+    the window. [OBS-0042; the wording is Ferris IDEA's own]
+    (v22) The checks of behaviour 40 run before the question: a step that would be refused —
+    changed since, unsaved changes, occupied, gone, or its kept copy unusable — is not offered;
+    no question is shown and the status bar names the item and the reason at once, the step
+    stays in the history. The checks run once more when the action is chosen, since the disk
+    may change while the question is open. Before v22 the question came first and the refusal
+    only after it was answered (OBS-0088 U3). [OBS-0088; GEN]
 39. **v16 – What undo and redo do:**
     - **New:** undo takes the created file or folder out of the project and removes the folders
       the same step created on its way, if they are empty; redo puts it back with the content it
@@ -411,7 +435,7 @@ way. Agents create, rename and delete files over MCP with the same rules.
     - **Changed since:** the item must be what the operation left: the same entries with the
       same names and kinds, every file with the same bytes, every link with the same target.
       (For an item of more than 64 MiB the sizes and modification times of its files are
-      compared instead of their bytes.) A file edited and saved in IDECraft, or written by
+      compared instead of their bytes.) A file edited and saved in Ferris IDEA, or written by
       another program, since the operation is therefore never taken out of the project, moved
       back or deleted again by undo or redo.
     - **Unsaved changes:** an open editor of an item of the step with unsaved changes refuses
@@ -422,8 +446,8 @@ way. Agents create, rename and delete files over MCP with the same rules.
     A step that was refused can be tried again after its reason is gone. [GEN; CLAUDE.md
     rule 12]
 41. **v16 – Where a deleted item is kept:** Delete from the tree moves the item into the undo
-    store of the project, `.idecraft/history/undo/` inside the project folder (machine-local
-    state beside the Local History, ignored by Git through `.idecraft/.gitignore`, SPEC-0069
+    store of the project, `.ferris-idea/history/undo/` inside the project folder (machine-local
+    state beside the Local History, ignored by Git through `.ferris-idea/.gitignore`, SPEC-0069
     behaviour 3), instead of removing it; the same store takes what undo of New and of a copy
     takes out of the project. Every file is recorded in the Local History before, as before v16
     (IMP-0275), so `restore_local_revision` still brings a text file back when the store no
@@ -431,7 +455,7 @@ way. Agents create, rename and delete files over MCP with the same rules.
     - **Only from the store, only into the project:** undo restores an item from this store and
       from nowhere else — never from the system's trash, a temporary folder or a path given by
       anyone — and only to the path inside the project it was deleted from. The store's folders
-      must be real folders inside the project folder; if `.idecraft`, `history` or `undo` is a
+      must be real folders inside the project folder; if `.ferris-idea`, `history` or `undo` is a
       link or leads out of the project, nothing is kept there and nothing is restored from
       there. Links inside a kept item are kept as links and never followed.
     - **Checked:** a kept item is restored only if it is still what was put into the store
@@ -444,7 +468,7 @@ way. Agents create, rename and delete files over MCP with the same rules.
     - **Bounded:** what belongs to a step is removed from the store when the step leaves the
       history (the 100-step limit, a new operation after an undo, the end of the project
       window). When a project window opens, what an earlier session left in the store is
-      removed. A second IDECraft process on the same project folder thereby empties the first
+      removed. A second Ferris IDEA process on the same project folder thereby empties the first
       one's store; the first one's undo of a delete is then refused (the item is gone from the
       store), never wrong.
     [GEN; SPEC-0044; CLAUDE.md rule 12]
@@ -458,7 +482,7 @@ way. Agents create, rename and delete files over MCP with the same rules.
     `copy`, `delete`) and `paths` relative to the project folder; it needs no right. `undo` and
     `redo` take the next step without the question of behaviour 38 — the user-granted `write`
     right is the consent — under every check of behaviours 40 and 41; a refusal is an error
-    with the reason and changes nothing. Both are logged in `.idecraft/agent-log.jsonl` (time,
+    with the reason and changes nothing. Both are logged in `.ferris-idea/agent-log.jsonl` (time,
     tool, action, whether it was done, and the status line or the reason). The reply is the
     history after the call and `done`, the status line. The tool takes no path and no content:
     an agent can only take back or repeat what was done in the tree. It is served by the window
@@ -537,6 +561,23 @@ way. Agents create, rename and delete files over MCP with the same rules.
     the field). [OSS: ids and chords; GEN: a range from the anchor, and one row where a list
     holds one selection. What the reference's lists do with these chords was not observed.]
 
+49. **v22 – Move (F6) from the Project tree:** while the Project tree has the keyboard focus,
+    `Move` (F6) acts on the tree's selected row — a file or a folder — not on the editor's file;
+    on the project folder, an extra node or several selected rows it does nothing but say so in
+    the status bar. The field of SPEC-0114 behaviour 1 opens with the item's folder. A file
+    moves as SPEC-0114 describes (references updated by its language server and by Ferris IDEA);
+    a folder moves plainly with everything in it, as a cut and pasted folder does (behaviour 21;
+    no package lines or references change, Move Package is out of scope). Either way the move is
+    one step of the history (behaviour 37): undo asks the question of behaviour 38 and puts the
+    item back where it was, a file with the text it had before the move (a package line the
+    move changed comes back), under every check of behaviour 40 — a file changed since the move,
+    or a new item at its old place, refuses the step. Edits the move made in other files are not
+    part of the step: open files changed through their editors (one editor undo step each),
+    closed ones are in the Local History, as for the Move refactoring of behaviour 26. Before v22
+    F6 in the tree moved the editor's file, and the move was no step: ⌘Z in the tree said there
+    was nothing to undo (OBS-0088 U1). Drag and drop in the tree stays out of scope. [OBS-0088,
+    OBS-0042; GEN]
+
 ## Acceptance criteria
 - **AK-1** Given the menu models, when built for a file, a folder, the project folder, the editor
   with and without selection and a runnable file, and every kind of database row, then the items and
@@ -556,7 +597,7 @@ way. Agents create, rename and delete files over MCP with the same rules.
 - **AK-6** Given the window, when real right clicks and Control-clicks reach a tab, a stripe button,
   a project tree row, the editor text and a database row, then each opens its menu; New › SQL File
   with a name creates and opens the file, the same name again is refused, Rename and Delete work, ⌘N
-  opens New, the arrow toggles, a click selects and a double click opens. (`idecraft ui --selftest`:
+  opens New, the arrow toggles, a click selects and a double click opens. (`ferris-idea ui --selftest`:
   `mouse_steps`)
 - **AK-7** Given MCP, when `create_file`, `rename_file` and `delete_file` run, then they behave as
   behaviours 3, 5, 6 and 7. (`crates/mcp/tests/it/protocol.rs`: `creates_renames_and_deletes_files`)
@@ -599,7 +640,7 @@ way. Agents create, rename and delete files over MCP with the same rules.
   Paste, Delete and Copy Path on them, and pasting a cut Java class into another package behave as
   above on the project owner's Mac.
 - **AK-18 (v4)** Given the menu of a ▶ marker, when a real click lands on the editor text, then the
-  menu is closed (`idecraft ui --selftest`: the Java steps); given the registry of popups, then
+  menu is closed (`ferris-idea ui --selftest`: the Java steps); given the registry of popups, then
   every popup of behaviour 28 is in it once (`popups::tests::every_popup_is_registered_once`).
 - **AK-19 (v4)** Given the hand test (round 5, Nr. 8 and Nr. 208), then a click outside the ▶ menu,
   outside ⌃⌥R, Go to Line and Recent Files closes them on the project owner's Mac, and switching to another
@@ -615,7 +656,7 @@ way. Agents create, rename and delete files over MCP with the same rules.
   (`context_menu::tests::editor_menu_without_selection_hides_cut_and_copy`); given a clipboard text
   and a file, then the diff rows compare them, and an empty clipboard gives no diff
   (`context_menu::tests::clipboard_comparison`); given the window, then a right click without a
-  selection has no Cut and has Compare with Clipboard (`idecraft ui --selftest`: `mouse_steps`).
+  selection has no Cut and has Compare with Clipboard (`ferris-idea ui --selftest`: `mouse_steps`).
 
 - **AK-22 (v7)** Given a window whose popups closed while inactive and no focused element, when it
   becomes active again, then the editor holds the focus (`WorkbenchView::render`, refocus on
@@ -640,6 +681,21 @@ way. Agents create, rename and delete files over MCP with the same rules.
   with a role is never inside a row and an error below a row marks it; (i) no project model, a plain
   tree and a remote tree are not compacted
   (`project_tree::compact_tests::*`, nine tests).
+- **AK-47 (v23, behaviour 30)** Given the Maven project of AK-25, then
+  `project_tree::compact_tests::packages_in_source_folders_are_one_row` shows `is_package` true for
+  the rows `lab.shop.core`, `util`, `lab.shop`, `app` and `core`, and false for the source folders,
+  the folders above them, the folders in the resources and outside, and a file; the tree draws
+  `ferris-idea/package` for those rows (`icons::tests` checks the icon in light and dark).
+- **AK-48 (v24, behaviour 30)** Given a window of the test harness on a project whose `.idea`
+  names a module file `app.iml` with source folder `code` and package `code/shop`, when the tree
+  shows them, then the semantic tree has an image node `tree-icon-shop` named `ferris-idea/package`,
+  `tree-icon-app.iml` named `ferris-idea/module`, `tree-icon-code` named `ferris-idea/sourceRoot` and
+  `tree-icon-gen` (a plain folder) named `nodes/folder`
+  (`crates/workbench/tests/it/idea_project_tree.rs`).
+- **AK-49 (v25, behaviour 30)** Given the window of AK-48, then `tree-icon-shop` is named
+  `nodes/package` and `tree-icon-app.iml` `fileTypes/ideaModule`; the module folder `library`
+  keeps `nodes/module` (`crates/workbench/tests/it/idea_project_tree.rs`). Supersedes the icon
+  names `ferris-idea/package` and `ferris-idea/module` in AK-47 and AK-48.
 - **AK-26 (v10)** Given the tree model, then its MCP view names the folders of every row and its
   actions take any folder of a row (`project_tree::compact_tests::the_state_names_the_folders_of_a_row`);
   given MCP, then `project_tree` passes `list`, `expand`, `collapse`, `select` and `compact` to the
@@ -707,7 +763,7 @@ way. Agents create, rename and delete files over MCP with the same rules.
   history, then each undo puts the disk back as it was before the step, byte for byte, and each
   redo as it was after it; a folder with files and an empty folder come back after Delete;
   several items are one step; a new operation drops the undone steps and the store holds
-  nothing of dropped steps (unit tests `idecraft_core::file_undo::tests`:
+  nothing of dropped steps (unit tests `ferris_idea_core::file_undo::tests`:
   `create_is_undone_and_redone`, `rename_and_move_are_undone_and_redone`,
   `a_deleted_file_and_folder_come_back`, `several_items_are_one_step`,
   `a_new_operation_drops_the_undone_steps`).
@@ -717,7 +773,7 @@ way. Agents create, rename and delete files over MCP with the same rules.
   and the reason, the disk is unchanged and the step is still the next one; when the reason is
   gone the same undo works (`a_changed_file_refuses_undo`, `an_occupied_place_refuses_undo`,
   `a_changed_store_refuses_undo`). Given an item larger than the limit, Delete removes it,
-  keeps nothing and reports that (`too_large_a_delete_is_not_kept`). Given `.idecraft/history`
+  keeps nothing and reports that (`too_large_a_delete_is_not_kept`). Given `.ferris-idea/history`
   is a link to a folder outside the workspace, Delete keeps nothing there and reports that
   (`the_store_never_leaves_the_workspace`).
 - **AK-36 (v16, behaviours 38, 39, 42)** In a window of the test harness
@@ -780,6 +836,17 @@ way. Agents create, rename and delete files over MCP with the same rules.
   `mouse::tests::a_control_click_is_no_primary_click_on_the_mac` (the editor's primary handler leaves
   such a click to the menu).
 
+- **AK-45 (v22, behaviour 49)** In a window of the test harness
+  (`crates/workbench/tests/it/window_check_gaps_1118.rs::a_move_from_the_tree_is_undone_from_the_tree`):
+  with `notes.txt` selected in the tree and another file open in the editor, F6 and `docs`
+  move `notes.txt` (not the open file) into `docs`; ⌘Z in the tree asks, and the action puts it
+  back; ⇧⌘Z moves it again; a folder moved with F6 is undone the same way; after a move, a new
+  `notes.txt` at the old place refuses the undo. Unit test
+  `ferris_idea_core::file_undo::tests::the_next_step_is_checked_without_touching_it`.
+- **AK-46 (v22, behaviour 38)** In the same file
+  (`a_refused_step_asks_nothing`): after a rename and a new file at the old name, ⌘Z in the
+  tree shows no question, the status bar names the file, and the step is still the next one.
+
 ## Out of scope
 - (v19) Page Up and Page Down in the lists of behaviour 47; the first and last row in the
   lists named there as not among them; several selected rows in a list other than the
@@ -789,7 +856,7 @@ way. Agents create, rename and delete files over MCP with the same rules.
   agents' file tools, and of operations in other trees; a history of file operations that
   survives closing the project window; a warning in the Delete question before an item larger
   than the store's limit is removed (the status bar says it afterwards).
-- Run with coverage, diagrams and the remaining run kinds of the reference's editor menu (IDECraft
+- Run with coverage, diagrams and the remaining run kinds of the reference's editor menu (Ferris IDEA
   has no such action yet).
 - Drag and drop, pasting files copied in Finder into the tree.
 - Moving a folder of Java or Kotlin classes with their package lines and references (Move Package).
@@ -800,7 +867,7 @@ way. Agents create, rename and delete files over MCP with the same rules.
 - (v8: Annotate and the file's history are in the Git submenu, behaviour 14c.) The reference's
   further Git entries (Compare with Revision…, Show History for Selection, Add to .gitignore,
   Repository › …).
-- Drag and drop in trees.
+- Drag and drop in trees (v22: Move from the tree is F6, behaviour 49).
 - (v13) A list of the file's parent folders to choose one to show (`ShowFilePath` shows the file
   itself); `OpenInRightSplit` by its mouse shortcut (⌥ with a double click); `ExpandAll` in the
   Database tree, and both actions in the trees not named in behaviour 33 (hierarchies, File
@@ -812,17 +879,17 @@ way. Agents create, rename and delete files over MCP with the same rules.
 
 ## Known deviations from the reference
 - (v16, OBS-0042) **Undo of a file operation is refused when the item changed since**, and a
-  deleted item comes back only from IDECraft's own store inside the project, up to 64 MiB
+  deleted item comes back only from Ferris IDEA's own store inside the project, up to 64 MiB
   (behaviours 40 and 41). What the reference does with a file that changed, where it keeps
   deleted content and up to which size was not observed. The question before undo and redo
-  uses IDECraft's own words and names what will happen to the file; its buttons are named
+  uses Ferris IDEA's own words and names what will happen to the file; its buttons are named
   after the action instead of a generic confirmation.
 - (v16) Undo and redo of file operations are offered only while the Project tree has the
   focus; whether the reference's editor undo reaches them was not observed. The history ends
   with the project window; whether the reference's survives a restart was not observed.
 - **Delete keeps a Local History revision of every deleted file and names how many files and
   folders a folder takes with it** (IMP-0275, IMP-0276), instead of a generic confirmation.
-- The New menu is one flat list of the kinds IDECraft supports, not the reference's grouping by
+- The New menu is one flat list of the kinds Ferris IDEA supports, not the reference's grouping by
   plugin.
 - A click outside an open context menu closes it and goes no further (also on macOS, where the
   reference passes it on in some places).

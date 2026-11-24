@@ -4,11 +4,11 @@
 
 use std::time::Duration;
 
-use idecraft_languages::{lsp, pool};
+use ferris_idea_languages::{lsp, pool};
 
 fn skip(reason: &str) {
     assert!(
-        std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+        ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
         "required tool missing: {reason}"
     );
     eprintln!("skipped: {reason}");
@@ -23,7 +23,7 @@ async fn pooled_vue_diagnostics_are_complete() {
         skip("vue-language-server not installed");
         return;
     }
-    let root = std::env::temp_dir().join(format!("idecraft-vue-pool-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-vue-pool-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     std::fs::write(root.join("package.json"), "{\"name\": \"app\"}\n").unwrap();

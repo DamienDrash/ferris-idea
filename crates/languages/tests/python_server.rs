@@ -6,11 +6,11 @@ use std::path::Path;
 use std::process::Command;
 use std::time::{Duration, Instant};
 
-use idecraft_languages::{lsp, pool, python_server};
+use ferris_idea_languages::{lsp, pool, python_server};
 
 fn skip(reason: &str) {
     assert!(
-        std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+        ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
         "required tool missing: {reason}"
     );
     eprintln!("skipped: {reason}");
@@ -55,7 +55,7 @@ async fn pyright_follows_the_selected_interpreter() {
         skip("pyright-langserver not installed");
         return;
     }
-    let root = std::env::temp_dir().join(format!("idecraft-pyserver-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-pyserver-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     let root = root.canonicalize().unwrap();
@@ -81,7 +81,7 @@ async fn pyright_follows_the_selected_interpreter() {
     let text = "import demo_only_in_a\n\nprint(demo_only_in_a.hello())\n";
     std::fs::write(&file, text).unwrap();
 
-    idecraft_core::save_interpreter(&root, Some(&a)).unwrap();
+    ferris_idea_core::save_interpreter(&root, Some(&a)).unwrap();
     assert_eq!(
         python_server::settings(&root)["python"]["pythonPath"],
         a.display().to_string()
@@ -95,13 +95,13 @@ async fn pyright_follows_the_selected_interpreter() {
     );
 
     // Switching to the empty environment marks the import; switching back clears it.
-    idecraft_core::save_interpreter(&root, Some(&b)).unwrap();
+    ferris_idea_core::save_interpreter(&root, Some(&b)).unwrap();
     assert_eq!(python_server::interpreter_changed(&root), 1);
     assert!(
         wait_for(&file, &mut since, unresolved).await,
         "env_b: the import is unresolved"
     );
-    idecraft_core::save_interpreter(&root, Some(&a)).unwrap();
+    ferris_idea_core::save_interpreter(&root, Some(&a)).unwrap();
     assert_eq!(python_server::interpreter_changed(&root), 1);
     assert!(
         wait_for(&file, &mut since, |d| !unresolved(d)).await,
@@ -122,7 +122,7 @@ async fn pyright_follows_the_selected_interpreter() {
     std::fs::create_dir_all(&installed_pkg).unwrap();
     std::fs::write(installed_pkg.join("__init__.py"), "X = 1\n").unwrap();
     assert_eq!(
-        pool::restart_language(&root, idecraft_languages::LanguageId::Python),
+        pool::restart_language(&root, ferris_idea_languages::LanguageId::Python),
         1
     );
     pool::sync_text(&root, &file, fresh).await.unwrap();

@@ -9,7 +9,7 @@
 - **Feature matrix rows:** F-073
 
 ## Purpose
-Change a function's parameters once and have the declaration and every call follow — with IDECraft's
+Change a function's parameters once and have the declaration and every call follow — with Ferris IDEA's
 own logic, so it works with every language server that finds references, not only with servers that
 offer such a refactoring.
 

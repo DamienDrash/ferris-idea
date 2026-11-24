@@ -410,7 +410,7 @@ fn once_into(
         }
     }
     if !has(headers, "user-agent") {
-        head.push_str("User-Agent: IDECraft\r\n");
+        head.push_str("User-Agent: FerrisIDEA\r\n");
     }
     if !has(headers, "connection") {
         head.push_str("Connection: close\r\n");
@@ -562,7 +562,7 @@ pub fn send_once(request: &ResolvedRequest, timeout: Duration) -> Result<Respons
 }
 
 /// Sends `request`, following redirects (behaviours 4, 5, 7). No `Accept-Encoding` is added: the
-/// callers are parts of IDECraft that read the body as it arrives.
+/// callers are parts of Ferris IDEA that read the body as it arrives.
 pub fn send(request: &ResolvedRequest, timeout: Duration) -> Result<Response, HttpError> {
     send_with(
         request,
@@ -715,7 +715,7 @@ pub fn fetch_small_text(
             headers: vec![
                 (
                     "User-Agent".into(),
-                    format!("IDECraft/{}", env!("CARGO_PKG_VERSION")),
+                    format!("FerrisIDEA/{}", env!("CARGO_PKG_VERSION")),
                 ),
                 ("Accept".into(), "text/plain, application/toml, */*".into()),
             ],

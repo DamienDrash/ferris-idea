@@ -1,5 +1,5 @@
 //! The highlighting level of a file (`SPEC-0070` v6 behaviour 11): none, syntax, essential or
-//! all, kept per project in `.idecraft/highlighting.json`.
+//! all, kept per project in `.ferris-idea/highlighting.json`.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 /// The file the levels are kept in, below the project root.
-pub const LEVELS_FILE: &str = ".idecraft/highlighting.json";
+pub const LEVELS_FILE: &str = ".ferris-idea/highlighting.json";
 
 /// How much of a file's problems the editor shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Serialize, Deserialize)]
@@ -163,7 +163,7 @@ mod tests {
     // SPEC-0070/AK-6 (the stored levels)
     #[test]
     fn levels_are_kept_per_file() {
-        let dir = std::env::temp_dir().join(format!("idecraft-hl-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-hl-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("src/A.java");

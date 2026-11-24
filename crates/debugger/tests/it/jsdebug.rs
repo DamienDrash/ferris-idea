@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use idecraft_debugger::{
+use ferris_idea_debugger::{
     DebugSession, JsDebugServer, SourceBreakpoint, StopState, known_adapters, node_launch,
 };
 use serde_json::json;
@@ -22,7 +22,7 @@ fn node_program_stops_at_breakpoint() {
         eprintln!("skipped: node or js-debug is not installed");
         return;
     };
-    let dir = std::env::temp_dir().join(format!("idecraft-jsdebug-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-jsdebug-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let dir = std::fs::canonicalize(&dir).unwrap();
@@ -92,7 +92,7 @@ fn browser_page_stops_at_breakpoint() {
         eprintln!("skipped: node or js-debug is not installed");
         return;
     };
-    let Some(chrome) = idecraft_debugger::chrome() else {
+    let Some(chrome) = ferris_idea_debugger::chrome() else {
         eprintln!("skipped: no Chrome or Chromium");
         return;
     };
@@ -109,13 +109,14 @@ fn browser_page_stops_at_breakpoint() {
             drop(session);
         }
         assert!(
-            settles(|| idecraft_debugger::lifetime::using_profile(&profile).is_empty()),
+            settles(|| ferris_idea_debugger::lifetime::using_profile(&profile).is_empty()),
             "a browser still uses the profile: {:?}",
-            idecraft_debugger::lifetime::using_profile(&profile)
+            ferris_idea_debugger::lifetime::using_profile(&profile)
         );
-        assert!(settles(
-            || idecraft_debugger::lifetime::command_of(server).is_none()
-        ));
+        assert!(settles(|| ferris_idea_debugger::lifetime::command_of(
+            server
+        )
+        .is_none()));
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -161,7 +162,7 @@ fn page_session(
     let address = server.address();
     let pid = server.pid();
     let breakpoints = BTreeMap::from([(script, vec![SourceBreakpoint::from(3)])]);
-    let launch = idecraft_debugger::browser_launch(
+    let launch = ferris_idea_debugger::browser_launch(
         &format!("file://{}", dir.join("index.html").display()),
         dir,
         chrome,
@@ -204,7 +205,7 @@ fn page_session(
 #[cfg(unix)]
 #[test]
 fn a_killed_owner_leaves_no_browser_or_adapter() {
-    const ROLE: &str = "IDECRAFT_TEST_PAGE_OWNER";
+    const ROLE: &str = "FERRIS_IDEA_TEST_PAGE_OWNER";
     let Some(command) = known_adapters()
         .into_iter()
         .find(|a| a.name == "js-debug")
@@ -213,7 +214,7 @@ fn a_killed_owner_leaves_no_browser_or_adapter() {
         eprintln!("skipped: node or js-debug is not installed");
         return;
     };
-    let Some(chrome) = idecraft_debugger::chrome() else {
+    let Some(chrome) = ferris_idea_debugger::chrome() else {
         eprintln!("skipped: no Chrome or Chromium");
         return;
     };
@@ -251,17 +252,17 @@ fn a_killed_owner_leaves_no_browser_or_adapter() {
         }
     }
     let profile = dir.join(".profile");
-    let in_use = !idecraft_debugger::lifetime::using_profile(&profile).is_empty();
+    let in_use = !ferris_idea_debugger::lifetime::using_profile(&profile).is_empty();
     owner.kill().unwrap();
     let _ = owner.wait();
     let server = server.expect("the owner debugged the page");
     assert!(in_use, "the owner's browser was not found");
     assert!(
-        settles(|| idecraft_debugger::lifetime::using_profile(&profile).is_empty()),
+        settles(|| ferris_idea_debugger::lifetime::using_profile(&profile).is_empty()),
         "the browser outlived its owner"
     );
     assert!(
-        settles(|| idecraft_debugger::lifetime::command_of(server).is_none()),
+        settles(|| ferris_idea_debugger::lifetime::command_of(server).is_none()),
         "js-debug outlived its owner"
     );
     let _ = std::fs::remove_dir_all(&dir);
@@ -324,7 +325,7 @@ fn stops_in_twice(launch: serde_json::Value, script: &std::path::Path, line: i64
 }
 
 fn temp_project(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("idecraft-{name}-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::canonicalize(&dir).unwrap()
@@ -367,7 +368,7 @@ fn typescript_file_stops_at_breakpoint() {
         .output()
         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned())
         .unwrap_or_default();
-    if !idecraft_debugger::strips_types(&version) {
+    if !ferris_idea_debugger::strips_types(&version) {
         eprintln!("skipped: node {version} cannot run TypeScript");
         return;
     }
@@ -490,7 +491,7 @@ fn jest_test_stops_at_breakpoint() {
     let args: Vec<String> = [
         "jest",
         "--json",
-        "--outputFile=.idecraft/jest.json",
+        "--outputFile=.ferris-idea/jest.json",
         "calc.test.js",
         "-t",
         "broken$",

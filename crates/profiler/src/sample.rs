@@ -92,6 +92,7 @@ pub fn parse_sample(text: &str) -> Profile {
         total,
         roots,
         notes,
+        lines: Vec::new(),
     }
 }
 

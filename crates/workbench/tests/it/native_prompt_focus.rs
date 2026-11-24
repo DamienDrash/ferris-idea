@@ -1,5 +1,5 @@
 //! `SPEC-0281` v3 behaviour 8, AK-7, in a window of the toolkit's test platform: the native alerts
-//! IDECraft asks hold the keyboard focus on the answer that changes nothing — the cancel answer,
+//! Ferris IDEA asks hold the keyboard focus on the answer that changes nothing — the cancel answer,
 //! else the default — so Space (with macOS keyboard navigation on) never deletes a file or drops
 //! unsaved changes; Return keeps giving the default. Pressing the focused answer is what Space
 //! does. Which button the system alert draws with the focus ring needs a screen (AK-8).
@@ -8,10 +8,10 @@
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_workbench::WorkbenchView;
+use ferris_idea_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
+use ferris_idea_workbench::tabs::CloseScope;
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_workbench::WorkbenchView;
-use idecraft_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
-use idecraft_workbench::tabs::CloseScope;
 
 /// A project with `notes.txt` and a window of the test platform on it.
 fn window(
@@ -23,7 +23,7 @@ fn window(
     &'static mut VisualTestContext,
 ) {
     let root = std::env::temp_dir().join(format!(
-        "idecraft-prompt-focus-{tag}-{}",
+        "ferris-idea-prompt-focus-{tag}-{}",
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&root);
@@ -35,7 +35,7 @@ fn window(
     cx.update(|cx| {
         cx.set_global(IdeSettingsFile(settings.join("settings.toml")));
         cx.set_global(ThemeFile(settings.join("theme")));
-        cx.set_global(CurrentIdeSettings(idecraft_core::IdeSettings::default()));
+        cx.set_global(CurrentIdeSettings(ferris_idea_core::IdeSettings::default()));
     });
     let at = root.clone();
     let handle = cx.add_window(move |_, cx| WorkbenchView::new(&at, cx));

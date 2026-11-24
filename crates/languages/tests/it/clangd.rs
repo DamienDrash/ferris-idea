@@ -2,12 +2,12 @@
 
 use std::time::Duration;
 
-use idecraft_languages::lsp::file_diagnostics;
+use ferris_idea_languages::lsp::file_diagnostics;
 
-/// Skips a test whose tool is missing; with `IDECRAFT_REQUIRE_TOOLS` set (CI) it fails instead.
+/// Skips a test whose tool is missing; with `FERRIS_IDEA_REQUIRE_TOOLS` set (CI) it fails instead.
 fn skip(reason: &str) {
     assert!(
-        std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+        ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
         "required tool missing: {reason}"
     );
     eprintln!("skipped: {reason}");
@@ -23,7 +23,7 @@ async fn clangd_reports_an_undeclared_identifier() {
         skip("clangd not installed");
         return;
     }
-    let root = std::env::temp_dir().join(format!("idecraft-clangd-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-clangd-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     let root = root.canonicalize().unwrap();
@@ -49,7 +49,7 @@ async fn clangd_reports_an_undeclared_identifier() {
 /// SPEC-0024/AK-3: hover, definition, references, completion and symbols from clangd.
 #[tokio::test]
 async fn clangd_code_insight() {
-    use idecraft_languages::insight::{LocationKind, complete, hover, locations, symbols};
+    use ferris_idea_languages::insight::{LocationKind, complete, hover, locations, symbols};
     if std::process::Command::new("clangd")
         .arg("--version")
         .output()
@@ -58,7 +58,7 @@ async fn clangd_code_insight() {
         skip("clangd not installed");
         return;
     }
-    let root = std::env::temp_dir().join(format!("idecraft-insight-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-insight-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     let root = root.canonicalize().unwrap();
@@ -112,7 +112,7 @@ async fn clangd_code_insight() {
 // SPEC-0040 AK-2: rename a C function through clangd.
 #[tokio::test]
 async fn clangd_renames_a_function() {
-    use idecraft_languages::rename::{apply_plan, plan_rename};
+    use ferris_idea_languages::rename::{apply_plan, plan_rename};
     if std::process::Command::new("clangd")
         .arg("--version")
         .output()
@@ -121,7 +121,7 @@ async fn clangd_renames_a_function() {
         skip("clangd not installed");
         return;
     }
-    let root = std::env::temp_dir().join(format!("idecraft-rename-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-rename-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     let root = root.canonicalize().unwrap();
@@ -179,8 +179,8 @@ async fn clangd_renames_a_function() {
 /// the result compiles.
 #[tokio::test]
 async fn clangd_change_signature() {
-    use idecraft_languages::rename::apply_files;
-    use idecraft_languages::signature::plan_change_signature_in;
+    use ferris_idea_languages::rename::apply_files;
+    use ferris_idea_languages::signature::plan_change_signature_in;
     if std::process::Command::new("clangd")
         .arg("--version")
         .output()
@@ -189,7 +189,7 @@ async fn clangd_change_signature() {
         skip("clangd not installed");
         return;
     }
-    let root = std::env::temp_dir().join(format!("idecraft-signature-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-signature-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     let root = root.canonicalize().unwrap();
@@ -236,9 +236,9 @@ async fn clangd_change_signature() {
 // SPEC-0041 AK-1: quick fix and extract refactoring through clangd.
 #[tokio::test]
 async fn clangd_code_actions() {
-    use idecraft_languages::actions::{code_actions, plan_code_action};
-    use idecraft_languages::insight::Range;
-    use idecraft_languages::rename::apply_files;
+    use ferris_idea_languages::actions::{code_actions, plan_code_action};
+    use ferris_idea_languages::insight::Range;
+    use ferris_idea_languages::rename::apply_files;
     if std::process::Command::new("clangd")
         .arg("--version")
         .output()
@@ -247,7 +247,7 @@ async fn clangd_code_actions() {
         skip("clangd not installed");
         return;
     }
-    let root = std::env::temp_dir().join(format!("idecraft-actions-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-actions-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     let root = root.canonicalize().unwrap();
@@ -318,9 +318,9 @@ async fn clangd_code_actions() {
 // SPEC-0043 AK-2: formatting through clangd (clang-format).
 #[tokio::test]
 async fn clangd_formats_files_and_ranges() {
-    use idecraft_languages::format::{FormatOptions, plan_format};
-    use idecraft_languages::insight::Range;
-    use idecraft_languages::rename::apply_files;
+    use ferris_idea_languages::format::{FormatOptions, plan_format};
+    use ferris_idea_languages::insight::Range;
+    use ferris_idea_languages::rename::apply_files;
     if std::process::Command::new("clangd")
         .arg("--version")
         .output()
@@ -329,7 +329,7 @@ async fn clangd_formats_files_and_ranges() {
         skip("clangd not installed");
         return;
     }
-    let root = std::env::temp_dir().join(format!("idecraft-format-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-format-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     let root = root.canonicalize().unwrap();
@@ -403,7 +403,7 @@ async fn clangd_formats_files_and_ranges() {
 /// SPEC-0072/AK-1: completion and definition on unsaved editor text.
 #[tokio::test]
 async fn clangd_on_unsaved_text() {
-    use idecraft_languages::insight::{LocationKind, complete_in, locations_in};
+    use ferris_idea_languages::insight::{LocationKind, complete_in, locations_in};
     if std::process::Command::new("clangd")
         .arg("--version")
         .output()
@@ -412,7 +412,7 @@ async fn clangd_on_unsaved_text() {
         skip("clangd not installed");
         return;
     }
-    let root = std::env::temp_dir().join(format!("idecraft-unsaved-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-unsaved-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     let root = root.canonicalize().unwrap();
@@ -447,10 +447,17 @@ async fn clangd_on_unsaved_text() {
         (0, 4)
     );
     // SPEC-0074/AK-1: rename on the unsaved text.
-    let plan =
-        idecraft_languages::rename::plan_rename_in(&root, &file, Some(text), 2, 12, "value", wait)
-            .await
-            .unwrap();
+    let plan = ferris_idea_languages::rename::plan_rename_in(
+        &root,
+        &file,
+        Some(text),
+        2,
+        12,
+        "value",
+        wait,
+    )
+    .await
+    .unwrap();
     assert_eq!(plan.old_name, "helper_value");
     let edits: Vec<(u64, u64)> = plan.files[0]
         .edits
@@ -468,16 +475,22 @@ async fn clangd_on_unsaved_text() {
     );
     // SPEC-0075/AK-1: formatting the unsaved text.
     let messy = "int helper_value(void) { return 1; }\nint main(void) { int a = 1; return a; }\n";
-    let options = idecraft_languages::format::FormatOptions {
+    let options = ferris_idea_languages::format::FormatOptions {
         tab_size: 2,
         insert_spaces: true,
         trim_trailing_whitespace: true,
         insert_final_newline: true,
     };
-    let formatted =
-        idecraft_languages::format::plan_format_in(&root, &file, Some(messy), None, options, wait)
-            .await
-            .unwrap();
+    let formatted = ferris_idea_languages::format::plan_format_in(
+        &root,
+        &file,
+        Some(messy),
+        None,
+        options,
+        wait,
+    )
+    .await
+    .unwrap();
     assert!(
         formatted
             .formatted
@@ -490,8 +503,8 @@ async fn clangd_on_unsaved_text() {
 /// SPEC-0076: actions and their edits come from the editor's text, not the disk.
 #[tokio::test]
 async fn clangd_code_actions_on_unsaved_text() {
-    use idecraft_languages::actions::{code_actions_in, plan_code_action_in};
-    use idecraft_languages::insight::Range;
+    use ferris_idea_languages::actions::{code_actions_in, plan_code_action_in};
+    use ferris_idea_languages::insight::Range;
     if std::process::Command::new("clangd")
         .arg("--version")
         .output()
@@ -500,8 +513,10 @@ async fn clangd_code_actions_on_unsaved_text() {
         skip("clangd not installed");
         return;
     }
-    let root =
-        std::env::temp_dir().join(format!("idecraft-actions-unsaved-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!(
+        "ferris-idea-actions-unsaved-{}",
+        std::process::id()
+    ));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     let root = root.canonicalize().unwrap();
@@ -553,7 +568,7 @@ async fn clangd_code_actions_on_unsaved_text() {
 /// SPEC-0077: documentation of a symbol that exists only in the editor's text, as Markdown.
 #[tokio::test]
 async fn clangd_hover_on_unsaved_text() {
-    use idecraft_languages::insight::hover_in;
+    use ferris_idea_languages::insight::hover_in;
     if std::process::Command::new("clangd")
         .arg("--version")
         .output()
@@ -562,7 +577,8 @@ async fn clangd_hover_on_unsaved_text() {
         skip("clangd not installed");
         return;
     }
-    let root = std::env::temp_dir().join(format!("idecraft-hover-unsaved-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-hover-unsaved-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     let root = root.canonicalize().unwrap();
@@ -582,7 +598,7 @@ async fn clangd_hover_on_unsaved_text() {
 /// SPEC-0079: symbols of the editor's text, nested, not of the disk.
 #[tokio::test]
 async fn clangd_symbols_on_unsaved_text() {
-    use idecraft_languages::insight::symbols_in;
+    use ferris_idea_languages::insight::symbols_in;
     if std::process::Command::new("clangd")
         .arg("--version")
         .output()
@@ -591,8 +607,10 @@ async fn clangd_symbols_on_unsaved_text() {
         skip("clangd not installed");
         return;
     }
-    let root =
-        std::env::temp_dir().join(format!("idecraft-symbols-unsaved-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!(
+        "ferris-idea-symbols-unsaved-{}",
+        std::process::id()
+    ));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     let root = root.canonicalize().unwrap();
@@ -614,7 +632,7 @@ async fn clangd_symbols_on_unsaved_text() {
 /// SPEC-0080: the signature of the call around the caret, with the parameter the caret is in.
 #[tokio::test]
 async fn clangd_signature_help_on_unsaved_text() {
-    use idecraft_languages::insight::signature_help_in;
+    use ferris_idea_languages::insight::signature_help_in;
     if std::process::Command::new("clangd")
         .arg("--version")
         .output()
@@ -623,8 +641,10 @@ async fn clangd_signature_help_on_unsaved_text() {
         skip("clangd not installed");
         return;
     }
-    let root =
-        std::env::temp_dir().join(format!("idecraft-signature-unsaved-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!(
+        "ferris-idea-signature-unsaved-{}",
+        std::process::id()
+    ));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     let root = root.canonicalize().unwrap();
@@ -651,7 +671,7 @@ async fn clangd_signature_help_on_unsaved_text() {
 /// SPEC-0081: type declaration of a variable and implementations of a virtual method.
 #[tokio::test]
 async fn clangd_type_definition_and_implementations() {
-    use idecraft_languages::insight::{LocationKind, locations_in};
+    use ferris_idea_languages::insight::{LocationKind, locations_in};
     if std::process::Command::new("clangd")
         .arg("--version")
         .output()
@@ -660,7 +680,7 @@ async fn clangd_type_definition_and_implementations() {
         skip("clangd not installed");
         return;
     }
-    let root = std::env::temp_dir().join(format!("idecraft-impl-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-impl-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     let root = root.canonicalize().unwrap();
@@ -709,7 +729,7 @@ async fn clangd_type_definition_and_implementations() {
 /// SPEC-0082: callers and callees of the editor's text, with call sites and recursion marked.
 #[tokio::test]
 async fn clangd_call_hierarchy_on_unsaved_text() {
-    use idecraft_languages::insight::{CallDirection, CallNode, call_hierarchy_in};
+    use ferris_idea_languages::insight::{CallDirection, CallNode, call_hierarchy_in};
     if std::process::Command::new("clangd")
         .arg("--version")
         .output()
@@ -718,7 +738,7 @@ async fn clangd_call_hierarchy_on_unsaved_text() {
         skip("clangd not installed");
         return;
     }
-    let root = std::env::temp_dir().join(format!("idecraft-calls-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-calls-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     let root = root.canonicalize().unwrap();
@@ -781,7 +801,11 @@ async fn clangd_call_hierarchy_on_unsaved_text() {
 }
 
 /// The range of `needle` in `text`, or with `caret` the empty range `caret` characters into it.
-fn range_of(text: &str, needle: &str, caret: Option<usize>) -> idecraft_languages::insight::Range {
+fn range_of(
+    text: &str,
+    needle: &str,
+    caret: Option<usize>,
+) -> ferris_idea_languages::insight::Range {
     let start = text.find(needle).unwrap_or_else(|| panic!("{needle:?}"));
     let (a, b) = match caret {
         Some(c) => (start + c, start + c),
@@ -794,7 +818,7 @@ fn range_of(text: &str, needle: &str, caret: Option<usize>) -> idecraft_language
         (line, column)
     };
     let ((start_line, start_character), (end_line, end_character)) = (pos(a), pos(b));
-    idecraft_languages::insight::Range {
+    ferris_idea_languages::insight::Range {
         start_line,
         start_character,
         end_line,
@@ -808,8 +832,8 @@ fn range_of(text: &str, needle: &str, caret: Option<usize>) -> idecraft_language
 /// Inline (clangd has none).
 #[tokio::test]
 async fn clangd_refactoring_shortcuts() {
-    use idecraft_languages::actions::{Refactoring, plan_code_action_in, refactoring_targets};
-    use idecraft_languages::rename::apply_edits;
+    use ferris_idea_languages::actions::{Refactoring, plan_code_action_in, refactoring_targets};
+    use ferris_idea_languages::rename::apply_edits;
     if std::process::Command::new("clangd")
         .arg("--version")
         .output()
@@ -818,7 +842,7 @@ async fn clangd_refactoring_shortcuts() {
         skip("clangd not installed");
         return;
     }
-    const SHAPES: &str = "// Handtest IDECraft: Navigation und Code-Einsicht
+    const SHAPES: &str = "// Handtest Ferris IDEA: Navigation und Code-Einsicht
 #include <cstdio>
 
 /// Eine Form mit Fläche.
@@ -842,7 +866,7 @@ int main() {
     return 0;
 }
 ";
-    let root = std::env::temp_dir().join(format!("idecraft-refactor-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-refactor-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     let root = root.canonicalize().unwrap();
@@ -850,7 +874,7 @@ int main() {
     // On disk an older text: every answer must come from the editor's text.
     std::fs::write(&file, "int main() { return 0; }\n").unwrap();
     let wait = Duration::from_secs(60);
-    let targets = async |range: idecraft_languages::insight::Range, r| {
+    let targets = async |range: ferris_idea_languages::insight::Range, r| {
         refactoring_targets(&root, &file, Some(SHAPES), &range, r, wait).await
     };
 
@@ -910,7 +934,7 @@ int main() {
         .unwrap();
     let with_function = apply_edits(SHAPES, &plan[0].edits).unwrap();
     assert!(with_function.contains("extracted(s);"), "{with_function}");
-    let name = idecraft_languages::actions::introduced_name(SHAPES, &with_function).unwrap();
+    let name = ferris_idea_languages::actions::introduced_name(SHAPES, &with_function).unwrap();
     assert_eq!(name.name, "extracted");
     let declaration = with_function.lines().nth(name.line as usize).unwrap();
     assert!(
@@ -918,12 +942,19 @@ int main() {
         "{name:?}: {declaration}"
     );
 
-    // Refactor This on a bare name (hand test 14): clangd lists nothing there, so IDECraft's own
+    // Refactor This on a bare name (hand test 14): clangd lists nothing there, so Ferris IDEA's own
     // Rename and extractions make the list (SPEC-0095 v5 behaviour 4a).
     let on_name = range_of(SHAPES, "total + missing", Some(2));
     let found = targets(on_name, Refactoring::Any).await.unwrap();
     let actions: Vec<_> = found.into_iter().flat_map(|t| t.actions).collect();
-    let own = idecraft_languages::actions::refactor_this_own(&actions, true);
+    let own = ferris_idea_languages::actions::refactor_this_own(
+        &actions,
+        &ferris_idea_languages::actions::RefactorSpot {
+            on_name: true,
+            in_code: true,
+            ..Default::default()
+        },
+    );
     assert_eq!(own[0].title, "Rename…", "{own:?}");
     // With `s.area()` selected clangd lists its Extract Variable; after the extraction the same
     // text is a variable's whole value and clangd lists nothing (the cause of the hand test's
@@ -964,7 +995,7 @@ int main() {
 /// clangd's `textDocument/documentHighlight`.
 #[tokio::test]
 async fn clangd_highlights_the_usages_in_a_file() {
-    use idecraft_languages::occurrences::{Highlights, OccurrenceKind, document_highlights_in};
+    use ferris_idea_languages::occurrences::{Highlights, OccurrenceKind, document_highlights_in};
     if std::process::Command::new("clangd")
         .arg("--version")
         .output()
@@ -973,7 +1004,7 @@ async fn clangd_highlights_the_usages_in_a_file() {
         skip("clangd not installed");
         return;
     }
-    let root = std::env::temp_dir().join(format!("idecraft-occurrences-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-occurrences-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     let root = root.canonicalize().unwrap();

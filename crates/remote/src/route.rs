@@ -141,7 +141,7 @@ impl HostSpec {
                 }) {
                     bare
                 } else {
-                    format!("{bare}:{}", idecraft_pairing::DEFAULT_PORT)
+                    format!("{bare}:{}", ferris_idea_pairing::DEFAULT_PORT)
                 };
                 Ok(Self::Paired {
                     address: format!("{full}{suffix}"),

@@ -17,17 +17,19 @@
 //!   button stays inside a low window and writes what the preview shows.
 //! - D39: a click on a row of the Database window selects it.
 //!
-//! On SQLite always; 113, 114 and 115 also on PostgreSQL with `IDECRAFT_TEST_PG` and its password
+//! On SQLite always; 113, 114 and 115 also on PostgreSQL with `FERRIS_IDEA_TEST_PG` and its password
 //! file (skipped without).
 
 #![cfg(target_os = "macos")]
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_workbench::{ServicesView, WorkbenchView, hit_targets, semantics};
 use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext, point, px};
-use idecraft_workbench::{ServicesView, WorkbenchView, hit_targets, semantics};
 
-use crate::db_refactor_retest::{has_sqlite, pg_run, reference, sqlite, until, window};
+use crate::db_refactor_retest::{
+    has_sqlite, pg_drop_leftovers, pg_run, reference, sqlite, until, window,
+};
 
 /// The inventory of the hand tests on SQLite: a key, a default, a check, a NULL and a value with
 /// a semicolon.
@@ -46,14 +48,15 @@ fn workspace(tag: &str, sql: &str) -> Option<PathBuf> {
     if !has_sqlite() {
         return None;
     }
-    let root = std::env::temp_dir().join(format!("idecraft-sqlbeta-{tag}-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-sqlbeta-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir_all(root.join(".idecraft")).unwrap();
+    std::fs::create_dir_all(root.join(".ferris-idea")).unwrap();
     let root = root.canonicalize().unwrap();
     let db = root.join("shop.db");
     sqlite(&db, &format!("{ITEM} {BIG}"));
     std::fs::write(
-        root.join(".idecraft/connections.toml"),
+        root.join(".ferris-idea/connections.toml"),
         format!(
             "[[connection]]\nid = \"shop\"\nname = \"shop\"\ndialect = \"sqlite\"\npath = \"{}\"\n",
             db.display()
@@ -69,7 +72,7 @@ fn workspace(tag: &str, sql: &str) -> Option<PathBuf> {
 /// secret with the lock that keeps the PostgreSQL tests of this module apart.
 type PgWorkspace = (
     PathBuf,
-    idecraft_database::ConnectionProfile,
+    ferris_idea_database::ConnectionProfile,
     String,
     (
         crate::db_refactor_retest::SecretFile,
@@ -79,14 +82,15 @@ type PgWorkspace = (
 
 /// A workspace on the reference PostgreSQL as connection `pg`, working in the fresh schema
 /// `scratch` (made here, with `item` and `m56_hand` like on SQLite). `None` without
-/// `IDECRAFT_TEST_PG`.
+/// `FERRIS_IDEA_TEST_PG`.
 fn pg_workspace(tag: &str, sql: &str) -> Option<PgWorkspace> {
     // The secret file is removed before the next test takes the lock (fields drop in order).
     let guard = PG.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     // An id of its own, so the secret is not the one of other modules' PostgreSQL tests.
-    let (mut profile, secret) = reference("IDECRAFT_TEST_PG", "pgbeta")?;
+    let (mut profile, secret) = reference("FERRIS_IDEA_TEST_PG", "pgbeta")?;
     profile.name = "pg".into();
     let scratch = format!("ht{tag}_{}", std::process::id());
+    pg_drop_leftovers(&profile, &format!("ht{tag}_"));
     pg_run(
         &profile,
         &format!(
@@ -102,12 +106,14 @@ fn pg_workspace(tag: &str, sql: &str) -> Option<PgWorkspace> {
     );
     profile.options.startup_script = Some(format!("set search_path to {scratch}"));
     profile.options.schemas = vec![scratch.clone()];
-    let root =
-        std::env::temp_dir().join(format!("idecraft-sqlbeta-pg{tag}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!(
+        "ferris-idea-sqlbeta-pg{tag}-{}",
+        std::process::id()
+    ));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     let root = root.canonicalize().unwrap();
-    idecraft_database::save_profiles(&root, std::slice::from_ref(&profile)).unwrap();
+    ferris_idea_database::save_profiles(&root, std::slice::from_ref(&profile)).unwrap();
     std::fs::write(root.join("query.sql"), sql).unwrap();
     std::fs::write(root.join("paste.txt"), "").unwrap();
     Some((root, profile, scratch, (secret, guard)))
@@ -126,7 +132,7 @@ fn paint(cx: &mut VisualTestContext) {
 
 /// Where the control `name` was last painted: the visible bounds of the element with that test id
 /// in the window's semantic tree (`SPEC-0319` behaviour 42; the last one painted, as it is on top).
-fn rect(cx: &mut VisualTestContext, name: &str) -> idecraft_ui::tool_windows::Rect {
+fn rect(cx: &mut VisualTestContext, name: &str) -> ferris_idea_ui::tool_windows::Rect {
     semantics::set_consumer(semantics::Consumer::SelfTest, true);
     paint(cx);
     drawn(cx, name).unwrap_or_else(|| panic!("{name} is drawn"))
@@ -134,7 +140,7 @@ fn rect(cx: &mut VisualTestContext, name: &str) -> idecraft_ui::tool_windows::Re
 
 /// Where the element with the test id `name` is visible in the window's last semantic tree, if
 /// it is (without drawing again).
-fn drawn(cx: &mut VisualTestContext, name: &str) -> Option<idecraft_ui::tool_windows::Rect> {
+fn drawn(cx: &mut VisualTestContext, name: &str) -> Option<ferris_idea_ui::tool_windows::Rect> {
     let tree = cx.update(|window, _| {
         semantics::tree(semantics::window_id(window)).expect("a tree is built")
     });
@@ -142,7 +148,7 @@ fn drawn(cx: &mut VisualTestContext, name: &str) -> Option<idecraft_ui::tool_win
         .filter(|n| n.test_id() == Some(name))
         .filter_map(|n| n.visible_bounds)
         .last()
-        .map(|r| idecraft_ui::tool_windows::Rect {
+        .map(|r| ferris_idea_ui::tool_windows::Rect {
             x: r.x,
             y: r.y,
             w: r.w,
@@ -323,7 +329,7 @@ fn copy_formats_and_export(bench: &Entity<WorkbenchView>, cx: &mut VisualTestCon
     let (footer, panel) = view.read_with(cx, |v, _| v.export_edges());
     assert!(
         // The mark covers the button inside its 1 px border.
-        button.h >= idecraft_workbench::metrics::CONTROL_HEIGHT - 2.5
+        button.h >= ferris_idea_workbench::metrics::CONTROL_HEIGHT - 2.5
             && button.y + button.h <= 560.
             && footer <= panel + 0.5,
         "Export is fully shown: {button:?}, footer {footer}, panel {panel}"
@@ -376,7 +382,7 @@ fn hand_test_115_copy_formats_and_export_on_postgres(cx: &mut TestAppContext) {
     let Some((root, profile, scratch, secret)) =
         pg_workspace("115", "select * from item order by id;\n")
     else {
-        eprintln!("skipped: IDECRAFT_TEST_PG or its password file is not set");
+        eprintln!("skipped: FERRIS_IDEA_TEST_PG or its password file is not set");
         return;
     };
     hit_targets::enable();
@@ -395,7 +401,7 @@ fn click_tree_row(bench: &Entity<WorkbenchView>, cx: &mut VisualTestContext, lab
     until(cx, "the tables are read", |cx| {
         db.update(cx, |v, cx| {
             if !v.visible().iter().any(|(_, n, _)| n == label) {
-                v.expand(idecraft_workbench::db_tree_model::Node::Conn(0), cx);
+                v.expand(ferris_idea_workbench::db_tree_model::Node::Conn(0), cx);
                 v.expand_all_tables(cx);
             }
             v.visible().iter().any(|(_, n, _)| n == label)
@@ -495,10 +501,11 @@ fn hand_test_114_copy_table(cx: &mut TestAppContext) {
 #[gpui::test]
 fn hand_test_114_copy_table_on_postgres(cx: &mut TestAppContext) {
     let Some((root, profile, scratch, secret)) = pg_workspace("114", "select 1;\n") else {
-        eprintln!("skipped: IDECRAFT_TEST_PG or its password file is not set");
+        eprintln!("skipped: FERRIS_IDEA_TEST_PG or its password file is not set");
         return;
     };
     let target = format!("m56_copy_{}", std::process::id());
+    pg_drop_leftovers(&profile, "m56_copy_");
     pg_run(
         &profile,
         &format!("drop schema if exists {target} cascade; create schema {target}"),
@@ -891,7 +898,7 @@ fn hand_test_113_table_data_editor(cx: &mut TestAppContext) {
 #[gpui::test]
 fn hand_test_113_table_data_editor_on_postgres(cx: &mut TestAppContext) {
     let Some((root, profile, scratch, secret)) = pg_workspace("113", "select 1;\n") else {
-        eprintln!("skipped: IDECRAFT_TEST_PG or its password file is not set");
+        eprintln!("skipped: FERRIS_IDEA_TEST_PG or its password file is not set");
         return;
     };
     hit_targets::enable();
@@ -960,12 +967,12 @@ fn b2_b3_copy_table_names_its_connection_and_keeps_the_selection(cx: &mut TestAp
     // A second connection after `shop`: the row that took `item`'s place in the defect.
     let other = root.join("other.db");
     sqlite(&other, "CREATE TABLE note (id INTEGER PRIMARY KEY);");
-    let mut profiles = std::fs::read_to_string(root.join(".idecraft/connections.toml")).unwrap();
+    let mut profiles = std::fs::read_to_string(root.join(".ferris-idea/connections.toml")).unwrap();
     profiles.push_str(&format!(
         "\n[[connection]]\nid = \"other\"\nname = \"other\"\ndialect = \"sqlite\"\npath = \"{}\"\n",
         other.display()
     ));
-    std::fs::write(root.join(".idecraft/connections.toml"), profiles).unwrap();
+    std::fs::write(root.join(".ferris-idea/connections.toml"), profiles).unwrap();
     hit_targets::enable();
     let (bench, cx) = window(&root, cx);
     open(&bench, cx, &root, "other");

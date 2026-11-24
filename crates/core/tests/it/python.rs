@@ -3,15 +3,15 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use idecraft_core::{
+use ferris_idea_core::{
     Dependency, InterpreterKind, PythonSearch, RunConfigs, RunKind, find_interpreters,
     installed_packages, python_environments, run_config,
 };
 
-/// Skips a test whose tool is missing; with `IDECRAFT_REQUIRE_TOOLS` set (CI) it fails instead.
+/// Skips a test whose tool is missing; with `FERRIS_IDEA_REQUIRE_TOOLS` set (CI) it fails instead.
 fn skip(reason: &str) {
     assert!(
-        std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+        ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
         "required tool missing: {reason}"
     );
     eprintln!("skipped: {reason}");
@@ -21,7 +21,8 @@ struct Scratch(PathBuf);
 
 impl Scratch {
     fn new(tag: &str) -> Self {
-        let p = std::env::temp_dir().join(format!("idecraft-python-{tag}-{}", std::process::id()));
+        let p =
+            std::env::temp_dir().join(format!("ferris-idea-python-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&p);
         std::fs::create_dir_all(&p).unwrap();
         Self(p.canonicalize().unwrap())
@@ -215,7 +216,10 @@ fn packages_requirements_and_test_framework() {
     let config = env.test_config.unwrap();
     assert_eq!(config.kind, RunKind::Test);
     assert_eq!(config.command[0], "${workspace}/.venv/bin/python");
-    assert_eq!(config.report_file.as_deref(), Some(".idecraft/pytest.xml"));
+    assert_eq!(
+        config.report_file.as_deref(),
+        Some(".ferris-idea/pytest.xml")
+    );
 
     let env = python_environments(&s.search(), Some(">=3.9,<4"), &[]);
     assert_eq!(env.compatible, Some(true));
@@ -284,15 +288,16 @@ fn create_choose_and_install_in_a_real_environment() {
     let proj = s.0.join("proj");
     std::fs::create_dir_all(&proj).unwrap();
     let before = python_environments(&s.search(), None, &[]);
-    let command = idecraft_core::venv_command(&idecraft_core::venv_base(&before), Path::new("env"));
-    let made = idecraft_core::run_tool(&command, &proj);
+    let command =
+        ferris_idea_core::venv_command(&ferris_idea_core::venv_base(&before), Path::new("env"));
+    let made = ferris_idea_core::run_tool(&command, &proj);
     if !made.ok {
         skip(&format!("python3 -m venv failed: {}", made.output));
         return;
     }
-    let python = idecraft_core::venv_python(&proj.join("env"));
+    let python = ferris_idea_core::venv_python(&proj.join("env"));
     assert!(python.is_file());
-    idecraft_core::save_interpreter(&proj, Some(&python)).unwrap();
+    ferris_idea_core::save_interpreter(&proj, Some(&python)).unwrap();
     let mut search = PythonSearch::for_workspace(&proj);
     search.path_var = None;
     let env = python_environments(&search, None, &[]);
@@ -300,9 +305,9 @@ fn create_choose_and_install_in_a_real_environment() {
     assert_eq!(chosen.found_by, "configured");
     assert_eq!(chosen.kind, InterpreterKind::Venv);
     assert!(
-        idecraft_core::interpreter_label(&env, &proj).ends_with(" (env)"),
+        ferris_idea_core::interpreter_label(&env, &proj).ends_with(" (env)"),
         "{}",
-        idecraft_core::interpreter_label(&env, &proj)
+        ferris_idea_core::interpreter_label(&env, &proj)
     );
     assert!(
         env.packages.iter().any(|p| p.name == "pip"),
@@ -310,9 +315,9 @@ fn create_choose_and_install_in_a_real_environment() {
         env.packages
     );
     let mut install =
-        idecraft_core::pip_install_command(&python, &["idecraft-no-such-package".into()]);
+        ferris_idea_core::pip_install_command(&python, &["ferris-idea-no-such-package".into()]);
     install.insert(4, "--no-index".into());
-    let run = idecraft_core::run_tool(&install, &proj);
+    let run = ferris_idea_core::run_tool(&install, &proj);
     assert!(!run.ok, "{run:?}");
     assert!(
         run.output

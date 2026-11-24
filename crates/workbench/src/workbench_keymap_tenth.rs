@@ -6,8 +6,8 @@
 
 use std::path::PathBuf;
 
+use ferris_idea_languages::insight::CompletionItem;
 use gpui::{Context, Window};
-use idecraft_languages::insight::CompletionItem;
 
 use super::WorkbenchView;
 use crate::completion_model;
@@ -42,7 +42,7 @@ impl WorkbenchView {
         let sql = path
             .extension()
             .is_some_and(|e| e.eq_ignore_ascii_case("sql"));
-        if sql || idecraft_languages::LanguageId::detect(&path).is_none() {
+        if sql || ferris_idea_languages::LanguageId::detect(&path).is_none() {
             self.status = Some(completion_model::NO_LIVE_TEMPLATES.into());
             cx.notify();
             return;

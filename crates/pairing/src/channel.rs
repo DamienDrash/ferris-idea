@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
-use idecraft_session::Transport;
+use ferris_idea_session::Transport;
 use snow::TransportState;
 
 const DATA: u8 = 0;

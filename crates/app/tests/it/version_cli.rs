@@ -1,11 +1,11 @@
-//! `idecraft --version` prints the version from the workspace `Cargo.toml` and the maturity
-//! stage (CONTENT_STYLE_GUIDE §5), e.g. `idecraft 0.8.0 (alpha)`.
+//! `ferris-idea --version` prints the version from the workspace `Cargo.toml` and the maturity
+//! stage (CONTENT_STYLE_GUIDE §5), e.g. `ferris-idea 0.8.0 (alpha)`.
 
 use std::process::Command;
 
 #[test]
 fn version_flag_prints_version_and_stage() {
-    let out = Command::new(env!("CARGO_BIN_EXE_idecraft"))
+    let out = Command::new(env!("CARGO_BIN_EXE_ferris-idea"))
         .arg("--version")
         .output()
         .unwrap();
@@ -14,9 +14,9 @@ fn version_flag_prints_version_and_stage() {
     assert_eq!(
         said.trim(),
         format!(
-            "idecraft {} ({})",
+            "ferris-idea {} ({})",
             env!("CARGO_PKG_VERSION"),
-            idecraft_core::release::STAGE
+            ferris_idea_core::release::STAGE
         )
     );
 }

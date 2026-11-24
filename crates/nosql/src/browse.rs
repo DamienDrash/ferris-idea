@@ -64,7 +64,7 @@ fn ttl_text(ttl: Option<i64>) -> String {
 /// Children of `path` in the store of `profile` (connects with `password`).
 pub async fn browse(
     profile: &StoreProfile,
-    password: Option<idecraft_database::Secret>,
+    password: Option<ferris_idea_database::Secret>,
     path: &[String],
     cursor: u64,
 ) -> Result<BrowseLevel, StoreError> {

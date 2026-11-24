@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 /// Entries of a list in the question before "and n more" (behaviour 2).
 const NAMED: usize = 10;
 
-/// What happens before quitting, the same for ⌘Q, the menu, `quit_ide` and `idecraft quit`
+/// What happens before quitting, the same for ⌘Q, the menu, `quit_ide` and `ferris-idea quit`
 /// (`SPEC-0261` v3 behaviour 15).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum QuitChoice {
@@ -43,7 +43,7 @@ pub fn question(unsaved: &[String], running: &[String]) -> Option<QuitQuestion> 
     }
     if !running.is_empty() {
         parts.push(format!(
-            "Still running, ended when IDECraft quits:\n{}",
+            "Still running, ended when Ferris IDEA quits:\n{}",
             cut(running)
         ));
     }
@@ -77,7 +77,7 @@ pub fn question(unsaved: &[String], running: &[String]) -> Option<QuitQuestion> 
 /// pending when it is chosen.
 pub fn confirm_question() -> QuitQuestion {
     QuitQuestion {
-        message: "Quit IDECraft?".into(),
+        message: "Quit Ferris IDEA?".into(),
         detail: String::new(),
         answers: vec![
             ("Quit", Some(QuitChoice::IfNothingPending)),
@@ -108,7 +108,7 @@ pub fn names(unsaved: &[PathBuf], roots: &[PathBuf]) -> Vec<String> {
     names
 }
 
-/// What keeps IDECraft open after the save step of quitting (`SPEC-0261` v3 behaviour 15): the
+/// What keeps Ferris IDEA open after the save step of quitting (`SPEC-0261` v3 behaviour 15): the
 /// files whose editors are still modified and the files the registry of open documents still marks
 /// modified, each once, named as [`names`] names them. Empty: everything is saved, quit.
 pub fn left_after_save(
@@ -173,7 +173,7 @@ mod tests {
     #[test]
     fn confirming_a_quit_with_nothing_pending() {
         let q = confirm_question();
-        assert_eq!(q.message, "Quit IDECraft?");
+        assert_eq!(q.message, "Quit Ferris IDEA?");
         assert!(q.detail.is_empty());
         assert_eq!(
             q.answers,
@@ -220,7 +220,7 @@ mod tests {
         assert_eq!(q.message, "Stop running processes and quit?");
         assert_eq!(
             q.detail,
-            "Still running, ended when IDECraft quits:\nht-prof: run configuration \"schlaf\""
+            "Still running, ended when Ferris IDEA quits:\nht-prof: run configuration \"schlaf\""
         );
         assert_eq!(
             q.answers,

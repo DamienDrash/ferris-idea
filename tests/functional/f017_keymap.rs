@@ -29,7 +29,7 @@ fn a_user_shortcut_replaces_the_default_and_can_be_reset() {
     // the agent log (SPEC-0053 v7 behaviour 11) with the `.gitignore` that keeps it out of
     // commits, and nothing else.
     assert!(std::fs::read_dir(&p.config).unwrap().count() > 0);
-    let in_project: Vec<String> = std::fs::read_dir(p.path(".idecraft"))
+    let in_project: Vec<String> = std::fs::read_dir(p.path(".ferris-idea"))
         .map(|entries| {
             entries
                 .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())

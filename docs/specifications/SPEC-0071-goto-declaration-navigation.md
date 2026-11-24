@@ -1,6 +1,6 @@
 # SPEC-0071: Go to Declaration and Back/Forward
 
-- **Version:** 12 · **Date:** 2026-11-14 (v12: Header/Source, behaviour 19, AK-14; ninth package of docs/research/KEYMAP_COVERAGE.md); 2026-11-14 (v11: the 30 s limit holds for the server's answer too,
+- **Version:** 13 · **Date:** 2026-11-18 (v13: a file opened from the Project tree or from Recent Files is a jump for Back and Forward, behaviour 4a, AK-15; window check A4 of PARITY row F-017, gap N1); 2026-11-14 (v12: Header/Source, behaviour 19, AK-14; ninth package of docs/research/KEYMAP_COVERAGE.md); 2026-11-14 (v11: the 30 s limit holds for the server's answer too,
   behaviour 1; v10: Go to Test and Go to Related, behaviours 15–18, AK-11 to AK-13; docs/research/KEYMAP_COVERAGE.md; v9: previous and next method, last and next edit location of the file, behaviours 12–14; v8: in an HTML file a class, an id and a jump link have a declaration, OBS-0039 W1 and W2; v2: works on unsaved text; v3: several definitions in a chooser, SPEC-0081; v4: shortcuts on keyboard layouts without `[`, hand test; v5: a caret right after a name, messages naming the reason, hand test round 5 Nr. 12 and 16; v6: one place named twice is one target, a target that cannot be opened says so, hand test Nr. 110, D61; v7: on a declaration ⌘B lists its usages, a jump opens the fold it lands in, OBS-0016)
 - **Sources:** GEN (jump from a use to its declaration by shortcut or modifier-click, and back and forward
   through earlier places; F-034, F-020), OSS (action ids `GotoDeclaration` with ⌘B and the mouse shortcut
@@ -28,6 +28,14 @@ Follow code to where it is defined and return to where you were.
    line). `Back` returns to the last recorded place and makes the current one available to `Forward`;
    a new jump clears the Forward places. At most 100 places are kept; places in deleted files are
    dropped when reached. [GEN, OSS]
+4a. **Opening a file is a jump (v13):** opening a file from the Project tool window — a double
+   click on its row, Enter or Jump to Source (⌘↓, F4) with its row selected — and from the Recent
+   Files popup (SPEC-0069 behaviour 4) records the caret's place in the active editor like the
+   jumps of behaviour 4, when the file opened is another file than the active one. Back then
+   returns to that file and its caret place, and Forward to the opened file at the place its caret
+   had when Back was used. Opening the active file again, or a file while no editor is active,
+   records nothing. Until v12 these openings were no jumps, so Back stayed in the opened file.
+   [OBS: window check of PARITY row F-017, 2026-11-18, Project tree only; GEN for Recent Files]
 5. The MCP counterpart is `find_symbol_locations` (SPEC-0024). [ADR-0008]
 6. **Keyboard layouts:** a shortcut whose key the current layout cannot type without ⌥ (⌘[ and ⌘] for
    Back and Forward) also works on the key in the same place, as other macOS applications move it
@@ -53,7 +61,7 @@ Follow code to where it is defined and return to where you were.
    one unfolds that region, so the target is shown with its body. [OBS-0016]
 11. **HTML: classes, ids and jump links (v8):** in an HTML file a word of a `class` attribute and
     the value of an `id` attribute lead to the rules that define them in the stylesheets, and the
-    fragment of an `href` leads to the element with that id. IDECraft answers these places itself,
+    fragment of an `href` leads to the element with that id. Ferris IDEA answers these places itself,
     without a language server; where, in which order and within which bounds is SPEC-0042 v17
     behaviours 28, 29, 32 and 33. One target opens directly, several come in the chooser
     (behaviour 2), a name without a rule gives the message for no declaration. Behaviour 7 holds:
@@ -82,8 +90,8 @@ Follow code to where it is defined and return to where you were.
     Last Edit Location and Next Edit Location (SPEC-0031); `JumpToNextChange` is offered although no
     key is bound to it. [GEN]
 15. **Test and test subject (v10; `GotoTest`):** from a source file the action goes to its test, from a test file to the file it tests, by file names alone and among the project's own files (SPEC-0148 v3 behaviour 7: no installed packages, build output or ignored files). A file is a test by the names the run markers use (SPEC-0045): `test_x.py` and `x_test.py`, `x_test.go`, `x.test.*` and `x.spec.*` with a JavaScript or TypeScript extension; for Java, Kotlin, Groovy, Scala, C#, PHP and Swift files, where the markers go by annotations, the names `XTest` and `XTests`. The counterpart of the test `XTest` is a file named `X`, the tests of `X` are the files with those names; Python and Go keep the extension, JavaScript and TypeScript files match across their extensions (`cart.ts` and `cart.test.tsx`), the JVM languages across theirs, the others keep the extension. Candidates are ordered by how many folder names they share with the file counted from the file's folder upwards (so `src/main/java/shop/Cart.java` prefers `src/test/java/shop/CartTest.java`), then by path. One candidate opens in a tab and the place left is recorded for Back; several are offered in the chooser of behaviour 3 with the title `Choose test for Cart.java (2)` or `Choose test subject for CartTest.java (2)`; none says so in the status line (`No test found for Cart.java`, `No test subject found for CartTest.java`) — no test is created and no dialog asks. A file of another language (Rust keeps its tests in the file itself or under `tests/` without a naming rule) says that Go to Test knows no naming rule for it. The contents of the files are not read: a test that tests a class under another name is not found. [OSS: id of the bundled keymaps; GEN: the naming conventions of the test runners; SPEC-0045]
-16. **The key of Go to Test (v10):** the bundled macOS keymap binds `GotoTest` to ⇧⌘T, the chord IDECraft's keymap gives to `ReopenClosedTab` as a named deviation (SPEC-0028 behaviour 7, SPEC-0059 v9.1 behaviour 22b). No shortcut changes: on a chord that also carries `ReopenClosedTab`, `GotoTest` does not run and the menu and Find Action show no key for it. It is reached through Navigate › Test and Find Action, and by a key the user gives it in Settings › Keymap. In the default keymap, where Reopen Closed Tab has another chord, Ctrl+Shift+T runs it. [SPEC-0028, SPEC-0059]
-17. **Related files (v10; `GotoRelated`, ⌃⌘↑):** goes to the files IDECraft's own model relates to the active file. The model has one relation: an HTML file and the stylesheets it links with `<link rel="stylesheet">` that are files of the project (SPEC-0042 v17), in both directions — from the HTML file to those stylesheets, from a CSS, SCSS or Less file to the project's HTML files that link it (at most 500 HTML files are read, the bound of SPEC-0042 behaviour 32). One related file opens, several are offered in the chooser (`Choose related file of index.html (2)`), none says so in the status line; for a file of another kind the status line says that no related files are known for it. Not related here: a Spring controller and its endpoints (they are places in the controller's own file, which File Structure and the Endpoints tool window list), a file and its test (behaviour 15), a class and its super types (hierarchies, SPEC-0082). [OSS: id and shortcut of the bundled keymaps; SPEC-0042 v17]
+16. **The key of Go to Test (v10):** the bundled macOS keymap binds `GotoTest` to ⇧⌘T, the chord Ferris IDEA's keymap gives to `ReopenClosedTab` as a named deviation (SPEC-0028 behaviour 7, SPEC-0059 v9.1 behaviour 22b). No shortcut changes: on a chord that also carries `ReopenClosedTab`, `GotoTest` does not run and the menu and Find Action show no key for it. It is reached through Navigate › Test and Find Action, and by a key the user gives it in Settings › Keymap. In the default keymap, where Reopen Closed Tab has another chord, Ctrl+Shift+T runs it. [SPEC-0028, SPEC-0059]
+17. **Related files (v10; `GotoRelated`, ⌃⌘↑):** goes to the files Ferris IDEA's own model relates to the active file. The model has one relation: an HTML file and the stylesheets it links with `<link rel="stylesheet">` that are files of the project (SPEC-0042 v17), in both directions — from the HTML file to those stylesheets, from a CSS, SCSS or Less file to the project's HTML files that link it (at most 500 HTML files are read, the bound of SPEC-0042 behaviour 32). One related file opens, several are offered in the chooser (`Choose related file of index.html (2)`), none says so in the status line; for a file of another kind the status line says that no related files are known for it. Not related here: a Spring controller and its endpoints (they are places in the controller's own file, which File Structure and the Endpoints tool window list), a file and its test (behaviour 15), a class and its super types (hierarchies, SPEC-0082). [OSS: id and shortcut of the bundled keymaps; SPEC-0042 v17]
 18. **Find Action, menu and MCP (v10):** Navigate gets Related Symbol… (`GotoRelated`) and Test (`GotoTest`) after Super Method (SPEC-0124 v5); Find Action lists them with these titles. MCP: `goto_test` (path) returns `known` (whether the file's language has a naming rule), `is_test`, `subject` (the name without the test affix) and `candidates` (workspace-relative paths in the order of behaviour 15); `related_files` (path) returns `known` and `files`, each with `path` and `relation` (`stylesheet` or `linked_from`). Both read only. [ADR-0008]
 19. **Header/Source (v12; `SwitchHeaderSource`, F10 in the bundled keymaps; Navigate ›
     Header/Source after Test):** in a C, C++ or Objective-C file the action goes from a header
@@ -104,7 +112,7 @@ Follow code to where it is defined and return to where you were.
 ## Acceptance criteria
 - **AK-1** Navigation history: duplicates on one line, back, forward, a new jump clearing forward,
   forgetting a file (unit test).
-- **AK-2** In a real window (`idecraft ui --selftest`, with `clangd`): from a call of `helper`,
+- **AK-2** In a real window (`ferris-idea ui --selftest`, with `clangd`): from a call of `helper`,
   ⌘B moves the caret to its definition at 1:5; ⌘[ returns to 2:28.
 - **AK-3** Use by hand: ⌘-click, several definitions, Forward.
 - **AK-4 (v5)** The column asked for: inside a name, right after a name, after `;` and at the start
@@ -140,6 +148,12 @@ Follow code to where it is defined and return to where you were.
   (`keymap_actions::tests::header_source_titles_and_messages`); in a window of the test harness
   F10 opens the one header and lists two sources (`ninth_package_keymap.rs::header_source_*`);
   MCP `header_source` (protocol test `header_source_tool`).
+- **AK-15 (v13, behaviour 4a)** Opening another file records the place left, opening the active
+  file or opening without an active editor does not, and Back and Forward walk between the two
+  files (unit test `nav_model::tests::opening_another_file_is_a_jump`); in a window of the test
+  harness a double click on a file row in the Project tree and then Back return to the first
+  file at its caret, Forward to the opened file, and a file opened from Recent Files is a jump too
+  (`tabs_and_tree_handtests.rs::back_returns_from_a_file_opened_in_the_tree`).
 
 ## Out of scope
 Find Usages (SPEC-0073), Go to Implementation and Type Declaration (SPEC-0081),
@@ -149,14 +163,19 @@ File (`HighlightUsagesInFile`): the editor computes no highlight of the occurren
 the caret that the action could keep.
 
 ## Known deviations from the reference
-The reference resolves declarations with its own index; IDECraft asks the language server per
+The reference resolves declarations with its own index; Ferris IDEA asks the language server per
 request. Compared side by side in OBS-0016 (2026-11-05, Java).
 
-v8: classes, ids and jump links of HTML files are resolved from IDECraft's own syntax trees; what
+v8: classes, ids and jump links of HTML files are resolved from Ferris IDEA's own syntax trees; what
 stays different there (classes built by scripts or templates, the choice among several rules) is
 listed in SPEC-0042 v17. The jump itself was not repeated in a window next to the reference.
 
+v13: opening from the Project tree was compared in the reference (Main.java, then Inventory.java by
+a double click in the tree: Back returns to Main.java at its caret, Forward to Inventory.java at its
+caret). Recent Files was not compared; other ways of opening a file — a click on an editor tab, the
+Switcher, opening in the right split — record nothing.
+
 v9: not compared with the reference. Known: the reference's Last Edit Location walks the edit
-places of all files of the project; IDECraft's walks those of the active file. Open there: whether
+places of all files of the project; Ferris IDEA's walks those of the active file. Open there: whether
 its Previous/Next Method also stops at classes and fields, and where on the declaration it puts
 the caret.

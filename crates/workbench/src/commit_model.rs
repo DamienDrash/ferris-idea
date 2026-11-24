@@ -5,7 +5,7 @@
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
-use idecraft_vcs::{ChangeKind, FileStatus};
+use ferris_idea_vcs::{ChangeKind, FileStatus};
 
 /// One listed file.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -612,10 +612,10 @@ pub const NO_REMOTE_MESSAGE_HISTORY: &str =
     "Commit Message History is not available in a remote project yet";
 
 /// What the status bar says when the history file was not used; `why` never quotes the file.
-pub fn history_unreadable(why: idecraft_core::commit_messages::Unreadable) -> String {
+pub fn history_unreadable(why: ferris_idea_core::commit_messages::Unreadable) -> String {
     format!(
         "The commit message history ({}) was not read: {why}. It starts empty with the next commit",
-        idecraft_core::commit_messages::COMMIT_MESSAGES_FILE
+        ferris_idea_core::commit_messages::COMMIT_MESSAGES_FILE
     )
 }
 
@@ -624,7 +624,7 @@ pub fn history_unreadable(why: idecraft_core::commit_messages::Unreadable) -> St
 pub fn history_not_saved(error: &std::io::Error) -> String {
     format!(
         "The commit message was not added to the history ({}): {error}",
-        idecraft_core::commit_messages::COMMIT_MESSAGES_FILE
+        ferris_idea_core::commit_messages::COMMIT_MESSAGES_FILE
     )
 }
 
@@ -792,7 +792,7 @@ mod tests {
     fn a_chosen_message_replaces_the_text_in_one_undo_step() {
         let typed = "half a thought\nwith ünïcode";
         let chosen = "Fix the parser\n\nIt lost the last token.";
-        let mut buffer = idecraft_editor::TextBuffer::from_text(typed);
+        let mut buffer = ferris_idea_editor::TextBuffer::from_text(typed);
         buffer.track_changes();
         let (range, text) = message_edit(typed, chosen).unwrap();
         assert_eq!(range, 0..buffer.len_chars());
@@ -816,8 +816,8 @@ mod tests {
         assert!(remembers_message(false, 1));
         assert!(remembers_message(true, 0));
         assert!(!remembers_message(false, 0));
-        let why = idecraft_core::commit_messages::Unreadable::Broken;
-        assert!(history_unreadable(why).contains(".idecraft/commit-messages.toml"));
+        let why = ferris_idea_core::commit_messages::Unreadable::Broken;
+        assert!(history_unreadable(why).contains(".ferris-idea/commit-messages.toml"));
         let e = std::io::Error::other("disk full");
         assert!(history_not_saved(&e).ends_with("disk full"));
     }
@@ -1182,7 +1182,7 @@ mod tests {
 
     #[test]
     fn modules_are_folders_with_a_build_file() {
-        let dir = std::env::temp_dir().join(format!("idecraft-modules-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-modules-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("svc/api/src")).unwrap();
         std::fs::write(dir.join("svc/api/Cargo.toml"), "").unwrap();

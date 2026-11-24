@@ -16,7 +16,7 @@
   Structure tool window, the panels outside the layout as tool windows, the traffic light pitch,
   behaviours 37–46; v8: a long status message cuts the breadcrumbs instead of overlapping them; OBS-0022;
   v9: no hover card of the editor stays over an open menu, behaviour 48; OBS-0022 L28; v10: one tool window per placement also at the bottom — replacing instead of stacking —, ⌥-click into the other half of the side (IMP-0311 reworked), the reference's default stripes with the rare windows off the sidebar, migration of untouched layouts, behaviours 49–56; the project owner's question of 2026-11-06)
-- **Sources:** OBS-0007 (main window of the reference beside IDECraft), OSS (`ManyIslandsDark.theme.json`:
+- **Sources:** OBS-0007 (main window of the reference beside Ferris IDEA), OSS (`ManyIslandsDark.theme.json`:
   `MainWindow`, `Island`, `EditorTabs`, `Tree`, `StatusBar`, `MainToolbar`, `ToolWindow` values; icons
   `toolwindows/project`, `general/vcs`), SPEC-0059 (tree and tabs), SPEC-0060 (themes), ADR-0009; v3:
   OBS-0011 item 3 (the reference's path in the status bar continues past the file to the class the
@@ -61,7 +61,7 @@
   `defaultToolWindowlayoutProvider.kt` as in v4: Notifications on the right), SPEC-0070 (the status
   bar's notes), SPEC-0087 (run widget), SPEC-0122 (what the editor's Run starts), ADR-0008; v19:
   OBS-0079 L4 (in `Islands Light` the reference's selected tab is white with a thin grey border,
-  IDECraft's light blue with a blue border; where the keyboard focus was is not recorded), OSS
+  Ferris IDEA's light blue with a blue border; where the keyboard focus was is not recorded), OSS
   (`JetBrains/intellij-community` master of 2026-11-17, equal in the keys below to the bundled
   `750ce16`: `ManyIslandsLight.theme.json` `EditorTabs.underlinedTabBackground` = `blue-150`,
   `underlinedBorderColor` = `blue-120`, `inactiveUnderlinedTabBackground` = `gray-150`,
@@ -83,9 +83,9 @@ window background, a main toolbar in the title bar, a tool window stripe and a s
    project's initials in a coloured square, its name and a menu arrow; a branch widget with the checked-out
    branch (read from the repository's `HEAD`, worktrees followed) when the folder is a Git repository.
    Widgets get the toolbar hover background. [OBS, OSS]
-3. **Tool window stripe** on the left with a button per tool window that exists in IDECraft (now: Project);
+3. **Tool window stripe** on the left with a button per tool window that exists in Ferris IDEA (now: Project);
    the button is highlighted while its tool window is shown and toggles it (like
-   `ActivateProjectToolWindow`). Buttons of tool windows IDECraft does not have yet are not shown. [OBS]
+   `ActivateProjectToolWindow`). Buttons of tool windows Ferris IDEA does not have yet are not shown. [OBS]
 4. **Tool window header** "Project" above the tree; the root row shows the folder's path after its name,
    with the home folder as `~`, in the dimmed text colour. The selected row is `Tree.selectionBackground`
    while the tree has focus and `Tree.selectionInactiveBackground` otherwise; rows are inset with rounded
@@ -151,7 +151,7 @@ window background, a main toolbar in the title bar, a tool window stripe and a s
 13. **(v4) Stripe order:** the default bottom windows are, in order, Git, Problems, Terminal, Services,
    then Run and Debug (registered when they first exist), and the stripe's foot group stacks them from
    the foot upward, so Git sits lowest; left and right windows stack from the top. The order kept in
-   `.idecraft/tool-windows.json` wins over the default. [OSS, OBS]
+   `.ferris-idea/tool-windows.json` wins over the default. [OSS, OBS]
 14. **(v4) Main toolbar:** the project, branch and run configuration widgets have 10 px before and 6 px
    after their content, 5 px above and below, corners of `MainToolbar.Dropdown.arc` / 2 (6 px) and at
    most `MainToolbar.Dropdown.maxWidth` (350 px), the name cut with "…"; the 20 px project avatar stays.
@@ -173,7 +173,7 @@ window background, a main toolbar in the title bar, a tool window stripe and a s
    as `< toolchain >` first, then the dependencies of the build files as `Tool: name:version` (the
    locked version, else the requirement), read when the node is first expanded (SPEC-0048 model).
    **Scratches and Consoles** (`fileTypes/scratches`) holds the folder **Scratches** (the `scratches`
-   folder in the IDECraft settings folder) and **Database Consoles** (`.idecraft/consoles` of the
+   folder in the Ferris IDEA settings folder) and **Database Consoles** (`.ferris-idea/consoles` of the
    project) where they exist; files in them open like project files. The two rows and the libraries
    cannot be renamed, deleted, cut, copied or pasted into, and only the project folder's row shows its
    path. The view "Project Files" leaves both rows out. [OSS, OBS]
@@ -206,7 +206,7 @@ window background, a main toolbar in the title bar, a tool window stripe and a s
    toolbar. The Problems tool window keeps its own header for now (deviation below). [OSS, GEN]
 19. **(v5) More actions in the main toolbar:** after Debug (and Stop while something runs), before
    Search Everywhere, a `MainToolbar.Button.size` button with the 20 px `general/moreVertical` icon
-   opens a menu below it. OBS-0007 item 2 records the button's place, **not its content**; IDECraft's
+   opens a menu below it. OBS-0007 item 2 records the button's place, **not its content**; Ferris IDEA's
    content is its own choice from the actions on the selected run configuration that have no button of
    their own: "Profile" and "Profile Memory" (SPEC-0120), a line, "Run Current File" and "Debug Current
    File" (SPEC-0047). A click runs the action and closes the menu; a click outside closes it. What the
@@ -282,10 +282,10 @@ window background, a main toolbar in the title bar, a tool window stripe and a s
    switched on). [OBS-0047, OSS: `IslandsGradientPainter.kt` (ramp to the widget and back, downward
    fade, 85 % mix), `ProjectWindowCustomizerService.kt` (nine theme colours per project), logic
    templates, no code]
-   The reference counts up a colour index for each new project and stores it; IDECraft derives it
+   The reference counts up a colour index for each new project and stores it; Ferris IDEA derives it
    from the folder path (FNV-1a), so the colour of a given project may differ from the reference's
    and stays the same across restarts without stored state. The avatar keeps the accent colour. The
-   reference extends the same gradient over the top of the stripes and the status bar; IDECraft
+   reference extends the same gradient over the top of the stripes and the status bar; Ferris IDEA
    tints the toolbar only.
 29. **(v6) Empty editor:** without tabs there is no tab row. The lines are left-aligned in a block
    centred in the editor area (IMP-0312), 22 px apart, each label followed 8 px later by its
@@ -316,7 +316,7 @@ window background, a main toolbar in the title bar, a tool window stripe and a s
    window's height (85 px at 954 px, as measured), a direction across the window does nothing;
    ⇧⌘' (`MaximizeToolWindow`) gives the focused window the whole room (a bottom window the whole
    column, the editor collapsed) and a second press restores its size. Sizes are at least 80 px,
-   kept per project in `.idecraft/tool-windows.json` (`size` per window) and win over the default of
+   kept per project in `.ferris-idea/tool-windows.json` (`size` per window) and win over the default of
    behaviour 22; side windows never get wider than the room between the stripes. [OBS-0020 items
    5, 16]35. **(v6) Compact values (Islands):** header 32 px with 24 px pills; stripe buttons 32 × 32 with a
    24 px highlight (the theme's compact padding) and 16 px icons; editor tabs 24 px in a 32 px bar;
@@ -373,13 +373,13 @@ window background, a main toolbar in the title bar, a tool window stripe and a s
    action, the More tool windows popup and MCP can still show it; showing it brings its button
    back at its placement. [OBS-0020 item 5]
 41. **(v7) More tool windows ("…"):** a stripe button with three horizontal dots (own icon
-   `idecraft/moreHorizontal`) after the left stripe's top groups opens a popup listing every tool
+   `ferris-idea/moreHorizontal`) after the left stripe's top groups opens a popup listing every tool
    window that exists, by title in alphabetical order, each with its stripe icon and its activation
    shortcut; shown windows are ticked and removed windows marked "removed". A click activates the
    window like its stripe button (a hidden window is shown and focused, a shown one hidden) and
    closes the popup; a click outside closes it. [OBS-0020 item 6, GEN]
 42. **(v7) Structure tool window:** id `structure`, Left Bottom, activated by
-   `ActivateStructureToolWindow` (⌘7, Alt+7), own icon `idecraft/structure`. It shows the symbols of
+   `ActivateStructureToolWindow` (⌘7, Alt+7), own icon `ferris-idea/structure`. It shows the symbols of
    the active editor's file as the File Structure popup does (SPEC-0079: order, nesting, speed
    search, filters), filling the window, and loads them again when it is shown and when the active
    tab changes while it is shown. Enter or a click moves the caret to the symbol and keeps the
@@ -394,17 +394,17 @@ window background, a main toolbar in the title bar, a tool window stripe and a s
    and "Remove from Sidebar", and gets **Options** (⋮) and **Hide** at the right end of its own
    header row (behaviour 33), which keeps its title and controls (`shared: false` in the header
    model, no line). Stripe icons: `general/search` (Find, Find in Files), `fileTypes/http`
-   (Endpoints), `fileTypes/python`, `fileTypes/docker` (Containers), own `idecraft/spring`,
-   `idecraft/chat`, `idecraft/profiler` and `idecraft/remote`, drawn at 20 px. [OBS-0020 item 4
+   (Endpoints), `fileTypes/python`, `fileTypes/docker` (Containers), own `ferris-idea/spring`,
+   `ferris-idea/chat`, `ferris-idea/profiler` and `ferris-idea/remote`, drawn at 20 px. [OBS-0020 item 4
    (L15), GEN]
 44. **(v7) Traffic lights:** GPUI 0.2.2 sets only the position of the macOS close button
    (`traffic_light_position`, 14 × 13 as before) and keeps the pitch AppKit gives the three buttons
-   (23 pt on macOS 27). IDECraft places the minimize and zoom buttons 20 pt after the one before
+   (23 pt on macOS 27). Ferris IDEA places the minimize and zoom buttons 20 pt after the one before
    (`TRAFFIC_LIGHT_PITCH`) when a window opens and again after every change of its bounds or
    activation; GPUI keeps a pitch it finds when it moves the buttons itself. Other systems are not
    affected. [OBS-0020 item 17, GEN]
 45. **(v7) Persistence:** placement, mode, `removed` and the Float/Window `bounds` are kept with the
-   sides and sizes per project in `.idecraft/tool-windows.json`; a missing entry means Dock Pinned,
+   sides and sizes per project in `.ferris-idea/tool-windows.json`; a missing entry means Dock Pinned,
    the window's default half and a stripe button; an unknown mode reads as Dock Pinned.
    [SPEC-0167 behaviour 8]
 46. **(v7) MCP:** `tool_windows` reports per window its `placement` (`left_top` …), `split`, `mode`,
@@ -439,7 +439,7 @@ window background, a main toolbar in the title bar, a tool window stripe and a s
 50. **v10 – ⌥-click into the other half (IMP-0311):** ⌥-click (Alt-click) on a stripe button shows
     the window in the other half of its side — Left Top ↔ Left Bottom, Bottom Left ↔ Bottom Right,
     Right Top ↔ Right Bottom — for as long as it stays shown. Its saved placement, the place of its
-    stripe button and `.idecraft/tool-windows.json` do not change; hiding it ends the exception.
+    stripe button and `.ferris-idea/tool-windows.json` do not change; hiding it ends the exception.
     A window shown in that half is replaced (behaviour 49). ⌥-click on a window shown in its own
     half moves it to the other half, on a window shown in the other half hides it. A plain click
     replaces as in behaviour 49. [GEN]
@@ -453,10 +453,10 @@ window background, a main toolbar in the title bar, a tool window stripe and a s
     | Right Top | AI Chat (always), Database, Build |
     | off the sidebar | Plugins (Right Top), Endpoints, Spring, Python Packages, Containers, Profiler, Remote Host (Bottom Left) |
 
-    Build is IDECraft's build tools window (Maven, Gradle and the other build tools, SPEC-0100); the
+    Build is Ferris IDEA's build tools window (Maven, Gradle and the other build tools, SPEC-0100); the
     reference keeps Maven and Gradle on the right, its Build output window has no counterpart of
     its own. AI Chat stands for the reference's AI window. The reference's Notifications window does
-    not exist in IDECraft (out of scope). Windows off the sidebar are reached through "…", their
+    not exist in Ferris IDEA (out of scope). Windows off the sidebar are reached through "…", their
     activation action and MCP until the user adds them (behaviour 52). [OBS-0020 item 6, OBS-0007
     item 3, OSS]
 52. **v10 – Windows off the sidebar (changes 40):** a window off the sidebar — by default
@@ -470,7 +470,7 @@ window background, a main toolbar in the title bar, a tool window stripe and a s
     shown windows are ticked, windows off the sidebar marked "not in sidebar". A click on a hidden
     window shows it in its placement (replacing, behaviour 49), on a shown one hides it; it does
     not add it to the sidebar. [GEN]
-54. **v10 – Migration of untouched layouts:** a `.idecraft/tool-windows.json` without `"version": 2`
+54. **v10 – Migration of untouched layouts:** a `.ferris-idea/tool-windows.json` without `"version": 2`
     whose listed windows are all at their v7 default placement (Project, Commit Left Top; Structure
     Left Bottom; Database, Build, Plugins Right Top; all others Bottom Left), in the v7 default order
     within each placement and none removed was never arranged by the user: it is read with the
@@ -499,14 +499,14 @@ window background, a main toolbar in the title bar, a tool window stripe and a s
     window's full-screen mode; no key in the default keymap; Window › Toggle Full Screen after Zoom, Find
     Action) puts the project window into the system's full-screen mode and takes it out again, as the
     system's own control of the window does. The layout of the window does not change and nothing is
-    stored: the mode is the system's. The menu item keeps one name in both states, as IDECraft's menus do
+    stored: the mode is the system's. The menu item keeps one name in both states, as Ferris IDEA's menus do
     not change with the context (SPEC-0124). Agents need no tool for it; `ui_act` presses the key. [GEN,
     STD: the full-screen mode of the platform's windows; OSS: the action id and its shortcut in the
     bundled keymap]
 59. **v13 – Tool windows come back (window check 2026-11-14):** the tool windows shown when the
-    project's window closes or IDECraft quits — Terminal, Database, the Project tree and every other
+    project's window closes or Ferris IDEA quits — Terminal, Database, the Project tree and every other
     — are shown again when the project opens, in the arrangement they had; they are written with the
-    editor tabs (`.idecraft/editor-tabs.json`, `tool_windows`). A window that cannot be shown at
+    editor tabs (`.ferris-idea/editor-tabs.json`, `tool_windows`). A window that cannot be shown at
     once (Run or Debug without a session) stays hidden; unknown names are skipped; a file written
     before v13 has none and leaves the start as it was. Until v13 every tool window but the Project
     tree came back closed. [GEN]
@@ -529,7 +529,7 @@ window background, a main toolbar in the title bar, a tool window stripe and a s
 62. **v16 – Stop Background Processes…:** `StopBackgroundProcesses` (⇧⌘F2 in the bundled macOS
     keymap, Ctrl+Shift+F2 in the default one; Run › Stop Background Processes…, SPEC-0124 v14
     behaviour 16) opens a list of the background tasks of this window that run now and that
-    IDECraft can stop.
+    Ferris IDEA can stop.
     - **The tasks,** in this order, each one row while it runs: a repository being cloned from
       the project popup, with the progress line of the clone behind it (SPEC-0094 v5); a
       remote project that is opening (SPEC-0318); a search of Find Usages (SPEC-0293); the
@@ -547,7 +547,7 @@ window background, a main toolbar in the title bar, a tool window stripe and a s
       says that nothing runs. Only the chosen task is stopped.
     - **Nothing to stop.** With no such task no list opens and the status bar says that no
       background task is running that can be stopped.
-    - **Not in the list,** because IDECraft has no way to stop them: the loading of a
+    - **Not in the list,** because Ferris IDEA has no way to stop them: the loading of a
       project's model and its symbol index, the start of a language server and its requests,
       Git operations other than the clone (fetch, pull, push, the log), an inspection run,
       a search of Find in Files (it ends when its popup closes), builds and build
@@ -561,7 +561,7 @@ window background, a main toolbar in the title bar, a tool window stripe and a s
     one. What the reference's list shows and how its rows are stopped was not observed.]
 63. **v17 – Structure icon (OBS-0046 A1):** the Structure tool window's stripe button, its row in
     the More tool windows popup and its menus use the open New UI tool window icon
-    `toolwindows/structure` (20 px on the stripe, 16 px elsewhere) instead of IDECraft's own tree
+    `toolwindows/structure` (20 px on the stripe, 16 px elsewhere) instead of Ferris IDEA's own tree
     drawing. [OBS-0046 A1, OSS]
 64. **v17 – Notifications tool window (OBS-0046 A2):** id `notifications`, title "Notifications",
     action `ActivateNotificationsToolWindow` (no key in the bundled keymaps; View › Tool Windows,
@@ -697,7 +697,7 @@ window background, a main toolbar in the title bar, a tool window stripe and a s
   reference (open).
 - **AK-28 (v7)** MCP: `tool_windows` with `move` and `split`, `set_mode`, `remove`, `restore`, the
   new fields per window, the split frame, `overlays` and `more_tool_windows` (protocol test
-  `tool_windows_modes_split_and_remove`; `idecraft call … tool_windows`).
+  `tool_windows_modes_split_and_remove`; `ferris-idea call … tool_windows`).
 - **AK-29 (v7)** Window self-test steps for the view modes, split placements, removing and
   restoring, "…" and Structure (`tool_window_mode_steps`); written, run with the next window
   self-test (open).
@@ -724,7 +724,7 @@ window background, a main toolbar in the title bar, a tool window stripe and a s
   moved, reordered or removed one stays, a version 2 file is not migrated (unit test
   `tool_windows::tests::untouched_layouts_are_migrated`).
 - **AK-36 (v10)** MCP: the new fields, `replaced` and `split_shown` in the frame (protocol test
-  `tool_windows_replace_and_alt_click`; `idecraft call <folder> tool_windows`).
+  `tool_windows_replace_and_alt_click`; `ferris-idea call <folder> tool_windows`).
 - **AK-37 (v10)** Window self-test steps (`tool_window_replace_steps`; `tool_window_mode_steps` and
   `status_bar_steps` changed to one window per part): written, run with the next window self-test
   (open); check in the window (open).
@@ -742,7 +742,7 @@ window background, a main toolbar in the title bar, a tool window stripe and a s
 - **AK-v15 (behaviour 61)** `title_bar::tests::a_press_on_a_control_is_not_the_title_bars`: a press
   of the primary button on a control's place is the control's, one beside it, between two controls
   or with the secondary button is not. Window self-test, group `title-bar-clicks` (12 checks, with
-  native double clicks posted to IDECraft's own event queue): two quick clicks on the run widget and
+  native double clicks posted to Ferris IDEA's own event queue): two quick clicks on the run widget and
   on the search button leave the window's size as it was and reach the control twice; a double
   click on the empty title bar is no press on a control and zooms the window, a second one gives
   it its size back (only where the system setting zooms on a double click). Without the change the
@@ -791,7 +791,7 @@ window background, a main toolbar in the title bar, a tool window stripe and a s
 - **AK-v14 (behaviour 28a)** `palette::tests::frame_islands_and_selection_come_from_the_open_theme`:
   `Islands Dark` has the nine project colours mixed 85 % into `#26282C` (`#394773` → `#364268`),
   each below 2 : 1 against the window, width 600 and height 300, the same colour for the same
-  folder; `Islands Light` has a gradient, `IDECraft Dark`, `IDECraft Light`, `Dark` and `Light`
+  folder; `Islands Light` has a gradient, `Ferris IDEA Dark`, `Ferris IDEA Light`, `Dark` and `Light`
   none (they keep the accent tint). On screen: next comparison run.
 - **AK-v18 (behaviour 68)** `EmojiAndSymbols` is carried out (`docs/research/KEYMAP_COVERAGE.md`);
   the palette itself is a hand test on macOS (the test window has none).
@@ -815,8 +815,8 @@ as read, grouping them by day, the settings per kind of notification and balloon
 as in the reference, behaviour 49, and ⌥-click opens a window in the other half of its side without
 moving it, behaviour 50); the empty editor's lines are
 centred in the editor area, not offset towards the window's centre and top (IMP-0312). The run
-widget's more-actions menu keeps IDECraft's entries: the reference's coverage run and parameter
-dialog belong to the run configurations (F-077). The Settings menu lists only entries IDECraft has.
+widget's more-actions menu keeps Ferris IDEA's entries: the reference's coverage run and parameter
+dialog belong to the run configurations (F-077). The Settings menu lists only entries Ferris IDEA has.
 (v6) The macOS window buttons were 23 px apart instead of 20 (GPUI's title bar; defect F087-2);
 v7 sets the pitch itself (behaviour 44).
 Only tool windows that exist get a stripe button (the reference shows all registered tool windows).
@@ -841,6 +841,6 @@ stays on the right, where the reference keeps Maven and Gradle.
 
 **(v11)** The More tool windows popup lists every window that can be opened, with its state, not only the ones without a stripe button as the reference does (IMP-0360).
 
-**(v14)** The Notifications window lists the notes of the status bar, which are IDECraft's
+**(v14)** The Notifications window lists the notes of the status bar, which are Ferris IDEA's
 notifications; the reference shows balloons and lists those. The Database tool window keeps its own
 icon (OBS-0046 A3): the reference's database tools are not open source.

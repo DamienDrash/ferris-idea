@@ -10,13 +10,13 @@
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_debugger::Suspend;
+use ferris_idea_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
+use ferris_idea_workbench::breakpoint_dialog::Row;
+use ferris_idea_workbench::breakpoint_popup::{RowKind, Target, title_of};
+use ferris_idea_workbench::debug_model::BreakpointLook;
+use ferris_idea_workbench::{EditorView, WorkbenchView, semantics};
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_debugger::Suspend;
-use idecraft_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
-use idecraft_workbench::breakpoint_dialog::Row;
-use idecraft_workbench::breakpoint_popup::{RowKind, Target, title_of};
-use idecraft_workbench::debug_model::BreakpointLook;
-use idecraft_workbench::{EditorView, WorkbenchView, semantics};
 
 type Bench = Entity<WorkbenchView>;
 
@@ -25,7 +25,7 @@ const LOOP_PY: &str = "total = 0\nfor i in range(5):\n    total += i\nprint(tota
 
 fn workspace(tag: &str) -> PathBuf {
     let root = std::env::temp_dir().join(format!(
-        "idecraft-breakpoint-popup-keys-{tag}-{}",
+        "ferris-idea-breakpoint-popup-keys-{tag}-{}",
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&root);
@@ -41,7 +41,7 @@ fn window(root: &Path, cx: &mut TestAppContext) -> (Bench, &'static mut VisualTe
     cx.update(|cx| {
         cx.set_global(IdeSettingsFile(settings.join("settings.toml")));
         cx.set_global(ThemeFile(settings.join("theme")));
-        cx.set_global(CurrentIdeSettings(idecraft_core::IdeSettings::default()));
+        cx.set_global(CurrentIdeSettings(ferris_idea_core::IdeSettings::default()));
     });
     let at = root.to_path_buf();
     let window = cx.add_window(move |_, cx| WorkbenchView::new(&at, cx));
@@ -68,8 +68,8 @@ fn open(bench: &Bench, cx: &mut VisualTestContext, file: &Path) -> Entity<Editor
         .expect("the file is open")
 }
 
-fn special(root: &Path) -> idecraft_debugger::SpecialBreakpoints {
-    idecraft_debugger::saved::load_special_breakpoints(root)
+fn special(root: &Path) -> ferris_idea_debugger::SpecialBreakpoints {
+    ferris_idea_debugger::saved::load_special_breakpoints(root)
 }
 
 fn popup_open(bench: &Bench, cx: &mut VisualTestContext) -> bool {
@@ -192,7 +192,7 @@ fn the_popup_edits_a_breakpoint_and_more_opens_the_dialog(cx: &mut TestAppContex
     assert_eq!(p.condition.as_deref(), Some("i > 2"));
     assert_eq!(p.rules.suspend, Some(Suspend::Thread));
     assert!(
-        std::fs::read_to_string(root.join(".idecraft/breakpoints.toml"))
+        std::fs::read_to_string(root.join(".ferris-idea/breakpoints.toml"))
             .unwrap_or_default()
             .contains("i > 2"),
         "saved"
@@ -289,7 +289,7 @@ fn exception_breakpoints_per_language_and_row_checks(cx: &mut TestAppContext) {
     assert!(!s.exceptions_of("java").uncaught);
     assert!(!s.uncaught, "the shared setting stays");
     let text =
-        std::fs::read_to_string(root.join(idecraft_debugger::saved::SPECIAL_BREAKPOINTS_FILE))
+        std::fs::read_to_string(root.join(ferris_idea_debugger::saved::SPECIAL_BREAKPOINTS_FILE))
             .unwrap_or_default();
     assert!(text.contains("\"languages\""), "{text}");
 
@@ -304,7 +304,7 @@ fn exception_breakpoints_per_language_and_row_checks(cx: &mut TestAppContext) {
     assert!(rules.depends_keep);
     assert_eq!(rules.suspend, Some(Suspend::All));
     assert_eq!(
-        idecraft_workbench::breakpoint_dialog::exception_headings(),
+        ferris_idea_workbench::breakpoint_dialog::exception_headings(),
         [
             "Java Exception Breakpoints",
             "Python Exception Breakpoints",
@@ -352,7 +352,7 @@ fn the_popup_shows_kind_rows_and_history(cx: &mut TestAppContext) {
     // Escape: nothing saved, the breakpoint keeps no choice of threads.
     keys(cx, "escape");
     let saved =
-        || std::fs::read_to_string(root.join(".idecraft/breakpoints.toml")).unwrap_or_default();
+        || std::fs::read_to_string(root.join(".ferris-idea/breakpoints.toml")).unwrap_or_default();
     assert!(!saved().contains("suspend"), "{}", saved());
 
     // A condition applied comes back with ↑ in the next popup; All is saved with it.
@@ -635,7 +635,7 @@ fn the_dialog_and_the_popup_show_one_state(cx: &mut TestAppContext) {
     keys(cx, "cmd-f8");
     assert_eq!(editor.read_with(cx, |e, _| e.breakpoints().to_vec()), [1]);
     let saved =
-        || std::fs::read_to_string(root.join(".idecraft/breakpoints.toml")).unwrap_or_default();
+        || std::fs::read_to_string(root.join(".ferris-idea/breakpoints.toml")).unwrap_or_default();
 
     // ⇧⌘F8: the popup with All chosen; ⇧⌘F8 there (More) opens the dialog.
     keys(cx, "cmd-shift-f8");

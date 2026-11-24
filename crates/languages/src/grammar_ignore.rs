@@ -1,5 +1,5 @@
 //! Grammar findings a project no longer reports (`SPEC-0155` v3 behaviour 10): "Ignore '<text>'"
-//! in ⌥↩ keeps the rule and the text of a finding in the project's `.idecraft/grammar-ignore.toml`,
+//! in ⌥↩ keeps the rule and the text of a finding in the project's `.ferris-idea/grammar-ignore.toml`,
 //! and the same rule's finding on the same text is then left out of the project's files.
 
 use std::collections::{BTreeSet, HashMap};
@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::inspections::Finding;
 
 /// The file, relative to the project folder.
-pub const FILE: &str = ".idecraft/grammar-ignore.toml";
+pub const FILE: &str = ".ferris-idea/grammar-ignore.toml";
 
 /// The rules whose findings can be ignored by their text: a repeated word and an article.
 pub const RULES: [&str; 2] = ["grazie.repeated-word", "grazie.article"];
@@ -75,7 +75,7 @@ pub fn render(entries: &BTreeSet<Ignored>) -> String {
     };
     let body = toml::to_string(&form).unwrap_or_default();
     format!(
-        "# Grammar findings IDECraft does not report in this project (\"Ignore\" in Alt+Enter).\n\n{body}"
+        "# Grammar findings Ferris IDEA does not report in this project (\"Ignore\" in Alt+Enter).\n\n{body}"
     )
 }
 
@@ -171,7 +171,7 @@ mod tests {
     /// the filter of a project's files.
     #[test]
     fn keeps_and_filters_ignored_texts() {
-        let dir = std::env::temp_dir().join(format!("idecraft-gignore-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-gignore-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("docs")).unwrap();
         let note = dir.join("docs/notes.txt");

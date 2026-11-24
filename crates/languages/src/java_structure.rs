@@ -248,10 +248,12 @@ pub fn method_named_on_line(text: &str, line: usize) -> Option<String> {
     let (owner, method) = types
         .iter()
         .find_map(|t| t.methods.iter().find(|m| m.line == line).map(|m| (t, m)))?;
-    Some(match idecraft_core::source_roots::declared_package(text) {
-        Some(pkg) => format!("{pkg}.{}.{}", owner.name, method.name),
-        None => format!("{}.{}", owner.name, method.name),
-    })
+    Some(
+        match ferris_idea_core::source_roots::declared_package(text) {
+            Some(pkg) => format!("{pkg}.{}.{}", owner.name, method.name),
+            None => format!("{}.{}", owner.name, method.name),
+        },
+    )
 }
 
 /// The method declaration around `offset` (name, parameters or body) and the type it is in.
@@ -1268,7 +1270,7 @@ mod tests {
 
     #[test]
     fn method_marks_follow_the_types() {
-        let dir = std::env::temp_dir().join(format!("idecraft-mh-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-mh-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let file = |name: &str, body: &str| {
             let p = dir.join(format!("{name}.java"));
@@ -1372,7 +1374,8 @@ mod tests {
     /// outer file; a library type keeps none.
     #[test]
     fn return_types_come_from_the_project_sources() {
-        let root = std::env::temp_dir().join(format!("idecraft-java-ret-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("ferris-idea-java-ret-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("src/shop")).unwrap();
         std::fs::create_dir_all(root.join("target/classes/shop")).unwrap();

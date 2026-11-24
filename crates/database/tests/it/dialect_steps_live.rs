@@ -2,19 +2,19 @@
 //! Server (`SPEC-0116`), MariaDB (`SPEC-0116`) and Oracle (`SPEC-0142`, `SPEC-0135`). Each test
 //! runs a throw-away script of `pd_*` objects as a user would select it all and run it, then
 //! checks Test Connection, the catalog, an edited cell, plans and a comparison of two schemas
-//! where the system has them, and drops its objects again. Without `IDECRAFT_TEST_SQLSERVER`,
-//! `IDECRAFT_TEST_MARIADB` or `IDECRAFT_TEST_ORACLE` (and their password files) the test of that
+//! where the system has them, and drops its objects again. Without `FERRIS_IDEA_TEST_SQLSERVER`,
+//! `FERRIS_IDEA_TEST_MARIADB` or `FERRIS_IDEA_TEST_ORACLE` (and their password files) the test of that
 //! system passes without doing anything.
 
 use crate::common;
 
-use idecraft_database::{
+use ferris_idea_database::{
     Applied, ConnectionProfile, Credentials, EditSet, EditTarget, OnError, Outcome, ScriptRun,
     Secret, Session, Values, compare, explain, introspect, introspect_schema, test_connection,
 };
 
 /// The profile of `var` and its password from `<var>_PASSWORD` or `<var>_PASSWORD_FILE`.
-fn reference(var: &str) -> Option<(ConnectionProfile, Credentials)> {
+pub(crate) fn reference(var: &str) -> Option<(ConnectionProfile, Credentials)> {
     let url = std::env::var(var).ok()?;
     let profile = ConnectionProfile::from_url("reference", &url).unwrap();
     let password = std::env::var(format!("{var}_PASSWORD")).ok().or_else(|| {
@@ -56,7 +56,7 @@ fn show(script: &str, run: &ScriptRun) -> String {
 
 /// Changes the body of row 2 of `pd_note` through an edit set, as the result grid submits it, and
 /// reads it back. `id` and `body` are the column names as the catalog has them.
-async fn edit_a_cell(s: &Session, table: &idecraft_database::Table, [id, body]: [&str; 2]) {
+async fn edit_a_cell(s: &Session, table: &ferris_idea_database::Table, [id, body]: [&str; 2]) {
     let target = EditTarget::new(table, s.dialect()).unwrap();
     let mut edits = EditSet::new(target);
     let row: Values = vec![
@@ -81,8 +81,8 @@ async fn edit_a_cell(s: &Session, table: &idecraft_database::Table, [id, body]: 
 /// sets of one procedure and two schemas compared.
 #[tokio::test]
 async fn sql_server_steps() {
-    let Some((profile, credentials)) = reference("IDECRAFT_TEST_SQLSERVER") else {
-        eprintln!("skipped: IDECRAFT_TEST_SQLSERVER not set");
+    let Some((profile, credentials)) = reference("FERRIS_IDEA_TEST_SQLSERVER") else {
+        eprintln!("skipped: FERRIS_IDEA_TEST_SQLSERVER not set");
         return;
     };
     let s = Session::connect(&profile, &credentials).await.unwrap();
@@ -131,11 +131,11 @@ async fn sql_server_steps() {
     // The login has no right to see the server's connections; the driver's agreement answers:
     // `prefer` is encrypted exactly when an encrypted session can be opened, `disable` is not.
     let mut strict = profile.clone();
-    strict.ssl = idecraft_database::SslMode::Require;
+    strict.ssl = ferris_idea_database::SslMode::Require;
     let encrypts = Session::connect(&strict, &credentials).await.is_ok();
     assert_eq!(test.tls, Some(encrypts), "{test:?}");
     let mut plain = profile.clone();
-    plain.ssl = idecraft_database::SslMode::Disable;
+    plain.ssl = ferris_idea_database::SslMode::Disable;
     let test = test_connection(&plain, &credentials).await.unwrap();
     assert_eq!(test.tls, Some(false), "{test:?}");
 
@@ -162,7 +162,7 @@ async fn sql_server_steps() {
     let query = "select id, body from pd_note where id = 2";
     let plan = explain(&s, query, false).await.unwrap();
     eprintln!("S3 plan:\n{:#?}", plan.nodes);
-    let all = |p: &idecraft_database::Plan| {
+    let all = |p: &ferris_idea_database::Plan| {
         let mut out = Vec::new();
         let mut stack: Vec<_> = p.nodes.iter().collect();
         while let Some(n) = stack.pop() {
@@ -303,8 +303,8 @@ async fn sql_server_steps() {
 /// procedure as on MySQL; the key in the catalog; an edited cell; two databases compared.
 #[tokio::test]
 async fn mariadb_steps() {
-    let Some((profile, credentials)) = reference("IDECRAFT_TEST_MARIADB") else {
-        eprintln!("skipped: IDECRAFT_TEST_MARIADB not set");
+    let Some((profile, credentials)) = reference("FERRIS_IDEA_TEST_MARIADB") else {
+        eprintln!("skipped: FERRIS_IDEA_TEST_MARIADB not set");
         return;
     };
     let test = test_connection(&profile, &credentials).await.unwrap();
@@ -408,8 +408,8 @@ async fn mariadb_steps() {
 /// the catalog; an edited cell; Explain Plan.
 #[tokio::test]
 async fn oracle_steps() {
-    let Some((profile, credentials)) = reference("IDECRAFT_TEST_ORACLE") else {
-        eprintln!("skipped: IDECRAFT_TEST_ORACLE not set");
+    let Some((profile, credentials)) = reference("FERRIS_IDEA_TEST_ORACLE") else {
+        eprintln!("skipped: FERRIS_IDEA_TEST_ORACLE not set");
         return;
     };
     let test = test_connection(&profile, &credentials).await.unwrap();

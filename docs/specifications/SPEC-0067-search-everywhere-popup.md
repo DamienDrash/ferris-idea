@@ -26,7 +26,7 @@ Everywhere.
    tab, a click on a tab selects it. [GEN, OSS] (v4) A press counts only as a tap: Shift pressed while
    no other modifier is held and released before any key or other modifier. The Shift left over
    when ⌘ of ⌘⇧← is released first, or the Shift of a capital letter, is no tap, so ⌘⇧← followed
-   quickly by ⇧P types `P`. [GEN; OBS-0021 item 12: IDECraft opened the popup there, the reference
+   quickly by ⇧P types `P`. [GEN; OBS-0021 item 12: Ferris IDEA opened the popup there, the reference
    did not]
 2. **Search while typing:** each change searches in the background with SPEC-0031's matching and ranking,
    at most 8 results per category on "All" and 50 on a single tab. A newer query cancels the running
@@ -37,11 +37,11 @@ Everywhere.
    Up and Down move over results (skipping headings) and wrap around; the first result is selected. [GEN]
 4. **Choose:** Enter or a double click: a file opens in a tab; a symbol opens its file with the caret at
    the start of its line; an action runs as if its shortcut had been pressed (editor actions on the
-   active editor first, then workbench actions); an action IDECraft does not have yet reports so in the
+   active editor first, then workbench actions); an action Ferris IDEA does not have yet reports so in the
    status bar. The popup closes. [GEN]
 5. **Close:** Escape closes the popup and returns focus to the editor. [GEN]
 6. The MCP counterpart is `search_everywhere` (SPEC-0031); both use the same function
-   `idecraft_languages::everywhere::search_everywhere`. [ADR-0008, ADR-0012]
+   `ferris_idea_languages::everywhere::search_everywhere`. [ADR-0008, ADR-0012]
 
 9. **Look (v2):** the popup uses the theme's popup background and border (`Popup.background`,
    `Popup.borderColor`); rows span the whole width, symbols and files start with their icon, locations,
@@ -76,7 +76,7 @@ Everywhere.
    [GEN; OBS-0023 L8]
 13. **Non-project items:** on All, Classes, Files, Symbols and Text a checkbox "Include non-project
    items" also searches the files of excluded folders (`node_modules`, `target`, `__pycache__`, …;
-   only `.git`, `.hg`, `.svn` and `.idecraft` stay out); pressing the tab's shortcut again while it is
+   only `.git`, `.hg`, `.svn` and `.ferris-idea` stay out); pressing the tab's shortcut again while it is
    shown toggles it. Each opening starts with the project scope again (IMP-0333). (v6) Without it
    the files of All and Files are the project's own sources (SPEC-0031 v5 behaviour 12), the files
    open in editors and the recently opened ones; a line below the results says what was left out,
@@ -88,7 +88,7 @@ Everywhere.
 15. **Calculator:** an arithmetic query shows `= value` first on All; Enter copies the value and the
    status bar says so. [GEN; OBS-0023 L14]
 16. **Settings pages:** the pages of the Settings dialog (SPEC-0105, SPEC-0129) are found among the
-   actions in the group "Settings"; Enter opens the dialog on that page. Only IDECraft's own pages are
+   actions in the group "Settings"; Enter opens the dialog on that page. Only Ferris IDEA's own pages are
    offered, no options of languages or tools the project does not use (IMP-0332). [GEN; OBS-0023 L15]
 17. **Find window:** on the Text tab a button shows the search in the Find in Files panel (SPEC-0066)
    with the same options, pinned so the results stay while matches are opened. [GEN; OBS-0023 L11]
@@ -157,7 +157,7 @@ Everywhere.
      of the rows as on the other single tabs. A project without endpoints, and a query that
      finds none, show one line that says so. [GEN]
    - **MCP:** `endpoints` takes an optional `query` with the same method prefix, matching and
-     ranking (one function for both, `idecraft_languages::endpoints::search_endpoints`), without
+     ranking (one function for both, `ferris_idea_languages::endpoints::search_endpoints`), without
      the limit of 50; without `query` it answers as before. [ADR-0008, ADR-0012]
 21. **v10 – Focus back where it was (window check 2026-11-14):** when the popup closes, or runs an
     action from its Actions tab, the focus goes back to the tool window that had it when the popup
@@ -186,12 +186,12 @@ Everywhere.
     two as "Next Group Element" and "Prev Group Element". [OSS: ids, titles and keys of the
     ported keymaps and `ActionsBundle.properties`; that the actions move the selection to
     another group of the list is from `SearchEverywhereUI.java`, the stepping rule itself is
-    IDECraft's, GEN]
+    Ferris IDEA's, GEN]
 
 ## Acceptance criteria
 - **AK-1** Rows grouped with empty groups hidden, selection skipping headings and wrapping, tab
   categories and limits (unit tests); search with cancellation stops early (unit test).
-- **AK-2** In a real window (`idecraft ui --selftest`): Go to File and typing select `new.txt`, Enter opens
+- **AK-2** In a real window (`ferris-idea ui --selftest`): Go to File and typing select `new.txt`, Enter opens
   it and closes the popup; Go to Action finds `CloseContent` and Enter runs it.
 - **AK-3** Use by hand: double Shift, tabs, symbols with line, mouse.
 - **AK-4 (v3)** "Show History" finds the local history first with either keymap (unit test
@@ -266,7 +266,7 @@ Jumping to the next or previous group of results and completing a command with T
 `SearchEverywhere.CompleteCommand`: the popup has neither operation).
 Usage-based ranking beyond recent files, symbols from language servers, a persistent index for very
 large workspaces, the reference's `/` commands (shortcuts to features of its plugins; OBS-0023 L18),
-an "include disabled actions" switch (IDECraft lists every action and says when one cannot run,
+an "include disabled actions" switch (Ferris IDEA lists every action and says when one cannot run,
 v3), descriptions of actions in the footer and assigning a shortcut from the list (Keymap settings,
 SPEC-0105). Endpoints (v9): endpoints on the All tab, matching the query against a full URL with
 host and port or against a path with values in place of its variables (`/users/42` for
@@ -283,5 +283,5 @@ items are the excluded folders, not libraries and the JDK (SPEC-0031 v4). "Open 
 offered on the Text tab: the other tabs list navigation targets that the popup itself opens. The
 scope resets on each opening (IMP-0333); only own settings pages are offered (IMP-0332).
 The Endpoints tab (v9) was not compared with the reference: its name, its place among the tabs,
-the title "Endpoint…", the rows and the ranking are IDECraft's own, and the action has no
+the title "Endpoint…", the rows and the ranking are Ferris IDEA's own, and the action has no
 shortcut. In a remote project the tab lists what the Endpoints tool window lists there.

@@ -18,6 +18,48 @@ pub struct DuckDbSession {
     conn: Arc<Mutex<Connection>>,
 }
 
+/// Makes the empty file at `path`, just made by the caller, a DuckDB database (`SPEC-0108` v13
+/// behaviour 23). DuckDB refuses an empty file and creates only a file that does not exist, so the
+/// database is made under a fresh name next to it, closed (its log written into the file) and moved
+/// over the empty file — only while that is still an empty file, not a link. No extension is loaded.
+pub(crate) fn initialise(path: &std::path::Path) -> Result<(), String> {
+    let folder = path.parent().ok_or("no folder")?;
+    let name = path.file_name().ok_or("no file name")?.to_string_lossy();
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.subsec_nanos());
+    let fresh = folder.join(format!(".{name}.{}-{nanos}.new", std::process::id()));
+    if fresh.symlink_metadata().is_ok() {
+        return Err(format!("{} exists", fresh.display()));
+    }
+    let made = (|| {
+        let config = Config::default()
+            .access_mode(AccessMode::ReadWrite)
+            .and_then(|c| c.enable_autoload_extension(false))
+            .map_err(|e| e.to_string())?;
+        let conn = Connection::open_with_flags(&fresh, config).map_err(|e| e.to_string())?;
+        conn.execute_batch("checkpoint")
+            .map_err(|e| e.to_string())?;
+        drop(conn);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&fresh, std::fs::Permissions::from_mode(0o600))
+                .map_err(|e| e.to_string())?;
+        }
+        let placeholder = path.symlink_metadata().map_err(|e| e.to_string())?;
+        if !placeholder.file_type().is_file() || placeholder.len() != 0 {
+            return Err(format!("{} changed while it was made", path.display()));
+        }
+        std::fs::rename(&fresh, path).map_err(|e| e.to_string())
+    })();
+    let _ = std::fs::remove_file(&fresh);
+    let _ = std::fs::remove_file(
+        folder.join(format!(".{name}.{}-{nanos}.new.wal", std::process::id())),
+    );
+    made
+}
+
 impl DuckDbSession {
     /// Opens the file of `profile` (read-only profiles open it read-only); the file must exist.
     pub async fn connect(

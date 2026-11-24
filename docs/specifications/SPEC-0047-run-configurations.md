@@ -1,6 +1,12 @@
 # SPEC-0047: Run configurations
 
-- **Version:** 4 · **Date:** 2026-11-14 (v4: templates per configuration type, operations on folders, "Open
+- **Version:** 7 · **Date:** 2026-11-19 (v7: `run_configuration` starts the reference IDE's configurations that
+  SPEC-0049 translates, by name as the window does, and they stay read only for agents, behaviour 18, AK-17; gap RC1
+  of OBS-0109, L4 of OBS-0085; no open pull request changed this spec when v7 was written); 2026-11-19 (v6: a configuration may send the requests of a `.http` file with
+  Ferris IDEA's HTTP client instead of starting a program, behaviour 17, AK-16; gap O8 of F-084 in OBS-0071; no open
+  pull request changed this spec when v6 was written); 2026-11-17 (v5: `run_configurations` also lists the reference IDE's
+  configurations that SPEC-0049 translates, with their origin, behaviour 16, AK-15; F-004 L4 of OBS-0085);
+  2026-11-14 (v4: templates per configuration type, operations on folders, "Open
   browser" may wait for a port; v3: folders, several instances, before-launch tasks "Build", "Run external
   tool" and "Open browser"; v2: starting through MCP with SPEC-0053)
 - **Sources:** GEN (IDEs keep named run and test configurations with command, arguments, working
@@ -11,14 +17,16 @@
   tasks could not be opened there and is named from general knowledge: build, run another configuration, external
   tool, npm script, open browser; folders were not evaluated), the parity note of F-077 in
   `docs/research/PARITY.md` (worse than the reference: no folders, no several instances, before-launch tasks only
-  as configurations), SPEC-0100 (Build Project), SPEC-0278 (trust)
+  as configurations), SPEC-0100 (Build Project), SPEC-0278 (trust); v6: SPEC-0046 (HTTP client), SPEC-0102 (environments),
+  SPEC-0053 (the `http` right), OBS-0061 (a run of a request in the reference also makes a run configuration of
+  it; every response is written as a file into the project)
 - **Feature matrix rows:** F-077
 
 ## Purpose
 Start the programs and tests of a project the same way every time, from the IDE or an agent.
 
 ## Behaviour
-1. Configurations live in `.idecraft/run.toml` as `[[run]]` tables: `name`, `command` (program and
+1. Configurations live in `.ferris-idea/run.toml` as `[[run]]` tables: `name`, `command` (program and
    arguments), optional `cwd` (workspace-relative, default the root), `env` (table), `kind` (`run` or
    `test`), `report` (`libtest`, `tap`, `junit`; for tests), `report_file` (workspace-relative JUnit file
    written by the tool, read after the run), `before` (names of configurations to run first) and
@@ -135,6 +143,71 @@ Start the programs and tests of a project the same way every time, from the IDE 
 15. **v4 – MCP:** `run_configurations` also lists `folders` (in list order), `types` (the configuration types
     with their command), `templates` (per type that has one) and `template_problems`. Changing folders and
     templates: SPEC-0327 v3 behaviour 17. [ADR-0008]
+16. **v5 – MCP, the reference's configurations:** `run_configurations` also lists `idea_configs`: the run
+    configurations SPEC-0049 reads from the reference IDE's project files (`.idea/runConfigurations/*.xml`,
+    the `RunManager` part of `.idea/workspace.xml`, or an `.ipr` and its `.iws`), in its order. Each has
+    `origin` `idea`, name, type, source file and folder, and either the translation (kind, command, working
+    folder and the *names* of its environment variables) or the reason it was not translated, as
+    `idea_project` lists them (SPEC-0049 v3 behaviour 16). `shadowed` is true when a configuration of
+    `run.toml` has the same name; the run list then shows only that one (SPEC-0049 behaviour 13). Environment
+    values are never returned, since they may hold secrets. `configs` stays `run.toml` alone, since it is what
+    the editing tools change; nothing is written. [ADR-0008, CLAUDE.md rule 12]
+17. **v6 – HTTP request configurations:** a configuration with the table `http` sends requests of a request file
+    (SPEC-0046) with Ferris IDEA's HTTP client instead of starting a program. Keys: `file` (the `.http` or `.rest`
+    file, workspace-relative), optional `request` (a request's name, or its number in the file counted from 1;
+    without it every request of the file is sent, in file order) and optional `environment` (an environment of
+    the environment files of SPEC-0102 found for that file). `command` stays empty (it may be left out), and
+    `url` and `kind = "test"` are not allowed beside `http`; a file that leaves the workspace, another file
+    type, an empty `request` or `environment`, and each of these combinations is a problem of behaviour 2
+    naming the configuration. The rest of the configuration (`before`, `before_launch`, `folder`,
+    `allow_multiple`, safe mode, Stop) works as for every configuration. A run:
+    - reads the file when it starts, never earlier; a file that is missing, lies outside the workspace or is
+      reached through a symbolic link that leads outside, a `request` the file does not have, and an
+      `environment` the environment files do not define end the run before anything is sent, with the reason;
+    - chooses the environment as SPEC-0102 v5 behaviour 4 does: the named one, else the only one, else none;
+      with several environments, none named and a request that needs a variable of one, nothing is sent and
+      the output names the environments to choose from;
+    - sends each request as the HTTP client does (SPEC-0046: its `# @timeout` and `# @no-redirect` settings,
+      body files only from inside the workspace, the redirect rules, response handlers and response targets
+      never run or written, each as a note); a request with unresolved names is not sent and the output says
+      which names; the next request is still tried;
+    - writes to its output, per request, its name (or its number), the request line, the status line with the
+      time and the size, `client error` or `server error` for a status of 400 and above, the response headers
+      and the body (indented when it is JSON; a body that is no text as its size; at most 1 MiB of body text,
+      with a note when cut). Values from the private environment file (SPEC-0102 behaviour 5) and the user
+      information of URLs never appear in the output: each private value is written as `{{name}}`, also in
+      the body;
+    - ends with exit code 0 when every request was sent and answered, whatever the status, and 1 when a
+      request was not sent, could not connect or timed out. Stop takes effect before the next request; the
+      request being sent ends with its own timeout. No response, cookie or history is written into the
+      project (IMP-0506).
+    A dry run (`run_configuration`) shows the step with its `http` table and as command the words
+    `HTTP request`, file, request and environment. Through MCP, starting a chain with such a step needs the
+    `http` right (SPEC-0053 behaviour 1) on top of `run`, both asked before anything starts; the agent log
+    keeps the run as for every configuration. A configuration with `http` cannot be debugged.
+    `run_configurations` lists the table like every key. [SPEC-0046, SPEC-0102, SPEC-0053; own design]
+18. **v7 – MCP, starting and protecting the reference's configurations:** an agent sees and starts what the window's
+    run list holds from the project files (SPEC-0049 v8 behaviour 13), the configurations detected from build files
+    aside.
+    - `run_configurations` marks each entry of `idea_configs` with `read_only` true; `source` stays the project file
+      it was read from (e.g. `.idea/runConfigurations/Main.xml`).
+    - `run_configuration` looks a name up in `run.toml` first and then among the translated configurations of
+      `idea_configs`, in their order; a name `run.toml` has too starts the configuration of `run.toml` (as in the
+      window, behaviour 16). A configuration of the reference starts exactly as one of `run.toml` does: dry run by
+      default, the same chain, the `run` right of SPEC-0053 (and the `http` right for an HTTP request
+      configuration), only in a trusted project, one instance unless `if_running` says otherwise, logged in the
+      agent log, and `failed_only` works on it. The answer adds `origin` `idea` and `source` for it. A
+      configuration of the reference that was not translated is refused with the reason `idea_configs` gives and
+      its source; nothing is started. Problems of `run.toml` keep every start refused, as before.
+    - Its environment values are passed to the program but never returned: where an answer would show the
+      configuration itself (the dry run of `failed_only`), `env` holds the variable names only.
+    - `run_configuration_edit` changes `run.toml` alone. An operation that names, as `name`, a configuration that
+      only the reference's files hold (`update`, `copy`, `remove`, `move`, `set_folder`) is refused before
+      anything is read for writing, with a message that names its source and says that Ferris IDEA does not change
+      the reference IDE's project files, and that a configuration of the same name added to `run.toml` takes its
+      place in the run list; `add` of such a name stays allowed for that reason. Nothing under `.idea` and no
+      `.ipr` or `.iws` is ever written. [ADR-0008; read only: SPEC-0049 v8; security first: no values of the
+      environment in answers]
 
 ## Acceptance criteria
 - **AK-1** Loading and validation: valid file, duplicate name, empty command, unknown and cyclic `before`,
@@ -173,16 +246,45 @@ Start the programs and tests of a project the same way every time, from the IDE 
   connections, and not at all when the program ends first, with the reason in the output; the key round-trips
   through the writer and the task line; the dry run names page and port (real processes and a real listener; the
   opener is a recorder).
-- **AK-14** v4 – In a real window (`idecraft ui --selftest`, groups `run-config-instances` and
+- **AK-14** v4 – In a real window (`ferris-idea ui --selftest`, groups `run-config-instances` and
   `run-config-before-launch`): a second start asks, Cancel keeps the running instance, Stop and Rerun replaces
   it; with `allow_multiple` a second tab `name (2)` runs beside the first; an external tool runs before the
   configuration and the page is handed to the opener after its start; a failing tool stops the launch and the
   output names the step.
+- **AK-15** v5 – MCP (`crates/mcp/tests/it/protocol.rs`: `run_configurations_lists_the_idea_ones`): with
+  `.idea/runConfigurations`, a personal configuration in `workspace.xml` and a `run.toml`, `configs` holds
+  `run.toml` only; `idea_configs` holds the shared and the personal configuration with origin `idea`, source,
+  command and the environment variable's name, an untranslated one with its reason, and `shadowed` for the
+  one `run.toml` names too; the environment value appears nowhere in the answer.
+- **AK-16** v6 – HTTP request configurations (`crates/core/tests/it/run_http.rs`, a server on 127.0.0.1): a
+  configuration with `http` loads and every malformed form of behaviour 17 is a problem naming it; a run sends
+  one request by name, by number and all requests of the file, with the named environment, and its output holds
+  request line, status, headers and the indented body with the private value written as `{{name}}`; with two
+  environments and none named nothing is sent and the output names both; an unresolved name, a missing request,
+  an unknown environment and a file reached through a link to outside are refused; a status of 404 ends with exit
+  code 0, a refused connection with 1; Stop before the start sends nothing; the streamed run reports start and
+  output lines; the dry run shows the `http` table. MCP (`crates/mcp/tests/it/protocol.rs`:
+  `an_http_run_configuration_needs_the_http_right`): `run_configuration` refuses without the `http` right and
+  sends with it.
+- **AK-17** v7 – Starting the reference's configurations: in `crates/core/tests/it/ideaproject.rs`
+  (`startable_configurations_add_the_idea_ones`, `idea_origin_and_read_only_refusal`) the startable list is
+  `run.toml` followed by the translated configurations not shadowed, an untranslated one is found with its reason
+  and source, and the refusal names the source; MCP (`crates/mcp/tests/it/protocol.rs`:
+  `run_configuration_starts_an_idea_one`) with a temporary project holding `.idea/runConfigurations/Main.xml`
+  (Application, plain `.idea` module, an environment variable): `run_configurations` lists it with `source` and
+  `read_only`; the dry run of `run_configuration` names it with `origin` and `source` and no environment value;
+  without the `run` right it is refused; with the right it compiles and runs the class and its output holds the
+  program's line; `run_configuration_edit` refuses `remove` and `update` of it with the source in the message
+  and leaves the files as they were.
 
 ## Out of scope
 Running inside the terminal view (SPEC-0038 offers the PTY), debug launches (SPEC-0039), compound
 configurations running in parallel, importing the reference's run
-configurations. v4: templates as a user default outside the project (the layered settings of SPEC-0002 hold
+configurations into `run.toml`. v6: the HTTP client's response view, cookies, response handlers and
+saved responses for runs of HTTP request configurations (the output is the run's result); choosing the
+environment when the run starts. v7: starting the configurations detected from build files through MCP
+`run_configuration` (the window lists them; agents read them from `idea_project` and the project model) and
+changing or importing a reference configuration through `run_configuration_edit`. v4: templates as a user default outside the project (the layered settings of SPEC-0002 hold
 single values by key, not tables with lists; and commands that do not come from the project file would need their
 own rule for when they are shown — a later step with the Project Owner's decision); a template for temporary
 configurations made by Run Current File and for detected configurations; re-applying a changed template to
@@ -205,3 +307,6 @@ SPEC-0327, which writes this file.
   configurations; one template form serves every type (the single form of SPEC-0327). The reference's templates
   were not evaluated in OBS-0032, so nothing here is taken from them.
 - v4: "Open browser" waits for a local port only; it does not fetch the page to see whether the server answers.
+- v6: a run of an HTTP request configuration writes nothing into the project: no response files and no history
+  (IMP-0506; OBS-0061: the reference saves every response as a file in the project). Private environment values
+  are masked in the run's output. Its result is the output of the run, not a separate tree of requests.

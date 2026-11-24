@@ -3,12 +3,12 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use idecraft_core::{JavaSearch, find_jdks, java_environment, java_requirements};
+use ferris_idea_core::{JavaSearch, find_jdks, java_environment, java_requirements};
 
-/// Skips a test whose tool is missing; with `IDECRAFT_REQUIRE_TOOLS` set (CI) it fails instead.
+/// Skips a test whose tool is missing; with `FERRIS_IDEA_REQUIRE_TOOLS` set (CI) it fails instead.
 fn skip(reason: &str) {
     assert!(
-        std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+        ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
         "required tool missing: {reason}"
     );
     eprintln!("skipped: {reason}");
@@ -18,7 +18,7 @@ struct Scratch(PathBuf);
 
 impl Scratch {
     fn new(tag: &str) -> Self {
-        let p = std::env::temp_dir().join(format!("idecraft-java-{tag}-{}", std::process::id()));
+        let p = std::env::temp_dir().join(format!("ferris-idea-java-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&p);
         std::fs::create_dir_all(p.join("proj")).unwrap();
         Self(p.canonicalize().unwrap())

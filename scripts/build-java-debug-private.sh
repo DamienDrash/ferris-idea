@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds crates/languages/java/debug-private/idecraft-java-debug-private.jar (SPEC-0322 behaviour 4)
+# Builds crates/languages/java/debug-private/ferris-idea-java-debug-private.jar (SPEC-0322 behaviour 4)
 # from our sources. The EPL-licensed jars below are only compiled against and are not packaged.
 # Sources are pinned by version and SHA-256; timestamps are fixed, so the same JDK gives the same
 # bytes. Built with Temurin 17.0.20.1.
@@ -10,7 +10,7 @@ set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 bundle="$root/crates/languages/java/debug-private"
-target="$bundle/idecraft-java-debug-private.jar"
+target="$bundle/ferris-idea-java-debug-private.jar"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 

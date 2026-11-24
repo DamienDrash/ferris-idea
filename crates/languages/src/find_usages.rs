@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use idecraft_core::{Finder, Query, Workspace};
+use ferris_idea_core::{Finder, Query, Workspace};
 use serde::Serialize;
 use serde_json::json;
 
@@ -58,7 +58,7 @@ pub struct UsageDetail {
     /// Module, package, class and method.
     #[serde(flatten)]
     pub context: PlaceContext,
-    /// Found by IDECraft's own index, not by a language server (`SPEC-0293` v5 behaviour 17).
+    /// Found by Ferris IDEA's own index, not by a language server (`SPEC-0293` v5 behaviour 17).
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub own_index: bool,
 }
@@ -100,7 +100,7 @@ impl UsageSearch {
 /// Searches the usages of `symbol` at a position of `file` whose content is `text` (else the saved
 /// file), within `deadline`, ending early with [`LspError::Stopped`] when `stop` is set. On a
 /// class or id selector of a stylesheet the uses in the project's HTML files are added from
-/// IDECraft's own index (`SPEC-0293` v5 behaviour 17).
+/// Ferris IDEA's own index (`SPEC-0293` v5 behaviour 17).
 #[allow(clippy::too_many_arguments)]
 pub async fn find_usages_in(
     root: &Path,
@@ -112,6 +112,23 @@ pub async fn find_usages_in(
     deadline: Duration,
     stop: Option<Arc<AtomicBool>>,
 ) -> Result<UsageSearch, LspError> {
+    // A class or id name in an HTML attribute: the rules that define it and its uses in the
+    // project's HTML files, from Ferris IDEA's own index, as Rename finds them (`SPEC-0042` v26
+    // behaviour 46).
+    if crate::html_css::is_html(file) {
+        let disk;
+        let content = match text {
+            Some(t) => Some(t),
+            None => {
+                disk = std::fs::read_to_string(file).ok();
+                disk.as_deref()
+            }
+        };
+        if let Some(found) = content.and_then(|t| html_name_search(root, file, t, line, character))
+        {
+            return Ok(found);
+        }
+    }
     let search =
         server_usages_in(root, file, text, line, character, symbol, deadline, stop).await?;
     let disk;
@@ -133,7 +150,67 @@ pub async fn find_usages_in(
     )
 }
 
-/// `search` with the places `uses` that IDECraft's own index found added, each once, marked and
+/// Find Usages on a class or id name of an HTML attribute (`SPEC-0042` v26 behaviour 46): the
+/// target is the name with its first rule as declaration; the usages are the rules and the uses
+/// in the project's HTML files, sorted by path and place, all from Ferris IDEA's own index.
+pub fn html_name_search(
+    root: &Path,
+    file: &Path,
+    text: &str,
+    line: u64,
+    character: u64,
+) -> Option<UsageSearch> {
+    let (name, class, rules, uses) =
+        crate::html_css::html_name_uses(root, file, text, line, character)?;
+    let mut all: Vec<Location> = project_only(root, rules.iter().cloned().chain(uses).collect());
+    all.sort_by(|a, b| {
+        (&a.path, a.range.start_line, a.range.start_character).cmp(&(
+            &b.path,
+            b.range.start_line,
+            b.range.start_character,
+        ))
+    });
+    all.dedup_by(|a, b| {
+        a.path == b.path
+            && a.range.start_line == b.range.start_line
+            && a.range.start_character == b.range.start_character
+    });
+    let details = all
+        .iter()
+        .map(|u| UsageDetail {
+            kind: UsageKind::Other,
+            context: context_of(
+                root,
+                &u.path,
+                None,
+                u.range.start_line,
+                u.range.start_character,
+            ),
+            own_index: true,
+        })
+        .collect();
+    let note = (!all.is_empty()).then(|| {
+        format!(
+            "{} {} found by Ferris IDEA's own index of the project's HTML and stylesheets.",
+            all.len(),
+            if all.len() == 1 { "usage" } else { "usages" }
+        )
+    });
+    Some(UsageSearch {
+        target: Target {
+            name,
+            declaration: rules.first().cloned(),
+            outside: None,
+            kind: Some(if class { "class" } else { "id" }.into()),
+        },
+        usages: all,
+        details,
+        source: UsageSource::LanguageServer,
+        note,
+    })
+}
+
+/// `search` with the places `uses` that Ferris IDEA's own index found added, each once, marked and
 /// counted in the note, all sorted by path, line and character (`SPEC-0293` v5 behaviour 17).
 pub fn with_own_index(root: &Path, mut search: UsageSearch, uses: Vec<Location>) -> UsageSearch {
     let same = |a: &Location, b: &Location| {
@@ -174,7 +251,7 @@ pub fn with_own_index(root: &Path, mut search: UsageSearch, uses: Vec<Location>)
     (search.usages, search.details) = rows.into_iter().unzip();
     if added > 0 {
         let own = format!(
-            "{added} {} in HTML files found by IDECraft's own index, not by the language server.",
+            "{added} {} in HTML files found by Ferris IDEA's own index, not by the language server.",
             if added == 1 { "usage" } else { "usages" }
         );
         search.note = Some(match search.note.take() {
@@ -204,16 +281,23 @@ fn no_server(e: &LspError) -> Option<String> {
 /// The answer from the whole-word text occurrences of `symbol` instead of the server's, with
 /// `reason` in the note (behaviours 10 and 10a): usages and kinds as [`usages_of`] and the syntax
 /// tree give them.
+#[allow(clippy::too_many_arguments)]
 fn text_answer(
     root: &Path,
     file: &Path,
     text: Option<&str>,
+    line: u64,
+    character: u64,
     symbol: &str,
-    target: Target,
+    mut target: Target,
     reason: &str,
 ) -> UsageSearch {
     let found = text_occurrences(root, file, text, symbol, MAX_TEXT_OCCURRENCES);
-    let usages = usages_of(root, file, text, found, None);
+    // The symbol's own declaration is the target, no usage (`SPEC-0293` v12 behaviour 29).
+    if target.declaration.is_none() {
+        target.declaration = text_declaration(file, text, line, character, symbol, &found);
+    }
+    let usages = usages_of(root, file, text, found, target.declaration.as_ref());
     let mut details = details(root, file, text, &usages, &std::collections::HashMap::new());
     set_kinds(file, text, &usages, &mut details);
     UsageSearch {
@@ -253,8 +337,11 @@ async fn server_usages_in(
         outside: None,
         kind: None,
     };
-    let from_text =
-        |target: Target, reason: String| Ok(text_answer(root, file, text, symbol, target, &reason));
+    let from_text = |target: Target, reason: String| {
+        Ok(text_answer(
+            root, file, text, line, character, symbol, target, &reason,
+        ))
+    };
     let too_slow = || {
         format!(
             "The language server did not answer within {} s",
@@ -291,6 +378,12 @@ async fn server_usages_in(
             Ok(v) => {
                 let found = parse_locations(&v, &mut o.files);
                 target.declaration = project_only(root, found.clone()).into_iter().next();
+                if target.declaration.is_none() && found.is_empty() {
+                    // No answer: the declaration under the caret, from the syntax tree, so it is
+                    // not listed as a usage (`SPEC-0293` v12 behaviour 29).
+                    target.declaration =
+                        syntax_declaration(root, file, text, line, character, symbol);
+                }
                 if target.declaration.is_none() {
                     target.outside = outside_locations(&v)
                         .into_iter()
@@ -299,7 +392,9 @@ async fn server_usages_in(
                 }
             }
             Err(e @ LspError::Stopped(_)) => return Err(e),
-            Err(_) => {}
+            Err(_) => {
+                target.declaration = syntax_declaration(root, file, text, line, character, symbol);
+            }
         }
         let mut params = params;
         params["context"] = json!({"includeDeclaration": false});
@@ -332,13 +427,20 @@ async fn server_usages_in(
                 }
                 let mut details = details(root, file, text, &usages, &symbols);
                 set_kinds(file, text, &usages, &mut details);
-                Ok(UsageSearch {
+                let search = UsageSearch {
                     target: target.clone(),
                     details,
                     usages,
                     source: UsageSource::LanguageServer,
                     note: None,
-                })
+                };
+                // Go: the mentions of a declared name in comments, a group of their own
+                // (`SPEC-0293` v12 behaviour 30).
+                let mentions = match &target.declaration {
+                    Some(d) => crate::go_usages::comment_mentions(root, file, text, d, symbol),
+                    None => Vec::new(),
+                };
+                Ok(with_comment_mentions(root, search, mentions))
             }
             Err(LspError::Timeout(..)) => from_text(target.clone(), too_slow()),
             Err(e) => Err(e),
@@ -405,11 +507,7 @@ pub fn usages_of(
     if let Some(d) = declaration {
         let d = project_only(root, vec![d.clone()]);
         if let Some(d) = d.first() {
-            usages.retain(|u| {
-                u.path != d.path
-                    || u.range.start_line != d.range.start_line
-                    || u.range.start_character != d.range.start_character
-            });
+            usages.retain(|u| !is_declaration(u, d));
         }
     }
     // Member declarations, and in a text search the occurrences in strings and comments
@@ -422,8 +520,167 @@ pub fn usages_of(
     usages
 }
 
+/// Whether the place `u` is the declaration `d`: the same file and line, and the two ranges meet on
+/// that line. A server's declaration may start before the name (`struct Rect {` from its first
+/// column) or cover more than the reference does (`SPEC-0293` v12 behaviour 29).
+pub fn is_declaration(u: &Location, d: &Location) -> bool {
+    if u.path != d.path || u.range.start_line != d.range.start_line {
+        return false;
+    }
+    let end = |r: &Range| {
+        if r.end_line == r.start_line {
+            r.end_character.max(r.start_character)
+        } else {
+            u64::MAX
+        }
+    };
+    let (us, ue) = (u.range.start_character, end(&u.range));
+    let (ds, de) = (d.range.start_character, end(&d.range));
+    us == ds || (us < de && ds < ue)
+}
+
+/// The declaration of `symbol` under the caret at `line` and `character` of `file` (content
+/// `text`, else the disk), from the syntax tree, when it lies in the project (`SPEC-0293` v12
+/// behaviour 29).
+fn syntax_declaration(
+    root: &Path,
+    file: &Path,
+    text: Option<&str>,
+    line: u64,
+    character: u64,
+    symbol: &str,
+) -> Option<Location> {
+    let disk;
+    let content = match text {
+        Some(t) => t,
+        None => {
+            disk = std::fs::read_to_string(file).ok()?;
+            &disk
+        }
+    };
+    let d = crate::declared_names::declaration_at(file, content, symbol, line, character)?;
+    let length = symbol.chars().count() as u64;
+    let place = Location {
+        path: file.to_path_buf(),
+        range: Range {
+            start_line: d.line as u64,
+            start_character: d.character as u64,
+            end_line: d.line as u64,
+            end_character: d.character as u64 + length,
+        },
+    };
+    project_only(root, vec![place]).into_iter().next()
+}
+
+/// The declaration of `symbol` in a text search (`SPEC-0293` v12 behaviour 29): the one under the
+/// caret, else the only one among the occurrences `found`.
+fn text_declaration(
+    file: &Path,
+    text: Option<&str>,
+    line: u64,
+    character: u64,
+    symbol: &str,
+    found: &[Location],
+) -> Option<Location> {
+    let file = file.canonicalize().unwrap_or_else(|_| file.to_path_buf());
+    let mut contents: std::collections::HashMap<PathBuf, Vec<crate::declared_names::Declared>> =
+        std::collections::HashMap::new();
+    let mut declared = |path: &PathBuf| {
+        contents
+            .entry(path.clone())
+            .or_insert_with(|| {
+                let content = match text {
+                    Some(t) if *path == file => t.to_owned(),
+                    _ => std::fs::read_to_string(path).unwrap_or_default(),
+                };
+                crate::declared_names::declarations(path, &content)
+                    .into_iter()
+                    .filter(|d| d.name == symbol)
+                    .collect()
+            })
+            .clone()
+    };
+    let is_declared = |u: &Location, list: &[crate::declared_names::Declared]| {
+        list.iter().any(|d| {
+            d.line as u64 == u.range.start_line && d.character as u64 == u.range.start_character
+        })
+    };
+    let candidates: Vec<&Location> = found
+        .iter()
+        .filter(|u| {
+            let list = declared(&u.path);
+            is_declared(u, &list)
+        })
+        .collect();
+    let length = symbol.chars().count() as u64;
+    candidates
+        .iter()
+        .find(|u| {
+            u.path == file
+                && u.range.start_line == line
+                && (u.range.start_character..=u.range.start_character + length).contains(&character)
+        })
+        .or_else(|| (candidates.len() == 1).then(|| &candidates[0]))
+        .map(|u| (*u).clone())
+}
+
+/// `search` with the comment `mentions` added as usages of kind [`UsageKind::Comment`], each place
+/// once, all sorted by path, line and character (`SPEC-0293` v12 behaviour 30).
+pub fn with_comment_mentions(
+    root: &Path,
+    mut search: UsageSearch,
+    mentions: Vec<Location>,
+) -> UsageSearch {
+    if mentions.is_empty() {
+        return search;
+    }
+    let mut rows: Vec<(Location, UsageDetail)> = std::mem::take(&mut search.usages)
+        .into_iter()
+        .zip(std::mem::take(&mut search.details))
+        .collect();
+    for m in project_only(root, mentions) {
+        if rows.iter().any(|(known, _)| {
+            known.path == m.path
+                && known.range.start_line == m.range.start_line
+                && known.range.start_character == m.range.start_character
+        }) {
+            continue;
+        }
+        let detail = UsageDetail {
+            kind: UsageKind::Comment,
+            context: context_of(
+                root,
+                &m.path,
+                None,
+                m.range.start_line,
+                m.range.start_character,
+            ),
+            own_index: false,
+        };
+        rows.push((m, detail));
+    }
+    rows.sort_by(|(a, _), (b, _)| {
+        (&a.path, a.range.start_line, a.range.start_character).cmp(&(
+            &b.path,
+            b.range.start_line,
+            b.range.start_character,
+        ))
+    });
+    (search.usages, search.details) = rows.into_iter().unzip();
+    search
+}
+
+/// How many of the `details` are code usages, not mentions in comments (`SPEC-0293` v12
+/// behaviour 30: MCP `count`).
+pub fn code_usages(details: &[UsageDetail]) -> usize {
+    details
+        .iter()
+        .filter(|d| d.kind != UsageKind::Comment)
+        .count()
+}
+
 /// How each of `usages` reads in the syntax tree of its file, for the files whose usages are read
-/// from it (JavaScript and TypeScript); `None` elsewhere.
+/// from it (JavaScript, TypeScript and v12 Go); `None` elsewhere.
 fn syntax_of(
     file: &Path,
     text: Option<&str>,
@@ -434,7 +691,7 @@ fn syntax_of(
     let mut paths: Vec<&PathBuf> = usages
         .iter()
         .map(|u| &u.path)
-        .filter(|p| crate::script_usages::supported(p))
+        .filter(|p| crate::script_usages::supported(p) || crate::go_usages::supported(p))
         .collect();
     paths.sort();
     paths.dedup();
@@ -450,18 +707,20 @@ fn syntax_of(
             .iter()
             .map(|&i| (usages[i].range.start_line, usages[i].range.start_character))
             .collect();
-        for (&i, usage) in at
-            .iter()
-            .zip(crate::script_usages::classify(path, &content, &positions))
-        {
+        let classified = if crate::go_usages::supported(path) {
+            crate::go_usages::classify(path, &content, &positions)
+        } else {
+            crate::script_usages::classify(path, &content, &positions)
+        };
+        for (&i, usage) in at.iter().zip(classified) {
             out[i] = usage;
         }
     }
     out
 }
 
-/// In JavaScript and TypeScript files the kind of each usage from the syntax tree (`SPEC-0293` v4
-/// behaviour 14a); other files keep the kinds from their lines.
+/// In JavaScript, TypeScript and Go files the kind of each usage from the syntax tree (`SPEC-0293`
+/// v4 behaviour 14a, v12 behaviour 14b); other files keep the kinds from their lines.
 fn set_kinds(file: &Path, text: Option<&str>, usages: &[Location], details: &mut [UsageDetail]) {
     for (detail, usage) in details.iter_mut().zip(syntax_of(file, text, usages)) {
         if let Some(u) = usage {
@@ -541,7 +800,7 @@ pub fn text_occurrences(
         let path = path.canonicalize().unwrap_or(path);
         let content = match text {
             Some(t) if path == file => t.to_owned(),
-            _ => match idecraft_core::searchable_text(&workspace, &relative) {
+            _ => match ferris_idea_core::searchable_text(&workspace, &relative) {
                 Some(t) => t,
                 None => continue,
             },
@@ -573,7 +832,7 @@ mod tests {
     /// details and drops the others.
     #[test]
     fn a_search_is_restricted_to_one_file() {
-        let root = std::env::temp_dir().join(format!("idecraft-in-file-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("ferris-idea-in-file-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("src")).unwrap();
         let root = root.canonicalize().unwrap();
@@ -625,7 +884,8 @@ mod tests {
     /// once, marked, sorted with the server's and counted in the note.
     #[test]
     fn own_index_usages_are_added_once() {
-        let root = std::env::temp_dir().join(format!("idecraft-own-index-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("ferris-idea-own-index-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("css")).unwrap();
         let root = root.canonicalize().unwrap();
@@ -695,7 +955,7 @@ mod tests {
         assert_eq!(
             found.note.as_deref(),
             Some(
-                "2 usages in HTML files found by IDECraft's own index, not by the language server."
+                "2 usages in HTML files found by Ferris IDEA's own index, not by the language server."
             )
         );
         let marked = serde_json::to_value(&found.details).unwrap();
@@ -711,7 +971,8 @@ mod tests {
     /// implementing and overriding members, places outside the project and repeats.
     #[test]
     fn usages_of_keep_calls_and_drop_implementations() {
-        let root = std::env::temp_dir().join(format!("idecraft-usages-of-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("ferris-idea-usages-of-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("src")).unwrap();
         let root = root.canonicalize().unwrap();
@@ -783,12 +1044,100 @@ mod tests {
 
     fn temp(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
-            "idecraft-find-usages-{name}-{}",
+            "ferris-idea-find-usages-{name}-{}",
             std::process::id()
         ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("src")).unwrap();
         dir.canonicalize().unwrap()
+    }
+
+    /// SPEC-0293 v12 AK-19 (behaviour 29, F-038 RS1): a text answer leaves out the symbol's own
+    /// declaration, asked on it or on a usage, in Rust and Go; the declaration becomes the target's.
+    /// Two declarations of one name leave both in place when asked on neither.
+    #[test]
+    fn a_text_answer_leaves_out_the_declaration() {
+        let root = temp("text-declaration");
+        let rust = root.join("src/main.rs");
+        std::fs::write(
+            &rust,
+            "#[derive(Debug)]\nstruct Rect {\n    w: f64,\n}\n\nimpl Rect {}\n\nfn main() {\n    let r = Rect { w: 2.0 };\n}\n",
+        )
+        .unwrap();
+        let go = root.join("src/main.go");
+        std::fs::write(
+            &go,
+            "package main\n\n// Rect is a rectangle.\ntype Rect struct{ W float64 }\n\nfunc (r Rect) Area() float64 { return r.W }\n",
+        )
+        .unwrap();
+        let target = || Target {
+            name: "Rect".into(),
+            declaration: None,
+            outside: None,
+            kind: None,
+        };
+        let lines = |found: &UsageSearch| -> Vec<(u64, u64, UsageKind)> {
+            found
+                .usages
+                .iter()
+                .zip(&found.details)
+                .map(|(u, d)| (u.range.start_line, u.range.start_character, d.kind))
+                .collect()
+        };
+        for (line, character) in [(1, 8), (5, 5)] {
+            let found = text_answer(&root, &rust, None, line, character, "Rect", target(), "x");
+            assert_eq!(
+                lines(&found)
+                    .iter()
+                    .map(|(l, c, _)| (*l, *c))
+                    .collect::<Vec<_>>(),
+                [(5, 5), (8, 12)]
+            );
+            let d = found.target.declaration.expect("declaration");
+            assert_eq!((d.range.start_line, d.range.start_character), (1, 7));
+        }
+        // Go: the comment mention is a usage in a comment, the receiver a receiver.
+        let found = text_answer(&root, &go, None, 3, 5, "Rect", target(), "x");
+        assert_eq!(
+            lines(&found),
+            [(2, 3, UsageKind::Comment), (5, 8, UsageKind::Receiver)]
+        );
+        assert_eq!(code_usages(&found.details), 1);
+        // Two declarations of `area`, asked on a call: neither is known as the target's.
+        let two = root.join("src/two.rs");
+        std::fs::write(
+            &two,
+            "trait A { fn area(&self); }\nimpl A for () { fn area(&self) {} }\nfn f() { ().area(); }\n",
+        )
+        .unwrap();
+        let found = text_answer(&root, &two, None, 2, 12, "area", target(), "x");
+        assert_eq!(found.usages.len(), 3);
+        assert!(found.target.declaration.is_none());
+    }
+
+    /// SPEC-0293 v12 AK-19 (behaviour 29): a place is the declaration when it starts on the
+    /// declaration's line and the two ranges meet there.
+    #[test]
+    fn the_declaration_is_matched_by_its_range() {
+        let place = |line, start, end| Location {
+            path: PathBuf::from("/p/a.rs"),
+            range: Range {
+                start_line: line,
+                start_character: start,
+                end_line: line,
+                end_character: end,
+            },
+        };
+        let name = place(1, 7, 11);
+        assert!(is_declaration(&place(1, 7, 11), &name));
+        // A server range from the first column, `struct Rect {`.
+        assert!(is_declaration(&place(1, 7, 11), &place(1, 0, 13)));
+        assert!(is_declaration(&place(1, 0, 13), &name));
+        assert!(!is_declaration(&place(5, 5, 9), &name));
+        assert!(!is_declaration(&place(1, 20, 24), &name));
+        let mut other = place(1, 7, 11);
+        other.path = PathBuf::from("/p/b.rs");
+        assert!(!is_declaration(&other, &name));
     }
 
     /// SPEC-0293 v11 AK-17 (behaviour 10a): without a usable language server the search answers
@@ -821,7 +1170,7 @@ mod tests {
             outside: None,
             kind: None,
         };
-        let found = text_answer(&root, &shape, None, "area", target, &reason);
+        let found = text_answer(&root, &shape, None, 8, 23, "area", target, &reason);
         let shown: Vec<(String, u64, UsageKind)> = found
             .usages
             .iter()

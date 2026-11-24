@@ -6,12 +6,12 @@
 
 #![cfg(target_os = "macos")]
 
+use ferris_idea_workbench::{
+    GitLogView, IntentionsView, MergeView, ProfilerView, StructureView, TabListView,
+};
 use gpui::{
     Entity, EntityInputHandler, FocusHandle, Modifiers, Render, TestAppContext, VisualTestContext,
     px,
-};
-use idecraft_workbench::{
-    GitLogView, IntentionsView, MergeView, ProfilerView, StructureView, TabListView,
 };
 
 /// A window holding the view `build` makes, focused through `focus`.
@@ -56,7 +56,8 @@ fn keys(cx: &mut VisualTestContext, keystrokes: &str) {
 }
 
 fn temp(tag: &str) -> std::path::PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-filters-{tag}-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-filters-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     root
@@ -152,7 +153,7 @@ fn profiler_processes_take_committed_text(cx: &mut TestAppContext) {
     let (view, cx) = window(cx, ProfilerView::new, ProfilerView::focus);
     view.update(cx, |v, cx| {
         v.show_processes(
-            vec![idecraft_profiler::ProcessInfo {
+            vec![ferris_idea_profiler::ProcessInfo {
                 pid: 41,
                 command: "java -jar shop.jar".into(),
                 refused: None,
@@ -180,7 +181,7 @@ fn profiler_processes_take_committed_text(cx: &mut TestAppContext) {
 fn merge_result_takes_committed_text(cx: &mut TestAppContext) {
     let root = temp("merge");
     std::fs::write(root.join("a.txt"), "x\n").unwrap();
-    let conflict = idecraft_vcs::Conflict {
+    let conflict = ferris_idea_vcs::Conflict {
         path: "a.txt".into(),
         base: Some("x\n".into()),
         ours: Some("x1\n".into()),

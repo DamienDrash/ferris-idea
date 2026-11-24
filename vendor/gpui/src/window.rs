@@ -1,4 +1,4 @@
-// Modified by IDECraft: in-process pointer input; a drawn prompt keeps the focus (see ../IDECRAFT.md).
+// Modified by Ferris IDEA: in-process pointer input; a drawn prompt keeps the focus; a prompt can be withdrawn; the frame can be captured (see ../FERRIS_IDEA.md).
 #[cfg(any(feature = "inspector", debug_assertions))]
 use crate::Inspector;
 use crate::{
@@ -1385,7 +1385,7 @@ impl Window {
 
     /// Move focus to the element associated with the given [`FocusHandle`].
     ///
-    /// IDECraft change (see ../IDECRAFT.md): while a prompt drawn in the window is shown, the focus
+    /// Ferris IDEA change (see ../FERRIS_IDEA.md): while a prompt drawn in the window is shown, the focus
     /// stays inside it; a handle outside it is remembered and focused once the prompt is answered.
     pub fn focus(&mut self, handle: &FocusHandle) {
         if !self.focus_enabled || self.focus == Some(handle.id) {
@@ -1404,7 +1404,7 @@ impl Window {
         self.focus_ignoring_prompt(handle);
     }
 
-    /// IDECraft change: moves the focus without regard to a prompt drawn in the window (the
+    /// Ferris IDEA change: moves the focus without regard to a prompt drawn in the window (the
     /// prompt itself takes the focus this way).
     pub(crate) fn focus_ignoring_prompt(&mut self, handle: &FocusHandle) {
         if !self.focus_enabled || self.focus == Some(handle.id) {
@@ -1418,7 +1418,7 @@ impl Window {
 
     /// Remove focus from all elements within this context's window.
     ///
-    /// IDECraft change: while a prompt drawn in the window is shown, the focus stays in it and the
+    /// Ferris IDEA change: while a prompt drawn in the window is shown, the focus stays in it and the
     /// window is blurred once the prompt is answered.
     pub fn blur(&mut self) {
         if !self.focus_enabled {
@@ -1433,14 +1433,14 @@ impl Window {
         self.refresh();
     }
 
-    /// IDECraft change (see ../IDECRAFT.md): whether a prompt is drawn in the window now (gpui's
+    /// Ferris IDEA change (see ../FERRIS_IDEA.md): whether a prompt is drawn in the window now (gpui's
     /// fallback prompt where the platform has no alert, as on Linux, or a custom prompt).
     pub fn has_drawn_prompt(&self) -> bool {
         self.prompt.is_some()
     }
 
-    /// IDECraft change: the fallback prompt drawn in the window now, if one is shown — to read its
-    /// message, answers, focused answer and painted bounds (IDECraft's accessibility nodes).
+    /// Ferris IDEA change: the fallback prompt drawn in the window now, if one is shown — to read its
+    /// message, answers, focused answer and painted bounds (Ferris IDEA's accessibility nodes).
     pub fn fallback_prompt(&self) -> Option<Entity<FallbackPromptRenderer>> {
         self.prompt
             .as_ref()?
@@ -1448,6 +1448,25 @@ impl Window {
             .any_view()
             .downcast::<FallbackPromptRenderer>()
             .ok()
+    }
+
+    /// Ferris IDEA change (see ../FERRIS_IDEA.md): withdraws the latest prompt of the window without an
+    /// answer while it is still shown — a prompt drawn in the window is removed, a platform alert
+    /// closed (`PlatformWindow::withdraw_prompt`); its receiver hears that nobody answered. A
+    /// prompt drawn later replaces the earlier one, so a drawn prompt is always the latest.
+    pub fn withdraw_prompt(&mut self) {
+        if let Some(prompt) = self.prompt.take() {
+            match prompt.focus_after {
+                Some(Some(handle)) => self.focus_ignoring_prompt(&handle),
+                Some(None) => {
+                    self.focus = None;
+                }
+                None => {}
+            }
+            self.refresh();
+        } else {
+            self.platform_window.withdraw_prompt();
+        }
     }
 
     /// Blur the window and don't allow anything in it to be focused again.
@@ -2048,6 +2067,21 @@ impl Window {
             self.mark_view_dirty(entity);
         }
         self.invalidator.replace_views(views);
+    }
+
+    /// Ferris IDEA change (FERRIS_IDEA.md, change 8): draws the window's current frame — after
+    /// drawing it anew when something changed, also while the window is covered and its display
+    /// link stands still — into an image of its own and returns it as RGBA in device pixels with
+    /// the scale factor. Delivers no input and presents nothing; `None` where the platform's
+    /// renderer gives no read-back (the test platform, Linux, Windows).
+    pub fn capture_frame(&mut self, cx: &mut App) -> Option<(image::RgbaImage, f32)> {
+        if self.invalidator.is_dirty() {
+            let arena_clear_needed = self.draw(cx);
+            arena_clear_needed.clear();
+            self.needs_present.set(true);
+        }
+        let image = self.platform_window.capture_frame(&self.rendered_frame.scene)?;
+        Some((image, self.scale_factor()))
     }
 
     #[profiling::function]
@@ -3608,7 +3642,7 @@ impl Window {
         false
     }
 
-    // IDECraft change to gpui 0.2.2 (Apache-2.0, see vendor/gpui/IDECRAFT.md): the only input hook.
+    // Ferris IDEA change to gpui 0.2.2 (Apache-2.0, see vendor/gpui/FERRIS_IDEA.md): the only input hook.
     /// Delivers a pointer event (move, button down or up, exit, scroll) into this window through the handler the platform layer calls for real input
     /// (`dispatch_event`), without the system: nothing goes to the window server, the display or
     /// another client. Keyboard events and file drops are refused (`false`); keys have

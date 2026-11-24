@@ -2,12 +2,12 @@
 
 use std::path::{Path, PathBuf};
 
-use idecraft_core::{DepNode, Workspace, dependency_tree, module_tasks, read_project};
+use ferris_idea_core::{DepNode, Workspace, dependency_tree, module_tasks, read_project};
 
 fn fixture(files: &[(&str, &str)]) -> PathBuf {
     static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let root = std::env::temp_dir().join(format!("idecraft-deptree-{n}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-deptree-{n}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     for (p, text) in files {
         let f = root.join(p);
@@ -135,7 +135,7 @@ fn this_workspace_resolves_its_own_lock_file() {
     let core = model
         .modules
         .iter()
-        .find(|m| m.name == "idecraft-core")
+        .find(|m| m.name == "ferris-idea-core")
         .unwrap();
     let deps = dependency_tree(&root, core).unwrap();
     let serde = deps.iter().find(|d| d.name == "serde").unwrap();

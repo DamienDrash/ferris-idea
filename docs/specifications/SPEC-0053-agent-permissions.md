@@ -1,6 +1,6 @@
 # SPEC-0053: Agents running programs and sending requests
 
-- **Version:** 10 · **Date:** 2026-11-16 (v10: no generic tool dispatcher and no agent code in the IDE process, named as deviations, IMP-0447, IMP-0448, OBS-0071; v9: Deny holds the keyboard focus of the question, so
+- **Version:** 12 · **Date:** 2026-11-19 (v12: a client that closes the connection of a waiting call without cancelling it ends the call at once, so its question is withdrawn at once, behaviour 8, AK-16, OBS-0114 Q2; v11: a question whose call was cancelled, timed out or lost its session is withdrawn from the window and from the queue, behaviour 8, IMP-0516, OBS-0110 Q1; v10: no generic tool dispatcher and no agent code in the IDE process, named as deviations, IMP-0447, IMP-0448, OBS-0071; v9: Deny holds the keyboard focus of the question, so
   Space denies as Return does, behaviour 8, SPEC-0281 v3 behaviour 8 — with keyboard navigation
   on, Space pressed "Always for This Workspace", found by the pre-check of hand test 202, rule 12;
   v8: right `settings` for the user's own settings, every tool with a changing effect needs a right and a test holds that for new tools, database permissions move into the grant file — security review 2026-11-14, rule 12, ADR-0031, behaviours 12–14, and the table of behaviour 11 carries the rights, the line of behaviour 11 the database decisions; v7: every call of a tool that changes something leaves a line in the agent log, written at one place for all tools, behaviour 11 — finding of 2026-11-14, rule 12; v6: right `secret-read` for files that commonly hold secrets and
@@ -24,12 +24,12 @@ refusing silently when a client of the running window lacks a right.
    SPEC-0054), `remote` (fetch, pull and push Git remotes, SPEC-0055), `ssh` (list, read and write files
    on SSH hosts; running commands there also needs `run`, SPEC-0121), `trust` (SPEC-0278), and `write`,
    `vcs-write` and `quit` (behaviour 6), `secret-read` (behaviour 10), `settings` (behaviour 12),
-   and `terminal-read`, `ports`, `ui` and `recent-projects` of their own specifications (SPEC-0313,
-   SPEC-0318, SPEC-0319, SPEC-0094 v9). Reading tools, dry runs and previews need no right, except for the text of files
+   and `terminal-read`, `ports`, `ui`, `recent-projects` and `agents` of their own specifications
+   (SPEC-0313, SPEC-0318, SPEC-0319, SPEC-0094 v9, SPEC-0348). Reading tools, dry runs and previews need no right, except for the text of files
    whose names commonly hold secrets (behaviour 10). Database connections have their own four
    permissions per connection (SPEC-0012 v3), kept in the same grant file. [GEN, READINESS A3]
 2. Rights are granted per workspace in the user's own settings folder, file `agent-permissions.toml`
-   (`$IDECRAFT_CONFIG_DIR`, else `$XDG_CONFIG_HOME/idecraft`, else `~/.config/idecraft`), as
+   (`$FERRIS_IDEA_CONFIG_DIR`, else `$XDG_CONFIG_HOME/ferris-idea`, else `~/.config/ferris-idea`), as
    `[[workspace]]` tables with `path` and `allow`, and `[[connection]]` tables for database
    permissions (SPEC-0012 v3 behaviour 1). Paths are compared after resolving links and `..`. A
    grant file inside the workspace is ignored, a malformed file or an unknown right grants nothing and the
@@ -46,7 +46,7 @@ refusing silently when a client of the running window lacks a right.
    timeout), `send_http_request` (a request of a `.http` file by name or number; unresolved names are never
    sent), `agent_permissions` (the granted rights, the file consulted and any problem). Output texts are
    capped at 256 KiB each and marked when cut. [GEN]
-5. Every real run or request appends one JSON line to `.idecraft/agent-log.jsonl` in the workspace: time,
+5. Every real run or request appends one JSON line to `.ferris-idea/agent-log.jsonl` in the workspace: time,
    tool, command or configuration chain with exit codes and timeouts, or method, URL, status and error —
    never request headers or bodies. The logged URL and error text of a request carry no user
    information (`user:password@` is left out) and show `{{name}}` in place of every value that comes
@@ -54,15 +54,15 @@ refusing silently when a client of the running window lacks a right.
    project. If the log cannot be written, the tool reports it. [improvement IMP-0028]
 6. Rights for changing things (READINESS A3). Each right is checked once, in the step that really
    changes something, for every tool that exposes the capability (IMP-0007):
-   - `write`: creating, changing, moving or deleting files of the workspace, including IDECraft's project
-     settings under `.idecraft/` and `.idea/`: `create_file`, `rename_file`, `delete_file`, `copy_file`,
+   - `write`: creating, changing, moving or deleting files of the workspace, including Ferris IDEA's project
+     settings under `.ferris-idea/` and `.idea/`: `create_file`, `rename_file`, `delete_file`, `copy_file`,
      `move_file`, `format_file`, `restore_local_revision`, `apply_code_action`, `undo_refactoring`,
      `rename_symbol`, `change_signature`, `optimize_imports`, `generate_code`, `fix_inspection`,
      `update_copyright`, `resource_bundle`, `project_dictionary` (add), `eslint_file` and `prettier_file`
      (writing), `python_select_interpreter`, `rename_sql_object` (file edits), `er_diagram` (a written
      image), `tool_windows` (move, stripes), `set_breakpoint`, `set_special_breakpoints`,
      `save_connection`, `remove_connection`, `sql_console`, `sql_file_data_source` (setting a binding).
-     Not covered: files IDECraft keeps by itself while working (agent log, local history, undo groups)
+     Not covered: files Ferris IDEA keeps by itself while working (agent log, local history, undo groups)
      and the user's settings outside the workspace.
    - `vcs-write`: operations that change the repository or the working tree through version control:
      `git_commit`, `git_create_branch`, `git_switch_branch`, `git_merge`, `git_stash` (push, apply, pop,
@@ -71,7 +71,7 @@ refusing silently when a client of the running window lacks a right.
    - `quit`: quitting the window through MCP while files are unsaved or programs run (SPEC-0261 v2);
      saving the files on the way also needs `write`.
    [GEN, READINESS A3, IMP-0002]
-7. Over the stdio transport (`idecraft mcp`, no window) a missing right is refused as in behaviour 3.
+7. Over the stdio transport (`ferris-idea mcp`, no window) a missing right is refused as in behaviour 3.
    Over the window's HTTP transport (SPEC-0221) the window asks the user instead (behaviour 8); the
    refusal of behaviour 3 is returned only when no window can ask or nobody answers within 2 minutes,
    and then it says so. [GEN, IMP-0007]
@@ -85,7 +85,16 @@ refusing silently when a client of the running window lacks a right.
    grants nothing (SPEC-0281 v3 behaviour 8); Deny is also its default — so with keyboard
    navigation on Space denies as Return does; Allow Once and Always
    need the mouse, VoiceOver or Tab first, and a stray key never grants a right.
-   [GEN, IMP-0007, IMP-0005, rule 12]
+   **v11:** a question lives only as long as its call. When the client cancels the call
+   (`notifications/cancelled`), the 2 minutes of behaviour 7 run out or the MCP session ends, the
+   question is withdrawn: an alert on the screen is closed without an answer, a question still
+   waiting behind another is never shown, and the next question comes up. Nothing the question
+   would have allowed runs and nothing is written to the grant file — also when the user had
+   pressed a button in the moment the call ended. [IMP-0516, OBS-0110 Q1, rule 12]
+   **v12:** a client that goes away without a word — its process ended, the connection of the
+   waiting call closed, no `notifications/cancelled` and no `DELETE` — ends that call at once, as
+   a cancel would: the question is withdrawn then, not when the 2 minutes run out, so for a client
+   that is gone no answer can allow anything. The session itself lives on. [OBS-0114 Q2, rule 12]
 9. "Deny" refuses the call with a message starting with `denied:` that says the user denied it in the
    window; that MCP session is not asked again for that right and gets the same refusal. A new session
    asks again. [GEN]
@@ -134,7 +143,7 @@ refusing silently when a client of the running window lacks a right.
     (a reading `run_sql` runs without `apply`), and `result` is `refused` also for a call refused
     in safe mode or for its keychain entry. [rule 12, ADR-0031]
 
-12. **v8 – The user's own settings.** The right `settings` ("change your own IDECraft settings,
+12. **v8 – The user's own settings.** The right `settings` ("change your own Ferris IDEA settings,
     which hold for every project: IDE settings, keymap, theme, plugin grants") is needed by every
     tool that changes a file of the user's settings folder or a choice kept there:
     `set_shortcut`, `themes` with `set`, `set_ide_settings` (the real change; the dry run is free),
@@ -146,7 +155,7 @@ refusing silently when a client of the running window lacks a right.
     when they change which layout is chosen), `revoke_plugin_network` and
     `revoke_plugin_run_permission`. Like every right it is granted per
     workspace: agents working in that workspace may then change these settings, and the settings
-    hold everywhere. A setting that names a program IDECraft starts later needs the right of that
+    hold everywhere. A setting that names a program Ferris IDEA starts later needs the right of that
     effect as well: `set_ide_settings` with `shell` also needs `run`. Settings an agent can never
     change stay refused (`ui.driver.external`, switching the SSH exceptions on). No right fitted
     before v8: the user's settings were out of scope, and the tools wrote them unasked. [rule 12,
@@ -166,10 +175,10 @@ refusing silently when a client of the running window lacks a right.
     - `set_shortcut`, `themes` (set), `set_ide_settings`, `project_tree` (compact),
       `revoke_plugin_network`, `revoke_plugin_run_permission`: none → `settings`; `import_file`:
       `write` → `write`, and `settings` for the user's files; with `show` → `ui`;
-    - `git_branch_favorite`: none → `write` (it writes `.idecraft/branch-favorites.toml`);
+    - `git_branch_favorite`: none → `write` (it writes `.ferris-idea/branch-favorites.toml`);
       `python_language_server` with `apply`: none → `write`; `python_create_venv` and
-      `run_configuration_edit`: `run` → `run` and `write` (they write `.idecraft/python.toml`,
-      `.venv` and `.idecraft/run.toml`); `ui_trace` writing into a workspace folder: `ui` → `ui`
+      `run_configuration_edit`: `run` → `run` and `write` (they write `.ferris-idea/python.toml`,
+      `.venv` and `.ferris-idea/run.toml`); `ui_trace` writing into a workspace folder: `ui` → `ui`
       and `write`; `er_diagram` as PNG: `write` is checked before the target folder is created;
       `export_file` with `path`: the path lies inside the workspace, as for every file an agent
       writes;
@@ -182,7 +191,7 @@ refusing silently when a client of the running window lacks a right.
     - `git_commit_action` with `push-up-to`: `vcs-write` → `vcs-write` and `remote`;
       `import_connector`: `write` → `settings`, and with `url` the download needs `http`, also
       in a dry run; `window_layouts`: `write` → `settings` for the user's named layouts, `write`
-      for the project's layout; `remove_connection` removes only IDECraft's own keychain entry
+      for the project's layout; `remove_connection` removes only Ferris IDEA's own keychain entry
       (SPEC-0012 v3 behaviour 20);
     - `test_connection`, `sql_history`, `cancel_sql`, the store tools and every database tool:
       SPEC-0012 v3.
@@ -192,7 +201,7 @@ refusing silently when a client of the running window lacks a right.
     (SPEC-0319 behaviour 37, ADR-0027): it stays free for every client, because a stop that has to
     be granted first is a weaker safety control; the table marks it as that exception. The
     second marked exception is `local_history`: it reads, and what it writes is a record
-    IDECraft keeps by itself (behaviour 6); its calls are logged. The test accepts no other. [rule 12, ADR-0031]
+    Ferris IDEA keeps by itself (behaviour 6); its calls are logged. The test accepts no other. [rule 12, ADR-0031]
 14. **v8 – Known limits of the classification.** Tools that read but start a fixed program or
     connect to a service of the user's are classified and need no right: language servers
     (governed by safe mode, SPEC-0278), `ps` (`debug_processes`, `profile_processes`), `ssh -G`
@@ -250,7 +259,7 @@ refusing silently when a client of the running window lacks a right.
   file nor the settings file is created or changed; the dry run of `set_ide_settings` and reading
   the themes still work. With `settings` each writes. `set_ide_settings` with `shell` and without
   `run` is refused naming `run`. Without `write`, `git_branch_favorite` is refused and
-  `.idecraft/branch-favorites.toml` is not written; with it the mark is kept (`protocol.rs`:
+  `.ferris-idea/branch-favorites.toml` is not written; with it the mark is kept (`protocol.rs`:
   `settings_and_favorites_need_a_right`).
 - **AK-13 (v8)** The ratchet: every tool of `tools/list` has exactly one row in `TOOLS`,
   every row names a tool that exists, every row with a changing effect names a right or database
@@ -260,6 +269,16 @@ refusing silently when a client of the running window lacks a right.
 - **AK-14 (v8)** `settings` round-trips through the grant file; a `[[connection]]` entry is read
   for its workspace only, an unknown permission in one makes the file grant nothing
   (`crates/core/tests/it/permissions.rs`).
+- **AK-15 (v11)** A question shown in the window whose call ends (the waiting side of its answer
+  goes away) disappears without an answer, and the next question is shown; a question whose call
+  ended while it waited is not shown; an answer that comes after the call ended grants nothing
+  (`crates/app/src/mcp_http.rs`: `a_question_is_withdrawn_when_its_call_ends`,
+  `a_question_whose_call_ended_is_never_shown`).
+- **AK-16 (v12)** Over HTTP, a client that closes the connection of a call waiting for a question,
+  without `notifications/cancelled` or `DELETE`, has the question withdrawn within seconds; an
+  answer given afterwards — even "Always for This Workspace" — creates nothing and writes nothing to
+  the grant file, and the session is asked again for its next call
+  (`crates/mcp/tests/it/http.rs`: `a_question_ends_with_its_call`, step 3).
 
 ## Out of scope
 Per-command allow lists, a right per setting (v8: one right `settings` covers the user's settings), sandboxing of started programs, streaming output while a program runs, asking stdio clients
@@ -270,16 +289,16 @@ driver (right `ui`, SPEC-0319) and what programs started with `run` print; value
 in a response to a request the agent sent with `http`.
 
 ## Known deviations from the reference
-The reference asks per command in a dialog (or skips asking in a "brave" mode); IDECraft uses standing
+The reference asks per command in a dialog (or skips asking in a "brave" mode); Ferris IDEA uses standing
 per-workspace rights held outside the project plus a log of every action (IMP-0028), and keeps the text of files that commonly hold secrets and the HTTP client's private
 values from agents unless the user grants `secret-read` (v6), and asks in the
 window only for a right that is missing, naming client, right, action and scope. A client that was not
 asked is told the right is not granted, never that the user rejected it (IMP-0007).
 
 v10 (OBS-0071): the reference's MCP server has a tool that runs any of its other tools from a command
-string, so a client that allows or denies tools by name is bypassed; IDECraft has no such dispatcher:
+string, so a client that allows or denies tools by name is bypassed; Ferris IDEA has no such dispatcher:
 every capability is its own tool with its row in the effects table of behaviour 13 and the rights it
 checks (IMP-0447). By its description, the reference also compiles and runs a script an agent
-supplies inside its own process (custom inspections); IDECraft runs no agent code inside the IDE —
+supplies inside its own process (custom inspections); Ferris IDEA runs no agent code inside the IDE —
 what an agent wants run is a separate process through `run_command`, `terminal_command` or a run
 configuration, under the `run` right, in a trusted project, with a dry run first (IMP-0448).

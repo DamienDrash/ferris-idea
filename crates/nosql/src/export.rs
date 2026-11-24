@@ -210,7 +210,7 @@ mod tests {
             "key,type,ttl,value\ngreeting,string,60,hello\nblob,string,,\"{\"\"base64\"\":\"\"/wA=\"\"}\"\nh,hash,,\"[[\"\"f\"\",\"\"v\"\"]]\"\n"
         );
         let dir =
-            std::env::temp_dir().join(format!("idecraft-nosql-export-{}", std::process::id()));
+            std::env::temp_dir().join(format!("ferris-idea-nosql-export-{}", std::process::id()));
         let path = dir.join("keys.json");
         let _ = std::fs::remove_dir_all(&dir);
         write_export(&path, "[]", false).unwrap();

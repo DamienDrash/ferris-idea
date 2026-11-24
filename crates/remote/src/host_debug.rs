@@ -11,8 +11,8 @@ use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
 use std::time::{Duration, Instant};
 
-use idecraft_debugger::{DapClient, DapConnect, DapError, FnHost, PathMap};
-use idecraft_session::{Connection, ErrorCode, RpcError};
+use ferris_idea_debugger::{DapClient, DapConnect, DapError, FnHost, PathMap};
+use ferris_idea_session::{Connection, ErrorCode, RpcError};
 use serde_json::{Value, json};
 
 use crate::live::LiveProject;
@@ -172,7 +172,10 @@ pub fn java_host(link: &HostLink, session: &str, stand_in: &Path) -> FnHost {
 }
 
 /// `dap.host` for exception types.
-pub fn java_exception_types(link: &HostLink, session: &str) -> idecraft_debugger::ExceptionTypes {
+pub fn java_exception_types(
+    link: &HostLink,
+    session: &str,
+) -> ferris_idea_debugger::ExceptionTypes {
     let (link, session) = (link.clone(), session.to_owned());
     Box::new(move |types| {
         link.call(
@@ -262,7 +265,7 @@ impl Read for ChanReader {
 fn console_frame(text: &str) -> Vec<u8> {
     let body = json!({
         "seq": 0, "type": "event", "event": "output",
-        "body": { "category": "console", "output": format!("[IDECraft] {text}\n") },
+        "body": { "category": "console", "output": format!("[Ferris IDEA] {text}\n") },
     })
     .to_string();
     format!("Content-Length: {}\r\n\r\n{body}", body.len()).into_bytes()

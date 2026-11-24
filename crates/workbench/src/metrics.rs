@@ -5,8 +5,8 @@
 //! theme sets a value (`Tree.rowHeight`, `Tree.border`, `TabbedPane.tabHeight`,
 //! `EditorTabs.tabInsets`, …) the theme wins, as in the reference.
 
+pub use ferris_idea_ui::metrics::*;
 use gpui::{Div, ElementId, Stateful, div, prelude::*, px};
-pub use idecraft_ui::metrics::*;
 
 use crate::palette::Palette;
 use crate::workbench_view::c;
@@ -99,7 +99,7 @@ pub fn tab(id: impl Into<ElementId>, selected: bool, active: bool) -> Stateful<D
 pub fn pill_colours(
     p: &Palette,
     active: bool,
-) -> (idecraft_ui::theme::Rgba, idecraft_ui::theme::Rgba) {
+) -> (ferris_idea_ui::theme::Rgba, ferris_idea_ui::theme::Rgba) {
     if active {
         (p.tab_selected, p.tab_selected_border)
     } else {

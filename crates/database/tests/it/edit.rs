@@ -1,9 +1,9 @@
-//! SPEC-0017 against SQLite (always) and PostgreSQL/MySQL when `IDECRAFT_TEST_PG` /
-//! `IDECRAFT_TEST_MYSQL` / `IDECRAFT_TEST_MARIADB` / `IDECRAFT_TEST_SQLSERVER` are set. Each run works on its own table.
+//! SPEC-0017 against SQLite (always) and PostgreSQL/MySQL when `FERRIS_IDEA_TEST_PG` /
+//! `FERRIS_IDEA_TEST_MYSQL` / `FERRIS_IDEA_TEST_MARIADB` / `FERRIS_IDEA_TEST_SQLSERVER` are set. Each run works on its own table.
 
 use crate::common;
 
-use idecraft_database::{
+use ferris_idea_database::{
     Applied, Column, ConnectionProfile, Credentials, EditSet, EditTarget, Failure, OnError,
     Outcome, Secret, Session, Table, Values,
 };
@@ -150,7 +150,7 @@ async fn exercise(s: &Session, create: &str) {
 
 #[tokio::test]
 async fn sqlite_applies_and_rolls_back() {
-    let dir = std::env::temp_dir().join(format!("idecraft-edit-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-edit-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("edit.sqlite");
     let _ = std::fs::remove_file(&file);
@@ -181,7 +181,7 @@ async fn server(var: &str) -> Option<Session> {
 
 #[tokio::test]
 async fn postgres_applies_and_rolls_back() {
-    let Some(s) = server("IDECRAFT_TEST_PG").await else {
+    let Some(s) = server("FERRIS_IDEA_TEST_PG").await else {
         return;
     };
     exercise(
@@ -193,7 +193,7 @@ async fn postgres_applies_and_rolls_back() {
 
 #[tokio::test]
 async fn mysql_applies_and_rolls_back() {
-    let Some(s) = server("IDECRAFT_TEST_MYSQL").await else {
+    let Some(s) = server("FERRIS_IDEA_TEST_MYSQL").await else {
         return;
     };
     exercise(
@@ -205,7 +205,7 @@ async fn mysql_applies_and_rolls_back() {
 
 #[tokio::test]
 async fn mariadb_applies_and_rolls_back() {
-    let Some(s) = server("IDECRAFT_TEST_MARIADB").await else {
+    let Some(s) = server("FERRIS_IDEA_TEST_MARIADB").await else {
         return;
     };
     exercise(
@@ -218,13 +218,15 @@ async fn mariadb_applies_and_rolls_back() {
 #[tokio::test]
 async fn sqlserver_applies_and_rolls_back() {
     // Same variables as tests/sqlserver.rs; `edit_probe` is a real table there, dropped again.
-    let Some(url) = std::env::var("IDECRAFT_TEST_SQLSERVER").ok() else {
+    let Some(url) = ferris_idea_core::product_var("FERRIS_IDEA_TEST_SQLSERVER").ok() else {
         return;
     };
-    let password = std::env::var("IDECRAFT_TEST_SQLSERVER_PASSWORD").unwrap_or_else(|_| {
-        let file = std::env::var("IDECRAFT_TEST_SQLSERVER_PASSWORD_FILE").unwrap();
-        std::fs::read_to_string(file).unwrap().trim().to_owned()
-    });
+    let password = ferris_idea_core::product_var("FERRIS_IDEA_TEST_SQLSERVER_PASSWORD")
+        .unwrap_or_else(|_| {
+            let file =
+                ferris_idea_core::product_var("FERRIS_IDEA_TEST_SQLSERVER_PASSWORD_FILE").unwrap();
+            std::fs::read_to_string(file).unwrap().trim().to_owned()
+        });
     let profile = ConnectionProfile::from_url("edit", &url).unwrap();
     let s = Session::connect(&profile, &Credentials::Available(Secret::new(password)))
         .await

@@ -5,7 +5,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 /// Folders that mark a folder opened as a project before (step 1).
-const PROJECT_MARKERS: [&str; 2] = [".idecraft", ".idea"];
+const PROJECT_MARKERS: [&str; 2] = [".ferris-idea", ".idea"];
 
 /// Version control roots (step 2): `.git` may be a folder or, in a worktree or submodule, a file.
 const VCS_MARKERS: [&str; 3] = [".git", ".hg", ".svn"];
@@ -117,7 +117,7 @@ mod tests {
     impl Dir {
         fn new(tag: &str) -> Self {
             let p = std::env::temp_dir().join(format!(
-                "idecraft-project-root-{tag}-{}",
+                "ferris-idea-project-root-{tag}-{}",
                 std::process::id()
             ));
             let _ = std::fs::remove_dir_all(&p);
@@ -194,7 +194,7 @@ mod tests {
         d.file("home/mono/sub/pkg/package.json");
         let file = d.file("home/mono/sub/pkg/index.js");
         assert_eq!(target(&file, &d.0.join("home")).root, d.0.join("home/mono"));
-        d.dir("home/other/.idecraft");
+        d.dir("home/other/.ferris-idea");
         d.file("home/other/deep/go.mod");
         let file = d.file("home/other/deep/main.go");
         assert_eq!(

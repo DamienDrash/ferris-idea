@@ -23,10 +23,10 @@
 
 ## Context
 
-The plan for remote work opens network paths that IDECraft never had: a window that talks to its
+The plan for remote work opens network paths that Ferris IDEA never had: a window that talks to its
 backend on another machine (M6.12), debug adapters and forwarded ports on that machine (M6.13), a
 backend started by hand on hosts without SSH (M6.14), a desktop app that paired phones and other PCs
-control (M16), and mobile apps (M17). Today IDECraft listens only on `127.0.0.1` with a per-start
+control (M16), and mobile apps (M17). Today Ferris IDEA listens only on `127.0.0.1` with a per-start
 token (SPEC-0221) and reaches hosts only through the system `ssh` in batch mode with strict host
 keys (SPEC-0121). The eight rules of the plan say what must hold; this ADR says how, so that every
 remote spec can be checked against one list.
@@ -40,7 +40,7 @@ of this ADR.
 | Id | Attacker | Can | Must not be able to |
 |---|---|---|---|
 | T1 | **On the network** (same Wi-Fi, ISP, a hostile DNS server, a hotel captive portal) | read, drop, delay, replay, inject and redirect packets; spoof names | read or change session content, impersonate either end, downgrade the protocol, pair a device, reach any unauthenticated port |
-| T2 | **On the host or on the window's machine as another user** | list processes with their arguments, connect to loopback ports, open world-readable files and sockets, race on `/tmp` | connect to the backend, read tokens or keys, attach to the user's debug ports through IDECraft, hijack a session that waits for reconnection |
+| T2 | **On the host or on the window's machine as another user** | list processes with their arguments, connect to loopback ports, open world-readable files and sockets, race on `/tmp` | connect to the backend, read tokens or keys, attach to the user's debug ports through Ferris IDEA, hijack a session that waits for reconnection |
 | T3 | **A compromised relay** (M16, M17) | see addresses, timing and sizes; drop, delay, reorder and replay frames | read or change content, impersonate an endpoint, keep a session alive after revocation |
 | T4 | **A stolen or lost device** (phone, second PC) | use whatever is unlocked on it | keep access after the user revokes it; exceed the rights granted to that device; read keys from files |
 | T5 | **A compromised host or backend** | anything the user can do on that host (it holds the project) | escalate to the window's machine: write local files outside the remote project's cache, open local listeners, run local programs, read local keychain entries |
@@ -56,17 +56,17 @@ hardware side channels, and an *active* attacker who breaks X25519 in real time 
 ### 1. Two kinds of channel, both encrypted and mutually authenticated
 
 **(a) SSH channel** — for every connection to a host that has an SSH server (M6.12, M6.13, M6.14
-SSH transport). IDECraft keeps using the **system OpenSSH client** exactly as SPEC-0121 does:
+SSH transport). Ferris IDEA keeps using the **system OpenSSH client** exactly as SPEC-0121 does:
 `BatchMode=yes`, `StrictHostKeyChecking=yes`, the user's own keys, agent, `~/.ssh/config` and
-`known_hosts`; no password or passphrase ever passes through IDECraft; an unknown or changed host key
+`known_hosts`; no password or passphrase ever passes through Ferris IDEA; an unknown or changed host key
 is refused with what to do and is never accepted from inside the IDE. The backend runs as the user
 behind the SSH channel and speaks the session protocol over the channel's standard input and output
 (ADR-0026). There is no second encryption layer inside SSH: SSH already gives confidentiality,
 integrity and both-way authentication (host key, user key).
 
 **Post-quantum key exchange required (v3, PO-STATUS question 29: "Ja, erzwingen"):** against T7,
-every SSH path of IDECraft — remote host commands and files, the SSH terminal, the backend and
-`idecraft serve` (SPEC-0158, SPEC-0317), Docker over SSH and the Compose CLI (SPEC-0243,
+every SSH path of Ferris IDEA — remote host commands and files, the SSH terminal, the backend and
+`ferris-idea serve` (SPEC-0158, SPEC-0317), Docker over SSH and the Compose CLI (SPEC-0243,
 SPEC-0242), database SSH tunnels, later debug and port tunnels (M6.13), and Git over SSH
 (SPEC-0055) — passes
 
@@ -75,7 +75,7 @@ SPEC-0242), database SSH tunnels, later debug and port tunnels (M6.13), and Git 
 to the system `ssh`, in that order of preference, and no classical method. The rules:
 
 - **One start point (v5; v3: one option function).** Every `ssh` of the product comes from
-  `idecraft_remote::SshCommand` (`crates/remote/src/launch.rs`): `SshCommand::new(purpose)` (remote
+  `ferris_idea_remote::SshCommand` (`crates/remote/src/launch.rs`): `SshCommand::new(purpose)` (remote
   host, `serve`, terminal, tunnel, Docker, `ssh -G`) sets the program, checks the client, puts the
   shared options first (batch mode, strict host keys, 10 s connect timeout, the key exchange), then
   the route (jump hosts, below), then the caller's own options; `build` returns the command line,
@@ -94,22 +94,22 @@ to the system `ssh`, in that order of preference, and no classical method. The r
   an `ssh` program — an `ssh` command line built by hand, a `GIT_SSH_COMMAND` not from the start
   point, or shell text that runs `ssh` is allowed only in the start point and the stand-in writers
   of `crates/remote`; the scanner has its own test with such variants.
-- **Local client checked first.** On first use IDECraft asks the local client (`ssh -Q kex`, once
+- **Local client checked first.** On first use Ferris IDEA asks the local client (`ssh -Q kex`, once
   per process) and passes only the allowed methods it knows (an OpenSSH 9.0–9.8 client does not know
   the ML-KEM name and would reject the whole option otherwise). A client that knows none of them is
   refused before any connection: "the local ssh client offers no post-quantum key exchange; update
-  OpenSSH (OpenSSH 9.0 or later; ML-KEM from 9.9). IDECraft does not fall back to a classical key
+  OpenSSH (OpenSSH 9.0 or later; ML-KEM from 9.9). Ferris IDEA does not fall back to a classical key
   exchange (ADR-0025)". There is no silent fallback.
 - **Host without one refused.** `ssh`'s "no matching key exchange method found" becomes its own
   error (`RemoteError::NoPqKex`): "<host>: the host offers no post-quantum key exchange (OpenSSH 9.0
-  or later needed there, ML-KEM from 9.9). IDECraft connects only with post-quantum protection
+  or later needed there, ML-KEM from 9.9). Ferris IDEA connects only with post-quantum protection
   (ADR-0025); nothing was sent" — in the window, in MCP errors (Git: `ssh_refusal`) and in logs; the
   message names only the host, never keys, the host's offer or other details of `ssh`'s output.
 - **Jump hosts (v5).** OpenSSH opens the hops of a `ProxyJump` with its own `ssh` and without
-  IDECraft's options. IDECraft therefore never lets it: before a connection the start point asks
+  Ferris IDEA's options. Ferris IDEA therefore never lets it: before a connection the start point asks
   `ssh -G` (with the target's port, login and extra arguments) for the resolved configuration.
   - A `ProxyJump` (from `~/.ssh/config` or `-J`, which is taken out of the command line) becomes
-    IDECraft's own `ProxyCommand`: a private hop stand-in (0700, its name a hash of its text) that
+    Ferris IDEA's own `ProxyCommand`: a private hop stand-in (0700, its name a hash of its text) that
     runs the same `ssh` with the shared options and `-W` to the next host, the hops before it in
     turn, and for the first hop resolves that host's own configuration again — so a hop's own
     `ProxyJump` gets the same treatment. Multi-step jumps (`a,b,c`), `ssh://` and
@@ -119,12 +119,12 @@ to the system `ssh`, in that order of preference, and no classical method. The r
     nothing was sent to <host>" (`RemoteError::HopNoPqKex`).
   - Without a jump the direct route is pinned with `ProxyCommand=none`, so nothing in the
     configuration can add a hop afterwards.
-  - A `ProxyCommand` of the user's own (target or hop) runs a program IDECraft cannot hold to the
+  - A `ProxyCommand` of the user's own (target or hop) runs a program Ferris IDEA cannot hold to the
     rule. It is **refused by default** ("<host>: the SSH configuration runs its own ProxyCommand …;
     nothing was started. Use ProxyJump instead …", `RemoteError::ProxyCommandRefused`). The setting
     `ssh.allowOwnProxyCommand` (Settings → Version Control, default **off**, shown with a warning;
     MCP can only switch it off) allows it, like the Azure DevOps exception: each such connection
-    writes one line to `ssh-proxy-command.log` in the IDECraft log folder (time and host, never the
+    writes one line to `ssh-proxy-command.log` in the Ferris IDEA log folder (time and host, never the
     command).
   - Git and the Compose CLI resolve the same way at run time: their stand-ins call `ssh -G` with
     the arguments they were given and use the same shell functions as the hop stand-in.
@@ -136,7 +136,7 @@ to the system `ssh`, in that order of preference, and no classical method. The r
   Allowing only ML-KEM would refuse these hosts while adding no protection against the recorded-
   traffic attacker that a hybrid sntrup761 does not already give. Streamlined NTRU Prime is not
   standardised by NIST (it was a round-3 alternate), which is why ML-KEM comes first and is chosen
-  whenever both sides have it. The stricter variant is prepared: `IDECRAFT_SSH_KEX=mlkem` limits the
+  whenever both sides have it. The stricter variant is prepared: `FERRIS_IDEA_SSH_KEX=mlkem` limits the
   set to `mlkem768x25519-sha256` (the variable can only narrow the set; any other value keeps the
   default); making it the default needs only that switch, once OpenSSH 9.9+ is common.
 - **Git over SSH** is included: on 2026-11-07 `github.com`, `gitlab.com`, `bitbucket.org` and
@@ -149,11 +149,11 @@ to the system `ssh`, in that order of preference, and no classical method. The r
   post-quantum method; without the exception its repositories work only over HTTPS. The Project
   Owner accepts the recorded-traffic risk (T7) for this one case; everything else in this section
   stays. *Limits*, each enforced in code (`crates/remote/src/pq_git.rs`):
-  - **Git only.** Only Git's `GIT_SSH_COMMAND` can carry it (`idecraft_remote::git_ssh_command`).
+  - **Git only.** Only Git's `GIT_SSH_COMMAND` can carry it (`ferris_idea_remote::git_ssh_command`).
     Remote hosts, remote projects and `serve`, the SSH terminal, Docker and Compose over SSH and
     tunnels keep `ssh_options`, which never contains a classical method, also to an Azure host name.
   - **Azure DevOps only, by the resolved host name.** Git runs a private stand-in script (0700, in
-    IDECraft's own SSH folder, its name a hash of its text). It asks `ssh -G` with Git's own
+    Ferris IDEA's own SSH folder, its name a hash of its text). It asks `ssh -G` with Git's own
     arguments for the `hostname` that `ssh` will really connect to (after `~/.ssh/config` aliases
     and `Hostname`) and compares it exactly — no pattern, no case folding, no trailing dot — with
     `ssh.dev.azure.com` and `vs-ssh.visualstudio.com`. An alias whose `Hostname` is Azure gets the
@@ -176,26 +176,26 @@ to the system `ssh`, in that order of preference, and no classical method. The r
     passed on) and reports it. Git operations that ran without a post-quantum exchange carry `pq:
     false` and `pq_notice` in their result (MCP `git_fetch`, `git_pull`, `git_push`), the window's
     status line shows the warning once per session, and one line goes to `git-ssh-kex.log` in the
-    IDECraft log folder (time, Git subcommand, host, method; no URL, reference or credential). The
+    Ferris IDEA log folder (time, Git subcommand, host, method; no URL, reference or credential). The
     notice recommends HTTPS with a token, or SSH once Azure DevOps offers a post-quantum exchange.
   - **Switchable, strictest wins.** The setting `git.ssh.allowClassicKexForAzureDevOps` (in
     `settings.toml`, Settings → Version Control; default **on** by the Project Owner's decision)
-    turns it off; `IDECRAFT_SSH_KEX=mlkem` also turns it off. MCP can only switch it off.
+    turns it off; `FERRIS_IDEA_SSH_KEX=mlkem` also turns it off. MCP can only switch it off.
   - **Re-check.** An ignored test (`azure_devops_still_lacks_post_quantum` in
     `crates/remote/tests/pq_kex.rs`), run by hand and in the nightly job, fails as soon as Azure
     DevOps offers a post-quantum exchange (then the exception is removed in a new revision) or stops
     offering both allowed classical ones.
 - **Residual risks:** (0) Git to Azure DevOps over SSH is open to T7 while the exception is on
   (above). (1) Jump hosts: closed in v5 (above) — every `ProxyJump` hop gets the shared options.
-  What remains is a `ProxyCommand` of the user's own while `ssh.allowOwnProxyCommand` is on: IDECraft
+  What remains is a `ProxyCommand` of the user's own while `ssh.allowOwnProxyCommand` is on: Ferris IDEA
   cannot see which key exchange that program's hops use (off by default, warning, log line); and a
   configuration changed in the 30 s for which a resolved route is reused applies only after that.
-  (2) IDECraft's shared connections (`ControlMaster`, own folder 0700) are only ever opened with
-  these options; masters a user opened by hand are not reused because IDECraft uses its own
+  (2) Ferris IDEA's shared connections (`ControlMaster`, own folder 0700) are only ever opened with
+  these options; masters a user opened by hand are not reused because Ferris IDEA uses its own
   `ControlPath`, and Git, the Compose CLI and every hop use none (v5). (3) Host authentication stays classical (host keys), as for paired
   channels (section 1c).
 
-**(b) Paired channel** — for connections without SSH: a hand-started `idecraft serve --pair` on a
+**(b) Paired channel** — for connections without SSH: a hand-started `ferris-idea serve --pair` on a
 host without SSH (M6.14), a paired device controlling the desktop app (M16), mobile apps (M17), and
 any path through a relay. It uses the **Noise Protocol Framework** (revision 34) through the crate
 `snow` (Apache-2.0 OR MIT; pure-Rust primitives: `curve25519-dalek` BSD-3-Clause, `chacha20poly1305`,
@@ -239,7 +239,7 @@ handshake-bound authentication string, which Noise gives directly. `snow`'s smal
 handled by keeping it on the current release, running `cargo deny check advisories` in CI (already
 part of the checks), wrapping it behind one small module with its own tests (section 9) and naming
 its version in every release's security review (rule 8). TLS stays where a standard requires it
-(HTTPS to Git hosts, database drivers, provider APIs); it is not used for IDECraft's own remote
+(HTTPS to Git hosts, database drivers, provider APIs); it is not used for Ferris IDEA's own remote
 channels.
 
 **Rekeying and lifetime:** the transport rekeys (Noise `rekey`) every 2^20 messages or 60 minutes,
@@ -331,7 +331,7 @@ cross-check against a second implementation, the NIST test vectors and the relea
 ### 2. Pairing (short code or QR code, then a short authentication string)
 
 Pairing is always started on the machine that will accept connections (the desktop app for M16,
-`idecraft serve --pair` for M6.14) and confirmed on both sides:
+`ferris-idea serve --pair` for M6.14) and confirmed on both sides:
 
 1. The user switches on "Pair a device". The accepting side opens a **pairing window of at most
    5 minutes** for **one** device and shows:
@@ -370,21 +370,21 @@ case. The code is never the only factor.
 - No key, token or short code is written to project files, logs, the session protocol's payloads,
   crash reports, command-line arguments or environment variables (process lists are visible to
   other users, T2).
-- SSH keys stay in the user's SSH agent and files, managed by OpenSSH; IDECraft never reads them.
+- SSH keys stay in the user's SSH agent and files, managed by OpenSSH; Ferris IDEA never reads them.
 - Hosts without a keychain: section 3a.
 
 ### 3a. Key file on hosts without a keychain (decided 2026-11-07, PO-STATUS question 28 a)
 
 Debug builds on macOS also use this file store (decided by the project owner, 2026-11-09): each rebuild has a new ad-hoc signature, so the keychain would prompt every time. Release builds always use the keychain. Debug builds on Linux do the same (v7), so no test reaches the Secret Service of the person running it.
 
-On Linux the keychain is the Secret Service on the session bus (v7, decided by the project owner on 2026-11-09): an encrypted Secret Service session only, its `default` collection, nothing unlocked or created by IDECraft; locked or unreachable refuses the start. `--key-file` stays the explicit choice of this file store on a machine with a session bus, and an existing key file is kept.
+On Linux the keychain is the Secret Service on the session bus (v7, decided by the project owner on 2026-11-09): an encrypted Secret Service session only, its `default` collection, nothing unlocked or created by Ferris IDEA; locked or unreachable refuses the start. `--key-file` stays the explicit choice of this file store on a machine with a session bus, and an existing key file is kept.
 
 A headless Linux or other Unix host has no keychain service (no Secret Service on a session bus).
-There, and only there, `idecraft serve --pair` keeps its key **in a file, like an OpenSSH host
+There, and only there, `ferris-idea serve --pair` keeps its key **in a file, like an OpenSSH host
 key**:
 
-- **Where:** the static X25519 private key in `$XDG_CONFIG_HOME/idecraft/remote/serve-key`
-  (default `~/.config/idecraft/remote/serve-key`), the paired peers' public keys and metadata in
+- **Where:** the static X25519 private key in `$XDG_CONFIG_HOME/ferris-idea/remote/serve-key`
+  (default `~/.config/ferris-idea/remote/serve-key`), the paired peers' public keys and metadata in
   `paired-keys.toml` beside it (not secret, but whoever can change that file could add a device).
   Both use the file header of ADR-0021 (`kind = "remote-serve-key"` and `"remote-paired-keys"`).
   No ML-KEM key is stored (section 1c: the KEM keys are ephemeral).
@@ -406,14 +406,14 @@ key**:
 - **Refusal:** `serve` exits with status 78 (`EX_CONFIG`), opens no listener and writes one line to
   standard error and the connection log that names the path, the finding and what to do, never any
   key material, for example:
-  - `idecraft serve: refusing to start: the key file ~/.config/idecraft/remote/serve-key can be read
+  - `ferris-idea serve: refusing to start: the key file ~/.config/ferris-idea/remote/serve-key can be read
     by group or others (mode 0644). If someone else may have read it, delete it and pair your
-    devices again; otherwise run: chmod 600 ~/.config/idecraft/remote/serve-key`
+    devices again; otherwise run: chmod 600 ~/.config/ferris-idea/remote/serve-key`
   - `… is owned by uid 1002 (backup), not by you (uid 1000). Check where it came from; delete it to
     create a new key (paired devices must pair again).`
   - `… is a symbolic link (or not a regular file); refusing to follow it.`
-  - `… the folder ~/.config/idecraft/remote can be read or written by group or others (mode 0755);
-    run: chmod 700 ~/.config/idecraft/remote`
+  - `… the folder ~/.config/ferris-idea/remote can be read or written by group or others (mode 0755);
+    run: chmod 700 ~/.config/ferris-idea/remote`
   `serve` never repairs modes by itself: a key that was readable may already be copied, so the
   user decides.
 - **Shown to the user:** the start line and the pairing confirmation say "key stored in file
@@ -445,12 +445,12 @@ key**:
 
 ### 5. Nothing listens openly
 
-- `idecraft serve --stdio` (the SSH backend) opens **no TCP listener**. For reattachment after a
+- `ferris-idea serve --stdio` (the SSH backend) opens **no TCP listener**. For reattachment after a
   network break it may open one Unix domain socket in a directory of mode 0700 owned by the user
-  (`$XDG_RUNTIME_DIR/idecraft/` or `~/.cache/idecraft/run/`); it checks the peer's user id
+  (`$XDG_RUNTIME_DIR/ferris-idea/` or `~/.cache/ferris-idea/run/`); it checks the peer's user id
   (`getpeereid`/`SO_PEERCRED`) and refuses any other user before reading a byte, and it still
   requires the resume token (ADR-0026).
-- A paired listener (`idecraft serve --pair`, M16 remote access) listens on a network interface
+- A paired listener (`ferris-idea serve --pair`, M16 remote access) listens on a network interface
   **only while the user has switched it on**, accepts nothing but Noise handshakes from pinned keys
   (or the one pairing handshake while the window is open), and closes when switched off. It never
   speaks HTTP, so browsers cannot talk to it (T6).
@@ -528,7 +528,7 @@ relay).
 | SEC-4 | **Missing right:** each method behind a right called without it | `not_granted` naming the right; nothing done; logged |
 | SEC-5 | **Plaintext attempt:** plain JSON, HTTP and an SSH banner sent to a paired listener and to the reattach socket | connection closed without any content in reply; no parser beyond the handshake reached |
 | SEC-6 | **Downgrade:** another Noise pattern (also v1's `IK`), suite, prologue version, construction (`pq=` missing or different) or role | handshake fails |
-| SEC-7 | **Exposed port:** list the listening sockets of every IDECraft process in each mode (stdio backend, window with forwards, paired listener on and off); ask to forward a debug port | only loopback sockets and the switched-on paired listener; none after switching off; forwards bound to loopback; the debug-port forward refused |
+| SEC-7 | **Exposed port:** list the listening sockets of every Ferris IDEA process in each mode (stdio backend, window with forwards, paired listener on and off); ask to forward a debug port | only loopback sockets and the switched-on paired listener; none after switching off; forwards bound to loopback; the debug-port forward refused |
 | SEC-8 | **Replay and tampering:** replay a recorded handshake and recorded transport messages; flip one bit in a message; reorder two messages | refused; connection closed; no operation applied twice |
 | SEC-9 | **Rate and time limits:** many handshakes from one address; a stalled handshake; an expired pairing window; wrong resume tokens | back-off and refusals as in section 8; stalled handshake closed after 10 s |
 | SEC-10 | **Secrets stay secret:** scan logs, `remote/*.toml`, project files, protocol frames (decrypted in the test) and the arguments and environment of every spawned process | no key, token, short code, pairing key, ML-KEM secret or password appears; no key files except the serve key file of section 3a (0600, nothing but the key); folders 0700, files 0600 |
@@ -538,14 +538,14 @@ relay).
 | SEC-14 | **Host cannot escalate (T5):** the backend sends paths outside the project (`..`, absolute, links), asks for a local listener, or sends oversized frames | refused or connection closed; nothing written outside the remote cache |
 | SEC-15 | **Post-quantum part is mandatory and effective** (section 1c). (a) *Refused without it:* a peer sends message 1 without an encapsulation key, with one byte too few or too many, with an invalid key (coefficient ≥ q), or message 2 without a ciphertext; a peer runs plain `Noise_XK_…`, `Noise_IK_…` or `Noise_XX_…` without `psk3`; a prologue without `pq=ML-KEM-1024` or with another KEM. (b) *It enters the session key:* with fixed X25519 keys and fixed KEM randomness (test-only builder), two runs that differ only in the ML-KEM shared secret give different transport keys, different first ciphertexts and different SAS digits; flipping one bit of the ciphertext or swapping the encapsulation key makes the handshake fail at message 2 or 3. (c) *Correct ML-KEM:* NIST's FIPS 203 test vectors for ML-KEM-1024 pass; encapsulating with `libcrux-ml-kem` and decapsulating with RustCrypto `ml-kem` (and the reverse) gives the same secret | (a) handshake fails before any session message, refusal logged, no `psk3` ever set to a default or zero value; (b) all differences hold, tampering fails; (c) all equal |
 | SEC-16 | **Key file with too open rights refuses the start** (section 3a; hosts without a keychain): the key file or `paired-keys.toml` with mode 0640, 0604, 0644; owned by another user; a symbolic link to a 0600 file; not a regular file; the folder 0750 or 0755; a parent folder writable by others; a key file of wrong length; a locked keychain | `serve --pair` exits with status 78 before opening any listener; the message names the path, the finding and what to do and contains no key material; nothing is repaired; a new key is created 0600 in a 0700 folder regardless of the umask (umask 000 in the test) |
-| SEC-17 | **SSH channel without post-quantum key exchange** (section 1a): a test `sshd` limited to classical key exchanges (`KexAlgorithms curve25519-sha256,…`); a current test `sshd`; Docker over SSH to the classical one; every product file that starts `ssh` (workspace scan) | the classical host is refused with `NoPqKex` and nothing runs there, although OpenSSH's defaults would reach it; the current one is accepted and `ssh -v` with the shared options reports a method of the allowed list; Docker names the refusal; every caller uses the shared options. v4: the Git stand-in allows the classical methods only for a resolved Azure DevOps host name (alias to Azure yes, Azure-looking argument resolving elsewhere no), non-Git paths to an Azure host name stay post-quantum only, the classical list has no SHA-1, `group1`, `group14` or group exchange, the setting off or `IDECRAFT_SSH_KEX=mlkem` restores the refusal. v5: test `sshd`s as jump hosts (`crates/remote/tests/jump.rs`) — a classical hop is refused alone, first or second in a chain, through a hop's own `ProxyJump` and as `-J`, by the start point and by the Git and Compose stand-ins, while plain OpenSSH reaches the target through it; post-quantum hops (one or two) are accepted; a `ProxyCommand` of the user's own, for the target or a hop, is refused unless `ssh.allowOwnProxyCommand` is on (then logged without the command); the workspace scan finds `ssh` started through variables and allows only `SshCommand` |
+| SEC-17 | **SSH channel without post-quantum key exchange** (section 1a): a test `sshd` limited to classical key exchanges (`KexAlgorithms curve25519-sha256,…`); a current test `sshd`; Docker over SSH to the classical one; every product file that starts `ssh` (workspace scan) | the classical host is refused with `NoPqKex` and nothing runs there, although OpenSSH's defaults would reach it; the current one is accepted and `ssh -v` with the shared options reports a method of the allowed list; Docker names the refusal; every caller uses the shared options. v4: the Git stand-in allows the classical methods only for a resolved Azure DevOps host name (alias to Azure yes, Azure-looking argument resolving elsewhere no), non-Git paths to an Azure host name stay post-quantum only, the classical list has no SHA-1, `group1`, `group14` or group exchange, the setting off or `FERRIS_IDEA_SSH_KEX=mlkem` restores the refusal. v5: test `sshd`s as jump hosts (`crates/remote/tests/jump.rs`) — a classical hop is refused alone, first or second in a chain, through a hop's own `ProxyJump` and as `-J`, by the start point and by the Git and Compose stand-ins, while plain OpenSSH reaches the target through it; post-quantum hops (one or two) are accepted; a `ProxyCommand` of the user's own, for the target or a hop, is refused unless `ssh.allowOwnProxyCommand` is on (then logged without the command); the workspace scan finds `ssh` started through variables and allows only `SshCommand` |
 
 Release review (rule 8): before each release that contains a remote feature, the network paths,
 the `snow` and `libcrux-ml-kem` versions and these tests' results are recorded in the release
 notes' security section.
 
 **Which specs carry SEC-15 and SEC-16:** every spec with a paired channel — the spec of M6.14's
-`idecraft serve --pair`, the spec of M16's remote access (paired devices, relay) and the M17 mobile
+`ferris-idea serve --pair`, the spec of M16's remote access (paired devices, relay) and the M17 mobile
 specs — lists both; the one Noise module of section 1b (it wraps `snow` and
 `libcrux-ml-kem`, in `crates/session` or a crate of its own, chosen by the M6.14 spec) holds the
 unit tests of SEC-15. SEC-16 applies to every spec in which `serve --pair` can run on a host
@@ -606,7 +606,7 @@ Owner's approval first.
   rejected: duplicates OpenSSH, its config and agent support, and adds a large attack surface;
   Windows ships OpenSSH.
 - **WireGuard/VPN as a prerequisite** — rejected: requires system privileges and setup outside
-  IDECraft; users may still use one underneath.
+  Ferris IDEA; users may still use one underneath.
 - **Short code as the only pairing factor** — rejected: an active attacker could guess offline; the
   SAS comparison is required.
 - **HTTP/WebSocket listener with tokens** (extending SPEC-0221 to the network) — rejected: a
@@ -648,7 +648,7 @@ Hybrid constructions compared for section 1c (state of 2026-11-07):
 - **v6 · 2026-11-07** — section 4 gets the device grant `ui` for the UI driver of ADR-0027
   (deny by default like every grant; an action's effects need their own grants as well).
 - **v5 · 2026-11-07** — rule "security first" (AGENTS.md rule 12) applied to residual risk (1):
-  section 1a gets the jump-host rules (every `ProxyJump` hop through IDECraft's hop stand-in with
+  section 1a gets the jump-host rules (every `ProxyJump` hop through Ferris IDEA's hop stand-in with
   the shared options, `ProxyCommand=none` without a jump, a `ProxyCommand` of the user's own refused
   unless `ssh.allowOwnProxyCommand`, default off, warning, log line) and one start point of `ssh`
   (`SshCommand`) instead of one option function, with a stricter workspace scan and crate-private
@@ -658,7 +658,7 @@ Hybrid constructions compared for section 1c (state of 2026-11-07):
   Ausnahme"): section 1a gets the one exception, Git over SSH to Azure DevOps — Git only, exact
   resolved host name, `diffie-hellman-group18-sha512` and `-group16-sha512` behind the post-quantum
   list, strict host keys, `pq: false` with a notice and a log line, setting
-  `git.ssh.allowClassicKexForAzureDevOps` (default on) and `IDECRAFT_SSH_KEX=mlkem` to switch it
+  `git.ssh.allowClassicKexForAzureDevOps` (default on) and `FERRIS_IDEA_SSH_KEX=mlkem` to switch it
   off, nightly re-check; residual risk (0); SEC-17 extended; question 5 answered; consequences.
 - **v3 · 2026-11-07** — after the Project Owner's answer to PO-STATUS question 29 ("Ja,
   erzwingen"): section 1a requires a hybrid post-quantum key exchange on every SSH path (one shared

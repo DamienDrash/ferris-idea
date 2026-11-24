@@ -1,4 +1,4 @@
-//! Simple breakpoint conditions evaluated by IDECraft when the adapter cannot (`SPEC-0178`
+//! Simple breakpoint conditions evaluated by Ferris IDEA when the adapter cannot (`SPEC-0178`
 //! behaviour 4a): literals, names and field paths, `! -`, `* / %`, `+ -`, comparisons, `&& ||`.
 
 /// A value during evaluation.

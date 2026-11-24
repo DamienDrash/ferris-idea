@@ -110,6 +110,12 @@ impl GridEdits {
             .is_some_and(|c| self.target.has_column(c))
     }
 
+    /// The declared type of result column `col`, if it is a column of the table.
+    pub fn column_type(&self, col: usize) -> Option<&str> {
+        let name = self.columns.get(col)?;
+        self.target.column_type(name)
+    }
+
     /// Sets cell (`row`, `col`) to `value`; rows past the loaded ones are added rows. Setting a
     /// loaded cell back to its loaded value drops the change (behaviour 2).
     pub fn set(

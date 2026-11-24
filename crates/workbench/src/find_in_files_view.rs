@@ -3,11 +3,11 @@
 use std::ops::Range;
 use std::path::PathBuf;
 
+use ferris_idea_core::{Query, Workspace};
 use gpui::{
     Context, Entity, EventEmitter, FocusHandle, KeyDownEvent, Subscription,
     UniformListScrollHandle, Window, div, prelude::*, px, uniform_list,
 };
-use idecraft_core::{Query, Workspace};
 
 use crate::EditorView;
 use crate::find_bar::toggle_button;
@@ -16,7 +16,7 @@ use crate::icon_images::icon;
 use crate::palette::Palette;
 use crate::tips::Tipped;
 use crate::workbench_view::c;
-use idecraft_languages::syntax::SearchContext;
+use ferris_idea_languages::syntax::SearchContext;
 
 /// Most matches listed (SPEC-0029 behaviour 5).
 const MAX_MATCHES: usize = 1000;
@@ -124,7 +124,9 @@ fn host_params(request: &SearchRequest) -> serde_json::Value {
         Scope::OpenFiles(files) => {
             let files: Vec<String> = files
                 .iter()
-                .filter_map(|f| idecraft_session::paths::check_relative(&f.to_string_lossy()).ok())
+                .filter_map(|f| {
+                    ferris_idea_session::paths::check_relative(&f.to_string_lossy()).ok()
+                })
                 .filter(|f| f != ".")
                 .collect();
             params["files"] = serde_json::json!(files);
@@ -139,20 +141,20 @@ fn host_params(request: &SearchRequest) -> serde_json::Value {
 fn host_search(
     host: &crate::workbench_view::HostCall,
     request: &SearchRequest,
-) -> Result<(idecraft_core::WorkspaceSearch, Option<String>), String> {
+) -> Result<(ferris_idea_core::WorkspaceSearch, Option<String>), String> {
     let v = host("search.text", host_params(request))?;
     let files = v["files"]
         .as_array()
         .into_iter()
         .flatten()
         .filter_map(|f| {
-            let doc = idecraft_session::paths::check_relative(f["doc"].as_str()?).ok()?;
+            let doc = ferris_idea_session::paths::check_relative(f["doc"].as_str()?).ok()?;
             let matches = f["matches"]
                 .as_array()?
                 .iter()
                 .filter_map(|m| {
                     let start = m["start"].as_u64()? as usize;
-                    Some(idecraft_core::Match {
+                    Some(ferris_idea_core::Match {
                         start,
                         end: start + m["length"].as_u64().unwrap_or(0) as usize,
                         line: m["line"].as_u64()? as usize,
@@ -161,13 +163,13 @@ fn host_search(
                     })
                 })
                 .collect();
-            Some(idecraft_core::FileMatches {
+            Some(ferris_idea_core::FileMatches {
                 path: PathBuf::from(doc),
                 matches,
             })
         })
         .collect();
-    let found = idecraft_core::WorkspaceSearch {
+    let found = ferris_idea_core::WorkspaceSearch {
         files,
         skipped: v["skipped"].as_u64().unwrap_or(0) as usize,
         truncated: v["truncated"].as_bool() == Some(true),
@@ -859,7 +861,7 @@ impl Render for FindInFilesView {
                                     .parent()
                                     .map(|d| d.display().to_string())
                                     .unwrap_or_default();
-                                row.child(icon(idecraft_ui::icons::file_icon(&name)))
+                                row.child(icon(ferris_idea_ui::icons::file_icon(&name)))
                                     .child(name)
                                     .child(div().text_color(c(p.ui_dim)).child(dir))
                                     .child(
@@ -952,7 +954,7 @@ impl Render for FindInFilesView {
                     })
                     .child(div().flex_1())
                     .child(
-                        tool("fif-filter", "idecraft/filter", self.context_menu || context_on)
+                        tool("fif-filter", "ferris-idea/filter", self.context_menu || context_on)
                             .tip(crate::tips::declared!(FIND_BAR, "fif-filter"))
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.context_menu = !this.context_menu;
@@ -960,7 +962,7 @@ impl Render for FindInFilesView {
                             })),
                     )
                     .child(
-                        tool("fif-preview", "idecraft/preview", self.preview)
+                        tool("fif-preview", "ferris-idea/preview", self.preview)
                             .tip(crate::tips::declared!(FIND_BAR, "fif-preview"))
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.preview = !this.preview;
@@ -968,7 +970,7 @@ impl Render for FindInFilesView {
                             })),
                     )
                     .child(
-                        tool("fif-pin", "idecraft/pin", self.pinned)
+                        tool("fif-pin", "ferris-idea/pin", self.pinned)
                             .tip(crate::tips::declared!(FIND_BAR, "fif-pin"))
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.pinned = !this.pinned;
@@ -1004,7 +1006,7 @@ impl Render for FindInFilesView {
                         .min_w_0(),
                     )
                     .child(
-                        tool("fif-newline", "idecraft/newLine", false)
+                        tool("fif-newline", "ferris-idea/newLine", false)
                             .tip(crate::tips::declared!(FIND_BAR, "fif-newline"))
                             .on_click(cx.listener(|this, _, _, cx| this.new_line(cx))),
                     )

@@ -1,11 +1,11 @@
 //! What the bookmark popups and the Bookmarks tool window show (`SPEC-0331` behaviours 16, 20,
 //! 23), without the toolkit: the rows of the list, the tree of project, files and bookmarks, the
 //! grid of mnemonic characters and what the status bar says. The bookmarks themselves, their
-//! lines and their file are [`idecraft_core::bookmarks`].
+//! lines and their file are [`ferris_idea_core::bookmarks`].
 
 use std::collections::BTreeSet;
 
-use idecraft_core::bookmarks::{Listed, MNEMONICS};
+use ferris_idea_core::bookmarks::{Listed, MNEMONICS};
 
 /// A bookmark as a row: of the list popup, or below its file in the tree.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -213,7 +213,7 @@ pub fn taken_message(m: char, from: Option<&(String, usize)>) -> Option<String> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use idecraft_core::bookmarks::{Bookmarks, Change, listed};
+    use ferris_idea_core::bookmarks::{Bookmarks, Change, listed};
 
     fn sample() -> Vec<Listed> {
         let mut b = Bookmarks::default();

@@ -22,7 +22,7 @@ environment with the tool the project uses, seeing the exact command first.
 ## Behaviour
 1. **Name list:** the project names of the index come from the simple API (JSON, requested with
    gzip) and are kept as one name per line in the user cache folder
-   (`…/idecraft/pypi-names.txt`). The list is downloaded on the first search and again when it is
+   (`…/ferris-idea/pypi-names.txt`). The list is downloaded on the first search and again when it is
    older than 7 days; while it is missing the search still finds an exact name (behaviour 3). Only
    `https://pypi.org` is contacted. [STD, GEN]
 2. **Matching:** the query and the names are compared normalised (PEP 503, case-insensitive). Order:

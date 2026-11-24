@@ -159,7 +159,7 @@ columns of `schema.table.` (only tables of a schema are offered).
   up at once (IMP-0057).
 - **v3 – No guessed joins:** the reference also offers join clauses for tables that merely share a
   column name with a table in the statement (e.g. `stock` after `movement` over `warehouse_id`).
-  IDECraft deliberately offers join clauses only for real foreign keys: a guessed condition can be
+  Ferris IDEA deliberately offers join clauses only for real foreign keys: a guessed condition can be
   wrong without any hint (equal names, different meaning) and quietly produce wrong results. The plain
   table stays available for writing the condition by hand.
 - **v3 – Detail text:** the schema is shown with the kind (`table · public`) instead of in parentheses,

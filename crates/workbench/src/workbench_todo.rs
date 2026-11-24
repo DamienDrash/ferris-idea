@@ -2,7 +2,7 @@
 //! project and of the current file in the background, the jump to an item, the occurrence
 //! actions and the grouping toggles.
 //!
-//! What a TODO item is and the scan are [`idecraft_languages::todo`]; what the tree shows is
+//! What a TODO item is and the scan are [`ferris_idea_languages::todo`]; what the tree shows is
 //! [`crate::todo_model`]; the view is [`crate::todo_view`].
 
 use std::collections::{BTreeMap, HashMap};
@@ -11,8 +11,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+use ferris_idea_languages::todo::{Scan, scan_project, scan_text, shown_path};
 use gpui::{AppContext, Context, Entity, Window};
-use idecraft_languages::todo::{Scan, scan_project, scan_text, shown_path};
 
 use super::WorkbenchView;
 use crate::keymap_actions;
@@ -33,7 +33,7 @@ pub(super) struct TodoState {
     pub(super) shown: bool,
     _events: Option<gpui::Subscription>,
     /// What the scans found per file (behaviour 11); the scan in the background holds it.
-    cache: Arc<std::sync::Mutex<idecraft_languages::todo::Cache>>,
+    cache: Arc<std::sync::Mutex<ferris_idea_languages::todo::Cache>>,
     /// The stop flag of the running scan of the project.
     scan: Option<Arc<AtomicBool>>,
     /// Something changed while a scan ran: another one follows it.
@@ -84,7 +84,7 @@ fn entries(root: &Path, scan: Scan) -> Vec<Entry> {
             let module_dir = modules
                 .entry(folder)
                 .or_insert_with(|| {
-                    let dir = idecraft_languages::context::module_folder(root, &path);
+                    let dir = ferris_idea_languages::context::module_folder(root, &path);
                     dir.strip_prefix(root).map(shown_path).unwrap_or_default()
                 })
                 .clone();
@@ -231,7 +231,7 @@ impl WorkbenchView {
         cx.spawn(async move |this, cx| {
             let found = cx
                 .background_spawn(async move {
-                    let workspace = idecraft_core::Workspace::open(&root).ok()?;
+                    let workspace = ferris_idea_core::Workspace::open(&root).ok()?;
                     let unsaved: BTreeMap<PathBuf, String> = unsaved
                         .into_iter()
                         .filter_map(|(path, text)| {

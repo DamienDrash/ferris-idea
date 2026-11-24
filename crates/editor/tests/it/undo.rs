@@ -4,8 +4,8 @@
 
 use std::collections::HashSet;
 
-use idecraft_editor::reformat::reformat_edits;
-use idecraft_editor::{Carets, EditorState, Reconcile, perform, type_text};
+use ferris_idea_editor::reformat::reformat_edits;
+use ferris_idea_editor::{Carets, EditorState, Reconcile, perform, type_text};
 
 fn typed(s: &mut EditorState, text: &str) {
     text.chars().for_each(|c| type_text(s, &c.to_string()));

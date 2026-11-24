@@ -52,7 +52,7 @@ fixed with one keystroke — in the editor and by agents.
    - self-assignment → delete the statement; unused import → "Remove unused import" (whole line);
    - unused local → "Remove variable 'x'" only when it is the declaration's single variable and its
      initializer is a literal or a plain name, so no call with side effects disappears.
-3. **⌥↩ / Alt+Enter** (SPEC-0076) lists IDECraft's fixes for findings at the caret first, before the
+3. **⌥↩ / Alt+Enter** (SPEC-0076) lists Ferris IDEA's fixes for findings at the caret first, before the
    language server's actions (same titles only once); with own fixes at hand the list waits at most
    3 s for the language server and also shows without it. Enter applies the fix as one undo step; if
    the text changed after the list opened, nothing is applied and the status bar says so. The list
@@ -79,7 +79,7 @@ fixed with one keystroke — in the editor and by agents.
      field, method or class suppresses those inspections in that element;
    - `@SuppressWarnings("Name")` or `@SuppressWarnings({"A", "B"})` on a class, method, constructor,
      field or local declaration suppresses them inside it.
-   A name matches an inspection by its IDECraft id (`java.string-equality`), by its short name below,
+   A name matches an inspection by its Ferris IDEA id (`java.string-equality`), by its short name below,
    `unused` matches the four unused rules and `ALL` every rule. Short names: `java.string-equality`
    StringEquality, `java.empty-catch` CatchMayIgnoreException, `java.unused-import` UNUSED_IMPORT,
    `java.unused-local`/`-private`/`-parameter` unused, `java.redundant-cast` RedundantCast,
@@ -136,7 +136,7 @@ fixed with one keystroke — in the editor and by agents.
 - **AK-2** MCP: Java findings with fix titles, a `fix_inspection` preview, applying it, an unknown
   finding refused (`crates/mcp/tests/it/protocol.rs`: `inspect_code_tool`).
 - **AK-3** Window self-test (`java_inspection_steps`): an unused import, an unused local and
-  `ready == true` appear as "IDECraft: …" problems; ⌥↩ offers "Simplify to 'ready'" first and Enter
+  `ready == true` appear as "Ferris IDEA: …" problems; ⌥↩ offers "Simplify to 'ready'" first and Enter
   applies it.
 - **AK-4** Hand test (round 4): a real Java project next to the reference.
 - **AK-5 (v2)** Every new rule reports its case and stays quiet on the near miss; suppression by
@@ -164,7 +164,7 @@ Rules that need types across files (nullability of other methods' results, resou
 unchecked casts), Kotlin rules beyond SPEC-0098.
 
 ## Known deviations from the reference
-The reference resolves types; IDECraft decides on the syntax tree and therefore reports
+The reference resolves types; Ferris IDEA decides on the syntax tree and therefore reports
 `size() == 0` only for receivers whose declared type is known from the file, and offers removal of
 an unused local only when that cannot drop a side effect. v2: the null-dereference rule only follows
 a local variable within its block; the reference also follows method results and fields. Undoing

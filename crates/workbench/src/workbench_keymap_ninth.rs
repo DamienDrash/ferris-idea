@@ -3,16 +3,16 @@
 //! Project tree (`SPEC-0095` v12 behaviours 15 and 16), Reformat File… with its options
 //! (`SPEC-0075` v6 behaviour 8), Force Refresh (`SPEC-0059` v9.8 behaviour 30) and Header/Source
 //! (`SPEC-0071` v12 behaviour 19). The decisions without a window are in
-//! [`crate::keymap_actions`], [`idecraft_languages::safe_delete`] and
-//! [`idecraft_languages::related`].
+//! [`crate::keymap_actions`], [`ferris_idea_languages::safe_delete`] and
+//! [`ferris_idea_languages::related`].
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use ferris_idea_languages::find_usages::{DEADLINE, UsageSource};
+use ferris_idea_languages::insight::Range;
+use ferris_idea_languages::safe_delete::SafeDeletePlan;
 use gpui::{AppContext, Context, Window};
-use idecraft_languages::find_usages::{DEADLINE, UsageSource};
-use idecraft_languages::insight::Range;
-use idecraft_languages::safe_delete::SafeDeletePlan;
 
 use super::WorkbenchView;
 use crate::keymap_actions::{self, ReformatOption};
@@ -75,9 +75,9 @@ impl WorkbenchView {
         let (Some(here), Some(editor)) = (self.here(cx), self.active_editor()) else {
             return;
         };
-        if idecraft_languages::LanguageId::detect(&path).is_none() {
+        if ferris_idea_languages::LanguageId::detect(&path).is_none() {
             self.status = Some(format!(
-                "Safe Delete needs a language server: IDECraft knows no language for {}",
+                "Safe Delete needs a language server: Ferris IDEA knows no language for {}",
                 path.file_name()
                     .map(|n| n.to_string_lossy().into_owned())
                     .unwrap_or_default()
@@ -119,7 +119,7 @@ impl WorkbenchView {
                         .enable_all()
                         .build()
                         .map_err(|e| e.to_string())?;
-                    rt.block_on(idecraft_languages::safe_delete::plan_in(
+                    rt.block_on(ferris_idea_languages::safe_delete::plan_in(
                         &root,
                         &here.path,
                         Some(&text),
@@ -239,7 +239,7 @@ impl WorkbenchView {
                 if now != plan.text {
                     None
                 } else {
-                    let edit = idecraft_languages::jvm::TextEdit {
+                    let edit = ferris_idea_languages::jvm::TextEdit {
                         range: plan.range.clone(),
                         text: String::new(),
                     };
@@ -276,7 +276,7 @@ impl WorkbenchView {
             .unwrap_or(path)
             .to_string_lossy()
             .replace('\\', "/");
-        let mut history = idecraft_core::LocalHistory::open(&self.root).ok();
+        let mut history = ferris_idea_core::LocalHistory::open(&self.root).ok();
         if let Some(h) = history.as_mut() {
             let _ = h.record(&relative);
         }
@@ -315,9 +315,9 @@ impl WorkbenchView {
                 .background_spawn(async move {
                     let mut all = Vec::new();
                     for f in &files {
-                        all.extend(idecraft_languages::safe_delete::file_mentions(&root, f));
+                        all.extend(ferris_idea_languages::safe_delete::file_mentions(&root, f));
                     }
-                    all.truncate(idecraft_languages::safe_delete::MAX_MENTIONS);
+                    all.truncate(ferris_idea_languages::safe_delete::MAX_MENTIONS);
                     all
                 })
                 .await;
@@ -333,7 +333,7 @@ impl WorkbenchView {
                     .collect();
                 let title = keymap_actions::safe_delete_title(&name, places.len(), "mention");
                 this.safe_delete_list(title, places, window, cx, move |this, window, cx| {
-                    match idecraft_core::file_ops::delete_plans(&this.root, &paths) {
+                    match ferris_idea_core::file_ops::delete_plans(&this.root, &paths) {
                         Ok(plans) => {
                             this.delete_confirm = Some(plans);
                             this.finish_delete(true, window, cx);
@@ -416,7 +416,7 @@ impl WorkbenchView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        use idecraft_languages::format::{FormatOptions, OwnFormatter, no_formatter};
+        use ferris_idea_languages::format::{FormatOptions, OwnFormatter, no_formatter};
         let (Some(path), Some(editor)) = (self.active_path(), self.active_editor()) else {
             return;
         };
@@ -463,26 +463,24 @@ impl WorkbenchView {
                     }]
                 })
             };
-            let indent = &e.state.indent;
+            // `.editorconfig`, else the project's scheme, else the editor's (SPEC-0150 v6
+            // behaviour 8).
+            let (tab_size, insert_spaces) = e.reformat_indent();
             let options = FormatOptions {
-                tab_size: if indent == "\t" {
-                    e.tab_width() as u32
-                } else {
-                    indent.chars().count().max(1) as u32
-                },
-                insert_spaces: indent != "\t",
+                tab_size,
+                insert_spaces,
                 trim_trailing_whitespace: true,
                 insert_final_newline: true,
             }
-            .with_editorconfig(&idecraft_core::editorconfig::editorconfig_for(&path));
+            .with_editorconfig(&ferris_idea_core::editorconfig::editorconfig_for(&path));
             (buffer.text(), ranges, options)
         };
         let prettier = (ranges.is_none()
-            && idecraft_core::trust::require_trusted(&self.root).is_ok())
-        .then(|| idecraft_languages::js_tools::find_prettier(&self.root, &path))
+            && ferris_idea_core::trust::require_trusted(&self.root).is_ok())
+        .then(|| ferris_idea_languages::js_tools::find_prettier(&self.root, &path))
         .flatten();
-        let python = idecraft_languages::LanguageId::detect(&path)
-            == Some(idecraft_languages::LanguageId::Python);
+        let python = ferris_idea_languages::LanguageId::detect(&path)
+            == Some(ferris_idea_languages::LanguageId::Python);
         // Refusals before anything runs (behaviour 8, behaviours 6 and 7); Prettier and Python
         // go their own way first, as with `ReformatCode`.
         if ranges.as_ref().is_none_or(|r| !r.is_empty()) && prettier.is_none() && !python {
@@ -564,7 +562,7 @@ impl WorkbenchView {
         let Some((_, relative, name)) = self.local_project_file("Header/Source", cx) else {
             return;
         };
-        let Some(is_header) = idecraft_languages::related::is_header(&relative) else {
+        let Some(is_header) = ferris_idea_languages::related::is_header(&relative) else {
             self.status = Some(keymap_actions::header_source_nothing(&name, None));
             cx.notify();
             return;
@@ -574,8 +572,8 @@ impl WorkbenchView {
             let walk_root = root.clone();
             let found = cx
                 .background_spawn(async move {
-                    let files = idecraft_core::OwnSources::new(&walk_root).files();
-                    idecraft_languages::related::header_source(&relative, &files)
+                    let files = ferris_idea_core::OwnSources::new(&walk_root).files();
+                    ferris_idea_languages::related::header_source(&relative, &files)
                         .unwrap_or_default()
                 })
                 .await;
@@ -598,17 +596,17 @@ fn reformat_job(
     text: String,
     ranges: Option<Vec<Range>>,
     imports: bool,
-    options: idecraft_languages::format::FormatOptions,
-    prettier: Option<idecraft_languages::js_tools::JsTool>,
+    options: ferris_idea_languages::format::FormatOptions,
+    prettier: Option<ferris_idea_languages::js_tools::JsTool>,
 ) -> ReformatOutcome {
-    use idecraft_languages::format::OwnFormatter;
-    use idecraft_languages::python_tools::{self, ToolKind, ToolSearch};
+    use ferris_idea_languages::format::OwnFormatter;
+    use ferris_idea_languages::python_tools::{self, ToolKind, ToolSearch};
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .map_err(|e| e.to_string())?;
-    let python = idecraft_languages::LanguageId::detect(file)
-        == Some(idecraft_languages::LanguageId::Python);
+    let python = ferris_idea_languages::LanguageId::detect(file)
+        == Some(ferris_idea_languages::LanguageId::Python);
     let python_format = |now: &str, range: Option<&Range>| -> Result<String, String> {
         let search = ToolSearch::for_workspace(root);
         let tool = python_tools::find_formatter(&search)
@@ -617,7 +615,7 @@ fn reformat_job(
     };
     let server_format = |now: &str, range: Option<&Range>| -> Result<String, String> {
         let plan = rt
-            .block_on(idecraft_languages::format::plan_format_in(
+            .block_on(ferris_idea_languages::format::plan_format_in(
                 root,
                 file,
                 Some(now),
@@ -626,7 +624,7 @@ fn reformat_job(
                 std::time::Duration::from_secs(30),
             ))
             .map_err(|e| format!("Reformat failed: {e}"))?;
-        idecraft_languages::rename::apply_edits(now, &plan.edits.edits)
+        ferris_idea_languages::rename::apply_edits(now, &plan.edits.edits)
             .map_err(|e| format!("Reformat failed: {e}"))
     };
     let mut now = text.clone();
@@ -642,21 +640,22 @@ fn reformat_job(
         }
         None => {
             now = if let Some(tool) = &prettier {
-                idecraft_languages::js_tools::prettier_format(tool, file, &now)?
+                ferris_idea_languages::js_tools::prettier_format(tool, file, &now)?
             } else if python {
                 python_format(&now, None)?
             } else if let Some(own) = OwnFormatter::of(file) {
                 let formatted = match own {
-                    OwnFormatter::Sql => {
-                        idecraft_database::sql_format::format_sql(&now, options.tab_size as usize)
-                    }
+                    OwnFormatter::Sql => ferris_idea_database::sql_format::format_sql(
+                        &now,
+                        options.tab_size as usize,
+                    ),
                     OwnFormatter::Markdown => {
-                        idecraft_languages::markdown_format::format_markdown(&now)
+                        ferris_idea_languages::markdown_format::format_markdown(&now)
                     }
                 };
                 formatted.map_err(|why| {
                     format!(
-                        "Reformat failed: IDECraft's {} formatter changed nothing: {why}",
+                        "Reformat failed: Ferris IDEA's {} formatter changed nothing: {why}",
                         own.language()
                     )
                 })?
@@ -684,8 +683,8 @@ fn reformat_job(
         let changed = done.text != now;
         now = done.text.clone();
         python_tools::summary(&done, changed, ruff_waits)
-    } else if idecraft_languages::js_imports::applies(file) {
-        let done = rt.block_on(idecraft_languages::js_imports::organize_imports_in(
+    } else if ferris_idea_languages::js_imports::applies(file) {
+        let done = rt.block_on(ferris_idea_languages::js_imports::organize_imports_in(
             root,
             file,
             &now,
@@ -693,9 +692,9 @@ fn reformat_job(
         ))?;
         let changed = done.text != now;
         now = done.text.clone();
-        idecraft_languages::js_imports::summary(&done, changed)
-    } else if let Some(lang) = idecraft_languages::jvm::Jvm::of(&file.to_string_lossy()) {
-        match idecraft_languages::jvm::optimize_imports(lang, &now)? {
+        ferris_idea_languages::js_imports::summary(&done, changed)
+    } else if let Some(lang) = ferris_idea_languages::jvm::Jvm::of(&file.to_string_lossy()) {
+        match ferris_idea_languages::jvm::optimize_imports(lang, &now)? {
             None => "Imports are already optimized".to_owned(),
             Some(plan) => {
                 now.replace_range(plan.range.clone(), &plan.replacement);

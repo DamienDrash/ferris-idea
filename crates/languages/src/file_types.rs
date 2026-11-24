@@ -1,6 +1,6 @@
 //! What language a file has when its name does not say it or the user says otherwise
 //! (`SPEC-0004` v5 behaviours 9–12): the hashbang line of a script, the file name patterns and
-//! per-file overrides a project keeps in `.idecraft/file-types.toml`.
+//! per-file overrides a project keeps in `.ferris-idea/file-types.toml`.
 //!
 //! The projects whose window or MCP server is open register here, so every place that asks
 //! [`crate::LanguageId::detect`] for a file's language follows them. A project's file is read again
@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use crate::LanguageId;
 
 /// Where a project keeps its associations, relative to the project folder (behaviour 10).
-pub const FILE: &str = ".idecraft/file-types.toml";
+pub const FILE: &str = ".ferris-idea/file-types.toml";
 
 /// How often a registered project's file is looked at for changes on disk (behaviour 12).
 const RECHECK: Duration = Duration::from_secs(1);
@@ -101,6 +101,8 @@ pub enum Source {
     Hashbang,
     /// An editor modeline (v9 behaviour 18).
     Modeline,
+    /// The markup a file starts with: an XML declaration or an HTML doctype (v10 behaviour 21).
+    Prolog,
     /// Nothing: plain text.
     None,
 }
@@ -114,6 +116,7 @@ impl Source {
             Self::Name => "name",
             Self::Hashbang => "hashbang",
             Self::Modeline => "modeline",
+            Self::Prolog => "prolog",
             Self::None => "none",
         }
     }
@@ -191,7 +194,7 @@ impl Associations {
         };
         let body = toml::to_string(&form).map_err(io::Error::other)?;
         let text = format!(
-            "# File types of this project (IDECraft, SPEC-0004): file name patterns and single files.\n{body}"
+            "# File types of this project (Ferris IDEA, SPEC-0004): file name patterns and single files.\n{body}"
         );
         if let Some(dir) = at.parent() {
             std::fs::create_dir_all(dir)?;
@@ -518,7 +521,38 @@ pub fn content_language(head: &str, tail: &str) -> Option<(LanguageId, Source)> 
         .find(|i| line.is_char_boundary(*i))
         .unwrap_or(0);
     let line = &line[..end];
-    hashbang_language(line).map(|l| (l, Source::Hashbang))
+    hashbang_language(line)
+        .map(|l| (l, Source::Hashbang))
+        .or_else(|| prolog_language(head).map(|l| (l, Source::Prolog)))
+}
+
+/// The language of markup a file starts with (v10 behaviour 21): its first line that is not empty,
+/// after a byte order mark and leading white space, begins with an XML declaration `<?xml` (XML)
+/// or, in any case, with `<!DOCTYPE html` or `<html` (HTML). Nothing else counts: a file that
+/// merely contains markup further down, or starts with another element, stays plain text.
+pub fn prolog_language(head: &str) -> Option<LanguageId> {
+    let first = head
+        .trim_start_matches('\u{feff}')
+        .lines()
+        .map(str::trim_start)
+        .find(|l| !l.is_empty())?;
+    if first.starts_with("<?xml") && first[5..].starts_with(|c: char| c.is_whitespace() || c == '?')
+    {
+        return Some(LanguageId::Xml);
+    }
+    let lower: String = first
+        .chars()
+        .take(16)
+        .collect::<String>()
+        .to_ascii_lowercase();
+    let html =
+        |rest: &str| rest.is_empty() || rest.starts_with(|c: char| c.is_whitespace() || c == '>');
+    if lower.strip_prefix("<!doctype html").is_some_and(html)
+        || lower.strip_prefix("<html").is_some_and(html)
+    {
+        return Some(LanguageId::Html);
+    }
+    None
 }
 
 type ContentCache = HashMap<PathBuf, (Option<SystemTime>, Option<(LanguageId, Source)>)>;
@@ -575,8 +609,9 @@ fn read_ends(path: &Path, len: u64) -> Option<(String, String)> {
     ))
 }
 
-/// The language of the file at `path` and what decided it (behaviours 9–12, 18): the override of
-/// its registered project, a pattern of it, the name, an editor modeline, the hashbang line.
+/// The language of the file at `path` and what decided it (behaviours 9–12, 18, 21): the override
+/// of its registered project, a pattern of it, the name, an editor modeline, the hashbang line, the
+/// markup a file without extension starts with.
 pub fn detect(path: &Path) -> Detected {
     let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
     if path.is_absolute()
@@ -595,7 +630,11 @@ pub fn detect(path: &Path) -> Detected {
             pattern: None,
         };
     }
-    match content_of(path) {
+    // The markup a file starts with counts only for a name without extension (v10 behaviour 21):
+    // `notes.txt` holding an HTML example stays text.
+    let found = content_of(path)
+        .filter(|(_, source)| *source != Source::Prolog || Path::new(name).extension().is_none());
+    match found {
         Some((language, source)) => Detected {
             language: Some(language),
             source,
@@ -624,8 +663,10 @@ mod tests {
     use LanguageId as L;
 
     fn project(tag: &str) -> PathBuf {
-        let root =
-            std::env::temp_dir().join(format!("idecraft-file-types-{tag}-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!(
+            "ferris-idea-file-types-{tag}-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         root.canonicalize().unwrap()
@@ -686,6 +727,55 @@ mod tests {
             .unwrap();
         f.set_modified(later).unwrap();
         assert_eq!(detect(&root.join("deploy")).language, Some(L::Shell));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// SPEC-0004 v10 AK-17: the markup a file starts with (behaviour 21), after the hashbang and
+    /// modelines, only for files whose name says nothing.
+    #[test]
+    fn the_prolog_names_xml_and_html() {
+        for (head, language) in [
+            ("<?xml version=\"1.0\"?>\n<a/>\n", Some(L::Xml)),
+            (
+                "\u{feff}\n  <?xml version='1.0' encoding='UTF-8'?>\n",
+                Some(L::Xml),
+            ),
+            ("<?xml?>", Some(L::Xml)),
+            ("<!DOCTYPE html>\n<html></html>\n", Some(L::Html)),
+            (
+                "<!doctype HTML PUBLIC \"-//W3C//DTD HTML 4.01//EN\">",
+                Some(L::Html),
+            ),
+            ("<html lang=\"en\">", Some(L::Html)),
+            ("<HTML>", Some(L::Html)),
+            ("<?xml-stylesheet href=\"a.xsl\"?>", None),
+            ("<htmlx>", None),
+            ("<svg xmlns=\"http://www.w3.org/2000/svg\"/>", None),
+            ("text\n<?xml version=\"1.0\"?>", None),
+            ("", None),
+        ] {
+            assert_eq!(prolog_language(head), language, "{head:?}");
+        }
+        assert_eq!(
+            content_language("<?xml version=\"1.0\"?>\n", ""),
+            Some((L::Xml, Source::Prolog))
+        );
+        // A modeline names the language before the markup does.
+        assert_eq!(
+            content_language("<!DOCTYPE html>\n<!-- vim: set ft=xml: -->\n", ""),
+            Some((L::Xml, Source::Modeline))
+        );
+        let root = project("prolog");
+        std::fs::write(root.join("config"), "<?xml version=\"1.0\"?>\n<a/>\n").unwrap();
+        std::fs::write(root.join("page"), "<!DOCTYPE html>\n<html></html>\n").unwrap();
+        std::fs::write(root.join("page.txt"), "<!DOCTYPE html>\n").unwrap();
+        let d = detect(&root.join("config"));
+        assert_eq!((d.language, d.source), (Some(L::Xml), Source::Prolog));
+        assert_eq!(Source::Prolog.name(), "prolog");
+        let d = detect(&root.join("page"));
+        assert_eq!((d.language, d.source), (Some(L::Html), Source::Prolog));
+        // The name decides first: `.txt` is plain text whatever it holds.
+        assert_ne!(detect(&root.join("page.txt")).source, Source::Prolog);
         let _ = std::fs::remove_dir_all(&root);
     }
 

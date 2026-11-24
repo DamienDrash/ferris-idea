@@ -51,7 +51,7 @@ HOST = "127.0.0.1"
 
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
-    server_version = "idecraft-test-server"
+    server_version = "ferris-idea-test-server"
     sys_version = ""
 
     def log_message(self, fmt, *args):  # quiet; nothing with headers is ever written

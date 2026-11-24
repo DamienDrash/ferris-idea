@@ -1,7 +1,7 @@
 //! The stash popup (`SPEC-0106`): stash the local changes, or apply, pop or drop a stash.
 
+use ferris_idea_vcs::Stash;
 use gpui::{Context, EventEmitter, FocusHandle, KeyDownEvent, Window, div, prelude::*, px};
-use idecraft_vcs::Stash;
 
 use crate::palette::Palette;
 use crate::workbench_view::c;
@@ -43,7 +43,7 @@ fn first_selection(stashes: usize) -> usize {
 /// A shortcut of this dialog written for the platform: ⌘ is Ctrl and ⌥ is Alt outside macOS
 /// (`SPEC-0028` v8 behaviour 13).
 fn keys(text: &str) -> String {
-    idecraft_ui::keymap::local_keys(text, cfg!(target_os = "macos"))
+    ferris_idea_ui::keymap::local_keys(text, cfg!(target_os = "macos"))
 }
 
 #[cfg(test)]
@@ -196,7 +196,7 @@ impl Render for StashView {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StashDialogEvent {
     /// Stash the local changes with these options.
-    Stash(idecraft_vcs::StashOptions),
+    Stash(ferris_idea_vcs::StashOptions),
     /// Close without stashing.
     Close,
 }
@@ -239,9 +239,9 @@ impl StashDialog {
     }
 
     /// The options as chosen.
-    pub fn options(&self, cx: &gpui::App) -> idecraft_vcs::StashOptions {
+    pub fn options(&self, cx: &gpui::App) -> ferris_idea_vcs::StashOptions {
         let text = self.message.read(cx).state.buffer.text().trim().to_owned();
-        idecraft_vcs::StashOptions {
+        ferris_idea_vcs::StashOptions {
             message: (!text.is_empty()).then_some(text),
             include_untracked: self.include_untracked,
             keep_index: self.keep_index,

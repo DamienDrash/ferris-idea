@@ -1,4 +1,4 @@
-//! SPEC-0325 AK-4 and AK-8: `idecraft-serve --wss` as a real process, with a certificate generated
+//! SPEC-0325 AK-4 and AK-8: `ferris-idea-serve --wss` as a real process, with a certificate generated
 //! here and real frames over TLS.
 
 use std::io::{BufRead, BufReader};
@@ -7,8 +7,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
-use idecraft_session::{ClientSession, ErrorCode};
-use idecraft_web::client::connect;
+use ferris_idea_session::{ClientSession, ErrorCode};
+use ferris_idea_web::client::connect;
 use rcgen::{BasicConstraints, CertificateParams, DnType, IsCa, Issuer, KeyPair};
 use serde_json::json;
 
@@ -72,7 +72,7 @@ impl Drop for Serve {
 fn start(project: &Path, state: &Path, c: &Certs, extra: &[&str]) -> Serve {
     let port = free_port();
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
-    let mut child = Command::new(env!("CARGO_BIN_EXE_idecraft-serve"))
+    let mut child = Command::new(env!("CARGO_BIN_EXE_ferris-idea-serve"))
         .args(["serve", "--wss", "--state-dir"])
         .arg(state)
         .arg("--listen")
@@ -143,7 +143,7 @@ fn ak8_a_session_runs_on_the_real_process_with_view_only() {
 }
 
 fn exit_of(args: &[&str]) -> (Option<i32>, String) {
-    let out = Command::new(env!("CARGO_BIN_EXE_idecraft-serve"))
+    let out = Command::new(env!("CARGO_BIN_EXE_ferris-idea-serve"))
         .arg("serve")
         .args(args)
         .output()

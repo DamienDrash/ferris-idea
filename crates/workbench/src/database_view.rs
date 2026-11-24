@@ -4,11 +4,11 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use gpui::{Context, EventEmitter, FocusHandle, KeyDownEvent, Window, div, prelude::*, px};
-use idecraft_database::{
+use ferris_idea_database::{
     ConnectionProfile, PROFILE_FILE, Session, SystemStore, Table, introspect, load_profiles,
     resolve_credentials,
 };
+use gpui::{Context, EventEmitter, FocusHandle, KeyDownEvent, Window, div, prelude::*, px};
 
 use crate::db_tree_model::{Conn, Load, Node, Row};
 use crate::icon_images::icon;
@@ -48,11 +48,14 @@ pub enum DatabaseEvent {
     ShowDdl(ConnectionProfile, String),
     /// Show DDL on a routine, trigger or type of the connection's current schema (`SPEC-0089` v13
     /// behaviour 18).
-    ShowObjectDdl(ConnectionProfile, idecraft_database::SchemaObject),
+    ShowObjectDdl(ConnectionProfile, ferris_idea_database::SchemaObject),
     /// Open a new console of this connection (`SPEC-0089` v6 behaviour 14).
     NewConsole(ConnectionProfile),
     /// Show this text in the status bar (`SPEC-0164` v3 behaviour 10).
     Note(String),
+    /// Open the connection dialog filled from a data source of the project's `.idea` (`SPEC-0089`
+    /// v16 behaviour 28); nothing is saved before the user saves there.
+    AddIdeaSource(ferris_idea_database::ConnectionForm),
 }
 
 /// A table or column to rename, with what the rename needs to know.
@@ -67,10 +70,10 @@ pub struct RenameTarget {
     /// The column, when a column is renamed or its type changed.
     pub column: Option<String>,
     /// What is done (`SPEC-0164`); renaming the table or column by default.
-    pub what: idecraft_database::Refactoring,
+    pub what: ferris_idea_database::Refactoring,
     /// Named constraints of the connection, for derived names (`SPEC-0019` v2); read when the
     /// dialog opens.
-    pub constraints: Vec<idecraft_database::ConstraintName>,
+    pub constraints: Vec<ferris_idea_database::ConstraintName>,
     /// The schema the connection works in, where a renamed sequence lives (`SPEC-0164` v5
     /// behaviour 8); read when the dialog opens, `None` until then.
     pub home_schema: Option<String>,
@@ -79,7 +82,7 @@ pub struct RenameTarget {
 impl RenameTarget {
     /// What the field starts with: the current name, or the column's current type.
     pub fn current(&self) -> String {
-        use idecraft_database::Refactoring as R;
+        use ferris_idea_database::Refactoring as R;
         match &self.what {
             R::RenameIndex(n) | R::RenameRoutine(n) | R::RenameSequence(n) => n.clone(),
             R::RenameConstraint { name, .. } => name.clone(),
@@ -100,7 +103,7 @@ impl RenameTarget {
 
     /// The dialog's title, e.g. `Rename column stock.qty`.
     pub fn title(&self) -> String {
-        use idecraft_database::Refactoring as R;
+        use ferris_idea_database::Refactoring as R;
         let kind = self
             .tables
             .iter()
@@ -129,7 +132,7 @@ type Selected = (Node, Vec<Node>);
 pub struct DatabaseView {
     root: PathBuf,
     conns: Vec<Conn>,
-    /// Non-relational stores of `.idecraft/stores.toml` (`SPEC-0310`).
+    /// Non-relational stores of `.ferris-idea/stores.toml` (`SPEC-0310`).
     stores: Vec<crate::db_tree_model::StoreConn>,
     /// Why `connections.toml` could not be read, if so.
     problem: Option<String>,
@@ -150,6 +153,8 @@ pub struct DatabaseView {
     filter_schemas: bool,
     /// The quick documentation shown for the selection (v6 behaviour 13).
     doc: Option<Vec<String>>,
+    /// The data sources of `.idea/dataSources.xml` not added yet (v16 behaviour 28).
+    idea_sources: Vec<ferris_idea_core::IdeaDataSource>,
 }
 
 impl EventEmitter<DatabaseEvent> for DatabaseView {}
@@ -163,7 +168,7 @@ struct ReadSchema {
     /// The sequences.
     sequences: Vec<String>,
     /// The routines, triggers and types (`SPEC-0089` v13 behaviour 25).
-    objects: Vec<idecraft_database::SchemaObject>,
+    objects: Vec<ferris_idea_database::SchemaObject>,
     /// Whether the session was encrypted (`SPEC-0089` v12 behaviour 24); `None` when the server
     /// does not say.
     tls: Option<bool>,
@@ -184,7 +189,7 @@ fn read_schema(profile: &ConnectionProfile, other: Option<&str>) -> Result<ReadS
             .await
             .map_err(|e| e.to_string())?;
         if other.is_some() {
-            let tables = idecraft_database::introspect_schema(&session, other)
+            let tables = ferris_idea_database::introspect_schema(&session, other)
                 .await
                 .map_err(|e| e.to_string())?;
             return Ok(ReadSchema {
@@ -196,18 +201,18 @@ fn read_schema(profile: &ConnectionProfile, other: Option<&str>) -> Result<ReadS
             });
         }
         let tables = introspect(&session).await.map_err(|e| e.to_string())?;
-        let others = idecraft_database::list_schemas(&session)
+        let others = ferris_idea_database::list_schemas(&session)
             .await
             .unwrap_or_default()
             .into_iter()
             .filter(|s| !s.current)
             .map(|s| s.name)
             .collect();
-        let sequences = idecraft_database::sequences(&session, None)
+        let sequences = ferris_idea_database::sequences(&session, None)
             .await
             .unwrap_or_default();
         // SPEC-0089 v13 behaviour 25: routines, triggers and types; sequences have their folder.
-        let objects = idecraft_database::schema_objects(&session, None)
+        let objects = ferris_idea_database::schema_objects(&session, None)
             .await
             .unwrap_or_default()
             .into_iter()
@@ -237,11 +242,11 @@ pub fn connection_doc(p: &ConnectionProfile) -> Vec<String> {
         lines.push(format!(
             "SSL: {}",
             match p.ssl {
-                idecraft_database::SslMode::Disable => "disable",
-                idecraft_database::SslMode::Prefer => "prefer",
-                idecraft_database::SslMode::Require => "require",
-                idecraft_database::SslMode::VerifyCa => "verify-ca",
-                idecraft_database::SslMode::VerifyFull => "verify-full",
+                ferris_idea_database::SslMode::Disable => "disable",
+                ferris_idea_database::SslMode::Prefer => "prefer",
+                ferris_idea_database::SslMode::Require => "require",
+                ferris_idea_database::SslMode::VerifyCa => "verify-ca",
+                ferris_idea_database::SslMode::VerifyFull => "verify-full",
             }
         ));
     }
@@ -286,6 +291,7 @@ impl DatabaseView {
             search: None,
             filter_schemas: true,
             doc: None,
+            idea_sources: Vec::new(),
         };
         view.reload();
         view
@@ -305,14 +311,14 @@ impl DatabaseView {
         match &node {
             Node::Conn(_) => Some(connection_doc(&conn.profile)),
             Node::Table(_, t) => {
-                idecraft_database::object_doc(&conn.profile, &tables(&conn.load)?, t, None)
+                ferris_idea_database::object_doc(&conn.profile, &tables(&conn.load)?, t, None)
             }
             Node::Column(_, t, c) => {
-                idecraft_database::object_doc(&conn.profile, &tables(&conn.load)?, t, Some(c))
+                ferris_idea_database::object_doc(&conn.profile, &tables(&conn.load)?, t, Some(c))
             }
             Node::SchemaTable(_, s, t) => {
                 let load = &conn.schemas.iter().find(|(n, _)| n == s)?.1;
-                idecraft_database::object_doc(&conn.profile, &tables(load)?, t, None)
+                ferris_idea_database::object_doc(&conn.profile, &tables(load)?, t, None)
             }
             _ => None,
         }
@@ -368,7 +374,7 @@ impl DatabaseView {
         cx.notify();
     }
 
-    /// Reads `.idecraft/connections.toml` again and forgets every loaded schema (behaviour 5).
+    /// Reads `.ferris-idea/connections.toml` again and forgets every loaded schema (behaviour 5).
     pub fn reload(&mut self) {
         match load_profiles(&self.root) {
             Ok(profiles) => {
@@ -390,7 +396,7 @@ impl DatabaseView {
                 self.conns.clear();
             }
         }
-        match idecraft_nosql::load_stores(&self.root) {
+        match ferris_idea_nosql::load_stores(&self.root) {
             Ok(stores) => {
                 self.stores = stores
                     .into_iter()
@@ -409,10 +415,46 @@ impl DatabaseView {
                 self.stores.clear();
             }
         }
+        self.read_idea_sources();
         self.expanded.clear();
         self.selected = None;
         self.keep_selection = None;
         self.search = None;
+    }
+
+    /// The data sources of the project's `.idea/dataSources.xml` that no connection has yet
+    /// (`SPEC-0089` v16 behaviour 28): offered ones and, with their reason, the others. Reading
+    /// connects to nothing and never opens the personal `dataSources.local.xml`.
+    fn read_idea_sources(&mut self) {
+        let profiles: Vec<ConnectionProfile> =
+            self.conns.iter().map(|c| c.profile.clone()).collect();
+        let root = self.root.clone();
+        self.idea_sources = ferris_idea_core::read_idea_data_sources(&root)
+            .into_iter()
+            .filter(|s| {
+                ferris_idea_database::idea_source_form(s).map_or(true, |f| {
+                    !ferris_idea_database::is_added(&f, &root, &profiles)
+                })
+            })
+            .collect();
+    }
+
+    /// The listed data sources of `.idea` (v16 behaviour 28).
+    pub fn idea_sources(&self) -> &[ferris_idea_core::IdeaDataSource] {
+        &self.idea_sources
+    }
+
+    /// Add… on the data source `name`: asks the workbench to open the connection dialog filled from
+    /// it (v16 behaviour 28). A data source that is not offered does nothing.
+    pub fn add_idea_source(&mut self, name: &str, cx: &mut Context<Self>) {
+        let form = self
+            .idea_sources
+            .iter()
+            .find(|s| s.name == name)
+            .and_then(|s| ferris_idea_database::idea_source_form(s).ok());
+        if let Some(form) = form {
+            cx.emit(DatabaseEvent::AddIdeaSource(form));
+        }
     }
 
     /// [`Self::reload`], keeping the open nodes and the selection (`SPEC-0089` v10 behaviour 22):
@@ -537,7 +579,7 @@ impl DatabaseView {
 
     /// The table or column selected in the tree with its connection's schema, if loaded.
     pub fn selected_object(&self) -> Option<RenameTarget> {
-        use idecraft_database::Refactoring as R;
+        use ferris_idea_database::Refactoring as R;
         // SPEC-0164 v3 behaviour 10: also index, sequence and named foreign key rows.
         let (conn, table, column, what) = match self.selected_node()? {
             Node::Table(i, t) => (i, t, None, R::Rename),
@@ -573,10 +615,10 @@ impl DatabaseView {
     /// The selected column as a type change (⌘F6, `SPEC-0164` v3 behaviour 10).
     pub fn selected_type_change(&self) -> Option<RenameTarget> {
         let mut target = self.selected_object()?;
-        if target.column.is_none() || target.what != idecraft_database::Refactoring::Rename {
+        if target.column.is_none() || target.what != ferris_idea_database::Refactoring::Rename {
             return None;
         }
-        target.what = idecraft_database::Refactoring::ChangeType;
+        target.what = ferris_idea_database::Refactoring::ChangeType;
         Some(target)
     }
 
@@ -600,6 +642,21 @@ impl DatabaseView {
                 this.expand_rows(Node::Conn(i), cx);
             });
         }
+    }
+
+    /// After a run whose statements may have changed the schema of connection `id`
+    /// (`SPEC-0089` v17 behaviour 29, OBS-0120 X2): a connection the tree has read is read again,
+    /// tables, views, sequences, routines and triggers alike, keeping the tree open and the
+    /// selection on its node; a connection not read yet stays as it is. Whether it was read again.
+    pub fn schema_changed(&mut self, id: &str, cx: &mut Context<Self>) -> bool {
+        let read = self
+            .conns
+            .iter()
+            .any(|c| c.profile.id == id && matches!(c.load, Load::Loaded(_)));
+        if read {
+            self.refresh_connection(id, cx);
+        }
+        read
     }
 
     /// Selects the first visible row named `label` (tests).
@@ -647,7 +704,7 @@ impl DatabaseView {
                             .enable_all()
                             .build()
                             .map_err(|e| e.to_string())?;
-                        rt.block_on(idecraft_nosql::browse(&profile, password, &at, 0))
+                        rt.block_on(ferris_idea_nosql::browse(&profile, password, &at, 0))
                             .map(|level| level.items)
                             .map_err(|e| e.to_string())
                     })
@@ -1519,5 +1576,84 @@ impl Render for DatabaseView {
                         })
                 })),
             )
+            // SPEC-0089 v16 behaviour 28: data sources of the project's `.idea`, not added yet.
+            .when(!self.idea_sources.is_empty(), |d| {
+                d.child(
+                    div()
+                        .id("database-idea-sources")
+                        .flex_none()
+                        .max_h(px(200.))
+                        .overflow_y_scroll()
+                        .border_t_1()
+                        .border_color(c(p.popup_border))
+                        .px_2()
+                        .py_1()
+                        .flex()
+                        .flex_col()
+                        .gap_1()
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(c(p.ui_muted))
+                                .child("From the project's .idea, not added yet"),
+                        )
+                        .children(self.idea_sources.iter().enumerate().map(|(i, s)| {
+                            let kind = s.kind.clone().unwrap_or_default();
+                            let detail = if let Some(reason) = &s.reason {
+                                reason.clone()
+                            } else if let Some(file) = &s.file {
+                                format!("{kind} · {file}")
+                            } else {
+                                let port = s.port.map(|p| format!(":{p}")).unwrap_or_default();
+                                let db = s
+                                    .database
+                                    .as_ref()
+                                    .map(|d| format!("/{d}"))
+                                    .unwrap_or_default();
+                                format!("{kind} · {}{port}{db}", s.host.clone().unwrap_or_default())
+                            };
+                            let name = s.name.clone();
+                            div()
+                                .id(("database-idea-source", i))
+                                .h(px(24.))
+                                .flex()
+                                .items_center()
+                                .gap_2()
+                                .overflow_hidden()
+                                .child(div().flex_none().child(s.name.clone()))
+                                .child(
+                                    div()
+                                        .flex_1()
+                                        .min_w_0()
+                                        .text_ellipsis()
+                                        .whitespace_nowrap()
+                                        .text_color(c(if s.offered() {
+                                            p.ui_dim
+                                        } else {
+                                            p.ui_muted
+                                        }))
+                                        .child(detail),
+                                )
+                                .when(s.offered(), |d| {
+                                    d.child(
+                                        div()
+                                            .id(("database-idea-source-add", i))
+                                            .flex_none()
+                                            .px_2()
+                                            .rounded(px(4.))
+                                            .border_1()
+                                            .border_color(c(p.popup_border))
+                                            .hover(|s| s.bg(c(p.tree_hover)))
+                                            .child("Add…")
+                                            .on_click(cx.listener(
+                                                move |this, _: &gpui::ClickEvent, _, cx| {
+                                                    this.add_idea_source(&name, cx)
+                                                },
+                                            )),
+                                    )
+                                })
+                        })),
+                )
+            })
     }
 }

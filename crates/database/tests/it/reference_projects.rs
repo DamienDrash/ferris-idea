@@ -1,6 +1,6 @@
 //! SPEC-0005 against the own reference project `tests/reference-projects/sql-basic`.
 
-use idecraft_database::{Dialect, split_statements};
+use ferris_idea_database::{Dialect, split_statements};
 
 fn read(name: &str) -> String {
     let path = format!(

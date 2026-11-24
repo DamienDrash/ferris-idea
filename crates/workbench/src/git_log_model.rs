@@ -1,6 +1,6 @@
 //! Rows, dates and the filter of the Git log tool window (`SPEC-0086`), free of the UI toolkit.
 
-use idecraft_vcs::CommitInfo;
+use ferris_idea_vcs::CommitInfo;
 
 /// Seconds east of UTC of the local time zone, as `date +%z` reports it (0 when unknown).
 pub fn local_offset() -> i64 {

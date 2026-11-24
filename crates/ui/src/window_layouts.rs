@@ -23,15 +23,15 @@ pub const MAX_LAYOUTS: usize = 50;
 pub const DEFAULT_TITLE: &str = "Default";
 
 /// Prefix of the action that applies the layout named after it (behaviour 6).
-pub const APPLY: &str = "IDECraft.Layout.Apply:";
+pub const APPLY: &str = "FerrisIDEA.Layout.Apply:";
 /// Prefix of the action that renames the layout named after it (behaviour 10).
-pub const RENAME: &str = "IDECraft.Layout.Rename:";
+pub const RENAME: &str = "FerrisIDEA.Layout.Rename:";
 /// Prefix of the action that deletes the layout named after it (behaviour 11).
-pub const DELETE: &str = "IDECraft.Layout.Delete:";
+pub const DELETE: &str = "FerrisIDEA.Layout.Delete:";
 
 /// The layouts file of this user, if there is a settings folder.
 pub fn layouts_file() -> Option<PathBuf> {
-    idecraft_core::user_config_dir().map(|d| d.join(LAYOUTS_FILE))
+    ferris_idea_core::user_config_dir().map(|d| d.join(LAYOUTS_FILE))
 }
 
 /// What a saved layout holds (behaviour 1).
@@ -114,7 +114,7 @@ pub enum LayoutError {
 /// Why the layouts file could not be used (behaviour 18).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Problem {
-    /// Written by a newer IDECraft: never overwritten.
+    /// Written by a newer Ferris IDEA: never overwritten.
     Newer(u64),
     /// Not a layouts file: kept once as `.bak` before the next save.
     Broken(String),
@@ -125,7 +125,7 @@ impl Problem {
     pub fn message(&self) -> String {
         match self {
             Problem::Newer(v) => format!(
-                "The saved layouts were written by a newer IDECraft (format {v}; this version reads up to {LAYOUTS_VERSION}); the default layout is used and the file is left as it is"
+                "The saved layouts were written by a newer Ferris IDEA (format {v}; this version reads up to {LAYOUTS_VERSION}); the default layout is used and the file is left as it is"
             ),
             Problem::Broken(why) => {
                 format!("The saved layouts could not be read ({why}); the default layout is used")
@@ -609,7 +609,7 @@ pub fn json_schema() -> Value {
         }
     });
     let layout = json!({
-        "description": "The arrangement, in the form of .idecraft/tool-windows.json (SPEC-0167).",
+        "description": "The arrangement, in the form of .ferris-idea/tool-windows.json (SPEC-0167).",
         "type": "object",
         "properties": {
             "version": {
@@ -651,7 +651,7 @@ pub fn json_schema() -> Value {
     });
     sorted(json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "title": "IDECraft window layouts",
+        "title": "Ferris IDEA window layouts",
         "description": "State file of the user (SPEC-0333): window-layouts.json in the settings folder. JSON; unknown keys and unknown tool window ids are ignored when it is read.",
         "type": "object",
         "required": ["version"],
@@ -715,7 +715,7 @@ mod tests {
 
     fn temp(tag: &str) -> PathBuf {
         let dir =
-            std::env::temp_dir().join(format!("idecraft-layouts-{tag}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("ferris-idea-layouts-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir.join(LAYOUTS_FILE)
@@ -1004,7 +1004,7 @@ mod tests {
         assert_eq!(l.problem, Some(Problem::Newer(9)));
         l.save_new("Review", plain()).unwrap();
         let err = l.save(&file).unwrap_err();
-        assert!(err.to_string().contains("newer IDECraft"), "{err}");
+        assert!(err.to_string().contains("newer Ferris IDEA"), "{err}");
         assert_eq!(std::fs::read_to_string(&file).unwrap(), text);
         let _ = std::fs::remove_dir_all(file.parent().unwrap());
     }
@@ -1079,18 +1079,18 @@ mod tests {
                     items: vec![
                         action("Restore", "RestoreDefaultLayout", false, true),
                         action("Save Changes", "StoreDefaultLayout", false, true),
-                        action("Rename…", "IDECraft.Layout.Rename:coding", false, true),
+                        action("Rename…", "FerrisIDEA.Layout.Rename:coding", false, true),
                         MenuItem::Separator,
-                        action("Delete…", "IDECraft.Layout.Delete:coding", false, false),
+                        action("Delete…", "FerrisIDEA.Layout.Delete:coding", false, false),
                     ],
                 },
                 MenuItem::Sub {
                     label: "Review".into(),
                     items: vec![
-                        action("Apply", "IDECraft.Layout.Apply:Review", false, true),
-                        action("Rename…", "IDECraft.Layout.Rename:Review", false, true),
+                        action("Apply", "FerrisIDEA.Layout.Apply:Review", false, true),
+                        action("Rename…", "FerrisIDEA.Layout.Rename:Review", false, true),
                         MenuItem::Separator,
-                        action("Delete…", "IDECraft.Layout.Delete:Review", false, true),
+                        action("Delete…", "FerrisIDEA.Layout.Delete:Review", false, true),
                     ],
                 },
                 MenuItem::Separator,
@@ -1112,13 +1112,13 @@ mod tests {
     }
 
     /// SPEC-0333 AK-4: the published schema is the one the code gives. With
-    /// `IDECRAFT_WRITE_SCHEMAS=1` the test writes it.
+    /// `FERRIS_IDEA_WRITE_SCHEMAS=1` the test writes it.
     #[test]
     fn published_schema_matches() {
         let file = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../docs/formats/window-layouts.schema.json");
         let text = serde_json::to_string_pretty(&json_schema()).unwrap() + "\n";
-        if std::env::var_os("IDECRAFT_WRITE_SCHEMAS").is_some() {
+        if ferris_idea_core::product_var_os("FERRIS_IDEA_WRITE_SCHEMAS").is_some() {
             std::fs::write(&file, &text).unwrap();
         }
         let published =
@@ -1126,7 +1126,7 @@ mod tests {
         assert_eq!(
             published,
             text,
-            "{} differs from the code; run with IDECRAFT_WRITE_SCHEMAS=1",
+            "{} differs from the code; run with FERRIS_IDEA_WRITE_SCHEMAS=1",
             file.display()
         );
         // What the code writes fits the schema's shape: its keys are the schema's.

@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use idecraft_vcs::{Operation, Repo};
+use ferris_idea_vcs::{Operation, Repo};
 
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = Command::new("git")
@@ -21,7 +21,7 @@ fn git(dir: &Path, args: &[&str]) -> String {
 
 /// A repository with `readme.txt` committed on `main`.
 fn repo(tag: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("idecraft-smart-{tag}-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-smart-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let dir = dir.canonicalize().unwrap();
@@ -76,7 +76,7 @@ fn smart_checkout_puts_changes_aside_and_back() {
     assert!(
         stash
             .message
-            .ends_with("IDECraft smart checkout: main → other")
+            .ends_with("Ferris IDEA smart checkout: main → other")
     );
     assert_eq!(read(&dir, "notes.txt"), "A\nb\nc\nd\nE\n");
     assert_eq!(read(&dir, "new.txt"), "untracked\n");

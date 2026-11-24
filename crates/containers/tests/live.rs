@@ -1,8 +1,8 @@
 //! Live tests against a real Docker Engine and a real Kubernetes cluster (SPEC-0119 AK-6,
 //! SPEC-0240 … SPEC-0243 AK-3). They skip unless the variables printed by
 //! `containers.sh env` of the reference environment are set and the engine or cluster answers:
-//! `IDECRAFT_TEST_DOCKER` (engine address), `IDECRAFT_TEST_DOCKER_SSH` (ssh arguments ending with
-//! the destination, optional), `IDECRAFT_TEST_KUBECONFIG` (kubeconfig file).
+//! `FERRIS_IDEA_TEST_DOCKER` (engine address), `FERRIS_IDEA_TEST_DOCKER_SSH` (ssh arguments ending with
+//! the destination, optional), `FERRIS_IDEA_TEST_KUBECONFIG` (kubeconfig file).
 #![cfg(unix)]
 
 use std::io::{Read, Write};
@@ -10,19 +10,19 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-use idecraft_containers::compose::{self, ComposeAction, ComposeCli};
-use idecraft_containers::ports::{PortForwards, browser_url};
-use idecraft_containers::{ContainerAction, DockerHost, ExecOptions, Kubectl, exec};
+use ferris_idea_containers::compose::{self, ComposeAction, ComposeCli};
+use ferris_idea_containers::ports::{PortForwards, browser_url};
+use ferris_idea_containers::{ContainerAction, DockerHost, ExecOptions, Kubectl, exec};
 
 fn scratch(tag: &str) -> PathBuf {
-    let p = std::env::temp_dir().join(format!("idecraft-live-{tag}-{}", std::process::id()));
+    let p = std::env::temp_dir().join(format!("ferris-idea-live-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&p);
     std::fs::create_dir_all(&p).unwrap();
     p
 }
 
 fn engine() -> Option<DockerHost> {
-    let address = std::env::var("IDECRAFT_TEST_DOCKER").ok()?;
+    let address = ferris_idea_core::product_var("FERRIS_IDEA_TEST_DOCKER").ok()?;
     let host = DockerHost::parse(&address, Vec::new())?;
     match host.info() {
         Ok(_) => Some(host),
@@ -63,7 +63,7 @@ fn state(host: &DockerHost, name: &str) -> Option<String> {
 #[test]
 fn docker_live() {
     let Some(host) = engine() else {
-        eprintln!("skipped: IDECRAFT_TEST_DOCKER not set or not reachable");
+        eprintln!("skipped: FERRIS_IDEA_TEST_DOCKER not set or not reachable");
         return;
     };
     let Some(cli) = ComposeCli::find(std::env::var_os("PATH").as_deref()) else {
@@ -72,7 +72,7 @@ fn docker_live() {
     };
     let info = host.info().unwrap();
     assert!(info.platform.starts_with("linux/"), "{info:?}");
-    let dir = scratch("compose").join("idecraft-live");
+    let dir = scratch("compose").join("ferris-idea-live");
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
         dir.join("compose.yaml"),
@@ -167,7 +167,7 @@ fn docker_live() {
     assert_eq!(state(&host, &worker_name).as_deref(), Some("running"));
 
     // SPEC-0243: the same engine over SSH.
-    if let Ok(words) = std::env::var("IDECRAFT_TEST_DOCKER_SSH") {
+    if let Ok(words) = ferris_idea_core::product_var("FERRIS_IDEA_TEST_DOCKER_SSH") {
         let mut words: Vec<String> = words.split_whitespace().map(str::to_owned).collect();
         let destination = words.pop().unwrap();
         let ssh = DockerHost::Ssh {
@@ -203,7 +203,7 @@ fn docker_live() {
             .unwrap();
         assert_eq!(out.output, "over ssh\n");
     } else {
-        eprintln!("ssh part skipped: IDECRAFT_TEST_DOCKER_SSH not set");
+        eprintln!("ssh part skipped: FERRIS_IDEA_TEST_DOCKER_SSH not set");
     }
 
     // SPEC-0242: remove one service, then down; volumes are never removed.
@@ -218,7 +218,7 @@ fn docker_live() {
 
 /// A `kubectl` that uses the test kubeconfig.
 fn kubectl() -> Option<Kubectl> {
-    let config = std::env::var("IDECRAFT_TEST_KUBECONFIG").ok()?;
+    let config = ferris_idea_core::product_var("FERRIS_IDEA_TEST_KUBECONFIG").ok()?;
     let real = Kubectl::find(std::env::var_os("PATH").as_deref())?;
     let dir = scratch("kubectl");
     let path = dir.join("kubectl");
@@ -267,11 +267,11 @@ fn kube_run(k: &Kubectl, args: &[&str], input: Option<&str>) -> String {
 const MANIFEST: &str = r#"
 apiVersion: v1
 kind: Namespace
-metadata: {name: idecraft-live}
+metadata: {name: ferris-idea-live}
 ---
 apiVersion: apps/v1
 kind: Deployment
-metadata: {name: web, namespace: idecraft-live}
+metadata: {name: web, namespace: ferris-idea-live}
 spec:
   replicas: 1
   selector: {matchLabels: {app: web}}
@@ -285,7 +285,7 @@ spec:
 ---
 apiVersion: v1
 kind: Service
-metadata: {name: web, namespace: idecraft-live}
+metadata: {name: web, namespace: ferris-idea-live}
 spec:
   selector: {app: web}
   ports: [{port: 80, targetPort: 80}]
@@ -294,7 +294,7 @@ spec:
 #[test]
 fn kubernetes_live() {
     let Some(k) = kubectl() else {
-        eprintln!("skipped: IDECRAFT_TEST_KUBECONFIG not set or cluster not reachable");
+        eprintln!("skipped: FERRIS_IDEA_TEST_KUBECONFIG not set or cluster not reachable");
         return;
     };
     let context = k
@@ -312,12 +312,12 @@ fn kubernetes_live() {
             "status",
             "deployment/web",
             "-n",
-            "idecraft-live",
+            "ferris-idea-live",
             "--timeout=180s",
         ],
         None,
     );
-    let ns = "idecraft-live";
+    let ns = "ferris-idea-live";
     assert!(k.namespaces(&context).unwrap().contains(&ns.to_owned()));
     let resources = k.resources(&context, ns).unwrap();
     let dep = resources.iter().find(|r| r.kind == "Deployment").unwrap();
@@ -332,7 +332,7 @@ fn kubernetes_live() {
     k.logs(&context, ns, "deployment/web", 20).unwrap();
 
     // SPEC-0240: a command in the deployment's pod.
-    let object = idecraft_containers::exec_object("Deployment", "web").unwrap();
+    let object = ferris_idea_containers::exec_object("Deployment", "web").unwrap();
     let args = k
         .exec_args(&context, ns, &object, None, &["hostname".into()], false)
         .unwrap();

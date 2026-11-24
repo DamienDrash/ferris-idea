@@ -1,4 +1,4 @@
-# ADR-0026: Session protocol between the window and `idecraft serve`
+# ADR-0026: Session protocol between the window and `ferris-idea serve`
 
 - **Status:** accepted · 2026-11-07 · prepares M6.12 step 2 ([plan](../architecture/REMOTE_AND_MOBILE.md));
   the headless service of M10.3, moved before QG-1 by the Project Owner (PO-STATUS question 27,
@@ -19,7 +19,7 @@ agents: it has no notion of a document with revisions, no byte streams for termi
 flow control and no resumable event stream. The readiness analysis requires one owner of open
 documents (A2, SPEC-0220) and the headless service of ADR-0012 hosts workspaces, documents,
 sessions and an event stream. This ADR defines the one protocol between a window (later also a
-paired device, M16, or a mobile app, M17) and `idecraft serve`.
+paired device, M16, or a mobile app, M17) and `ferris-idea serve`.
 
 ## Decision
 
@@ -31,7 +31,7 @@ paired device, M16, or a mobile app, M17) and `idecraft serve`.
  byte stream        SSH channel stdio | Noise channel | in-process pipe     ADR-0025
 ```
 
-- **SSH:** the window runs `ssh <options of SPEC-0121> <host> <path>/idecraft serve --stdio`; the
+- **SSH:** the window runs `ssh <options of SPEC-0121> <host> <path>/ferris-idea serve --stdio`; the
   protocol uses the process's standard input and output; standard error carries only log lines for
   the connection log, never protocol data. The project folder is sent in `session.hello`, not on the
   command line.
@@ -64,7 +64,7 @@ Each frame is
 ### 3. Messages: JSON-RPC 2.0, `domain.verb` names
 
 - Messages are JSON-RPC 2.0 requests (with `id`), responses and notifications, as LSP, DAP-like
-  tooling and MCP already use in IDECraft. Method names follow ADR-0012's `domain.verb` scheme so the
+  tooling and MCP already use in Ferris IDEA. Method names follow ADR-0012's `domain.verb` scheme so the
   capability layer of M10 can map them one to one: `session.*`, `doc.*`, `fs.*`, `lsp.*`, `dap.*`,
   `term.*`, `run.*`, `port.*`, `event.*`, `stream.*`.
 - Either side may send requests (the backend asks the window, for example, to show a right question
@@ -170,7 +170,7 @@ of ADR-0025 section 4.
   the reattach period (ADR-0025 section 8: default 10 minutes). The window keeps every editor
   editable; new edits join the pending queue; saving and host functions say "reconnecting" instead
   of failing silently.
-- **Resume:** the window reconnects (SSH: `idecraft serve --attach`, which bridges standard input and
+- **Resume:** the window reconnects (SSH: `ferris-idea serve --attach`, which bridges standard input and
   output to the backend's reattach socket; paired: a new Noise handshake) and sends `session.resume
   {session, token, last_seq}` as the first message — the token never appears on a command line. The
   backend replays notifications after `last_seq`, the window resends every pending edit with its
@@ -221,7 +221,7 @@ of ADR-0025 section 4.
   adds the operation log, `(client, cseq)` deduplication and the write path through operations. In a
   local project the registry stays in-process; the in-process transport (section 1) lets local and
   remote projects later share the window's code path.
-- **M10.3** (`idecraft serve`) implements exactly this protocol as its native interface; adding
+- **M10.3** (`ferris-idea serve`) implements exactly this protocol as its native interface; adding
   workspaces per process (M10.4) adds a `workspace` field to `session.hello`, a minor change.
 
 ## Consequences

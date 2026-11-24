@@ -1,4 +1,4 @@
-//! SPEC-0146 v6 AK-v6-2: method breakpoints that watch the exit, emulated by IDECraft with a step
+//! SPEC-0146 v6 AK-v6-2: method breakpoints that watch the exit, emulated by Ferris IDEA with a step
 //! out, and switched-off method breakpoints, against a fake adapter.
 //!
 //! The fake program is `main` calling `area` once: a function breakpoint on `area` stops on
@@ -11,7 +11,7 @@ use std::net::TcpListener;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use idecraft_debugger::{
+use ferris_idea_debugger::{
     DapClient, DebugSession, Event, FunctionBreakpoint, SpecialBreakpoints, read_message,
     write_message,
 };

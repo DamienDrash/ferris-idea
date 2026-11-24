@@ -5,12 +5,12 @@ use std::net::TcpListener;
 use std::sync::mpsc::{Receiver, channel};
 use std::time::Duration;
 
-use flate2::Compression;
-use flate2::write::{DeflateEncoder, GzEncoder, ZlibEncoder};
-use idecraft_http::{
+use ferris_idea_http::{
     MAX_DECODE_RATIO, MAX_DECODED_BODY, RATIO_FLOOR, ResolvedRequest, Response, SendOptions, send,
     send_with,
 };
+use flate2::Compression;
+use flate2::write::{DeflateEncoder, GzEncoder, ZlibEncoder};
 
 const WAIT: Duration = Duration::from_secs(20);
 
@@ -155,7 +155,7 @@ fn stacked_and_unknown_codings() {
     let r = send_with(&request("GET", port, &[]), &from_file()).unwrap();
     assert_eq!(r.text.as_deref(), Some(TEXT));
 
-    // A coding IDECraft does not decode: the body stays as it arrived, without text or note.
+    // A coding Ferris IDEA does not decode: the body stays as it arrived, without text or note.
     for unknown in ["br", "zstd", "gzip, br"] {
         let raw = gzip(TEXT.as_bytes());
         let r = get(unknown, raw.clone());
@@ -325,7 +325,7 @@ fn accept_encoding_is_sent_unless_the_request_sets_it() {
     let range = request("GET", port, &[("Range", "bytes=0-9")]);
     send_with(&range, &from_file()).unwrap();
     assert!(accept(&seen).is_empty());
-    // Not for IDECraft's own requests, which read the body as it arrives.
+    // Not for Ferris IDEA's own requests, which read the body as it arrives.
     send(&request("GET", port, &[]), WAIT).unwrap();
     assert!(accept(&seen).is_empty());
 

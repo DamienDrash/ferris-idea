@@ -6,22 +6,22 @@
 
 use std::time::{Duration, Instant};
 
-use idecraft_languages::pool;
+use ferris_idea_languages::pool;
 
 #[tokio::test]
 async fn a_file_opened_after_the_indexing_is_answered_at_once() {
-    let php = idecraft_languages::servers::resolve(idecraft_languages::LanguageId::Php)
+    let php = ferris_idea_languages::servers::resolve(ferris_idea_languages::LanguageId::Php)
         .ok()
         .filter(|r| r.candidate.program == "intelephense");
     if php.is_none() {
         assert!(
-            std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+            ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
             "required tool missing: intelephense"
         );
         eprintln!("skipped: intelephense not installed");
         return;
     }
-    let root = std::env::temp_dir().join(format!("idecraft-php-pool-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-php-pool-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     let root = root.canonicalize().unwrap();
@@ -36,13 +36,13 @@ async fn a_file_opened_after_the_indexing_is_answered_at_once() {
     pool::enable();
     let wait = Duration::from_secs(60);
     // The first question starts the server and waits for its indexing.
-    let first = idecraft_languages::lsp::file_diagnostics(&root, &good, wait)
+    let first = ferris_idea_languages::lsp::file_diagnostics(&root, &good, wait)
         .await
         .unwrap();
     assert!(first.is_empty(), "{first:?}");
     // The next file is opened in the indexed server: one list, the answer.
     let started = Instant::now();
-    let found = idecraft_languages::lsp::file_diagnostics(&root, &bad, wait)
+    let found = ferris_idea_languages::lsp::file_diagnostics(&root, &bad, wait)
         .await
         .unwrap();
     let took = started.elapsed();

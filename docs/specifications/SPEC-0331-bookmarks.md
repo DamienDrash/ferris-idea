@@ -66,13 +66,13 @@ there again after a restart.
    is shown with an empty line text; jumping to it goes to the last line. A bookmark whose file is
    missing is kept but not listed, and shows again when the file is back (a branch switch). [GEN]
 9. **Renamed, moved and deleted files:** a file or folder renamed or moved inside the project by
-   IDECraft (project tree, Move, Rename with its type, and taking such a refactoring back) keeps
-   its bookmarks under the new path. Deleting a file or folder through IDECraft removes its
+   Ferris IDEA (project tree, Move, Rename with its type, and taking such a refactoring back) keeps
+   its bookmarks under the new path. Deleting a file or folder through Ferris IDEA removes its
    bookmarks. [GEN]
 
 ### Storage
 10. **Per project, in a file with an envelope:** the bookmarks are kept in
-    `.idecraft/bookmarks.toml`, a project file of kind `bookmarks`, format 1 (SPEC-0303 behaviours
+    `.ferris-idea/bookmarks.toml`, a project file of kind `bookmarks`, format 1 (SPEC-0303 behaviours
     1–3 and 14): one `[[bookmark]]` table per bookmark, newest first, with `file` (relative to the
     project, `/` between the parts), `line` (1-based), and optionally `mnemonic` and
     `description`. The schema is published as `docs/formats/bookmarks.schema.json`. The file is
@@ -169,7 +169,7 @@ there again after a restart.
     "Go to Bookmark 0" … "Go to Bookmark 9" and "Toggle Bookmark 0" … "Toggle Bookmark 9", each
     with its shortcut. [GEN]
 27. **Declared effects (SPEC-0319 behaviour 35):** the toggle actions change a file of the
-    workspace (`.idecraft/bookmarks.toml`) and are declared with the effect `write`; the go-to
+    workspace (`.ferris-idea/bookmarks.toml`) and are declared with the effect `write`; the go-to
     actions, the popup and the tool window are declared with no effect. The rows of the popup and
     of the tool window are annotated elements of the semantic tree. [SPEC-0319, GEN; security
     first: the stricter effect]
@@ -185,7 +185,7 @@ there again after a restart.
     `dry_run` defaults to true and returns the bookmark as it would be saved and, when the
     mnemonic is taken, the place it would be taken from. With `dry_run: false` it needs the
     user-granted `write` right, like the other tools that change files, and is logged in
-    `.idecraft/agent-log.jsonl` (tool, path, line, mnemonic; not the description). [GEN, SPEC-0053]
+    `.ferris-idea/agent-log.jsonl` (tool, path, line, mnemonic; not the description). [GEN, SPEC-0053]
 30. **`remove_bookmark`** takes `path` and `line`, or `mnemonic`; it fails when there is no such
     bookmark. The file need not exist any more. `dry_run`, the `write` right and the log are as
     for `set_bookmark`. An open window shows the change (behaviour 13). [GEN, SPEC-0053]
@@ -201,7 +201,7 @@ there again after a restart.
     file is gone are left out; without a bookmark with a mnemonic the status bar says so and no
     list opens. [OSS: id, title, keys and "the bookmarks with a mnemonic, in a popup, Enter
     navigates" from `ShowTypeBookmarksAction.kt`, logic template. In the open platform a key of
-    a mnemonic also jumps from the open list; IDECraft's list takes arrows and Enter only]
+    a mnemonic also jumps from the open list; Ferris IDEA's list takes arrows and Enter only]
 
 ## Acceptance criteria
 - **AK-1** Given bookmarks on lines 7, 12 and 16 of a file, when two lines are inserted above
@@ -221,7 +221,7 @@ there again after a restart.
   file; entries that leave the project, repeat a line or repeat a mnemonic are handled as
   behaviour 11 says; the published schema matches the code. (Behaviours 4, 10–12)
 - **AK-5** Given a bookmarked file, when it or a folder above it is renamed or moved inside the
-  project through IDECraft's file operations, then its bookmarks are under the new path; when it
+  project through Ferris IDEA's file operations, then its bookmarks are under the new path; when it
   is deleted that way they are gone. (Behaviour 9)
 - **AK-6** `ToggleBookmark` on a line without bookmark sets one and on the same line again removes
   it; `ToggleBookmark3` sets, moves and removes the mnemonic as behaviour 17 says; the next and
@@ -270,5 +270,5 @@ there again after a restart.
 - The store is a readable project file with a published schema, and agents reach bookmarks
   through MCP tools with a dry run and the `write` right (ADR-0008); the reference keeps them in
   its own workspace state.
-- The tool window is reached through the More tool windows list by default, because IDECraft
+- The tool window is reached through the More tool windows list by default, because Ferris IDEA
   has no bookmark icon of its own for a stripe button yet.

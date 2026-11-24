@@ -1,6 +1,8 @@
 # SPEC-0087: Run widget and Run tool window
 
-- **Version:** 10 · **Date:** 2026-11-14 (v10: Send EOF (`SendEOF`) ends the input of the program of the selected tab; a program started for the Run tool window has an open standard input for it, behaviour 18, AK-12; seventh package of docs/research/KEYMAP_COVERAGE.md; v9: instances and folders in the Run tool window and the run widget's list, checked in the window; v8: the chooser opened for debugging, the keymap's `ChooseDebugConfiguration`; v7: typing filters the rows of the list; v6: list entries for editing and the current file, row actions, temporary configurations, run window toolbar, quoted command line, a start that cannot happen says why; v5: modified documents are saved before anything starts; v4: Stop asks the program to end first; v2: configurations detected from build files; v3: the run
+- **Version:** 11 · **Date:** 2026-11-19 (v11: a run of an HTTP request configuration (SPEC-0047 v6 behaviour 17)
+  shows the requests and responses in its tab, behaviour 19, AK-13; no open pull request changed this spec when v11
+  was written); 2026-11-14 (v10: Send EOF (`SendEOF`) ends the input of the program of the selected tab; a program started for the Run tool window has an open standard input for it, behaviour 18, AK-12; seventh package of docs/research/KEYMAP_COVERAGE.md; v9: instances and folders in the Run tool window and the run widget's list, checked in the window; v8: the chooser opened for debugging, the keymap's `ChooseDebugConfiguration`; v7: typing filters the rows of the list; v6: list entries for editing and the current file, row actions, temporary configurations, run window toolbar, quoted command line, a start that cannot happen says why; v5: modified documents are saved before anything starts; v4: Stop asks the program to end first; v2: configurations detected from build files; v3: the run
   widget's list only selects)
 - **Sources:** GEN (a run widget in the main toolbar with the selected configuration, Run and Stop; a Run
   tool window with one tab per started configuration, live output with errors in the error colour and a
@@ -14,7 +16,7 @@
 Start the project's programs and tests from the window and watch them run.
 
 ## Behaviour
-1. **Widget:** the main toolbar shows the selected configuration of `.idecraft/run.toml` (the first one
+1. **Widget:** the main toolbar shows the selected configuration of `.ferris-idea/run.toml` (the first one
    at the start), a Run button and, while it runs, a Stop button. Without configurations it reads
    "Add Configuration…" and Run explains in the status bar where they go; a file with problems names the
    first problem. [GEN]
@@ -85,7 +87,7 @@ Start the project's programs and tests from the window and watch them run.
     typed character. Escape first clears the text and closes the list only when there is none. The digits of
     behaviour 9 pick a row while nothing is typed; after the first character a digit is part of the text (names such
     as `test2`), and the rows show no digits then. Found in the window on 2026-11-13: typing did nothing, unlike in
-    the other lists of IDECraft that filter (SPEC-0122 behaviour 14). [GEN]
+    the other lists of Ferris IDEA that filter (SPEC-0122 behaviour 14). [GEN]
 16. **v8 – The chooser for debugging:** `ChooseDebugConfiguration` (⌃⌥D in the macOS keymap, Alt+Shift+F9 in the
     default one; Run › Debug…, Find Action "Debug…") opens the chooser of behaviours 2 and 9 with the two ways of
     starting exchanged: Enter, a click and a digit debug the chosen configuration (or the current file), and
@@ -140,12 +142,18 @@ Start the project's programs and tests from the window and watch them run.
     files; GEN: the end of input is the closed standard input of a child process. Whether the reference closes
     the input or writes an end-of-transmission character was not observed.]
 
+19. **v11 – HTTP request configurations:** a configuration that sends requests (SPEC-0047 v6 behaviour 17) runs
+    in a tab like every configuration. The first line is its command line, `HTTP request` with file, request and
+    environment; then per request what SPEC-0047 behaviour 17 lists, as the lines arrive, a refusal or a
+    connection error in the error colour; the closing line has the exit code. Stop, Rerun, Clear and the instance
+    rule are unchanged. [own design]
+
 ## Acceptance criteria
 - **AK-1** Streaming runs report the command, stdout and stderr lines in order, the exit code, a stop that
   ends the process group, and a failing `before` step; the blocking run gives the same results (unit and
-  integration tests in `idecraft-core`).
+  integration tests in `ferris-idea-core`).
 - **AK-2** Console lines, the line limit and the closing texts (unit tests of `run_model`).
-- **AK-3** In a real window (`idecraft ui --selftest`): with a `run.toml` of the fixture, ⌃R runs the
+- **AK-3** In a real window (`ferris-idea ui --selftest`): with a `run.toml` of the fixture, ⌃R runs the
   selected configuration, the Run tool window shows its output and "Process finished with exit code 0";
   a long-running configuration is stopped with Stop; ⌘4 hides the tool window.
 - **AK-4** Use by hand next to the reference.
@@ -177,7 +185,7 @@ Start the project's programs and tests from the window and watch them run.
   (`run_debug_actions_keymap::debug_opens_the_chooser_for_debugging`). On screen, and Enter starting a debug
   session from it: not checked.
 
-- **AK-11 (v9, behaviour 17)** In a real window (`idecraft ui --selftest`): a second ⌃R on a running configuration
+- **AK-11 (v9, behaviour 17)** In a real window (`ferris-idea ui --selftest`): a second ⌃R on a running configuration
   shows the question; Cancel keeps the run (same tab, same output, still running); Stop and Rerun gives the tab a
   new run (a new process id in its output); with "Allow multiple instances" two tabs `rc-many` and `rc-many (2)`
   run at once without a question (group `run-config-instances`); the tab of a configuration with tasks shows the
@@ -198,6 +206,10 @@ Start the project's programs and tests from the window and watch them run.
   more it says that nothing runs; without a Run tool window the action is not available
   (`seventh_package_keymap.rs::send_eof_lets_the_program_of_the_run_tab_go_on`). On screen, on a real keyboard
   and next to the reference: not checked.
+- **AK-13 (v11, behaviour 19)** The streamed run of an HTTP request configuration reports its start with the
+  `HTTP request` command line, the request and response lines as output and a refusal on the error stream, then
+  the end with the exit code (`crates/core/tests/it/run_http.rs`: `the_streamed_run_reports_the_requests`). In a
+  window and on screen: not checked.
 
 ## Out of scope
 Debugging (SPEC-0039), text typed to the program (v10: only the end of input is sent, behaviour 18), ANSI colours in the output, clickable file links, the test tree
@@ -206,10 +218,10 @@ Debugging (SPEC-0039), text typed to the program (v10: only the end of input is 
 ## Known deviations from the reference
 Since SPEC-0047 v3 (behaviour 10) a start of a configuration that still runs asks first or, with "Allow multiple
 instances", opens a further tab; the silent stop of behaviour 3 remains for a tab's own Rerun (behaviour 12).
-The reference keeps configurations in its own XML; IDECraft uses `.idecraft/run.toml` (SPEC-0047) and edits it with
+The reference keeps configurations in its own XML; Ferris IDEA uses `.ferris-idea/run.toml` (SPEC-0047) and edits it with
 the dialog of SPEC-0327. v6: a start that cannot happen always names the reason (IMP-0394; the reference starts a
 broken temporary configuration silently not at all), and the shown command line is quoted (IMP-0395; the reference
-drops the quotes). The reference's console keeps 1024 KB by default; IDECraft keeps
+drops the quotes). The reference's console keeps 1024 KB by default; Ferris IDEA keeps
 10 000 lines.
 
 **Window check 2026-11-09** (`main` @ 3b3cc1e0, agent run with real input, OBS-0028): behaviour of v5 confirmed: Debug saved the modified document, the tab lost its marker and the program paused at the shown line.

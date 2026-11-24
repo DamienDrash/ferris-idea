@@ -1,15 +1,15 @@
 #!/bin/sh
-# Window self-test (`idecraft ui --selftest`) on Linux, in a local Lima VM on the Mac (QG-1
+# Window self-test (`ferris-idea ui --selftest`) on Linux, in a local Lima VM on the Mac (QG-1
 # criterion 3). The build server has no X server and no Vulkan driver and must not get system
 # packages, so the Linux window run happens here instead: Ubuntu 24.04 aarch64 under Apple's
 # virtualization (vz), an X server in memory (Xvfb) and Mesa's software Vulkan driver (lavapipe).
 #
 #   linux-ui-selftest-lima.sh              create or start the VM, provision it, copy the tree,
-#                                          build `idecraft` (debug), run the self-test, stop the VM
+#                                          build `ferris-idea` (debug), run the self-test, stop the VM
 #   linux-ui-selftest-lima.sh --keep       the same, but leave the VM running afterwards
 #   linux-ui-selftest-lima.sh --build-only stop after the build (VM keeps running)
 #
-# The VM (IDECRAFT_LIMA_VM, default idecraft-linux-ui) is the only one this script creates, starts
+# The VM (FERRIS_IDEA_LIMA_VM, default idecraft-linux-ui) is the only one this script creates, starts
 # or stops; it never deletes a VM and never touches another one. It is made in Lima's plain mode:
 # no folder of the Mac is mounted, no port of the guest is forwarded, no containerd. Lima's own SSH
 # listens on 127.0.0.1 only. The source goes in as a copy (rsync over that SSH: the tree without
@@ -19,20 +19,24 @@
 #
 # What it prints: the build log tail on failure, the lines of groups and tools the self-test skipped,
 # the slowest groups and the result line `{"checks":N,"failed":[…],"skipped":[…]}`. The logs
-# (build.log, selftest.log, result.json) are in $IDECRAFT_LIMA_OUT (default
+# (build.log, selftest.log, result.json) are in $FERRIS_IDEA_LIMA_OUT (default
 # target/linux-ui-selftest/) on the Mac. Exit code 0 only when the result
 # line was printed and `failed` is empty.
 #
-# Environment passed into the VM: IDECRAFT_SELFTEST_ONLY, IDECRAFT_SELFTEST_SKIP,
-# IDECRAFT_SELFTEST_DRIVER, IDECRAFT_SELFTEST_TRACE. SELFTEST_TIMEOUT (seconds, default 10800)
+# Environment passed into the VM: FERRIS_IDEA_SELFTEST_ONLY, FERRIS_IDEA_SELFTEST_SKIP,
+# FERRIS_IDEA_SELFTEST_DRIVER, FERRIS_IDEA_SELFTEST_TRACE. SELFTEST_TIMEOUT (seconds, default 10800)
 # bounds the self-test: on the software renderer a full run takes far longer than on the Mac. The
 # first debug build in the VM takes about 25 minutes.
 set -eu
+# Variables under the former name (IDECRAFT_*) still count while today's is not set. rebrand:keep
+for former in $(env | sed -n 's/^IDECRAFT_\([A-Za-z0-9_]*\)=.*/\1/p'); do # rebrand:keep
+  eval "[ -n \"\${FERRIS_IDEA_$former+x}\" ] || { FERRIS_IDEA_$former=\$IDECRAFT_$former; export FERRIS_IDEA_$former; }" # rebrand:keep
+done
 cd "$(dirname "$0")/.."
 
-VM="${IDECRAFT_LIMA_VM:-idecraft-linux-ui}"
+VM="${FERRIS_IDEA_LIMA_VM:-idecraft-linux-ui}"
 LIMACTL="${LIMACTL:-$(command -v limactl || echo "$HOME/.local/bin/limactl")}"
-OUT="${IDECRAFT_LIMA_OUT:-target/linux-ui-selftest}"
+OUT="${FERRIS_IDEA_LIMA_OUT:-target/linux-ui-selftest}"
 TIMEOUT="${SELFTEST_TIMEOUT:-10800}"
 # Bump when the package list changes: the VM is provisioned again.
 PROVISION=2
@@ -50,7 +54,7 @@ done
 
 case "$VM" in
   idecraft-db | idecraft-docker | idecraft-k3s | idecraft-mssql)
-    echo "error: $VM belongs to the reference environment; choose another IDECRAFT_LIMA_VM" >&2; exit 2 ;;
+    echo "error: $VM belongs to the reference environment; choose another FERRIS_IDEA_LIMA_VM" >&2; exit 2 ;;
 esac
 
 mkdir -p "$OUT"
@@ -188,11 +192,11 @@ EOF
 echo "== copying the tree into the VM"
 ssh_config="$HOME/.lima/$VM/ssh.config"
 rsync -a --delete --delete-excluded --exclude=/.git --exclude=/target --filter=':- .gitignore' \
-  -e "ssh -F $ssh_config" ./ "lima-$VM:idecraft/"
+  -e "ssh -F $ssh_config" ./ "lima-$VM:ferris-idea/"
 
-echo "== building idecraft (debug)"
+echo "== building ferris-idea (debug)"
 # Without incremental state: the debug build is 2.7 GB, and the 60 GiB disk filled up with it.
-if ! in_vm bash -lc 'cd ~/idecraft && export CARGO_TARGET_DIR=$HOME/target CARGO_INCREMENTAL=0 && cargo build -p idecraft' \
+if ! in_vm bash -lc 'cd ~/ferris-idea && export CARGO_TARGET_DIR=$HOME/target CARGO_INCREMENTAL=0 && cargo build -p ferris-idea' \
   >"$OUT/build.log" 2>&1; then
   tail -40 "$OUT/build.log" >&2
   echo "error: build failed, log in $OUT/build.log" >&2
@@ -204,9 +208,9 @@ echo "== vulkan devices"
 in_vm bash -lc 'vulkaninfo --summary 2>/dev/null | grep -E "deviceName|driverName" || echo "no vulkan device"'
 
 echo "== self-test (timeout $TIMEOUT s)"
-# Each step is named in the log (IDECRAFT_SELFTEST_TRACE), so a failure can be put in its group.
-envs="IDECRAFT_SELFTEST_TRACE=${IDECRAFT_SELFTEST_TRACE:-1}"
-for v in IDECRAFT_SELFTEST_ONLY IDECRAFT_SELFTEST_SKIP IDECRAFT_SELFTEST_DRIVER; do
+# Each step is named in the log (FERRIS_IDEA_SELFTEST_TRACE), so a failure can be put in its group.
+envs="FERRIS_IDEA_SELFTEST_TRACE=${FERRIS_IDEA_SELFTEST_TRACE:-1}"
+for v in FERRIS_IDEA_SELFTEST_ONLY FERRIS_IDEA_SELFTEST_SKIP FERRIS_IDEA_SELFTEST_DRIVER; do
   eval "val=\${$v:-}"
   [ -z "$val" ] && continue
   case "$val" in *[!A-Za-z0-9_,.-]*) echo "error: $v may hold names and commas only" >&2; exit 2 ;; esac
@@ -218,13 +222,13 @@ in_vm bash -s "$TIMEOUT" $envs <<'EOF'
 set -eu
 limit=$1; shift
 rm -f ~/selftest.log ~/selftest.rc
-cd ~/idecraft
+cd ~/ferris-idea
 # The provisioned tools come first (clangd 21 before Ubuntu's 18, node 24 before the archive's 18).
 export PATH="$HOME/.local/bin:$PATH"
 GEM_HOME=$(ruby -e 'print Gem.user_dir' 2>/dev/null || true)
 [ -n "$GEM_HOME" ] && export GEM_HOME && export PATH="$GEM_HOME/bin:$PATH"
 setsid nohup bash -c 'env "$@" timeout -k 30 "$0" xvfb-run -a -s "-screen 0 1920x1080x24" \
-  "$HOME/target/debug/idecraft" ui --selftest >"$HOME/selftest.log" 2>&1
+  "$HOME/target/debug/ferris-idea" ui --selftest >"$HOME/selftest.log" 2>&1
   echo $? >"$HOME/selftest.rc"' "$limit" "$@" </dev/null >/dev/null 2>&1 &
 EOF
 waited=0
@@ -236,7 +240,7 @@ in_vm bash -c 'cat ~/selftest.log' >"$OUT/selftest.log" 2>/dev/null || true
 rc=$(in_vm bash -c 'cat ~/selftest.rc 2>/dev/null' || true)
 rc=${rc:-unknown}
 echo "exit code $rc (124: timed out); log in $OUT/selftest.log"
-grep -E '^[a-z].*(steps skipped|; skipped|need IDECRAFT_SELFTEST_DRIVER)' "$OUT/selftest.log" | grep -v '^self-test' | sort -u || true
+grep -E '^[a-z].*(steps skipped|; skipped|need FERRIS_IDEA_SELFTEST_DRIVER)' "$OUT/selftest.log" | grep -v '^self-test' | sort -u || true
 # The slowest groups (the self-test prints them slowest first).
 grep -E '^self-test group ' "$OUT/selftest.log" | head -10 || true
 result=$(grep '^{"checks"' "$OUT/selftest.log" | tail -1 || true)

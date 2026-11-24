@@ -19,7 +19,7 @@ use crate::editor_view::EditorView;
 use crate::palette::Palette;
 use crate::semantics::{Annotated, AxAction, Effect, Role, Semantics};
 use crate::workbench_view::c;
-use idecraft_debugger::{FunctionBreakpoint, Suspend};
+use ferris_idea_debugger::{FunctionBreakpoint, Suspend};
 
 /// Suspend after one of its keys (`SPEC-0127` v10 behaviour 20): `s` switches the check box (off:
 /// the breakpoint does not stop; on again: as the debugger does), `a` all threads, `t` this
@@ -104,7 +104,7 @@ pub fn title_of(target: &Target) -> (&'static str, String) {
 pub const RECENT_CONDITIONS: usize = 20;
 
 /// The conditions applied last, the most recent first, each once (behaviour 26); kept while
-/// IDECraft runs.
+/// Ferris IDEA runs.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ConditionHistory(pub Vec<String>);
 
@@ -593,13 +593,13 @@ impl Render for BreakpointPopup {
 /// The popup's own keys in the notation of the system the window runs on (`SPEC-0127` v14
 /// behaviour 30).
 fn keys(text: &str) -> String {
-    idecraft_ui::keymap::local_keys(text, cfg!(target_os = "macos"))
+    ferris_idea_ui::keymap::local_keys(text, cfg!(target_os = "macos"))
 }
 
 /// The button that opens the dialog, with the first shortcut of View Breakpoints in `keymap`
 /// written for macOS when `macos` (`SPEC-0127` v14 behaviour 30): "More (⇧⌘F8)",
 /// "More (Ctrl+Shift+F8)", or "More" without a shortcut.
-pub fn more_label(keymap: &idecraft_ui::keymap::Keymap, macos: bool) -> String {
+pub fn more_label(keymap: &ferris_idea_ui::keymap::Keymap, macos: bool) -> String {
     match keymap.shortcut_label("ViewBreakpoints", macos) {
         k if k.is_empty() => "More".to_owned(),
         k => format!("More ({k})"),
@@ -613,20 +613,20 @@ mod tests {
     /// SPEC-0127 v14 AK-19 (PR #866): the keys per platform.
     #[test]
     fn keys_follow_the_platform() {
-        let mac = idecraft_ui::keymap::Keymap::bundled_macos();
-        let default = idecraft_ui::keymap::Keymap::bundled_default();
+        let mac = ferris_idea_ui::keymap::Keymap::bundled_macos();
+        let default = ferris_idea_ui::keymap::Keymap::bundled_default();
         assert_eq!(more_label(&mac, true), "More (⇧⌘F8)");
         assert_eq!(more_label(&default, false), "More (Ctrl+Shift+F8)");
-        let empty = idecraft_ui::keymap::KeymapFile::user("empty", "none");
-        let none = idecraft_ui::keymap::Keymap::resolve(&empty, None, false);
+        let empty = ferris_idea_ui::keymap::KeymapFile::user("empty", "none");
+        let none = ferris_idea_ui::keymap::Keymap::resolve(&empty, None, false);
         assert_eq!(more_label(&none, false), "More");
         let hint = "⇧↩ collapse · ⌘↩ done";
-        assert_eq!(idecraft_ui::keymap::local_keys(hint, true), hint);
+        assert_eq!(ferris_idea_ui::keymap::local_keys(hint, true), hint);
         assert_eq!(
-            idecraft_ui::keymap::local_keys(hint, false),
+            ferris_idea_ui::keymap::local_keys(hint, false),
             "Shift+Enter collapse · Ctrl+Enter done"
         );
-        assert_eq!(idecraft_ui::keymap::local_keys("⌥S", false), "Alt+S");
+        assert_eq!(ferris_idea_ui::keymap::local_keys("⌥S", false), "Alt+S");
     }
 
     /// SPEC-0127 v10 behaviours 19 and 20: Enabled, Suspend with All or Thread.

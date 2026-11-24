@@ -1,11 +1,11 @@
-//! `idecraft serve --wss` (`SPEC-0325`): the secure WebSocket endpoint for browsers.
+//! `ferris-idea serve --wss` (`SPEC-0325`): the secure WebSocket endpoint for browsers.
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use idecraft_session::{Backend, Right};
-use idecraft_web::{Limits, WebConfig, listen, load_server_config, normalize_origin};
+use ferris_idea_session::{Backend, Right};
+use ferris_idea_web::{Limits, WebConfig, listen, load_server_config, normalize_origin};
 
 /// What `--wss` was given.
 pub struct WssOptions {
@@ -27,7 +27,7 @@ pub struct WssOptions {
 
 /// The address `--wss` binds without `--listen`.
 pub fn default_address() -> SocketAddr {
-    SocketAddr::from(([127, 0, 0, 1], idecraft_web::DEFAULT_PORT))
+    SocketAddr::from(([127, 0, 0, 1], ferris_idea_web::DEFAULT_PORT))
 }
 
 fn refuse(message: &str) -> ExitCode {
@@ -40,7 +40,7 @@ pub fn run(backend: Backend, o: WssOptions) -> ExitCode {
     if !o.has_folder {
         return refuse(
             "--wss needs a folder: a connection is bound to one project \
-             (idecraft serve --wss <folder> ...)",
+             (ferris-idea serve --wss <folder> ...)",
         );
     }
     let (Some(cert), Some(key)) = (o.cert, o.key) else {
@@ -71,9 +71,9 @@ pub fn run(backend: Backend, o: WssOptions) -> ExitCode {
     };
     let addr = running.addr();
     if addr.ip().is_loopback() {
-        eprintln!("idecraft serve --wss: listening on wss://{addr}");
+        eprintln!("ferris-idea serve --wss: listening on wss://{addr}");
     } else {
-        eprintln!("idecraft serve --wss: listening on wss://{addr}, reachable from the network");
+        eprintln!("ferris-idea serve --wss: listening on wss://{addr}, reachable from the network");
     }
     // Shown once, like the pairing code (behaviour 12); it ends with this process.
     if let Some(secret) = running.take_owner_secret() {

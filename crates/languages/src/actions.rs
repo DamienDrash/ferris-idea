@@ -180,7 +180,7 @@ pub async fn code_actions_in(
         .await
         .map(|list| {
             let actions: Vec<CodeAction> = list.iter().map(describe).collect();
-            // Java: IDECraft's own fixes where jdtls has none (`SPEC-0076` v7 behaviours 11, 12).
+            // Java: Ferris IDEA's own fixes where jdtls has none (`SPEC-0076` v7 behaviours 11, 12).
             let offered: Vec<String> = actions.iter().map(|a| a.title.clone()).collect();
             let own = crate::java_quick_fixes::own_fixes(
                 file,
@@ -467,7 +467,7 @@ async fn enclosing_ranges(o: &mut Opened, line: u64, character: u64) -> Vec<Rang
 /// statements from inside out. Only `refactor` kinds are asked for (`SPEC-0095` v2).
 ///
 /// In a Python file Extract Variable, Extract Method, Extract Constant, Inline and Refactor This
-/// fall back to IDECraft's own actions when the server offers none there or cannot be asked
+/// fall back to Ferris IDEA's own actions when the server offers none there or cannot be asked
 /// (`SPEC-0330` behaviours 1, 17 and 22); what they refuse is said by [`own_refusal`].
 pub async fn refactoring_targets(
     root: &Path,
@@ -505,7 +505,7 @@ pub async fn within<T>(
 }
 
 /// [`refactoring_targets`] with the language server given up after `limit` in all (`SPEC-0095` v9
-/// behaviour 11): IDECraft's own refactorings are still found then, and without one the error
+/// behaviour 11): Ferris IDEA's own refactorings are still found then, and without one the error
 /// names the server and the limit.
 pub async fn refactoring_targets_within(
     root: &Path,
@@ -547,7 +547,7 @@ async fn targets(
     Ok(own)
 }
 
-/// Whether IDECraft has an own `refactoring` for `file`: Python (`SPEC-0330`), or Extract Variable
+/// Whether Ferris IDEA has an own `refactoring` for `file`: Python (`SPEC-0330`), or Extract Variable
 /// in JavaScript and TypeScript (`SPEC-0320` v7 behaviour 23).
 fn own_offers(file: &Path, refactoring: Refactoring) -> bool {
     crate::python_extract::offers(file, refactoring) || crate::ts_extract::offers(file, refactoring)
@@ -576,7 +576,7 @@ fn content_of(file: &Path, text: Option<&str>) -> Option<String> {
 }
 
 /// What the status bar says for a `refactoring` that neither the language server of `file` nor
-/// IDECraft offers for its language (`SPEC-0095` v13 behaviour 7a): Extract Field and Introduce
+/// Ferris IDEA offers for its language (`SPEC-0095` v13 behaviour 7a): Extract Field and Introduce
 /// Parameter in Python, Introduce Parameter in JavaScript and TypeScript. In place of the hint of
 /// [`Refactoring::none_message`], which would ask for a selection that cannot help.
 pub fn missing_message(file: &Path, refactoring: Refactoring) -> Option<String> {
@@ -590,11 +590,11 @@ pub fn missing_message(file: &Path, refactoring: Refactoring) -> Option<String> 
     };
     Some(format!(
         "{name} is not available for {language} files yet: the language server offers none and \
-         IDECraft has no own one. Extract Variable and Extract Method are."
+         Ferris IDEA has no own one. Extract Variable and Extract Method are."
     ))
 }
 
-/// Why IDECraft's own refactoring refuses `range` of `file` (content `text`, or the disk
+/// Why Ferris IDEA's own refactoring refuses `range` of `file` (content `text`, or the disk
 /// content), for the status bar in place of [`Refactoring::none_message`]; `None` where there is
 /// no own refactoring (`SPEC-0330` behaviour 14).
 pub fn own_refusal(
@@ -612,7 +612,7 @@ pub fn own_refusal(
     own_find(file, &content_of(file, text)?, range, refactoring).1
 }
 
-/// What the server says to IDECraft's own Python extraction titled `title` for `range`: whether
+/// What the server says to Ferris IDEA's own Python extraction titled `title` for `range`: whether
 /// it offers a refactoring of that title itself, and, when it does not, the hover texts Extract
 /// Method asks for to type the new function (`SPEC-0330` v3 behaviour 16): pyright and
 /// basedpyright only, each with its place, all within `wait`. Without a server: no, and none.
@@ -790,7 +790,7 @@ pub async fn plan_code_action_in(
     title: &str,
     wait: Duration,
 ) -> Result<Vec<FileEdits>, LspError> {
-    // IDECraft's own extractions, unless the server has an action of that title (`SPEC-0330`
+    // Ferris IDEA's own extractions, unless the server has an action of that title (`SPEC-0330`
     // behaviour 1, `SPEC-0320` v7 behaviour 23).
     if crate::ts_extract::is_own(file, title) {
         let (offered, _) = server_for_own(root, file, text, range, title, wait).await;
@@ -830,7 +830,7 @@ pub async fn plan_code_action_in(
         let actions = request_actions(&mut o, range, &diagnostics, &[]).await?;
         let Some(action) = actions.iter().find(|a| a["title"] == title) else {
             let titles: Vec<&str> = actions.iter().filter_map(|a| a["title"].as_str()).collect();
-            // Java: one of IDECraft's own fixes (`SPEC-0076` v7 behaviours 11, 12).
+            // Java: one of Ferris IDEA's own fixes (`SPEC-0076` v7 behaviours 11, 12).
             let offered: Vec<String> = titles.iter().map(|t| (*t).to_owned()).collect();
             let own = crate::java_quick_fixes::own_fixes(
                 file,
@@ -1050,7 +1050,7 @@ pub fn has_word(text: &str, name: &str) -> bool {
     words(text).iter().any(|(_, w)| w == name)
 }
 
-/// One of IDECraft's own entries in Refactor This: the title shown and the keymap action it runs
+/// One of Ferris IDEA's own entries in Refactor This: the title shown and the keymap action it runs
 /// (`SPEC-0095` v5 behaviour 4a).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct OwnRefactoring {
@@ -1062,36 +1062,181 @@ pub struct OwnRefactoring {
     pub preview: &'static str,
 }
 
-/// IDECraft's own entries of Refactor This next to the server's `actions` (`SPEC-0095` v5
-/// behaviour 4a): Rename when `on_name` (the caret, or a selection that is exactly one name, is on
-/// a name; a rename is no code action, so no server lists it), and Extract Variable and Extract
-/// Method unless the server already lists a matching action. The extractions run their shortcuts,
-/// which widen a bare caret and say why nothing can be extracted.
-pub fn refactor_this_own(actions: &[CodeAction], on_name: bool) -> Vec<OwnRefactoring> {
+/// What the place of Refactor This offers (`SPEC-0095` v14 behaviour 4b), read from the text
+/// and the syntax tree without a server.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct RefactorSpot {
+    /// The caret, or a selection that is exactly one name, is on a name.
+    pub on_name: bool,
+    /// That name opens a parameter list: a call or a function's declaration.
+    pub before_parameters: bool,
+    /// The name is the one a declaration declares.
+    pub declaration: bool,
+    /// The caret is in code that runs: inside a function's body, or outside every class.
+    pub in_code: bool,
+    /// Java: jdtls extracts constants and fields and introduces parameters.
+    pub java: bool,
+    /// The file is a file of this project on this machine (it can be moved and copied).
+    pub project_file: bool,
+}
+
+/// Ferris IDEA's own entries of Refactor This next to the server's `actions` (`SPEC-0095` v5
+/// behaviour 4a, v14 behaviour 4b): each only where it can act, and none the server already lists.
+/// Rename on a name (a rename is no code action, so no server lists it); Change Signature on a
+/// name that opens a parameter list; the extractions in code that runs (Constant, Field and
+/// Parameter in Java); Move and Copy of a project file; Safe Delete on a declaration's name.
+/// The extractions run their shortcuts, which widen a bare caret and say why nothing can be
+/// extracted.
+pub fn refactor_this_own(actions: &[CodeAction], spot: &RefactorSpot) -> Vec<OwnRefactoring> {
     let mut out = Vec::new();
-    if on_name {
+    let mut add = |title, action, preview| {
         out.push(OwnRefactoring {
-            title: "Rename…",
-            action: "RenameElement",
-            preview: "Asks for the new name; every use follows through the language server",
-        });
+            title,
+            action,
+            preview,
+        })
+    };
+    if spot.on_name {
+        add(
+            "Rename…",
+            "RenameElement",
+            "Asks for the new name; every use follows through the language server",
+        );
+        if spot.before_parameters {
+            add(
+                "Change Signature…",
+                "ChangeSignature",
+                "Asks for the new parameter list; the declaration and every call follow",
+            );
+        }
     }
     let has = |r: Refactoring| actions.iter().any(|a| r.matches(a));
-    if !has(Refactoring::Variable) {
-        out.push(OwnRefactoring {
-            title: "Extract Variable…",
-            action: "IntroduceVariable",
-            preview: "Asks the language server which expression around the caret it can extract",
-        });
+    if spot.in_code {
+        let extractions = [
+            (
+                Refactoring::Variable,
+                true,
+                "Extract Variable…",
+                "IntroduceVariable",
+                "Asks the language server which expression around the caret it can extract",
+            ),
+            (
+                Refactoring::Constant,
+                spot.java,
+                "Extract Constant…",
+                "IntroduceConstant",
+                "Asks the language server which expression around the caret it can make a constant",
+            ),
+            (
+                Refactoring::Field,
+                spot.java,
+                "Extract Field…",
+                "IntroduceField",
+                "Asks the language server which expression around the caret it can make a field",
+            ),
+            (
+                Refactoring::Parameter,
+                spot.java,
+                "Introduce Parameter…",
+                "IntroduceParameter",
+                "Asks the language server which expression around the caret it can make a parameter",
+            ),
+            (
+                Refactoring::Method,
+                true,
+                "Extract Method…",
+                "ExtractMethod",
+                "Asks the language server which statements it can extract into a function",
+            ),
+        ];
+        for (refactoring, offered, title, action, preview) in extractions {
+            if offered && !has(refactoring) {
+                add(title, action, preview);
+            }
+        }
     }
-    if !has(Refactoring::Method) {
-        out.push(OwnRefactoring {
-            title: "Extract Method…",
-            action: "ExtractMethod",
-            preview: "Asks the language server which statements it can extract into a function",
-        });
+    if spot.project_file {
+        add(
+            "Move…",
+            "Move",
+            "Asks for the folder to move this file into; references follow",
+        );
+        add(
+            "Copy…",
+            "CopyElement",
+            "Asks for the name of a copy of this file in its folder",
+        );
+    }
+    if spot.on_name && spot.declaration {
+        add(
+            "Safe Delete…",
+            "SafeDelete",
+            "Deletes the declaration after looking for its usages; lists them if there are any",
+        );
     }
     out
+}
+
+/// The place of a row in Refactor This, in the reference's order (`SPEC-0095` v14 behaviour 4c):
+/// Rename, Change Signature, the extractions (variable, constant, field, parameter, method), the
+/// server's other refactorings, Inline, Move, Copy, Safe Delete.
+fn refactor_this_rank(action: &CodeAction, own: Option<&OwnRefactoring>) -> u8 {
+    if let Some(own) = own {
+        return match own.action {
+            "RenameElement" => 0,
+            "ChangeSignature" => 1,
+            "IntroduceVariable" => 2,
+            "IntroduceConstant" => 3,
+            "IntroduceField" => 4,
+            "IntroduceParameter" => 5,
+            "ExtractMethod" => 6,
+            "Move" => 9,
+            "CopyElement" => 10,
+            "SafeDelete" => 11,
+            _ => 7,
+        };
+    }
+    let title = action.title.to_lowercase();
+    let ranked = [
+        (Refactoring::Variable, 2),
+        (Refactoring::Constant, 3),
+        (Refactoring::Field, 4),
+        (Refactoring::Parameter, 5),
+        (Refactoring::Method, 6),
+        (Refactoring::Inline, 8),
+    ];
+    if title.starts_with("rename") {
+        0
+    } else if title.contains("signature") {
+        1
+    } else if let Some((_, rank)) = ranked.iter().find(|(r, _)| r.matches(action)) {
+        *rank
+    } else if title.starts_with("move") {
+        9
+    } else {
+        7
+    }
+}
+
+/// The rows of Refactor This: the server's `actions` and the `own` entries in one list, in the
+/// order of [`refactor_this_rank`]; rows of the same place keep the order they came in.
+pub fn refactor_this_rows(actions: Vec<CodeAction>, own: &[OwnRefactoring]) -> Vec<CodeAction> {
+    let mut rows: Vec<(u8, CodeAction)> = actions
+        .into_iter()
+        .map(|a| (refactor_this_rank(&a, None), a))
+        .collect();
+    rows.extend(own.iter().map(|o| {
+        let row = CodeAction {
+            title: o.title.to_owned(),
+            kind: Some("refactor".into()),
+            preferred: false,
+            disabled: None,
+            fixes: Vec::new(),
+        };
+        (refactor_this_rank(&row, Some(o)), row)
+    }));
+    rows.sort_by_key(|(rank, _)| *rank);
+    rows.into_iter().map(|(_, row)| row).collect()
 }
 
 /// The status line after the name popup of an extraction closed without a new name
@@ -1512,13 +1657,19 @@ mod tests {
             fixes: Vec::new(),
         };
         let titles = |own: Vec<OwnRefactoring>| own.iter().map(|o| o.title).collect::<Vec<_>>();
+        // In code that runs, as in v5.
+        let code = |on_name| RefactorSpot {
+            on_name,
+            in_code: true,
+            ..RefactorSpot::default()
+        };
         // clangd on the name `placeholder`: no actions at all.
         assert_eq!(
-            titles(refactor_this_own(&[], true)),
+            titles(refactor_this_own(&[], &code(true))),
             ["Rename…", "Extract Variable…", "Extract Method…"]
         );
         // clangd with `s.area()` selected: its Extract Variable is listed, not ours.
-        let own = refactor_this_own(&[action("Extract subexpression to variable")], false);
+        let own = refactor_this_own(&[action("Extract subexpression to variable")], &code(false));
         assert_eq!(titles(own.clone()), ["Extract Method…"]);
         assert_eq!(own[0].action, "ExtractMethod");
         // rust-analyzer with a selection lists both extractions itself.
@@ -1526,15 +1677,101 @@ mod tests {
             action("Extract into variable"),
             action("Extract into function"),
         ];
-        assert!(refactor_this_own(&both, false).is_empty());
-        assert_eq!(refactor_this_own(&both, true)[0].action, "RenameElement");
+        assert!(refactor_this_own(&both, &code(false)).is_empty());
+        assert_eq!(
+            refactor_this_own(&both, &code(true))[0].action,
+            "RenameElement"
+        );
         // A disabled action does not count as listed.
         let mut disabled = action("Extract into variable");
         disabled.disabled = Some("no expression".into());
         assert_eq!(
-            titles(refactor_this_own(&[disabled], false))[0],
+            titles(refactor_this_own(&[disabled], &code(false)))[0],
             "Extract Variable…"
         );
+    }
+
+    /// SPEC-0095 v14 AK-26 (behaviours 4b and 4c, OBS-0119 K3): on `area` of `s.area()` in a Java
+    /// method Refactor This lists every refactoring that can act there, in the reference's order,
+    /// with jdtls's Inline among them; on a class's name no extraction; nothing that cannot act.
+    #[test]
+    fn refactor_this_lists_what_acts_here_in_order() {
+        let action = |title: &str, kind: &str| CodeAction {
+            title: title.into(),
+            kind: Some(kind.into()),
+            preferred: false,
+            disabled: None,
+            fixes: Vec::new(),
+        };
+        let titles = |rows: Vec<CodeAction>| rows.into_iter().map(|r| r.title).collect::<Vec<_>>();
+        let call = RefactorSpot {
+            on_name: true,
+            before_parameters: true,
+            declaration: false,
+            in_code: true,
+            java: true,
+            project_file: true,
+        };
+        let server = vec![action("Inline Method", "refactor.inline")];
+        let own = refactor_this_own(&server, &call);
+        assert_eq!(
+            titles(refactor_this_rows(server, &own)),
+            [
+                "Rename…",
+                "Change Signature…",
+                "Extract Variable…",
+                "Extract Constant…",
+                "Extract Field…",
+                "Introduce Parameter…",
+                "Extract Method…",
+                "Inline Method",
+                "Move…",
+                "Copy…",
+            ]
+        );
+        // jdtls's own extraction takes the place of ours; another refactoring of the server
+        // comes after the extractions.
+        let server = vec![
+            action("Convert to lambda expression", "refactor.rewrite"),
+            action("Extract to constant", "refactor.extract.constant"),
+        ];
+        let own = refactor_this_own(&server, &call);
+        let rows = titles(refactor_this_rows(server, &own));
+        assert_eq!(rows[3], "Extract to constant");
+        assert_eq!(rows[7], "Convert to lambda expression");
+        assert!(!rows.contains(&"Extract Constant…".to_owned()));
+        // A method's declaration: Safe Delete too; not Java: no constant, field or parameter.
+        let declaration = RefactorSpot {
+            declaration: true,
+            java: false,
+            ..call
+        };
+        let rows = titles(refactor_this_rows(
+            Vec::new(),
+            &refactor_this_own(&[], &declaration),
+        ));
+        assert_eq!(rows.last().map(String::as_str), Some("Safe Delete…"));
+        assert!(
+            !rows
+                .iter()
+                .any(|r| r.contains("Constant") || r.contains("Parameter"))
+        );
+        // The class's name between members: no extraction, no Change Signature.
+        let class = RefactorSpot {
+            on_name: true,
+            declaration: true,
+            project_file: true,
+            ..RefactorSpot::default()
+        };
+        assert_eq!(
+            titles(refactor_this_rows(
+                Vec::new(),
+                &refactor_this_own(&[], &class)
+            )),
+            ["Rename…", "Move…", "Copy…", "Safe Delete…"]
+        );
+        // A remote document, not on a name, outside code: nothing of ours.
+        assert!(refactor_this_own(&[], &RefactorSpot::default()).is_empty());
     }
 
     /// SPEC-0095 v5 AK-11, SPEC-0193 v4 AK-8: the status line follows Escape and ⌘Z.

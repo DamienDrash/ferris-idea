@@ -4,12 +4,12 @@
 
 #![cfg(target_os = "macos")]
 
+use ferris_idea_workbench::WorkbenchView;
+use ferris_idea_workbench::project_windows::{RecentProjectsFile, register_window};
 use gpui::TestAppContext;
-use idecraft_workbench::WorkbenchView;
-use idecraft_workbench::project_windows::{RecentProjectsFile, register_window};
 
 fn workspace(tag: &str) -> std::path::PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-ppw-{tag}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-ppw-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     root.canonicalize().unwrap()
@@ -59,7 +59,8 @@ fn open_popup(
 /// list is at its limit of 25 (`RECENT_PROJECTS_LIMIT`), so none is dropped on any platform.
 #[gpui::test]
 fn the_popup_opens_in_a_single_window_with_many_recent_projects(cx: &mut TestAppContext) {
-    let recent = std::env::temp_dir().join(format!("idecraft-ppw-recent1-{}", std::process::id()));
+    let recent =
+        std::env::temp_dir().join(format!("ferris-idea-ppw-recent1-{}", std::process::id()));
     let others: Vec<_> = (0..24).map(|i| workspace(&format!("r{i}"))).collect();
     let text: String = others
         .iter()
@@ -95,7 +96,8 @@ fn the_popup_opens_in_a_single_window_with_many_recent_projects(cx: &mut TestApp
 /// first window, closes the second without ending the process.
 #[gpui::test]
 fn the_popup_and_closing_work_with_two_windows(cx: &mut TestAppContext) {
-    let recent = std::env::temp_dir().join(format!("idecraft-ppw-recent2-{}", std::process::id()));
+    let recent =
+        std::env::temp_dir().join(format!("ferris-idea-ppw-recent2-{}", std::process::id()));
     cx.update(|cx| cx.set_global(RecentProjectsFile(recent.clone())));
     let roots = [workspace("a"), workspace("b")];
     let w = windows(&roots, cx);

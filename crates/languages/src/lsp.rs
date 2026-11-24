@@ -299,10 +299,10 @@ pub fn formatting_options(path: &Path) -> Value {
     {
         return json!({"tabSize": options["tabSize"], "insertSpaces": options["insertSpaces"]});
     }
-    let config = idecraft_core::editorconfig::editorconfig_for(path);
+    let config = ferris_idea_core::editorconfig::editorconfig_for(path);
     let tabs = config
         .indent_style()
-        .map(|s| s == idecraft_core::editorconfig::IndentStyle::Tab);
+        .map(|s| s == ferris_idea_core::editorconfig::IndentStyle::Tab);
     let (size, tabs) = match (config.indent_size(), tabs) {
         (Some(n), tabs) => (Some(n), tabs.unwrap_or(false)),
         (None, Some(true)) => (config.tab_width().or(Some(4)), true),
@@ -533,7 +533,7 @@ fn answer_server_request(
         // kept for whoever asked the server (`SPEC-0043` v4 behaviour 9).
         "window/showMessageRequest" => Ok(Value::Null),
         // typescript-language-server asks the client to start a rename after an extraction; the
-        // edit has arrived, and IDECraft offers its own in-place rename (SPEC-0095 v3).
+        // edit has arrived, and Ferris IDEA offers its own in-place rename (SPEC-0095 v3).
         "_typescript.rename" => Ok(Value::Null),
         other => Err((-32601, format!("method not found: {other}"))),
     }
@@ -1053,7 +1053,7 @@ impl LspClient {
                 "initialize",
                 json!({
                     "processId": std::process::id(),
-                    "clientInfo": {"name": "IDECraft"},
+                    "clientInfo": {"name": "Ferris IDEA"},
                     "rootUri": uri,
                     "workspaceFolders": [{"uri": uri, "name": name}],
                     "initializationOptions": self.init_options,
@@ -1249,9 +1249,15 @@ pub async fn file_diagnostics(
         || server.candidate.reports_status
     {
         let mut o = crate::insight::Opened::open_text(root, file, None, wait).await?;
-        let found = o.diagnostics(wait).await.iter().map(diagnostic).collect();
+        let found = o.published_diagnostics(wait).await;
         o.close().await;
-        return Ok(found);
+        // A server that says nothing in time has not analysed the file: no empty list, which
+        // would read as a clean file (`SPEC-0006` v59 behaviour 23).
+        return found
+            .map(|list| list.iter().map(diagnostic).collect())
+            .ok_or_else(|| {
+                LspError::Timeout("textDocument/publishDiagnostics".into(), wait.as_secs())
+            });
     }
     let text = std::fs::read_to_string(file).map_err(|e| LspError::Io(e.to_string()))?;
     let mut client = server.spawn(root)?;
@@ -1383,6 +1389,8 @@ pub(crate) fn client_capabilities() -> Value {
             "documentHighlight": {"dynamicRegistration": false},
             // SPEC-0291 behaviour 1.
             "inlayHint": {"dynamicRegistration": false},
+            // Usage lenses (SPEC-0292 v8 behaviour 11).
+            "codeLens": {"dynamicRegistration": false},
             // SPEC-0290 behaviour 1.
             "semanticTokens": {
                 "requests": {"full": true},
@@ -1419,7 +1427,12 @@ pub(crate) fn client_capabilities() -> Value {
             "fileOperations": {"willRename": true, "didRename": true}
         },
         "window": {"workDoneProgress": true},
-        "experimental": {"serverStatusNotification": true}
+        // rust-analyzer offers its reference lenses only to a client that knows their command;
+        // Ferris IDEA reads the places from it and never runs it (SPEC-0292 v8 behaviour 11).
+        "experimental": {
+            "serverStatusNotification": true,
+            "commands": {"commands": ["rust-analyzer.showReferences"]}
+        }
     })
 }
 
@@ -1640,7 +1653,8 @@ mod tests {
         );
         assert_eq!(indentation_of("const a = 1;\n"), None);
 
-        let dir = std::env::temp_dir().join(format!("idecraft-fmt-options-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("ferris-idea-fmt-options-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("sub")).unwrap();
         std::fs::write(dir.join("a.ts"), "function f() {\n  return 1;\n}\n").unwrap();

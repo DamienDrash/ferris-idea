@@ -1,6 +1,7 @@
 # SPEC-0089: Database tool window
 
-- **Version:** 15 · **Date:** 2026-11-17 (v15: a foreign key's row and its documentation name its actions, an
+- **Version:** 17 · **Date:** 2026-11-23 (v17: after a run that may change the schema the tree reads a
+  connection it has read again, routines included, behaviour 29, AK-32–33 — OBS-0120 X2); 2026-11-19 (v16: the data sources of the reference's `.idea/dataSources.xml` that are not added yet are offered below the connections, added only through the connection dialog, behaviour 28, AK-31 — SPEC-0049 v7, SPEC-0008 v9, gap DS1 of OBS-0109); 2026-11-17 (v15: a foreign key's row and its documentation name its actions, an
   index's row and line its access method, behaviour 27, AK-30 — SPEC-0013 v8, OBS-0076 D1–D2); 2026-11-16 (v14: the selection stays on its node while rows come and go, also
   while a connection is read again after Copy Table, and goes to the nearest parent of a node that
   is gone, behaviour 26, AK-29 — screen run of 2026-11-16, B3); 2026-11-16 (v13: routines, triggers and types in folders of their kind,
@@ -39,7 +40,7 @@ See what is in the project's databases without leaving the editor.
 1. **Open:** the Database button at the top of the right stripe, or `ActivateDatabaseToolWindow` (no
    default shortcut; found through Search Everywhere), shows the tool window at the right; pressed again,
    Escape in the tree or ⇧Esc hides it. [GEN, OSS]
-2. **Connections:** one row per profile of `.idecraft/connections.toml`, with the dialect and where it
+2. **Connections:** one row per profile of `.ferris-idea/connections.toml`, with the dialect and where it
    points ("SQLite · shop.db", "PostgreSQL · host:5432/db"). Without profiles the window says where to add
    them; a file with problems names the problem. ↑/↓ choose, →/Enter expand, ← collapse, a double-click
    toggles. [GEN]
@@ -54,7 +55,7 @@ See what is in the project's databases without leaving the editor.
 7. **v2 – Look:** the window is 400 px wide; names and details that do not fit end in "…"; details stay
    readable on the selected row. A failure row has the warning icon and the error without the repeated
    connection name ("Password missing in keychain entry …"), wrapping over several lines. Primary keys,
-   foreign keys and indexes have IDECraft's own icons (a yellow key, a blue key with an arrow, green lines
+   foreign keys and indexes have Ferris IDEA's own icons (a yellow key, a blue key with an arrow, green lines
    with an arrow), since the reference's database icons are not open. [GEN, OSS]
 
 8. **v3 – All schemas (IMP-0052):** under a connection, after the "tables" and "views" of its current
@@ -70,8 +71,8 @@ See what is in the project's databases without leaving the editor.
    may ask for keychain access first, so a pending system prompt is not taken for a hang. [GEN]
 9. **v3 – Error node (IMP-0051):** when reading a schema fails, the connection (or schema) expands to an
    error row "Could not read the schema: <cause>" with the warning icon, and under it a "Retry" row; Enter
-   or a double-click on either reads it again. Whatever IDECraft cached about that connection's schema
-   (completion, inspections) is dropped, so a retry starts clean; IDECraft keeps metadata only in memory,
+   or a double-click on either reads it again. Whatever Ferris IDEA cached about that connection's schema
+   (completion, inspections) is dropped, so a retry starts clean; Ferris IDEA keeps metadata only in memory,
    so no restart is ever needed. `list_tables` reports the same cause over MCP; `list_schemas` (connection)
    lists the schemas with the current one marked. [GEN, ADR-0008]
 10. **v5 – Speed search:** a letter typed while the tree has the focus opens a small search field
@@ -87,7 +88,7 @@ See what is in the project's databases without leaving the editor.
     (enabled on tables and views) and ⌥⇧⌘D (Ctrl+Alt+Shift+D; free in both bundled keymaps — the
     reference's Edit Source key already opens the data or properties here) open the selected table's or
     view's definition as SQL in a read-only editor tab "<name> (DDL).sql", read anew each time from
-    the connection. It is generated per dialect from IDECraft's own introspection (SPEC-0013, the same
+    the connection. It is generated per dialect from Ferris IDEA's own introspection (SPEC-0013, the same
     generator as SPEC-0018): `CREATE TABLE` with the columns (type, `NOT NULL`, default), the primary
     key and the foreign keys (`REFERENCES`), then the table's own indexes (not the primary key's or,
     on MySQL, a foreign key's implicit index). A view is `CREATE VIEW <name> AS <query>` with its
@@ -207,10 +208,28 @@ See what is in the project's databases without leaving the editor.
     default one ends its detail in `· gin` and its documentation line names it (`Index tags_idx using
     gin (tags)`). The condition of a PostgreSQL partial index shows like SQLite's (behaviour 20). [GEN]
 
+28. **v16 – Data sources from `.idea` (SPEC-0049 v7 behaviour 18):** below the connections and stores the
+    window lists, under the heading "From the project's .idea, not added yet", the data sources of the
+    project's `.idea/dataSources.xml` that are not added yet (SPEC-0008 v9 behaviour 19): name, kind and file
+    or server, all from the clean URL. Each offered one has an Add… button; data sources that cannot be offered
+    are listed with their reason and no button. Add… opens the connection dialog filled with the profile of
+    SPEC-0008 v9 behaviour 19 and a note saying where it came from; nothing is saved before the user saves in
+    the dialog, nothing connects before Test Connection or the first use, and closing the dialog leaves the
+    data source offered. Once saved the data source leaves the list. The list is read with the window and on
+    every reload (Refresh, saving a connection); without data sources there is no heading. [GEN, CLAUDE.md
+    rule 12]
+
+29. **v17 – After a script (OBS-0120 X2):** when a run from an editor or console may have changed a
+    connection's schema (the statements SPEC-0192 v5 behaviour 11a names: DDL, `CALL`, `EXEC`,
+    blocks), the tree reads that connection again once the run has ended, as Refresh does (behaviour
+    22): tables, views, sequences, procedures, functions and triggers alike, keeping the open nodes and
+    the selection. A procedure a MariaDB script created between `DELIMITER` lines appears under
+    Procedures without Refresh. A connection the tree has not read yet stays as it is. [GEN]
+
 ## Acceptance criteria
 - **AK-1** Connection rows and details, loading, failure and empty states, groups, sections and the texts
   of columns, keys and indexes (unit tests of `db_tree_model`).
-- **AK-2** In a real window (`idecraft ui --selftest`): a SQLite connection of the workspace is listed,
+- **AK-2** In a real window (`ferris-idea ui --selftest`): a SQLite connection of the workspace is listed,
   expanding it lists two tables, the columns, the foreign key and the index of `orders` are shown, Escape
   hides the window.
 - **AK-3** Use by hand with the reference databases (PostgreSQL, MySQL) next to the reference.
@@ -221,7 +240,7 @@ See what is in the project's databases without leaving the editor.
 - **AK-6 (v3)** In a real window: a connection whose file is missing expands to the error and retry rows;
   Enter on Retry reads it again (`--selftest`). `list_schemas` over MCP (protocol test).
 - **AK-7 (v4, restated in v11.1)** Window self-test: an open `.sql` file of the selected connection
-  marks a table that does not exist as unknown; the table is created outside IDECraft and stays
+  marks a table that does not exist as unknown; the table is created outside Ferris IDEA and stays
   unknown until Refresh on the selected connection; after it the mark goes without an edit, and the
   SQL editors hold the schema read anew (`db_compare_steps`). Until v11.1 the criterion asked that no
   schema be cached right after Refresh; since SPEC-0192 v3 behaviour 11 the open files are inspected
@@ -239,7 +258,7 @@ See what is in the project's databases without leaving the editor.
   shortcut in both keymaps (`keymap::tests`).
 - **AK-11 (v5)** The sequences row with its count (`db_tree_model::tests::sequences_group_with_count`);
   sequences read from PostgreSQL, none for SQLite (`crates/database/tests/it/catalog.rs`
-  `sequences_of_a_schema`, PostgreSQL part with `IDECRAFT_TEST_PG`).
+  `sequences_of_a_schema`, PostgreSQL part with `FERRIS_IDEA_TEST_PG`).
 - **AK-12 (v5)** Window self-test: typing "ord" selects `orders`, Escape closes the search only, Show DDL
   opens `orders (DDL).sql` with its `CREATE TABLE` (`db_search_ddl_steps`).
 - **AK-13 (v6)** The documentation lines of a table (columns with keys and defaults, foreign key,
@@ -306,6 +325,19 @@ See what is in the project's databases without leaving the editor.
 
 - **AK-30 (v15, behaviour 27)** `db_tree_model::tests::foreign_key_actions_and_index_methods_in_rows`;
   `object_doc::tests::foreign_key_actions_and_index_methods_in_the_documentation`.
+- **AK-31 (v16, behaviour 28)** `crates/workbench/tests/it/idea_data_sources.rs`:
+  `idea_data_sources_are_offered_until_added`: a workspace with `.idea/dataSources.xml` for a SQLite file and
+  an unsupported driver: the Database window offers the SQLite one and lists the other with its reason;
+  `connections.toml` does not exist; Add… opens the dialog with name, SQLite and the file; Save writes the
+  profile, after which the data source is no longer offered.
+- **AK-32 (v17, behaviour 29)** `crates/workbench/tests/it/db_object_definitions.rs`
+  `objects_a_script_creates_appear_in_the_tree`: with the trigger folder of a SQLite connection open,
+  running `CREATE TRIGGER` from a `.sql` file lists the new trigger beside the old one, without
+  Refresh.
+- **AK-33 (v17, behaviour 29)** Live (`crates/database/tests/it/dialect_numbers_live.rs`
+  `routines_a_script_creates_are_listed`): a procedure and a function created by a script — MariaDB
+  and MySQL between `DELIMITER` lines, SQL Server in `GO` batches, Oracle ended with `/`, PostgreSQL —
+  are in the catalog the tree reads.
 
 ## Out of scope
 Adding or editing connections in a dialog (F-051 remains partly open), renaming or comparing objects of
@@ -313,12 +345,12 @@ other schemas than the current one, routines and triggers, sequences of other sc
 the DDL of objects of other schemas, editing the DDL tab (it is read-only), opening a table's data (F-054), a SQL console (F-053), drag and drop.
 
 ## Known deviations from the reference
-The reference shows many more object kinds and has a connection dialog; IDECraft edits connections in
+The reference shows many more object kinds and has a connection dialog; Ferris IDEA edits connections in
 `connections.toml`. Unlike the reference, all non-system schemas are listed without ticking them in the
 data source settings (IMP-0052), and a failed introspection shows its cause in the tree with a retry
 instead of an empty node (IMP-0051). Its Database icon is not open; the stripe
-uses the open `dataSchema` icon. v5: the DDL tab is named "<name> (DDL).sql" (a file in IDECraft's cache, so
-the editor highlights SQL; on SQLite the text is the stored statement in the user's own spelling, v7) and IDECraft gives Show DDL a shortcut of its own, ⌥⇧⌘D, since the
+uses the open `dataSchema` icon. v5: the DDL tab is named "<name> (DDL).sql" (a file in Ferris IDEA's cache, so
+the editor highlights SQL; on SQLite the text is the stored statement in the user's own spelling, v7) and Ferris IDEA gives Show DDL a shortcut of its own, ⌥⇧⌘D, since the
 reference's key for it opens the data here. **v6:** the quick documentation appears at once from what
 the tree read, where the reference waited minutes for an unrelated engine (IMP-0367); it is a panel
 above the tree instead of a floating popup; the toolbar has no comparison and view-options buttons

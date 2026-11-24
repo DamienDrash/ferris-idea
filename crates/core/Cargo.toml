@@ -1,5 +1,5 @@
 [package]
-name = "idecraft-core"
+name = "ferris-idea-core"
 description = "IDE lifecycle, layered configuration and workspace model"
 version.workspace = true
 edition.workspace = true
@@ -10,13 +10,15 @@ publish.workspace = true
 
 [dependencies]
 flate2 = "1"
-idecraft-http.workspace = true
+# Random bits of ticket ids (SPEC-0352 behaviour 9); already in the tree, same version.
+getrandom = "0.3"
+ferris-idea-http.workspace = true
 # Gitignore rules for the project's own sources (SPEC-0148 v3 behaviour 7): read from the files,
 # no git process.
 ignore = "0.4"
 # The files Git tracks are the project's own even when an ignore rule matches them (SPEC-0148 v4
 # behaviour 7): the index is read from the file, no git process. Already in the tree through
-# `gix` of idecraft-vcs, same version.
+# `gix` of ferris-idea-vcs, same version.
 gix-index = { version = "0.55", default-features = false, features = ["sha1"] }
 quick-xml = "0.41"
 regex = "1"

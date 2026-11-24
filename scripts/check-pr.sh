@@ -17,8 +17,11 @@
 # on a changed crate, directly or through others, is tested too (normal and build dependencies are
 # followed all the way; a crate that only has a dev-dependency on an affected crate is added itself).
 # The whole workspace is tested when the change touches the root Cargo.toml or Cargo.lock, the
-# toolchain, .cargo/, a build script, the shared tests/ folder, or a file this script cannot place.
-# Documents only (docs/, changelog.d/, Markdown in the root): scripts/check-docs.sh alone.
+# toolchain, .cargo/, .config/, vendor/, a build script, the shared tests/ folder, or a file this
+# script cannot place. Documents only (docs/, changelog.d/, Markdown in the root):
+# scripts/check-docs.sh alone; files no crate reads (scripts/, .github/, …): format and lints.
+# The selection is scripts/ci-select.py, which the server CI uses too. Every run ends with
+# scripts/spec-number.sh check: new specifications and ADRs take free numbers.
 #
 # Steps stop at the first failure; every step ends with one line naming its duration.
 set -eu
@@ -42,7 +45,7 @@ done
 merge_base=$(git merge-base "$base" HEAD 2>/dev/null) \
   || { echo "error: no merge base of $base and HEAD (git fetch origin?)" >&2; exit 2; }
 
-tmp=$(mktemp -d "${TMPDIR:-/tmp}/idecraft-check-pr.XXXXXX")
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/ferris-idea-check-pr.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
 {
   git -c core.quotepath=off diff --name-only --no-renames "$merge_base"
@@ -50,140 +53,12 @@ trap 'rm -rf "$tmp"' EXIT
 } | sort -u >"$tmp/files"
 cargo metadata --format-version 1 --no-deps >"$tmp/metadata.json"
 
-# Writes $tmp/plan (mode=…, crates=…) and prints the report.
-python3 -I - "$tmp/metadata.json" "$tmp/files" "$tmp/plan" "$full" "$base" "$merge_base" "$changed_only" <<'PY'
-import json, os, sys
-meta = json.load(open(sys.argv[1], encoding='utf-8'))
-files = [l.rstrip('\n') for l in open(sys.argv[2], encoding='utf-8') if l.strip()]
-plan_path, forced, base, merge_base = sys.argv[3], sys.argv[4] == '1', sys.argv[5], sys.argv[6]
-changed_only = sys.argv[7] == '1'
-root = os.path.realpath(meta['workspace_root'])
-
-# Workspace crates: name -> folder relative to the root; folder -> name.
-folder = {p['name']: os.path.relpath(os.path.dirname(os.path.realpath(p['manifest_path'])), root)
-          for p in meta['packages']}
-by_folder = {d: n for n, d in folder.items()}
-# users[x] = workspace crates that build against x (normal or build dependency); dev_users[x] =
-# crates whose tests alone use x. A path dependency is matched by its folder (it may be renamed),
-# anything else by its name.
-users = {n: set() for n in folder}
-dev_users = {n: set() for n in folder}
-for p in meta['packages']:
-    for d in p['dependencies']:
-        target = None
-        if d.get('path'):
-            target = by_folder.get(os.path.relpath(os.path.realpath(d['path']), root))
-        elif d['name'] in folder and d.get('source') is None:
-            target = d['name']
-        if target and target != p['name']:
-            (dev_users if d.get('kind') == 'dev' else users)[target].add(p['name'])
-
-def owner(path):
-    """The crate whose folder is the longest prefix of the path, or None."""
-    best = None
-    for d, n in by_folder.items():
-        if d != '.' and (path == d or path.startswith(d + '/')):
-            if best is None or len(d) > len(folder[best]):
-                best = n
-    return best
-
-# Files outside the crates that crates read (include_bytes!/include_str! or tests that open them).
-# (prefix, crate, dependents too?) Dependents are added when the file is compiled into the crate.
-INPUTS = [
-    ('packaging/', 'idecraft-ui', True),              # icons and desktop entry, built into ui
-    ('docs/formats/', 'idecraft-core', False),        # published schemas, compared by a core test
-    ('scripts/bundle-macos.sh', 'idecraft-formats', False),  # read by a formats test
-]
-# Root files and folders that force the whole workspace.
-WHOLE = ('Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'rust-toolchain', 'clippy.toml',
-         '.clippy.toml', 'rustfmt.toml', '.rustfmt.toml')
-WHOLE_DIRS = ('.cargo/', 'tests/')
-# Paths no workspace crate builds from or reads (fuzz/ and mobile/ are outside the workspace).
-NO_CRATE_DIRS = ('scripts/', '.github/', '.claude/', 'fuzz/', 'mobile/')
-NO_CRATE = ('.gitattributes', '.gitignore', 'deny.toml', 'NOTICE')
-
-changed, direct_only, whole, docs, no_crate = set(), set(), [], [], []
-for f in files:
-    name = os.path.basename(f)
-    if f in WHOLE or f.startswith(WHOLE_DIRS):
-        whole.append(f); continue
-    crate = owner(f)
-    if crate:
-        if name == 'build.rs':
-            whole.append(f + ' (build script)')
-        else:
-            changed.add(crate)
-        continue
-    if f.startswith('crates/'):
-        whole.append(f + ' (in crates/, but in no crate)'); continue
-    for prefix, crate, with_users in INPUTS:
-        if f == prefix or (prefix.endswith('/') and f.startswith(prefix)):
-            if crate not in folder:
-                whole.append(f + f' (read by {crate}, which is not in the workspace)')
-            elif with_users:
-                changed.add(crate)
-            else:
-                direct_only.add(crate)
-            break
-    else:
-        if f.startswith(('docs/', 'changelog.d/')) or ('/' not in f and f.endswith('.md')):
-            docs.append(f)
-        elif f.startswith(NO_CRATE_DIRS) or f in NO_CRATE or name.startswith('LICENSE'):
-            no_crate.append(f)
-        else:
-            whole.append(f + ' (not known to this script)')
-
-affected, todo = set(changed), list(changed)
-while todo:
-    for u in users[todo.pop()]:
-        if u not in affected:
-            affected.add(u); todo.append(u)
-# A dev-dependency changes the tests of the crate that declares it, not what that crate gives to
-# others: such a crate is tested, its own dependents are not added because of it.
-for c in list(affected):
-    affected |= dev_users[c]
-affected |= direct_only
-
-if forced:
-    mode, why = 'full', '--full'
-elif changed_only:
-    # The author's quick check: the changed crates alone; what depends on them, and a change this
-    # script cannot place, is left to the server's check of the merge result.
-    affected = set(changed) | direct_only
-    mode, why = ('crates', '') if affected else ('lint' if (whole or no_crate) else 'docs', '')
-elif whole:
-    mode, why = 'full', ', '.join(whole[:4]) + (f' and {len(whole) - 4} more' if len(whole) > 4 else '')
-elif affected:
-    mode, why = ('full', 'every crate is affected') if affected == set(folder) else ('crates', '')
-else:
-    mode, why = 'docs', ''
-
-def names(s):
-    return ' '.join(sorted(s)) if s else '(none)'
-def some(paths):
-    return ', '.join(paths[:4]) + (f' and {len(paths) - 4} more' if len(paths) > 4 else '')
-print(f'base: {base} (merge base {merge_base[:9]}), {len(files)} changed file(s)')
-print(f'changed crates: {names(changed)}')
-if direct_only - changed:
-    print(f'crates that read a changed file outside crates/: {names(direct_only - changed)}')
-print(f'affected crates ({len(affected)} of {len(folder)}): {names(affected)}')
-if mode == 'full':
-    print(f'whole workspace: yes ({why})')
-else:
-    print('whole workspace: no')
-if no_crate:
-    print(f'files no crate is tested for: {some(no_crate)}')
-if mode == 'docs':
-    if not files:
-        print('nothing differs from the merge base: documents check only')
-    elif not no_crate:
-        print('documents only: documents check only')
-    else:
-        print('no crate is affected: documents check only')
-with open(plan_path, 'w', encoding='utf-8') as out:
-    out.write(f'mode={mode}\n')
-    out.write('crates=' + ' '.join(sorted(affected)) + '\n')
-PY
+# Writes $tmp/plan (mode=…, crates=…) and prints the report (the same selection as the server CI).
+set --
+[ "$full" = 1 ] && set -- "$@" --full
+[ "$changed_only" = 1 ] && set -- "$@" --changed-only
+python3 -I scripts/ci-select.py "$tmp/metadata.json" "$tmp/files" "$tmp/plan" "$@" \
+  --base "$base" --merge-base "$merge_base"
 
 mode=$(sed -n 's/^mode=//p' "$tmp/plan")
 crates=$(sed -n 's/^crates=//p' "$tmp/plan")
@@ -207,6 +82,7 @@ if [ "$list" = 1 ]; then
     [ "$mode" = lint ] || echo "  $*"
   fi
   echo "  scripts/check-docs.sh"
+  echo "  scripts/spec-number.sh --base $base check"
   exit 0
 fi
 
@@ -239,4 +115,7 @@ if [ "$mode" != docs ]; then
   [ "$mode" = lint ] || step "$*" "$@"
 fi
 step "scripts/check-docs.sh" scripts/check-docs.sh
+# A new specification or ADR takes a number no other file on the base uses and RESERVED.md does not
+# reserve for another branch (ADR-0035 decision 6).
+step "scripts/spec-number.sh check" scripts/spec-number.sh --base "$base" check
 printf '\n== summary: all steps passed\n%s' "$summary"

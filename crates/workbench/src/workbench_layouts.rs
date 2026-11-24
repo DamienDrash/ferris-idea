@@ -2,15 +2,15 @@
 //! name, applying and restoring a saved layout, renaming and deleting one, and the Layouts
 //! submenu of the Window menu.
 //!
-//! The rules, the names and the user's file are [`idecraft_ui::window_layouts`], the same code as
+//! The rules, the names and the user's file are [`ferris_idea_ui::window_layouts`], the same code as
 //! the MCP tool `window_layouts`. The file is read again before every action, so two windows do
 //! not overwrite each other's layouts (behaviour 15).
 
 use std::path::PathBuf;
 
+use ferris_idea_ui::tool_windows::ToolWindow;
+use ferris_idea_ui::window_layouts::{self as model, Applied, Arrangement, Layouts};
 use gpui::{Context, Window};
-use idecraft_ui::tool_windows::ToolWindow;
-use idecraft_ui::window_layouts::{self as model, Applied, Arrangement, Layouts};
 
 use super::{DrawnFor, WorkbenchView};
 

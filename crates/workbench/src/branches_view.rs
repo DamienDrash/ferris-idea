@@ -4,11 +4,11 @@
 use std::collections::BTreeSet;
 use std::ops::Range;
 
+use ferris_idea_vcs::Branch;
 use gpui::{
     Context, Entity, EventEmitter, FocusHandle, KeyDownEvent, Subscription,
     UniformListScrollHandle, Window, div, prelude::*, px, uniform_list,
 };
-use idecraft_vcs::Branch;
 
 use crate::EditorView;
 use crate::branches_model::{
@@ -111,7 +111,7 @@ impl BranchesView {
     /// waiting `operation` first.
     pub fn new(
         branches: Vec<Branch>,
-        operation: Option<idecraft_vcs::Operation>,
+        operation: Option<ferris_idea_vcs::Operation>,
         cx: &mut Context<Self>,
     ) -> Self {
         Self::with_data(PopupData::of(&branches, operation), cx)
@@ -662,7 +662,7 @@ impl Render for BranchesView {
                                     "general/chevronRight"
                                 }))
                                 .child(icon(if *group == Group::Tags {
-                                    "idecraft/tag"
+                                    "ferris-idea/tag"
                                 } else {
                                     "nodes/folder"
                                 }))
@@ -677,7 +677,7 @@ impl Render for BranchesView {
                             BranchRow::Tag(t) => {
                                 let r = rows[i].clone();
                                 pick(
-                                    row.child(icon("idecraft/tag"))
+                                    row.child(icon("ferris-idea/tag"))
                                         .child(div().flex_none().child(t.name.clone()))
                                         .child(div().flex_1())
                                         .child(
@@ -700,13 +700,13 @@ impl Render for BranchesView {
                                     .id(("br-star", i))
                                     .flex_none()
                                     .size(px(16.))
-                                    .when(fav, |d| d.child(icon("idecraft/star")))
+                                    .when(fav, |d| d.child(icon("ferris-idea/star")))
                                     .when(!fav, |d| {
                                         d.when(!on, |d| {
                                             d.opacity(0.)
                                                 .group_hover(group.clone(), |s| s.opacity(1.))
                                         })
-                                        .child(icon("idecraft/starOutline"))
+                                        .child(icon("ferris-idea/starOutline"))
                                     })
                                     .on_click(cx.listener(
                                         move |this, _: &gpui::ClickEvent, window, cx| {
@@ -874,7 +874,7 @@ mod tests {
     #[test]
     fn naming_started_by_the_actions() {
         let branch = |name: &str, remote: bool| {
-            BranchRow::Branch(idecraft_vcs::Branch {
+            BranchRow::Branch(ferris_idea_vcs::Branch {
                 name: name.into(),
                 remote,
                 current: false,

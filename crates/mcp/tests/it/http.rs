@@ -2,24 +2,24 @@
 
 use std::path::{Path, PathBuf};
 
-use idecraft_core::Workspace;
-use idecraft_editor::TextSnapshot;
-use idecraft_editor::documents::DocumentRegistry;
-use idecraft_mcp::IdeServer;
-use idecraft_mcp::http::HttpServer;
+use ferris_idea_core::Workspace;
+use ferris_idea_editor::TextSnapshot;
+use ferris_idea_editor::documents::DocumentRegistry;
+use ferris_idea_mcp::IdeServer;
+use ferris_idea_mcp::http::HttpServer;
 use rmcp::ServiceExt;
 use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 
 fn temp_dir(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("idecraft-http-{}-{name}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-http-{}-{name}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     dir.canonicalize().unwrap()
 }
 
 fn server_for(root: &Path, documents: &DocumentRegistry) -> IdeServer {
-    let permissions = idecraft_core::AgentPermissions {
+    let permissions = ferris_idea_core::AgentPermissions {
         allow: Default::default(),
         file: Some(root.join("agent-permissions.toml")),
         problem: None,
@@ -27,6 +27,8 @@ fn server_for(root: &Path, documents: &DocumentRegistry) -> IdeServer {
     IdeServer::with_permissions(Workspace::open(root).unwrap(), permissions)
         .with_plugins_dir(root.join(".test-plugins"))
         .with_documents(documents.clone())
+        // Every tool, as before SPEC-0006 v58, so both transports list the same.
+        .with_tool_offer(ferris_idea_mcp::groups::Offer::all())
 }
 
 /// Status, headers (lower-case names) and body of one HTTP/1.1 exchange.
@@ -184,7 +186,7 @@ impl Client {
         assert_eq!(init.status, 200, "{}", init.body);
         c.session = init.header("mcp-session-id").map(str::to_owned);
         let info = init.message();
-        assert_eq!(info["result"]["serverInfo"]["name"], "idecraft");
+        assert_eq!(info["result"]["serverInfo"]["name"], "ferris-idea");
         let note = c
             .exchange(json!({"jsonrpc": "2.0", "method": "notifications/initialized"}))
             .await;
@@ -423,24 +425,27 @@ async fn unsaved_buffer_is_visible_over_http() {
 #[derive(Default)]
 struct AllowingWindow {
     clients: std::sync::Mutex<Vec<String>>,
-    quits: std::sync::Mutex<Vec<idecraft_mcp::window::QuitMode>>,
+    quits: std::sync::Mutex<Vec<ferris_idea_mcp::window::QuitMode>>,
 }
 
-impl idecraft_mcp::window::Window for AllowingWindow {
+impl ferris_idea_mcp::window::Window for AllowingWindow {
     fn ask(
         &self,
-        request: idecraft_mcp::window::PermissionRequest,
-        reply: tokio::sync::oneshot::Sender<idecraft_mcp::window::PermissionAnswer>,
+        request: ferris_idea_mcp::window::PermissionRequest,
+        reply: tokio::sync::oneshot::Sender<ferris_idea_mcp::window::PermissionAnswer>,
     ) {
         self.clients.lock().unwrap().push(request.client);
-        let _ = reply.send(idecraft_mcp::window::PermissionAnswer::AllowOnce);
+        let _ = reply.send(ferris_idea_mcp::window::PermissionAnswer::AllowOnce);
     }
-    fn pending_work(&self, reply: tokio::sync::oneshot::Sender<idecraft_mcp::window::PendingWork>) {
+    fn pending_work(
+        &self,
+        reply: tokio::sync::oneshot::Sender<ferris_idea_mcp::window::PendingWork>,
+    ) {
         let _ = reply.send(Default::default());
     }
     fn quit(
         &self,
-        mode: idecraft_mcp::window::QuitMode,
+        mode: ferris_idea_mcp::window::QuitMode,
         reply: tokio::sync::oneshot::Sender<Result<(), String>>,
     ) {
         self.quits.lock().unwrap().push(mode);
@@ -456,15 +461,16 @@ async fn the_cli_client_is_named_in_the_question_and_quits() {
     let config = temp_dir("cli-config");
     let window = std::sync::Arc::new(AllowingWindow::default());
     let server = HttpServer::start(Some(&config)).unwrap();
-    let w: std::sync::Arc<dyn idecraft_mcp::window::Window> = window.clone();
+    let w: std::sync::Arc<dyn ferris_idea_mcp::window::Window> = window.clone();
     server
         .add_workspace(server_for(&root, &DocumentRegistry::default()).with_window(w))
         .unwrap();
     let cfg = config.clone();
     let (created, quit) = tokio::task::spawn_blocking(move || {
-        let found = idecraft_mcp::client::running_windows(&cfg);
+        let found = ferris_idea_mcp::client::running_windows(&cfg);
         assert_eq!(found.len(), 1, "{found:?}");
-        let mut client = idecraft_mcp::client::Client::connect(&found[0], "idecraft-cli").unwrap();
+        let mut client =
+            ferris_idea_mcp::client::Client::connect(&found[0], "ferris-idea-cli").unwrap();
         let created = client.call(
             "create_file",
             json!({"dir": "", "name": "a.txt", "dry_run": false}),
@@ -480,13 +486,13 @@ async fn the_cli_client_is_named_in_the_question_and_quits() {
     let clients = window.clients.lock().unwrap().clone();
     assert_eq!(clients.len(), 2);
     assert!(
-        clients.iter().all(|c| c.starts_with("idecraft-cli ")),
+        clients.iter().all(|c| c.starts_with("ferris-idea-cli ")),
         "{clients:?}"
     );
     assert_eq!(quit.unwrap()["quit"], true);
     assert_eq!(
         *window.quits.lock().unwrap(),
-        [idecraft_mcp::window::QuitMode::IfNothingPending]
+        [ferris_idea_mcp::window::QuitMode::IfNothingPending]
     );
     server.stop();
     let _ = std::fs::remove_dir_all(root);
@@ -526,4 +532,316 @@ async fn a_closed_project_is_no_longer_served() {
     let found: Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
     assert_eq!(found["projects"].as_array().unwrap().len(), 1);
     assert_eq!(found["projects"][0]["url"], json!(url_two));
+}
+
+/// SPEC-0006 v57 behaviour 15 over HTTP: `notifications/cancelled` for a running `run_command`
+/// ends the program, and the call's line in the agent log says `cancelled` (OBS-0082).
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread")]
+async fn a_cancelled_call_ends_its_program_over_http() {
+    let root = temp_dir("cancel");
+    let documents = DocumentRegistry::default();
+    // Each HTTP session reads the grant file again (SPEC-0053 v4 behaviour 9).
+    let grants = root.with_extension("agent-permissions.toml");
+    std::fs::write(
+        &grants,
+        format!(
+            "[[workspace]]\npath = \"{}\"\nallow = [\"run\"]\n",
+            root.display()
+        ),
+    )
+    .unwrap();
+    let permissions = ferris_idea_core::AgentPermissions {
+        allow: [ferris_idea_core::Grant::Run].into_iter().collect(),
+        file: Some(grants),
+        problem: None,
+    };
+    let server = IdeServer::with_permissions(Workspace::open(&root).unwrap(), permissions)
+        .with_plugins_dir(root.join(".test-plugins"))
+        .with_documents(documents);
+    let http = HttpServer::start(None).unwrap();
+    let url = http.add_workspace(server).unwrap();
+    let path = url
+        .trim_start_matches(&format!("http://127.0.0.1:{}", http.port()))
+        .to_owned();
+    let mut client = Client::connect(http.port(), &path, http.token()).await;
+    client.next_id = 7;
+    let call = json!({"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {
+        "name": "run_command", "arguments": {
+            "command": ["sh", "-c", "echo up > started.txt; sleep 3; echo late > marker.txt"], "dry_run": false}}});
+    let (port, p, auth, session) = (
+        client.port,
+        client.path.clone(),
+        client.auth.clone(),
+        client.session.clone(),
+    );
+    let running = tokio::spawn(async move {
+        let mut headers = vec![
+            ("Authorization", auth.as_str()),
+            ("MCP-Protocol-Version", "2025-06-18"),
+        ];
+        if let Some(s) = &session {
+            headers.push(("Mcp-Session-Id", s.as_str()));
+        }
+        tokio::time::timeout(
+            std::time::Duration::from_secs(8),
+            post(port, &p, &headers, &call),
+        )
+        .await
+    });
+    // Cancelled once the program runs, however busy the machine is.
+    wait_for_file(&root.join("started.txt")).await;
+    let note = client
+        .exchange(
+            json!({"jsonrpc": "2.0", "method": "notifications/cancelled",
+            "params": {"requestId": 7, "reason": "test"}}),
+        )
+        .await;
+    assert!(note.status == 202 || note.status == 200, "{}", note.status);
+    running.abort();
+    // Longer than the program's own three seconds: an ended program never writes its file.
+    tokio::time::sleep(std::time::Duration::from_secs(6)).await;
+    assert!(
+        !root.join("marker.txt").exists(),
+        "the cancelled program ran to its end"
+    );
+    let log = std::fs::read_to_string(root.join(".ferris-idea/agent-log.jsonl")).unwrap();
+    let last: Value = serde_json::from_str(log.lines().last().unwrap()).unwrap();
+    assert_eq!(last["tool"], "run_command");
+    assert_eq!(last["result"], "cancelled", "{log}");
+    http.stop();
+}
+
+/// Waits up to 60 s for `file` to appear (SPEC-0006 v57 AK-16).
+#[cfg(unix)]
+async fn wait_for_file(file: &std::path::Path) {
+    for _ in 0..600 {
+        if file.exists() {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    panic!("{} did not appear", file.display());
+}
+
+/// A stand-in window that keeps each question open: it holds the reply and never answers.
+#[derive(Default)]
+struct HoldingWindow {
+    questions: std::sync::Mutex<
+        Vec<tokio::sync::oneshot::Sender<ferris_idea_mcp::window::PermissionAnswer>>,
+    >,
+}
+
+impl ferris_idea_mcp::window::Window for HoldingWindow {
+    fn ask(
+        &self,
+        _request: ferris_idea_mcp::window::PermissionRequest,
+        reply: tokio::sync::oneshot::Sender<ferris_idea_mcp::window::PermissionAnswer>,
+    ) {
+        self.questions.lock().unwrap().push(reply);
+    }
+    fn pending_work(
+        &self,
+        reply: tokio::sync::oneshot::Sender<ferris_idea_mcp::window::PendingWork>,
+    ) {
+        let _ = reply.send(Default::default());
+    }
+    fn quit(
+        &self,
+        _mode: ferris_idea_mcp::window::QuitMode,
+        reply: tokio::sync::oneshot::Sender<Result<(), String>>,
+    ) {
+        let _ = reply.send(Ok(()));
+    }
+}
+
+impl HoldingWindow {
+    /// Waits up to 30 s until `n` questions were asked.
+    async fn asked(&self, n: usize) {
+        for _ in 0..300 {
+            if self.questions.lock().unwrap().len() >= n {
+                return;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        panic!("the window was not asked {n} times");
+    }
+
+    /// Waits up to 30 s until the waiting side of question `i` went away; then an answer, even
+    /// "Always", reaches nobody.
+    async fn withdrawn(&self, i: usize) {
+        for _ in 0..300 {
+            if self.questions.lock().unwrap()[i].is_closed() {
+                let reply = self.questions.lock().unwrap().remove(i);
+                assert!(
+                    reply
+                        .send(ferris_idea_mcp::window::PermissionAnswer::Always)
+                        .is_err(),
+                    "an answer after the call ended reaches nobody"
+                );
+                return;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        panic!("question {i} is still waiting for an answer");
+    }
+}
+
+/// SPEC-0261 AK-14 (v10, behaviour 11): a `quit_ide` call whose question for `quit` nobody answers
+/// ends with the client's limit: within 10 s the client has a timeout, the question is withdrawn,
+/// and the window never quits.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_quit_the_window_does_not_answer_is_withdrawn() {
+    let root = temp_dir("quit-silent");
+    let config = temp_dir("quit-silent-config");
+    let window = std::sync::Arc::new(HoldingWindow::default());
+    let w: std::sync::Arc<dyn ferris_idea_mcp::window::Window> = window.clone();
+    let server = HttpServer::start(Some(&config)).unwrap();
+    server
+        .add_workspace(server_for(&root, &DocumentRegistry::default()).with_window(w))
+        .unwrap();
+    let cfg = config.clone();
+    let (took, outcome) = tokio::task::spawn_blocking(move || {
+        let found = ferris_idea_mcp::client::running_windows(&cfg);
+        let mut client = ferris_idea_mcp::client::Client::connect_within(
+            &found[0],
+            "ferris-idea-cli",
+            std::time::Duration::from_secs(2),
+        )
+        .unwrap();
+        let start = std::time::Instant::now();
+        let outcome = client.call_within(
+            "quit_ide",
+            json!({"pending": "discard"}),
+            std::time::Duration::from_secs(8),
+        );
+        (start.elapsed(), outcome)
+    })
+    .await
+    .unwrap();
+    assert_eq!(outcome, Err(ferris_idea_mcp::client::CallError::TimedOut));
+    assert!(took < std::time::Duration::from_secs(10), "took {took:?}");
+    window.asked(1).await;
+    window.withdrawn(0).await;
+    server.stop();
+    let _ = std::fs::remove_dir_all(root);
+    let _ = std::fs::remove_dir_all(config);
+}
+
+/// SPEC-0053 v11 behaviour 8 (IMP-0516, OBS-0110 Q1) over HTTP: a question for a right lives as
+/// long as its call. When the client cancels the call (`notifications/cancelled`) or ends its
+/// session (`DELETE`), the window's question loses its waiting side, so the window withdraws it;
+/// an answer given afterwards — even "Always for This Workspace" — creates nothing and writes
+/// nothing to the grant file. (The 2-minute limit of behaviour 7 drops the waiting side the same
+/// way.)
+#[tokio::test(flavor = "multi_thread")]
+async fn a_question_ends_with_its_call() {
+    let root = temp_dir("withdraw");
+    let window = std::sync::Arc::new(HoldingWindow::default());
+    let w: std::sync::Arc<dyn ferris_idea_mcp::window::Window> = window.clone();
+    let http = HttpServer::start(None).unwrap();
+    let url = http
+        .add_workspace(server_for(&root, &DocumentRegistry::default()).with_window(w))
+        .unwrap();
+    let path = url
+        .trim_start_matches(&format!("http://127.0.0.1:{}", http.port()))
+        .to_owned();
+    let create = |id: u64, name: &str| {
+        json!({"jsonrpc": "2.0", "id": id, "method": "tools/call", "params": {
+            "name": "create_file", "arguments": {"dir": "", "name": name, "dry_run": false}}})
+    };
+    let pending = |client: &Client, body: Value| {
+        let (port, p, auth, session) = (
+            client.port,
+            client.path.clone(),
+            client.auth.clone(),
+            client.session.clone(),
+        );
+        tokio::spawn(async move {
+            let mut headers = vec![
+                ("Authorization", auth.as_str()),
+                ("MCP-Protocol-Version", "2025-06-18"),
+            ];
+            if let Some(s) = &session {
+                headers.push(("Mcp-Session-Id", s.as_str()));
+            }
+            tokio::time::timeout(
+                std::time::Duration::from_secs(30),
+                post(port, &p, &headers, &body),
+            )
+            .await
+        })
+    };
+
+    // 1. Cancelled by the client.
+    let client = Client::connect(http.port(), &path, http.token()).await;
+    let call = pending(&client, create(7, "cancelled.txt"));
+    window.asked(1).await;
+    let note = client
+        .exchange(
+            json!({"jsonrpc": "2.0", "method": "notifications/cancelled",
+            "params": {"requestId": 7, "reason": "test"}}),
+        )
+        .await;
+    assert!(note.status == 202 || note.status == 200, "{}", note.status);
+    window.withdrawn(0).await;
+    call.abort();
+
+    // 2. The session ends while the question is open.
+    let client = Client::connect(http.port(), &path, http.token()).await;
+    let call = pending(&client, create(8, "ended.txt"));
+    window.asked(1).await;
+    let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", http.port()))
+        .await
+        .unwrap();
+    let delete = format!(
+        "DELETE {path} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nAuthorization: {}\r\nMCP-Protocol-Version: 2025-06-18\r\nMcp-Session-Id: {}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+        http.port(),
+        client.auth,
+        client.session.as_deref().unwrap()
+    );
+    stream.write_all(delete.as_bytes()).await.unwrap();
+    let mut answer = String::new();
+    let _ = stream.read_to_string(&mut answer).await;
+    assert!(
+        answer.starts_with("HTTP/1.1 2"),
+        "the session ends: {answer}"
+    );
+    window.withdrawn(0).await;
+    call.abort();
+
+    // 3. The client goes away without a word: it closes the connection of the waiting call, with no
+    // `notifications/cancelled` and no `DELETE` (SPEC-0053 v12, OBS-0114 Q2). The call ends at once,
+    // not after the 2 minutes of behaviour 7.
+    let client = Client::connect(http.port(), &path, http.token()).await;
+    let body = create(9, "closed.txt").to_string();
+    let request = format!(
+        "POST {path} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nContent-Type: application/json\r\nAccept: application/json, text/event-stream\r\nAuthorization: {}\r\nMCP-Protocol-Version: 2025-06-18\r\nMcp-Session-Id: {}\r\nContent-Length: {}\r\n\r\n{body}",
+        http.port(),
+        client.auth,
+        client.session.as_deref().unwrap(),
+        body.len()
+    );
+    let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", http.port()))
+        .await
+        .unwrap();
+    stream.write_all(request.as_bytes()).await.unwrap();
+    window.asked(1).await;
+    drop(stream);
+    window.withdrawn(0).await;
+    // The session itself lives on: the same client is asked again for its next call.
+    let again = pending(&client, create(10, "again.txt"));
+    window.asked(1).await;
+    again.abort();
+    window.withdrawn(0).await;
+
+    // Nothing the questions would have allowed happened.
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    assert!(!root.join("cancelled.txt").exists());
+    assert!(!root.join("ended.txt").exists());
+    assert!(!root.join("closed.txt").exists());
+    assert!(!root.join("again.txt").exists());
+    assert!(!root.join("agent-permissions.toml").exists());
+    http.stop();
+    let _ = std::fs::remove_dir_all(root);
 }

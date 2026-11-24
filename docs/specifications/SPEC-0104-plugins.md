@@ -6,17 +6,17 @@
 - **Feature matrix rows:** F-080
 
 ## Purpose
-Let people and teams add their own text actions to IDECraft without trusting them with their machine.
+Let people and teams add their own text actions to Ferris IDEA without trusting them with their machine.
 
 ## Behaviour
 1. **Module:** a plugin is a WebAssembly module (at most 16 MiB) that imports nothing and exports
-   `memory`, `idecraft_alloc(len: i32) -> i32` (memory for the host to write into),
-   `idecraft_manifest() -> i64` and `idecraft_run(action_ptr, action_len, input_ptr, input_len: i32)
+   `memory`, `ferris_idea_alloc(len: i32) -> i32` (memory for the host to write into),
+   `ferris_idea_manifest() -> i64` and `ferris_idea_run(action_ptr, action_len, input_ptr, input_len: i32)
    -> i64`. A returned `i64` is a pointer (high 32 bits) and a length (low 32 bits) of UTF-8 text; a
    negative value is an error code. The manifest is JSON: `name`, `version`, `description`, `actions`
    with `id`, `title` and `kind` (`replace`, the default, or `message`). [STD, ADR-0016]
-2. **Installing:** plugins are the `*.wasm` files in the user's IDECraft settings folder `plugins/`
-   (or `IDECRAFT_PLUGINS`), read when Search Everywhere opens; a workspace cannot add any. A file that
+2. **Installing:** plugins are the `*.wasm` files in the user's Ferris IDEA settings folder `plugins/`
+   (or `FERRIS_IDEA_PLUGINS`), read when Search Everywhere opens; a workspace cannot add any. A file that
    is not a valid plugin is skipped and named in the status bar. [GEN, IMP-0028]
 3. **Running:** each action appears in Search Everywhere as "Plugin name: Title" (id
    `Plugin.<file>.<action>`). It runs off the UI thread in a fresh instance on the selection of the
@@ -33,7 +33,7 @@ Let people and teams add their own text actions to IDECraft without trusting the
   refused; a folder with a broken file (`crates/plugins/tests/runtime.rs`).
 - **AK-2** MCP: an empty folder, an installed plugin listed, its action run, found by
   `search_everywhere` (`crates/mcp/tests/it/protocol.rs`: `plugin_tools`).
-- **AK-3** In a real window (`idecraft ui --selftest`): an installed plugin's action replaces the
+- **AK-3** In a real window (`ferris-idea ui --selftest`): an installed plugin's action replaces the
   selected word with capitals.
 - **AK-4** By hand: a plugin built from Rust for `wasm32-unknown-unknown` installed and run.
 - **AK-5 (v2)** Window test with keys (`crates/workbench/tests/it/f080_window.rs`:
@@ -47,5 +47,5 @@ plugin manager and marketplace, signing, updates, per-workspace plugins, the ref
 plugins.
 
 ## Known deviations from the reference
-The reference's plugins are JVM code with full access to the IDE and the machine; IDECraft's plugins
+The reference's plugins are JVM code with full access to the IDE and the machine; Ferris IDEA's plugins
 are sandboxed text actions (improvement IMP-0037). Not compared side by side.

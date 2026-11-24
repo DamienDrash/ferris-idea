@@ -4,7 +4,7 @@
 
 use std::path::{Path, PathBuf};
 
-use idecraft_core::{DepNode, Workspace, dependency_tree, jvmdeps, read_project};
+use ferris_idea_core::{DepNode, Workspace, dependency_tree, jvmdeps, read_project};
 
 fn on_path(tool: &str) -> bool {
     std::process::Command::new(tool)
@@ -17,15 +17,17 @@ fn on_path(tool: &str) -> bool {
 
 fn skip(reason: &str) {
     assert!(
-        std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+        ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
         "required tool missing: {reason}"
     );
     eprintln!("skipped: {reason}");
 }
 
 fn project(tag: &str, files: &[(&str, &str)]) -> PathBuf {
-    let dir =
-        std::env::temp_dir().join(format!("idecraft-jvm-resolve-{tag}-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!(
+        "ferris-idea-jvm-resolve-{tag}-{}",
+        std::process::id()
+    ));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     for (name, text) in files {
@@ -34,7 +36,7 @@ fn project(tag: &str, files: &[(&str, &str)]) -> PathBuf {
     dir.canonicalize().unwrap()
 }
 
-fn module(root: &Path) -> idecraft_core::Module {
+fn module(root: &Path) -> ferris_idea_core::Module {
     let files = Workspace::open(root).unwrap().files().unwrap();
     read_project(root, &files).modules.remove(0)
 }
@@ -147,7 +149,7 @@ fn maven_keeps_entries_left_out_for_a_conflict() {
         Some("omitted for conflict with 3.12.0")
     );
     assert!(!lang.missing);
-    let analysis = idecraft_core::depanalysis::analyze("l7-core", &tree);
+    let analysis = ferris_idea_core::depanalysis::analyze("l7-core", &tree);
     assert_eq!(analysis[0].name, "org.apache.commons:commons-lang3");
     assert!(analysis[0].conflict);
     assert_eq!(analysis[0].chosen, "3.12.0");

@@ -5,9 +5,9 @@
 use std::ops::Range;
 use std::path::Path;
 
+use ferris_idea_languages::LanguageId;
+use ferris_idea_languages::syntax::SyntaxDocument;
 use gpui::{ParentElement, Styled, div, px};
-use idecraft_languages::LanguageId;
-use idecraft_languages::syntax::SyntaxDocument;
 
 use crate::palette::Palette;
 

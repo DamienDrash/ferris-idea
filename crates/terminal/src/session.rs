@@ -2,7 +2,7 @@
 
 use std::io::{Read, Write};
 use std::path::Path;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicI32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -48,10 +48,17 @@ pub enum LinkRead {
 /// The end of a linked program: its exit code and the note.
 type LinkEnd = Arc<Mutex<Option<(Option<u32>, String)>>>;
 
+/// The master side of a local pseudo terminal, shared weakly with the reader thread so that it
+/// still closes when the session goes.
+type Master = Arc<Mutex<Box<dyn MasterPty + Send>>>;
+
 enum Backing {
     Pty {
-        master: Box<dyn MasterPty + Send>,
+        master: Master,
         child: Box<dyn Child + Send + Sync>,
+        /// The foreground process group of the terminal when the last OSC 7 came, 0 when not
+        /// known (`SPEC-0161` v2 behaviour 4).
+        reporter: Arc<AtomicI32>,
     },
     Link {
         link: Arc<dyn PtyLink>,
@@ -153,18 +160,29 @@ impl Session {
         screen.restore(&options.history);
         let terminal = Arc::new(Mutex::new(screen));
         let generation = Arc::new(AtomicU64::new(0));
+        let master: Master = Arc::new(Mutex::new(pair.master));
+        let reporter = Arc::new(AtomicI32::new(0));
         let (term, answer, changed) = (terminal.clone(), writer.clone(), generation.clone());
+        let (group_of, reported_by) = (Arc::downgrade(&master), reporter.clone());
         std::thread::spawn(move || {
             let mut buf = [0u8; 8192];
+            let mut reports = 0;
             while let Ok(n) = reader.read(&mut buf) {
                 if n == 0 {
                     break;
                 }
-                let responses = {
+                let (responses, now) = {
                     let Ok(mut t) = term.lock() else { break };
                     t.feed(&buf[..n]);
-                    t.screen.take_responses()
+                    (t.screen.take_responses(), t.screen.dir_reports())
                 };
+                // OSC 7 belongs to the process group in the foreground when it came: the shell
+                // that drew its prompt (`SPEC-0161` v2 behaviour 4).
+                if now != reports {
+                    reports = now;
+                    let group = group_of.upgrade().and_then(|m| foreground_group(&m));
+                    reported_by.store(group.unwrap_or(0), Ordering::Release);
+                }
                 changed.fetch_add(1, Ordering::Release);
                 if !responses.is_empty()
                     && let Ok(mut w) = answer.lock()
@@ -175,8 +193,9 @@ impl Session {
         });
         Ok(Self {
             backing: Backing::Pty {
-                master: pair.master,
+                master,
                 child,
+                reporter,
             },
             writer,
             terminal,
@@ -279,6 +298,8 @@ impl Session {
             .resize(rows.into(), cols.into());
         match &self.backing {
             Backing::Pty { master, .. } => master
+                .lock()
+                .map_err(err)?
                 .resize(PtySize {
                     rows,
                     cols,
@@ -300,14 +321,38 @@ impl Session {
     }
 
     /// The shell's current folder (`SPEC-0161` behaviour 1): the one it reported with OSC 7, else
-    /// the folder of its process as the system reports it.
+    /// the folder of its process as the system reports it. While another process group than the
+    /// one that reported OSC 7 is in the foreground (a nested `bash` without OSC 7), the folder of
+    /// that group's leader (v2 behaviour 4).
     pub fn current_dir(&self) -> Option<std::path::PathBuf> {
-        if let Some(d) = self.with_terminal(|t| t.screen.reported_dir().map(str::to_owned)) {
-            return Some(d.into());
-        }
+        let reported =
+            self.with_terminal(|t| t.screen.reported_dir().map(std::path::PathBuf::from));
         match &self.backing {
-            Backing::Pty { child, .. } => process_dir(child.process_id()?),
-            // The folder of a host's shell is not a folder of this machine.
+            Backing::Pty {
+                master,
+                child,
+                reporter,
+            } => {
+                // The group comes from our own terminal, so only a process on it is asked.
+                if let Some(group) = foreground_group(master) {
+                    let by = reporter.load(Ordering::Acquire);
+                    let other = reported.is_none() || (by != 0 && by != group);
+                    if other && let Some(d) = u32::try_from(group).ok().and_then(process_dir) {
+                        return Some(d);
+                    }
+                }
+                reported.or_else(|| process_dir(child.process_id()?))
+            }
+            // The folder of a host's shell is not a folder of this machine: only what it reported.
+            Backing::Link { .. } => reported,
+        }
+    }
+
+    /// The process group in the foreground of the terminal, as the terminal reports it (`None`
+    /// for a linked program and where the system has no such group).
+    pub fn foreground_group(&self) -> Option<i32> {
+        match &self.backing {
+            Backing::Pty { master, .. } => foreground_group(master),
             Backing::Link { .. } => None,
         }
     }
@@ -402,9 +447,31 @@ impl Drop for Session {
     }
 }
 
-/// The current folder of process `pid`: `/proc` on Linux, `lsof` on macOS.
+/// The foreground process group of the terminal behind `master` (`tcgetpgrp`).
+fn foreground_group(master: &Master) -> Option<i32> {
+    #[cfg(unix)]
+    {
+        master
+            .lock()
+            .ok()?
+            .process_group_leader()
+            .filter(|&g| g > 0)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = master;
+        None
+    }
+}
+
+/// The current folder of process `pid`: `/proc` on Linux, the process information of the kernel
+/// on macOS (`PROC_PIDVNODEPATHINFO`), else `lsof`.
 pub fn process_dir(pid: u32) -> Option<std::path::PathBuf> {
     if let Ok(p) = std::fs::read_link(format!("/proc/{pid}/cwd")) {
+        return Some(p);
+    }
+    #[cfg(target_os = "macos")]
+    if let Some(p) = kernel_process_dir(pid) {
         return Some(p);
     }
     let out = std::process::Command::new("lsof")
@@ -416,4 +483,34 @@ pub fn process_dir(pid: u32) -> Option<std::path::PathBuf> {
         .lines()
         .find_map(|l| l.strip_prefix('n'))
         .map(std::path::PathBuf::from)
+}
+
+/// The current folder of `pid` from the kernel's process information (`proc_pidinfo` with
+/// `PROC_PIDVNODEPATHINFO`, through `sysinfo`), without starting `lsof`.
+#[cfg(target_os = "macos")]
+fn kernel_process_dir(pid: u32) -> Option<std::path::PathBuf> {
+    use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+    let pid = Pid::from_u32(pid);
+    let mut system = System::new();
+    system.refresh_processes_specifics(
+        ProcessesToUpdate::Some(&[pid]),
+        ProcessRefreshKind::new().with_cwd(UpdateKind::Always),
+    );
+    system
+        .process(pid)?
+        .cwd()
+        .filter(|d| !d.as_os_str().is_empty())
+        .map(std::path::Path::to_path_buf)
+}
+
+#[cfg(test)]
+mod tests {
+    /// `SPEC-0161` v2: the kernel names a process's folder without `lsof`.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn kernel_reports_the_folder_of_a_process() {
+        let here = std::fs::canonicalize(std::env::current_dir().unwrap()).unwrap();
+        let read = super::kernel_process_dir(std::process::id()).unwrap();
+        assert_eq!(std::fs::canonicalize(read).unwrap(), here);
+    }
 }

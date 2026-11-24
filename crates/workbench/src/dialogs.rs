@@ -1,13 +1,13 @@
 //! Simple confirmations as native alerts (`SPEC-0281` behaviour 6), and questions drawn in the
 //! window (`SPEC-0281` v2 behaviour 6, `SPEC-0261` v4 behaviour 5).
 //!
-//! GPUI 0.2 has no accessibility tree (ADR-0019), so a question IDECraft draws itself is invisible
+//! GPUI 0.2 has no accessibility tree (ADR-0019), so a question Ferris IDEA draws itself is invisible
 //! to screen readers. A question whose answers are only buttons is asked with the platform's alert
 //! instead (on macOS a system sheet on the window, read and pressed by accessibility clients; on
 //! Linux GPUI draws it). The window self-test cannot answer a native alert, so it sets
 //! [`DrawnConfirmations`] and gets the same question drawn in the window (behaviour 7).
 //!
-//! A question that keeps IDECraft from quitting or a window from closing is always drawn
+//! A question that keeps Ferris IDEA from quitting or a window from closing is always drawn
 //! ([`DrawnQuestion`]): a system sheet that does not appear (seen with Stage Manager on macOS 27)
 //! would leave no way out.
 
@@ -23,7 +23,7 @@ pub fn native_alerts(cx: &App) -> bool {
     !cx.has_global::<DrawnConfirmations>()
 }
 
-/// A question with buttons, drawn by IDECraft above everything else in the window.
+/// A question with buttons, drawn by Ferris IDEA above everything else in the window.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DrawnQuestion {
     /// Headline.
@@ -134,7 +134,7 @@ mod tests {
 
     #[test]
     fn the_notice_has_only_ok() {
-        let d = DrawnQuestion::notice("IDECraft did not quit", "not saved: a.txt");
+        let d = DrawnQuestion::notice("Ferris IDEA did not quit", "not saved: a.txt");
         assert_eq!(d.buttons, ["OK"]);
         assert_eq!(d.answer_for_key("enter"), Some(0));
         assert_eq!(d.answer_for_key("escape"), Some(0));

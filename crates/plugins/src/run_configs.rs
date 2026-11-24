@@ -54,7 +54,7 @@ pub struct SuggestedCommand {
     /// Folder relative to the project; `.` is the project folder.
     #[serde(default = "dot")]
     pub cwd: String,
-    /// Variables added to IDECraft's environment.
+    /// Variables added to Ferris IDEA's environment.
     #[serde(default)]
     pub env: BTreeMap<String, String>,
 }
@@ -249,15 +249,15 @@ impl RunType {
     }
 
     /// `command` as a run configuration that starts verbatim (behaviour 6).
-    pub fn run_config(&self, command: &SuggestedCommand) -> idecraft_core::RunConfig {
+    pub fn run_config(&self, command: &SuggestedCommand) -> ferris_idea_core::RunConfig {
         let mut argv = vec![command.program.clone()];
         argv.extend(command.args.iter().cloned());
-        idecraft_core::RunConfig {
+        ferris_idea_core::RunConfig {
             name: self.config_name(command),
             command: argv,
             cwd: (command.cwd != ".").then(|| command.cwd.clone()),
             env: command.env.clone(),
-            kind: idecraft_core::RunKind::Run,
+            kind: ferris_idea_core::RunKind::Run,
             report: None,
             report_file: None,
             before: Vec::new(),
@@ -267,6 +267,7 @@ impl RunType {
             allow_multiple: false,
             before_launch: Vec::new(),
             verbatim: true,
+            http: None,
         }
     }
 }
@@ -323,8 +324,8 @@ pub fn run_types(
                     Ok((commands, problems)) => {
                         t.problems = problems;
                         for c in commands {
-                            match idecraft_core::folder_below(root, Path::new(&c.cwd)) {
-                                Ok(_) | Err(idecraft_core::FolderProblem::Missing) => {
+                            match ferris_idea_core::folder_below(root, Path::new(&c.cwd)) {
+                                Ok(_) | Err(ferris_idea_core::FolderProblem::Missing) => {
                                     t.commands.push(c);
                                 }
                                 Err(why) => t
@@ -345,9 +346,9 @@ pub fn run_types(
 /// Name of the file in the user's settings folder that keeps "always allow" (behaviour 7).
 pub const RUN_PERMISSIONS: &str = "plugin-run-permissions.toml";
 
-/// `plugin-run-permissions.toml` in the user's IDECraft settings folder.
+/// `plugin-run-permissions.toml` in the user's Ferris IDEA settings folder.
 pub fn run_permissions_file() -> Option<PathBuf> {
-    idecraft_core::user_config_dir().map(|d| d.join(RUN_PERMISSIONS))
+    ferris_idea_core::user_config_dir().map(|d| d.join(RUN_PERMISSIONS))
 }
 
 /// One command the user always allows in a workspace (behaviour 7): exactly this command.
@@ -561,8 +562,10 @@ mod tests {
 
     impl Dirs {
         fn new(tag: &str) -> Self {
-            let base = std::env::temp_dir()
-                .join(format!("idecraft-plugin-run-{tag}-{}", std::process::id()));
+            let base = std::env::temp_dir().join(format!(
+                "ferris-idea-plugin-run-{tag}-{}",
+                std::process::id()
+            ));
             let _ = std::fs::remove_dir_all(&base);
             std::fs::create_dir_all(base.join("config")).unwrap();
             std::fs::create_dir_all(base.join("ws/sub")).unwrap();

@@ -2,13 +2,13 @@
 
 use std::path::PathBuf;
 
-use idecraft_core::{AGENT_LOG, Grant, load_agent_permissions, log_agent_action};
+use ferris_idea_core::{AGENT_LOG, Grant, load_agent_permissions, log_agent_action};
 
 struct Scratch(PathBuf);
 
 impl Scratch {
     fn new(tag: &str) -> Self {
-        let p = std::env::temp_dir().join(format!("idecraft-perm-{tag}-{}", std::process::id()));
+        let p = std::env::temp_dir().join(format!("ferris-idea-perm-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&p);
         std::fs::create_dir_all(p.join("ws")).unwrap();
         std::fs::create_dir_all(p.join("config")).unwrap();
@@ -76,7 +76,7 @@ fn grants_per_workspace_from_the_user_file() {
 fn a_grant_file_inside_the_workspace_is_ignored() {
     let s = Scratch::new("inside");
     let ws = s.0.join("ws");
-    let file = ws.join(".idecraft/agent-permissions.toml");
+    let file = ws.join(".ferris-idea/agent-permissions.toml");
     std::fs::create_dir_all(file.parent().unwrap()).unwrap();
     std::fs::write(
         &file,
@@ -108,7 +108,7 @@ fn actions_are_appended_to_the_log() {
 /// Workspace" appends an entry and keeps the rest; refusals say "not granted" and nobody was asked.
 #[test]
 fn write_rights_and_always_for_this_workspace() {
-    use idecraft_core::add_grant;
+    use ferris_idea_core::add_grant;
     let s = Scratch::new("always");
     let ws = s.0.join("ws");
     let file = s.0.join("config/agent-permissions.toml");
@@ -142,7 +142,7 @@ fn write_rights_and_always_for_this_workspace() {
     assert!(!p.allows(Grant::Run));
 
     // A grant file inside the workspace is never written.
-    let inside = ws.join(".idecraft/agent-permissions.toml");
+    let inside = ws.join(".ferris-idea/agent-permissions.toml");
     assert!(add_grant(&inside, &ws, Grant::Write).is_err());
     assert!(!inside.exists());
 }
@@ -151,7 +151,7 @@ fn write_rights_and_always_for_this_workspace() {
 /// workspace, connection and target; `settings` is a right like the others.
 #[test]
 fn connection_grants_are_kept_per_workspace_connection_and_target() {
-    use idecraft_core::{
+    use ferris_idea_core::{
         add_connection_grant, add_grant, connection_grant_entry, connection_grants,
         connection_target,
     };
@@ -227,7 +227,7 @@ fn connection_grants_are_kept_per_workspace_connection_and_target() {
     assert!(broken.grants.is_empty());
     assert!(broken.problem.unwrap().contains("everything"));
     // A grant file inside the workspace is ignored and never written.
-    let inside = ws.join(".idecraft/agent-permissions.toml");
+    let inside = ws.join(".ferris-idea/agent-permissions.toml");
     assert!(add_connection_grant(&inside, &ws, "shop", &target, &["read-data"]).is_err());
     assert!(!inside.exists());
     std::fs::create_dir_all(inside.parent().unwrap()).unwrap();

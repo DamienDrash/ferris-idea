@@ -1,8 +1,8 @@
-//! IDECraft's own Java quick fixes where jdtls offers none at the place (`SPEC-0076` v7 behaviours
+//! Ferris IDEA's own Java quick fixes where jdtls offers none at the place (`SPEC-0076` v7 behaviours
 //! 11 and 12): wrapping a primitive value assigned to a `String` in `String.valueOf()`, and
 //! removing an unused local variable in a method that JDT does not check for unused code because
 //! it holds an error. Each is offered only when the server's list for the place has no action of
-//! that purpose, and is applied by IDECraft.
+//! that purpose, and is applied by Ferris IDEA.
 
 use std::path::Path;
 
@@ -112,7 +112,7 @@ pub(crate) fn own_fixes(
         }
     }
     // Behaviour 12: an unused local the server has no removal for (JDT skips a method with an
-    // error), with the fix of IDECraft's inspection.
+    // error), with the fix of Ferris IDEA's inspection.
     if !offered.iter().any(|t| t.starts_with("Remove '")) {
         let at = byte_of(text, range.start_line, range.start_character);
         let found = crate::inspections::findings_at(file, text, at)

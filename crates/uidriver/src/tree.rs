@@ -148,7 +148,7 @@ impl Effect {
             Self::Ssh => "reach SSH hosts and their files",
             Self::Http => "send HTTP requests",
             Self::Trust => "trust the project",
-            Self::Quit => "quit IDECraft while work is pending",
+            Self::Quit => "quit Ferris IDEA while work is pending",
             Self::Ports => "forward ports of a remote project's host",
         }
     }
@@ -245,6 +245,11 @@ pub struct Semantics {
     /// The keys that give its action without the focus on it, in AccessKit's form (`Enter`,
     /// `Escape`, several separated by spaces).
     pub keyboard_shortcut: Option<String>,
+    /// Keys its view handles itself before the keymap (`delete` on the Containers list, `cmd-n`
+    /// in the Remote Host window), as the keymap writes them: pressed while it or an element in
+    /// it has the focus, they take the effects declared on it and around it instead of their
+    /// keymap actions' (`SPEC-0319` v7 behaviour 56).
+    pub own_keys: Vec<String>,
 }
 
 impl Semantics {
@@ -274,6 +279,7 @@ impl Semantics {
             ),
             modal: false,
             keyboard_shortcut: None,
+            own_keys: Vec::new(),
         }
     }
 
@@ -401,6 +407,13 @@ impl Semantics {
         self.keyboard_shortcut = Some(keys.into());
         self
     }
+
+    /// Keys its view handles itself before the keymap, as the keymap writes them (`delete`,
+    /// `cmd-backspace`); they take its declared effects (see [`Semantics::own_keys`]).
+    pub fn handles_keys(mut self, keys: &[&str]) -> Self {
+        self.own_keys = keys.iter().map(|k| (*k).to_owned()).collect();
+        self
+    }
 }
 
 /// One node of a window's tree.
@@ -429,6 +442,8 @@ pub struct UiNode {
     pub text_class: TextClass,
     /// Drawn on top of what came before.
     pub overlay: bool,
+    /// Keys its view handles itself before the keymap (see [`Semantics::own_keys`]).
+    pub own_keys: Vec<String>,
     /// Position in paint order.
     pub order: usize,
 }
@@ -975,6 +990,7 @@ impl TreeBuilder {
                 reserved: sem.reserved,
                 text_class: sem.text_class,
                 overlay: sem.overlay,
+                own_keys: sem.own_keys,
                 order: 0,
             };
             match seen_ids.get(&id) {

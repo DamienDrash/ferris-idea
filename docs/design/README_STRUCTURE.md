@@ -4,14 +4,14 @@
 order from the ArtCraft family (analysis §4).
 v2 followed the project owner's brief of 2026-11-14: carry all the information a reader may want,
 say openly what the idea was, what the goal is now, how far the project is and what comes next,
-and present IDECraft as an IDE AI harness. v3 works in two critical reviews of v2: the harness
+and present Ferris IDEA as an IDE AI harness. v3 works in two critical reviews of v2: the harness
 before the story, each number once, real captures instead of asserted value, and corrected facts.
 
 ## Two readers
 
 - **The reader with 30 seconds** gets the first screen: head block, hero image, three sentences,
   the status callout, the highlights and "Use It, or Not Yet". After that they know what it is,
-  what an agent gets from it, that it is alpha, and whether it is for them.
+  what an agent gets from it, which stage it is at, and whether it is for them.
 - **The reader with 30 minutes** gets the rest in the order of their questions: what can an agent
   do with it and what protects me (harness), what can it do (features), why does it exist (story),
   can I rely on it (how it is built, status), how do I get it (platforms, build), where do I read
@@ -64,7 +64,7 @@ Until an image or an output exists, its place holds an HTML comment and nothing 
 A slot is never filled with a mock-up or with invented output. At publication, a slot without
 content is removed together with the sentence that leads to it.
 
-Capture rules: themes IDECraft Dark and IDECraft Light only, never the dark theme taken from the
+Capture rules: themes Ferris IDEA Dark and Ferris IDEA Light only, never the dark theme taken from the
 open platform files; window 1440×900 exported at 2×; the same sample project in every image; no
 real host names, user names or paths; images in `docs/images/` under 1 MB each.
 

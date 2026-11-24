@@ -1,6 +1,7 @@
 # SPEC-0082: Call hierarchy
 
-- **Version:** 7 · **Date:** 2026-11-16 (v7: paths of the MCP hierarchy tools are workspace-relative, behaviour 18, AK-14, OBS-0071 G2, IMP-0445); 2026-11-11 (v1: domain function and MCP tool; v2: Hierarchy tool window; v3: closing it, hand test; v4: on the right, all levels open, rows with class, sorting, OBS-0016 defect F034-7; v5: type hierarchy,
+- **Version:** 8 · **Date:** 2026-11-19 (v8: Java callees include `new` of a record, behaviour 19, AK-15,
+  OBS-0071 O4); 2026-11-16 (v7: paths of the MCP hierarchy tools are workspace-relative, behaviour 18, AK-14, OBS-0071 G2, IMP-0445); 2026-11-11 (v1: domain function and MCP tool; v2: Hierarchy tool window; v3: closing it, hand test; v4: on the right, all levels open, rows with class, sorting, OBS-0016 defect F034-7; v5: type hierarchy,
   method hierarchy and Go to Super Method for Java, OBS-0027; v6: the same three for Kotlin, OBS-0035 L5)
 - **Sources:** GEN (who calls a function and what it calls, as an expandable tree; F-034), OSS (action
   id `CallHierarchy` with ⌃⌥H in the ported keymaps), STD (LSP `textDocument/prepareCallHierarchy`,
@@ -106,6 +107,17 @@ Follow how control reaches a function, or where it goes from there, without read
     with `/`, as `find_symbol_locations` does; a place outside the workspace (a library, the JDK) keeps
     its absolute path, and a place the server gives no file for keeps an empty path. The tool window
     is not affected: it works on the domain result. [GEN; OBS-0071 G2, IMP-0445]
+19. **Java constructor calls (v8):** jdtls leaves a `new R(…)` out of a method's outgoing calls when
+    `R`'s constructor is not written in the source (a record's canonical constructor; a class without
+    constructors and an anonymous class it does report, as the type). For the callees of a Java
+    method or constructor, every `new` expression of its body (not those inside the body of an
+    anonymous or local class, which belong to that class's members) that has no call site of exactly
+    its range among the server's answer is added: the server's call hierarchy item at the created
+    type's simple name (for a record the type, as jdtls shows a class without constructors), with
+    the expressions as call sites, one node per type, placed in source order among the server's
+    callees, expanded like any other node. Nothing is added for callers, other languages, or when the
+    server finds no item at the name. Read from the syntax tree of the method's file (the editor's
+    text for the file asked about). [GEN, STD; OBS-0071 O4]
 
 ## Acceptance criteria
 - **AK-1** With clangd on unsaved C: callers of `leaf` are `mid` (two call sites on its line) and `rec`;
@@ -113,7 +125,7 @@ Follow how control reaches a function, or where it goes from there, without read
   are `mid` and then `leaf`, with the call site in `mid` (integration test).
 - **AK-2** MCP `call_hierarchy` returns callers and refuses an unknown direction (protocol test).
 - **AK-3** Rows follow expand and collapse (unit test of `hierarchy_model`).
-- **AK-4** In a real window (`idecraft ui --selftest`, with clangd): ⌃⌥H on `calc` opens the tool window
+- **AK-4** In a real window (`ferris-idea ui --selftest`, with clangd): ⌃⌥H on `calc` opens the tool window
   with `calc` as root and callers; Callees asks again; Escape closes it.
 - **AK-5** Use by hand: deeper trees, recursion, jumping, the two buttons.
 - **AK-6 (v4)** All levels open, sorting, collapse all and the row label (unit tests
@@ -151,18 +163,26 @@ Follow how control reaches a function, or where it goes from there, without read
   outside the root and empty paths (unit test `tests::locations_inside_the_workspace_become_relative`
   in `crates/mcp/src/lib.rs`).
 
+- **AK-15 (v8)** The `new` expressions of a method body with their range and the start of the type's
+  simple name (plain, qualified, generic, nested type), none from an anonymous class's body, none for a
+  type's or a field's name (unit test `java_calls::tests::creations_of_a_method_body`); with jdtls the
+  callees of `main` have `Rec` once, at the record's name, with its three call sites in `main` in
+  order (one inside `List.of(…)`, one followed by `.toString()`) and none from the anonymous class,
+  after `println` and before `Runnable`, and `Item`, `Runnable`, `Shop`, `totalValue`, `println` once
+  each (`crates/languages/tests/java_method_refs.rs`).
+
 ## Out of scope
 Loading levels beyond the fifth on demand, the call-site list beside the tree, scope filters (the
 language server answers for the project it indexed), the type and method hierarchies, pinning
 several hierarchies as tabs (each new hierarchy replaces the shown one, as Find Usages does).
 
 ## Known deviations from the reference
-The reference builds the hierarchy from its own index; IDECraft asks the language server, so results
+The reference builds the hierarchy from its own index; Ferris IDEA asks the language server, so results
 depend on the server and on what it has indexed (with clangd: the open file and indexed files of the
 project).
 
 v5 (OBS-0027): the reference's window froze for over a minute on Run while a background engine
-started, and Go to Implementation did not answer meanwhile; IDECraft's hierarchies, Super Method and
+started, and Go to Implementation did not answer meanwhile; Ferris IDEA's hierarchies, Super Method and
 Implementations run in the background and never block the window (IMP-0380). The method hierarchy
 marks the type it was asked for with `+`/`-`/`!` like the others (the reference adds `*`).
 
@@ -174,5 +194,9 @@ resolves all of these from its index. In return the answer does not wait for the
 reference showed its Kotlin analysis about nine minutes after opening the project (IMP-0399).
 
 v7 (OBS-0071): the reference's call tree over MCP names places outside the project relative to it,
-with `..` into the JDK's source archive; IDECraft keeps such places absolute and makes only places in
+with `..` into the JDK's source archive; Ferris IDEA keeps such places absolute and makes only places in
 the workspace relative (IMP-0445).
+
+v8 (OBS-0071): the reference lists the constructor of a record among the callees; Ferris IDEA adds it from
+the syntax tree (behaviour 19) and names it as the type, as jdtls names a class's implicit constructor.
+A record's implicit accessors (`r.name()`) are still left out by jdtls and not added.

@@ -6,13 +6,13 @@ use std::path::PathBuf;
 
 use std::ops::Range;
 
+use ferris_idea_vcs::{
+    CommitDetails, DiffRow, LineChangeKind, Repo, TodoAction, TodoEntry, WordRanges, change_starts,
+    changed_words,
+};
 use gpui::{
     Context, EventEmitter, FocusHandle, KeyDownEvent, ScrollStrategy, UniformListScrollHandle,
     Window, div, prelude::*, px, rgb, uniform_list,
-};
-use idecraft_vcs::{
-    CommitDetails, DiffRow, LineChangeKind, Repo, TodoAction, TodoEntry, WordRanges, change_starts,
-    changed_words,
 };
 
 use crate::commit_model::status_color_key;
@@ -726,13 +726,13 @@ impl RebaseView {
 /// A shortcut of this dialog written for the platform: ⌘ is Ctrl and ⌥ is Alt outside macOS
 /// (`SPEC-0028` v8 behaviour 13).
 fn keys(text: &str) -> String {
-    idecraft_ui::keymap::local_keys(text, cfg!(target_os = "macos"))
+    ferris_idea_ui::keymap::local_keys(text, cfg!(target_os = "macos"))
 }
 
 #[cfg(test)]
 mod tests {
     use super::side_text_of;
-    use idecraft_vcs::{DiffRow, LineChangeKind};
+    use ferris_idea_vcs::{DiffRow, LineChangeKind};
 
     fn row(
         kind: Option<LineChangeKind>,

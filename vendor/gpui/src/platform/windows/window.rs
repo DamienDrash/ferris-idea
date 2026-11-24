@@ -1,4 +1,4 @@
-// Modified by IDECraft: PromptButton::Safe maps like Other (see ../../../IDECRAFT.md).
+// Modified by Ferris IDEA: PromptButton::Safe maps like Other (see ../../../FERRIS_IDEA.md).
 #![deny(unsafe_op_in_unsafe_fn)]
 
 use std::{

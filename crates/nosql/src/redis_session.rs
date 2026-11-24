@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use idecraft_database::Secret;
+use ferris_idea_database::Secret;
 use redis::aio::MultiplexedConnection;
 use redis::{
     AsyncConnectionConfig, ConnectionAddr, IntoConnectionInfo, RedisConnectionInfo, Value,

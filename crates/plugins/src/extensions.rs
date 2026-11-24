@@ -1,5 +1,5 @@
 //! Extension points beyond actions (`SPEC-0210`): completion items, status bar text, rows of the
-//! Plugins tool window, and file types that IDECraft highlights itself from the manifest.
+//! Plugins tool window, and file types that Ferris IDEA highlights itself from the manifest.
 
 use std::collections::HashSet;
 use std::ops::Range;
@@ -95,7 +95,7 @@ pub struct PanelResult {
     pub rows: Vec<PanelRow>,
 }
 
-/// A file type a plugin declares (behaviour 3): IDECraft highlights it, no plugin code runs.
+/// A file type a plugin declares (behaviour 3): Ferris IDEA highlights it, no plugin code runs.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FileType {
     /// Name, e.g. `TOML`.
@@ -179,7 +179,7 @@ pub(crate) fn check_manifest(manifest: &Manifest) -> Result<(), String> {
     Ok(())
 }
 
-/// The file type of `path` among the enabled `plugins` (behaviour 3): none when IDECraft has a
+/// The file type of `path` among the enabled `plugins` (behaviour 3): none when Ferris IDEA has a
 /// language of its own for it (`builtin`), else the first plugin's (by file name) that declares it.
 pub fn file_type_for<'a>(
     plugins: &'a [Plugin],
@@ -213,7 +213,7 @@ pub enum TokenKind {
 }
 
 impl TokenKind {
-    /// The highlight capture name IDECraft colours it with.
+    /// The highlight capture name Ferris IDEA colours it with.
     pub fn capture(self) -> &'static str {
         match self {
             Self::Comment => "comment",

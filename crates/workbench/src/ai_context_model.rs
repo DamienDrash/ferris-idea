@@ -3,8 +3,8 @@
 
 use std::path::Path;
 
-use idecraft_ai::live::FailedTest;
-use idecraft_core::{TestReport, TestStatus, TestSuite};
+use ferris_idea_ai::live::FailedTest;
+use ferris_idea_core::{TestReport, TestStatus, TestSuite};
 
 use crate::problems_model::Located;
 
@@ -112,7 +112,7 @@ pub fn git_diff(root: &Path) -> Option<(String, usize)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use idecraft_core::{ReportFormat, parse_report};
+    use ferris_idea_core::{ReportFormat, parse_report};
 
     #[test]
     fn failed_tests_with_suites_message_and_details() {
@@ -147,7 +147,7 @@ mod tests {
 
     #[test]
     fn git_diff_of_a_repository_with_a_change_and_a_new_file() {
-        let dir = std::env::temp_dir().join(format!("idecraft-ai-diff-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-ai-diff-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         assert_eq!(git_diff(&dir), None, "not a repository");

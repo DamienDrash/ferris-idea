@@ -2,7 +2,7 @@
 //! a project would run code, and the check every action that runs project code makes.
 //!
 //! Trusted locations live in the user's settings folder, never in a project (IMP-0028). The check
-//! is switched on by the program ([`enforce`]): the window and `idecraft mcp` enforce it, the
+//! is switched on by the program ([`enforce`]): the window and `ferris-idea mcp` enforce it, the
 //! library used by tests does not, so tests see trusted projects unless they ask otherwise.
 
 use std::path::{Path, PathBuf};
@@ -11,11 +11,11 @@ use std::sync::{Mutex, OnceLock};
 
 use serde::{Deserialize, Serialize};
 
-/// Name of the trust file inside the user's IDECraft settings folder (behaviour 6).
+/// Name of the trust file inside the user's Ferris IDEA settings folder (behaviour 6).
 pub const TRUST_FILE: &str = "trusted-projects.toml";
 /// Environment variable that trusts projects without asking: `all`, or paths separated as in
 /// `PATH` (behaviour 10).
-pub const TRUST_ENV: &str = "IDECRAFT_TRUST_PROJECTS";
+pub const TRUST_ENV: &str = "FERRIS_IDEA_TRUST_PROJECTS";
 
 static ENFORCED: AtomicBool = AtomicBool::new(false);
 static PROCESS_ALL: AtomicBool = AtomicBool::new(false);
@@ -85,7 +85,7 @@ struct TrustFile {
 pub enum TrustSource {
     /// Safe mode is not switched on in this process (library, tests).
     NotEnforced,
-    /// `IDECRAFT_TRUST_PROJECTS`, with the value or path that matched.
+    /// `FERRIS_IDEA_TRUST_PROJECTS`, with the value or path that matched.
     Environment(String),
     /// Trusted for this process only (`--trust`, self-test).
     Process(PathBuf),
@@ -129,7 +129,7 @@ pub struct TrustSettings {
     pub file: Option<PathBuf>,
     /// Whether untrusted projects are in safe mode; when false everything is trusted.
     pub enforced: bool,
-    /// Value of `IDECRAFT_TRUST_PROJECTS`, if set.
+    /// Value of `FERRIS_IDEA_TRUST_PROJECTS`, if set.
     pub env: Option<String>,
     /// Everything is trusted for the process.
     pub process_all: bool,
@@ -153,7 +153,7 @@ impl TrustSettings {
         Self {
             file: trust_file(),
             enforced: enforced(),
-            env: std::env::var(TRUST_ENV)
+            env: crate::product_var(TRUST_ENV)
                 .ok()
                 .filter(|v| !v.trim().is_empty()),
             process_all: PROCESS_ALL.load(Ordering::SeqCst),
@@ -253,7 +253,7 @@ fn save_locations(file: &Path, list: &[TrustedLocation]) -> Result<(), String> {
     })
     .map_err(|e| e.to_string())?;
     let text = format!(
-        "# Projects and folders whose code IDECraft may run (SPEC-0278). Remove an entry to put its\n# projects back into safe mode.\n{text}"
+        "# Projects and folders whose code Ferris IDEA may run (SPEC-0278). Remove an entry to put its\n# projects back into safe mode.\n{text}"
     );
     crate::write_atomic(file, text).map_err(|e| format!("{}: {e}", file.display()))
 }
@@ -295,7 +295,7 @@ pub fn allows_project_code(path: &Path) -> bool {
 /// The message for an action refused in safe mode (behaviour 5).
 pub fn refusal(root: &Path) -> String {
     format!(
-        "Safe mode: {} is not trusted, so IDECraft runs none of its code (build scripts, build-tool sync, run configurations, tests, tasks). Trust it with \"Trust Project…\" in the banner, `idecraft trust add <folder>`, or the MCP tool trust_project.",
+        "Safe mode: {} is not trusted, so Ferris IDEA runs none of its code (build scripts, build-tool sync, run configurations, tests, tasks). Trust it with \"Trust Project…\" in the banner, `ferris-idea trust add <folder>`, or the MCP tool trust_project.",
         root.display()
     )
 }
@@ -357,6 +357,7 @@ const MARKERS: &[(&str, &str)] = &[
     ("venv", "the project's Python interpreter"),
     ("setup.py", "Python packaging code"),
     (crate::run::RUN_FILE, "run configurations"),
+    (crate::check_gates::GATES_FILE, "check gates"),
     (".run", "run configurations"),
     (".idea/runConfigurations", "run configurations"),
     (".luarc.json", "Lua language server plugins"),
@@ -382,9 +383,9 @@ pub fn question(root: &Path) -> (String, String) {
         .unwrap_or_else(|| root.display().to_string());
     let found = findings(root);
     let mut detail = if found.is_empty() {
-        "No build files or run configurations were found. Trusting the project lets IDECraft run its configurations, tests and tasks.".to_owned()
+        "No build files or run configurations were found. Trusting the project lets Ferris IDEA run its configurations, tests and tasks.".to_owned()
     } else {
-        let mut d = "Trusting it lets IDECraft run code from the project:\n".to_owned();
+        let mut d = "Trusting it lets Ferris IDEA run code from the project:\n".to_owned();
         for f in &found {
             d.push_str(&format!("• {} — {}\n", f.file, f.runs));
         }
@@ -401,7 +402,8 @@ mod tests {
     use super::*;
 
     fn scratch(tag: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("idecraft-trust-{tag}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("ferris-idea-trust-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         canonical(&dir)
@@ -462,7 +464,7 @@ mod tests {
             "`..` resolved"
         );
         // A trust file inside the project cannot trust it (IMP-0028).
-        let inside = real.join(".idecraft").join(TRUST_FILE);
+        let inside = real.join(".ferris-idea").join(TRUST_FILE);
         add_location(&inside, &real, TrustKind::Project).unwrap();
         let st = TrustSettings::with_file(&inside).status(&real);
         assert!(!st.trusted);
@@ -524,10 +526,19 @@ mod tests {
         assert!(detail.contains("No build files"), "{detail}");
         std::fs::write(dir.join("Cargo.toml"), "[package]\n").unwrap();
         std::fs::write(dir.join("build.rs"), "fn main() {}\n").unwrap();
-        std::fs::create_dir_all(dir.join(".idecraft")).unwrap();
+        std::fs::create_dir_all(dir.join(".ferris-idea")).unwrap();
         std::fs::write(dir.join(crate::run::RUN_FILE), "").unwrap();
+        std::fs::write(dir.join(crate::check_gates::GATES_FILE), "").unwrap();
         let f: Vec<String> = findings(&dir).into_iter().map(|f| f.file).collect();
-        assert_eq!(f, ["Cargo.toml", "build.rs", ".idecraft/run.toml"]);
+        assert_eq!(
+            f,
+            [
+                "Cargo.toml",
+                "build.rs",
+                ".ferris-idea/run.toml",
+                ".ferris-idea/check-gates.toml"
+            ]
+        );
         let (_, detail) = question(&dir);
         assert!(
             detail.contains("build.rs — a Cargo build script"),

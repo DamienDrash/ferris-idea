@@ -16,14 +16,29 @@ static QUIT_ARMED: AtomicBool = AtomicBool::new(false);
 /// (`SPEC-0261` behaviour 13) and the process exits with status 0. Returns whether this call armed
 /// it. Call it whenever quitting is decided; the normal quit usually ends the process first.
 pub fn arm_quit_deadline() -> bool {
-    arm_deadline(QUIT_DEADLINE, &QUIT_ARMED, || {
-        eprintln!(
-            "warning: quitting did not finish within {} s; ending the process",
-            QUIT_DEADLINE.as_secs()
-        );
-        crate::run::end_all_runs(Duration::from_millis(500));
-        std::process::exit(0);
-    })
+    arm_deadline(QUIT_DEADLINE, &QUIT_ARMED, || end_now(QUIT_DEADLINE))
+}
+
+/// How long a process asked to end by a signal may take before it ends anyway: with the half
+/// second for the programs of run configurations it is gone within 5 s (`SPEC-0262` v3
+/// behaviour 3).
+pub const SIGNAL_DEADLINE: Duration = Duration::from_secs(4);
+
+/// [`arm_quit_deadline`] for a signal, with [`SIGNAL_DEADLINE`]; called by the thread that receives
+/// the signal, so a blocked window thread cannot keep the process alive (`SPEC-0262` v3
+/// behaviour 3). Shares the once-only arming with the quit deadline.
+pub fn arm_signal_deadline() -> bool {
+    arm_deadline(SIGNAL_DEADLINE, &QUIT_ARMED, || end_now(SIGNAL_DEADLINE))
+}
+
+/// Ends the programs of run configurations and the process, `after` the quit was decided.
+fn end_now(after: Duration) {
+    eprintln!(
+        "warning: quitting did not finish within {} s; ending the process",
+        after.as_secs()
+    );
+    crate::run::end_all_runs(Duration::from_millis(500));
+    std::process::exit(0);
 }
 
 /// Runs `end` on its own thread `after` from now, unless `armed` was already set.
@@ -93,9 +108,17 @@ mod tests {
         assert_eq!(QUIT_DEADLINE, Duration::from_secs(5));
     }
 
+    /// SPEC-0262 AK-5 (v3, behaviour 3): with the half second for the run configurations' programs,
+    /// a signal's deadline ends the process within 5 s.
+    #[test]
+    fn the_signal_deadline_ends_within_five_seconds() {
+        assert_eq!(SIGNAL_DEADLINE, Duration::from_secs(4));
+        assert!(SIGNAL_DEADLINE + Duration::from_millis(500) < Duration::from_secs(5));
+    }
+
     fn scratch(tag: &str) -> std::path::PathBuf {
         let dir =
-            std::env::temp_dir().join(format!("idecraft-atomic-{tag}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("ferris-idea-atomic-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         dir
     }

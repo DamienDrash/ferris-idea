@@ -163,7 +163,7 @@ mod tests {
     /// in a file only the user reads.
     #[test]
     fn the_last_ten_runs_are_kept_without_output() {
-        let base = std::env::temp_dir().join(format!("idecraft-history-{}", std::process::id()));
+        let base = std::env::temp_dir().join(format!("ferris-idea-history-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         let (dir, root) = (base.join("settings/test-history"), base.join("project"));
         std::fs::create_dir_all(&root).unwrap();

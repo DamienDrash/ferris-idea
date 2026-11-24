@@ -1,11 +1,16 @@
-//! The assistant through a chat subscription (`SPEC-0160`): IDECraft runs the provider's own command
+//! The assistant through a chat subscription (`SPEC-0160`): Ferris IDEA runs the provider's own command
 //! line program — Claude Code (`claude`), Codex (`codex`) or Gemini CLI (`gemini`) — that the user
-//! installed and signed in to with their subscription, and reads its answer. IDECraft never sees,
+//! installed and signed in to with their subscription, and reads its answer. Ferris IDEA never sees,
 //! stores or sends the subscription's tokens; signing in happens in the program itself.
 //!
 //! The program runs as a plain chat: in an empty temporary folder, with its tools switched off or
 //! read only, without the user's project settings, hooks or MCP servers, and with nothing kept
 //! after the answer.
+//!
+//! Claude's plan has a mode of its own (`SPEC-0160` v2, `ai.claude_plan_mode`): "Chat" (the
+//! default) runs Claude Code behind the chat as above; "Terminal" runs the user's own Claude Code
+//! only in a terminal tab of the project ([`claude_code_command`]) and the chat then uses Claude
+//! through the Anthropic API key, or sends nothing and says why ([`CLAUDE_PLAN_MESSAGE`]).
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
@@ -28,6 +33,33 @@ pub enum Cli {
 
 /// The programs in the order the settings offer them.
 pub const CLIS: [Cli; 3] = [Cli::Claude, Cli::Codex, Cli::Gemini];
+
+/// What the chat and the settings say while Claude's plan is set to the Terminal and no Anthropic
+/// API key is set up (`SPEC-0160` v2 behaviour 6).
+pub const CLAUDE_PLAN_MESSAGE: &str = "Claude with your Claude plan is set to run in the \
+Terminal, as Claude Code. In AI Chat, Claude then needs your own Anthropic API key. Open Claude \
+Code in the Terminal, or set up the Anthropic API.";
+
+/// What the settings say under the Claude plan row (`SPEC-0160` v2 behaviour 6).
+pub const CLAUDE_PLAN_MODE_NOTE: &str = "Chat uses your Claude plan behind AI Chat and waits for \
+Anthropic's approval of this use; Terminal runs Claude Code in a terminal of the project, the use \
+within Anthropic's current terms.";
+
+/// What a terminal tab of the project runs for Claude with the plan (`SPEC-0160` v2 behaviour 7):
+/// the user's own Claude Code, `claude` when it is on `PATH`, else its full path in quotes; `None`
+/// when it is not installed. Ferris IDEA only types the command; Claude Code signs in by itself.
+pub fn claude_code_command() -> Option<String> {
+    let path = find(Cli::Claude)?;
+    let on_path = std::env::var_os("PATH")
+        .is_some_and(|p| std::env::split_paths(&p).any(|d| d.join(Cli::Claude.program()) == path));
+    if on_path {
+        return Some(Cli::Claude.program().to_owned());
+    }
+    Some(format!(
+        "'{}'",
+        path.display().to_string().replace('\'', "'\\''")
+    ))
+}
 
 impl Cli {
     /// The id kept in the settings (`ai.subscription`).
@@ -58,7 +90,7 @@ impl Cli {
         self.id()
     }
 
-    /// What the user runs to sign in (IDECraft types it into a terminal tab).
+    /// What the user runs to sign in (Ferris IDEA types it into a terminal tab).
     pub fn login_command(self) -> &'static str {
         match self {
             Cli::Claude => "claude auth login",
@@ -407,7 +439,7 @@ pub fn ask_with(
     let prompt = transcript(cli.system_in_prompt().then_some(system), messages);
     // An empty folder of its own, removed afterwards: the program sees no project files.
     let dir = std::env::temp_dir().join(format!(
-        "idecraft-ai-{}-{}",
+        "ferris-idea-ai-{}-{}",
         std::process::id(),
         RUN.fetch_add(1, Ordering::Relaxed)
     ));
@@ -547,7 +579,7 @@ mod tests {
     fn stand_in(name: &str, output: &str, exit: i32) -> (PathBuf, PathBuf) {
         static N: AtomicU64 = AtomicU64::new(0);
         let dir = std::env::temp_dir().join(format!(
-            "idecraft-cli-{}-{}",
+            "ferris-idea-cli-{}-{}",
             std::process::id(),
             N.fetch_add(1, Ordering::Relaxed)
         ));
@@ -621,7 +653,7 @@ mod tests {
         assert!(input.contains("User: hi") && input.contains("Assistant: yes?"));
         assert!(input.ends_with("say hello") && !input.contains("SYS"));
         let cwd = std::fs::read_to_string(seen.with_extension("cwd")).unwrap();
-        assert!(cwd.contains("idecraft-ai-"), "{cwd}");
+        assert!(cwd.contains("ferris-idea-ai-"), "{cwd}");
         assert!(!Path::new(cwd.trim()).exists(), "the folder is removed");
     }
 
@@ -699,6 +731,27 @@ mod tests {
         );
     }
 
+    /// `SPEC-0160` v2 AK-9: Claude Code outside `PATH` is typed into the terminal as its quoted
+    /// full path; the message names the Terminal, Claude Code and the Anthropic API key.
+    #[cfg(debug_assertions)]
+    #[test]
+    fn claude_code_is_found_for_the_terminal() {
+        let dir =
+            std::env::temp_dir().join(format!("ferris-idea-cli-claude-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let dir = use_test_programs(dir);
+        let program = dir.join("claude");
+        std::fs::write(&program, "#!/bin/sh\nexit 0\n").unwrap();
+        assert_eq!(
+            claude_code_command().unwrap(),
+            format!("'{}'", program.display())
+        );
+        for part in ["Terminal", "Claude Code", "Anthropic API key"] {
+            assert!(CLAUDE_PLAN_MESSAGE.contains(part), "{part}");
+        }
+        assert!(CLAUDE_PLAN_MODE_NOTE.contains("approval"));
+    }
+
     #[test]
     fn stops_and_times_out() {
         let (program, _) = stand_in(
@@ -717,7 +770,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(answer, "a");
-        let dir = std::env::temp_dir().join(format!("idecraft-cli-slow-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-cli-slow-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let slow = dir.join("codex");
         std::fs::write(&slow, "#!/bin/sh\nexec sleep 30\n").unwrap();

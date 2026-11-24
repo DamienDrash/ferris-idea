@@ -28,7 +28,7 @@ pub enum GotoEvent {
     Locations,
     /// Rename the symbol to this name, also in comments, strings and text files as chosen
     /// (SPEC-0074, SPEC-0148).
-    Rename(String, idecraft_languages::rename_text::TextOptions),
+    Rename(String, ferris_idea_languages::rename_text::TextOptions),
     /// Change the function's parameters to this list (SPEC-0113).
     Signature(String),
     /// Move the file into this workspace folder (SPEC-0114).
@@ -44,7 +44,7 @@ enum Mode {
     /// Recent Files: all files and the one shown in the editor.
     Recent(RecentFiles, Option<PathBuf>),
     /// Rename: the current name and where else to look (SPEC-0148 behaviour 1).
-    Rename(String, idecraft_languages::rename_text::TextOptions),
+    Rename(String, ferris_idea_languages::rename_text::TextOptions),
     /// Change Signature: the function's name and its current parameters.
     Signature(String, String),
     /// Move: the file's name and its folder.
@@ -113,7 +113,7 @@ impl GotoView {
     /// the last rename (SPEC-0148 behaviour 1).
     pub fn rename(
         old: &str,
-        options: idecraft_languages::rename_text::TextOptions,
+        options: ferris_idea_languages::rename_text::TextOptions,
         cx: &mut Context<Self>,
     ) -> Self {
         let field = cx.new(EditorView::field);
@@ -176,6 +176,15 @@ impl GotoView {
         let mut view = Self::with(root, Mode::Locations(rows), field, cx);
         view.refilter(cx);
         view
+    }
+
+    /// Whether this is Go to Line, Recent Files or Recent Locations, which a navigation elsewhere
+    /// closes (v5 behaviour 10), and not one of the name popups.
+    pub fn is_navigation(&self) -> bool {
+        matches!(
+            self.mode,
+            Mode::Line(_) | Mode::Recent(..) | Mode::Locations(_)
+        )
     }
 
     /// Whether only edited files or places are listed (v2 behaviours 6, 8).
@@ -258,7 +267,7 @@ impl GotoView {
     }
 
     /// The rename options shown, in Rename mode.
-    pub fn rename_options(&self) -> Option<idecraft_languages::rename_text::TextOptions> {
+    pub fn rename_options(&self) -> Option<ferris_idea_languages::rename_text::TextOptions> {
         match &self.mode {
             Mode::Rename(_, o) => Some(*o),
             _ => None,
@@ -414,7 +423,7 @@ impl GotoView {
         let toggles = match self.mode {
             Mode::Recent(..) => {
                 let m = &k.modifiers;
-                idecraft_ui::keymap::Keystroke::from_platform(
+                ferris_idea_ui::keymap::Keystroke::from_platform(
                     &k.key, m.control, m.alt, m.shift, m.platform,
                 )
                 .is_some_and(|stroke| {
@@ -528,7 +537,7 @@ impl Render for GotoView {
                             .rounded(px(4.))
                             .when(on, |d| d.bg(c(p.tree_selection)))
                             .when(!on, |d| d.hover(|s| s.bg(c(p.tree_hover))))
-                            .child(icon(idecraft_ui::icons::file_icon(&name)))
+                            .child(icon(ferris_idea_ui::icons::file_icon(&name)))
                             .child(name)
                             .child(
                                 div()
@@ -649,7 +658,7 @@ impl Render for GotoView {
                                 .items_center()
                                 .gap_2()
                                 .h(px(22.))
-                                .child(icon(idecraft_ui::icons::file_icon(&name)))
+                                .child(icon(ferris_idea_ui::icons::file_icon(&name)))
                                 .child(div().font_weight(gpui::FontWeight::SEMIBOLD).child(name))
                                 .child(div().text_color(c(p.ui_muted)).child(r.symbols.clone()))
                                 .child(div().flex_1())
@@ -799,7 +808,7 @@ fn shortcut_of(action: &str) -> String {
     crate::keymaps::current()
         .shortcuts(action)
         .iter()
-        .find(|s| !matches!(s, idecraft_ui::keymap::Shortcut::Mouse { .. }))
+        .find(|s| !matches!(s, ferris_idea_ui::keymap::Shortcut::Mouse { .. }))
         .map(|s| s.display(cfg!(target_os = "macos")))
         .unwrap_or_default()
 }
@@ -818,7 +827,7 @@ fn locations_toggle(key: &str, m: &gpui::Modifiers, macos: bool) -> bool {
 /// A shortcut of this dialog written for the platform: ⌘ is Ctrl and ⌥ is Alt outside macOS
 /// (`SPEC-0028` v8 behaviour 13).
 fn keys(text: &str) -> String {
-    idecraft_ui::keymap::local_keys(text, cfg!(target_os = "macos"))
+    ferris_idea_ui::keymap::local_keys(text, cfg!(target_os = "macos"))
 }
 
 #[cfg(test)]
@@ -839,9 +848,9 @@ mod platform_tests {
         assert!(locations_toggle("e", &m(true, false), false));
         assert!(!locations_toggle("e", &m(false, true), false));
         assert_eq!(
-            idecraft_ui::keymap::local_keys("⇧⌘E", false),
+            ferris_idea_ui::keymap::local_keys("⇧⌘E", false),
             "Ctrl+Shift+E"
         );
-        assert_eq!(idecraft_ui::keymap::local_keys("⌥C", false), "Alt+C");
+        assert_eq!(ferris_idea_ui::keymap::local_keys("⌥C", false), "Alt+C");
     }
 }

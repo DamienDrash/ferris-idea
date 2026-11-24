@@ -6,12 +6,12 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use idecraft_debugger::{
+use ferris_idea_debugger::{
     Breakpoint, DebugSession, Kind, PathMap, Runtime, SourceBreakpoint, Target, attach_arguments,
     with_source_map,
 };
-use idecraft_remote::LiveProject;
-use idecraft_remote::host_debug::{HostLink, java_exception_types, java_host, start_host_debug};
+use ferris_idea_remote::LiveProject;
+use ferris_idea_remote::host_debug::{HostLink, java_exception_types, java_host, start_host_debug};
 use serde_json::{Value, json};
 
 use crate::debug_model::{Launch, Update};
@@ -48,8 +48,15 @@ impl Eq for RemoteLaunch {}
 /// The placed breakpoints per file of a started session.
 type Started = (DebugSession, BTreeMap<PathBuf, Vec<Breakpoint>>);
 
-fn is_loopback(host: &str) -> bool {
-    matches!(host, "127.0.0.1" | "::1" | "localhost")
+/// What the Debug console says before an attach to `host:port` from the host (`SPEC-0322`
+/// behaviour 11): an address outside the host's loopback is not protected by Ferris IDEA.
+fn address_note(host: &str, port: u16) -> Option<String> {
+    let bare = host.trim_start_matches('[').trim_end_matches(']');
+    (!ferris_idea_debugger::is_loopback(bare)).then(|| {
+        format!(
+            "[Ferris IDEA] The traffic between the host and {host}:{port} is not protected by Ferris IDEA.\n"
+        )
+    })
 }
 
 /// Starts the adapter on the host and launches or attaches.
@@ -105,10 +112,14 @@ pub fn start(
         let runtime = runtime.ok_or("this kind of program is not attached to")?;
         let target = match (&info.address, info.pid) {
             (Some((host, port)), _) => {
-                if !is_loopback(host) {
-                    send(Update::Output(format!(
-                        "[IDECraft] The traffic between the host and {host}:{port} is not protected by IDECraft.\n"
-                    )));
+                if let Some(note) = address_note(host, *port) {
+                    send(Update::Output(note));
+                }
+                // What Stop does to the program is the Delve server's doing, so it is said.
+                if runtime == Runtime::Go {
+                    send(Update::Output(
+                        ferris_idea_debugger::DELVE_SERVER_NOTE.to_owned(),
+                    ));
                 }
                 Target::Address {
                     host: host.clone(),
@@ -166,5 +177,24 @@ fn launch_id(launch: &Launch) -> String {
     match launch.kind {
         Kind::Java => "java".into(),
         k => k.adapter_name().to_owned(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// SPEC-0322 behaviour 11 (AK-14): only an address outside the host's loopback gets the note.
+    #[test]
+    fn an_address_outside_the_hosts_loopback_is_said_to_be_unprotected() {
+        for host in ["127.0.0.1", "127.0.0.2", "::1", "[::1]", "localhost"] {
+            assert_eq!(address_note(host, 5005), None, "{host}");
+        }
+        let note = address_note("10.0.0.7", 5005).unwrap();
+        assert!(
+            note.contains("10.0.0.7:5005") && note.contains("not protected"),
+            "{note}"
+        );
+        assert!(address_note("build.example", 2345).is_some());
     }
 }

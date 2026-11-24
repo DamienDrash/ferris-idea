@@ -3,20 +3,20 @@
 //! without the window sending any text; completion, hover, definition, semantic tokens and
 //! rename run on the backend's text; places outside the project come back without a host path
 //! (SEC-14). A test binary of its own, because the language server pool is per process. Skipped
-//! without clangd, failing under `IDECRAFT_REQUIRE_TOOLS`.
+//! without clangd, failing under `FERRIS_IDEA_REQUIRE_TOOLS`.
 
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use idecraft_host::HostOptions;
-use idecraft_session::{
+use ferris_idea_host::HostOptions;
+use ferris_idea_session::{
     Backend, BackendConfig, ClientSession, ErrorCode, Op, Right, Transport, in_process,
 };
 use serde_json::{Value, json};
 
 fn skip(reason: &str) {
     assert!(
-        std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+        ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
         "required tool missing: {reason}"
     );
     eprintln!("skipped: {reason}");
@@ -67,7 +67,7 @@ fn language_servers_on_the_host_follow_the_session_documents() {
         rights: Right::ALL.to_vec(),
         ..BackendConfig::default()
     });
-    idecraft_host::bind(
+    ferris_idea_host::bind(
         &backend,
         HostOptions {
             language_servers: true,
@@ -187,6 +187,6 @@ fn language_servers_on_the_host_follow_the_session_documents() {
     assert!(status["running"].as_u64().unwrap() >= 1, "{status}");
     assert!(!status.to_string().contains("/usr/bin"), "{status}");
     let _ = s.bye();
-    idecraft_languages::pool::shutdown();
+    ferris_idea_languages::pool::shutdown();
     let _ = std::fs::remove_dir_all(&dir);
 }

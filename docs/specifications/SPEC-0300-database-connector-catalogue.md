@@ -12,8 +12,8 @@
 
 ## Purpose
 The user picks a database system from one searchable, grouped list and connects to it; each entry
-says whether IDECraft tests it (Supported) or only builds it (Beta). Systems that speak a protocol
-IDECraft already has are added as declarative connector definitions — the built-in ones and those
+says whether Ferris IDEA tests it (Supported) or only builds it (Beta). Systems that speak a protocol
+Ferris IDEA already has are added as declarative connector definitions — the built-in ones and those
 the user writes or imports.
 
 ## Behaviour
@@ -25,8 +25,8 @@ the user writes or imports.
    connector is unknown fails with "unknown database system `<id>`; import its definition" before
    any network access. [ADR-0020, SPEC-0008]
 2. **Catalogue.** The catalogue is the built-in definitions (compiled in) followed by the files in
-   `connectors/*.toml` in the IDECraft settings folder (`$IDECRAFT_CONFIG_DIR`, else
-   `$XDG_CONFIG_HOME/idecraft`, else `~/.config/idecraft`; `IDECRAFT_CONNECTORS_DIR` overrides the
+   `connectors/*.toml` in the Ferris IDEA settings folder (`$FERRIS_IDEA_CONFIG_DIR`, else
+   `$XDG_CONFIG_HOME/ferris-idea`, else `~/.config/ferris-idea`; `FERRIS_IDEA_CONNECTORS_DIR` overrides the
    folder for tests). A file whose id equals a built-in id is refused (built-ins cannot be shadowed); of
    two user files with the same id, the first in name order wins and the other is reported as a
    problem. Files that do not validate are listed as problems with their path and messages and do
@@ -84,7 +84,7 @@ report_url = "https://…?title={title}&body={body}"   # optional, SPEC-0301
    the three; `homepage` or `report_url` not `https://`; `explain…` without `{statement}`; any SQL text over 16 KiB; an introspection query
    that is not a single statement starting with `SELECT`, `WITH`, `SHOW` or `PRAGMA` (SPEC-0005
    splitter); keys outside the format. Files over 64 KiB are refused unread. A definition is data:
-   no key names a program, library, script or URL that IDECraft would run or fetch. The `status`
+   no key names a program, library, script or URL that Ferris IDEA would run or fetch. The `status`
    of a user or imported file is never `supported`: it reads as **User** (written here) or
    **Imported** (brought in by import, SPEC-0302), whatever the file says. [ADR-0020, ADR-0007]
 5. **Categories**, in this order: Relational, Distributed SQL, Cloud, Analytics, Time series,
@@ -147,7 +147,7 @@ report_url = "https://…?title={title}&body={body}"   # optional, SPEC-0301
 - **AK-4** Catalogue from a folder: valid, invalid and duplicate files; search by alias; grouping
   order (unit tests with a temporary folder).
 - **AK-5** Introspection through override queries with `{schema}` against a live server
-  (TimescaleDB container, `crates/database/tests/it/connectors.rs`, `IDECRAFT_TEST_TIMESCALE`).
+  (TimescaleDB container, `crates/database/tests/it/connectors.rs`, `FERRIS_IDEA_TEST_TIMESCALE`).
 - **AK-6** MCP `list_connectors` and `save_connection` with `system` (protocol test).
 - **AK-7** Window self-test steps: the system list opens, typing "tidb" leaves TiDB, Enter picks
   it (MySQL family, port hint 4000), Redshift shows the Beta badge, Escape closes list and dialog.

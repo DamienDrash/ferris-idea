@@ -5,8 +5,8 @@
 
 use std::collections::{HashMap, HashSet};
 
-use idecraft_core::buildtools::{Task, TaskGroup};
-use idecraft_core::{DepNode, Module, ModuleKind};
+use ferris_idea_core::buildtools::{Task, TaskGroup};
+use ferris_idea_core::{DepNode, Module, ModuleKind};
 
 /// One module with what the window shows of it.
 #[derive(Debug, Clone)]
@@ -108,7 +108,7 @@ pub struct Extras {
     pub profiles: Vec<(String, bool)>,
     /// The dependency analyzer's result for a module (v3 behaviour 14): the module's label and
     /// every artifact of its tree.
-    pub analysis: Option<(String, Vec<idecraft_core::depanalysis::Artifact>)>,
+    pub analysis: Option<(String, Vec<ferris_idea_core::depanalysis::Artifact>)>,
     /// What a task row shows dimmed after its label — its triggers and shortcut (v3 behaviours 18,
     /// 19) — by `<module folder>|<task>`.
     pub task_notes: HashMap<String, String>,
@@ -124,12 +124,12 @@ pub fn note_key(dir: &str, label: &str) -> String {
 /// The analyzer's rows (v3 behaviour 14): the group, its conflicts and their places.
 fn push_analysis(
     module: &str,
-    artifacts: &[idecraft_core::depanalysis::Artifact],
+    artifacts: &[ferris_idea_core::depanalysis::Artifact],
     filter: &str,
     expanded: &HashSet<String>,
     out: &mut Vec<Row>,
 ) {
-    let conflicts: Vec<&idecraft_core::depanalysis::Artifact> =
+    let conflicts: Vec<&ferris_idea_core::depanalysis::Artifact> =
         artifacts.iter().filter(|a| a.conflict).collect();
     let open = expanded.contains("analysis");
     out.push(Row {
@@ -179,7 +179,7 @@ fn push_analysis(
     // analyzer lists all resolved dependencies and their usages, OBS-0024 re-check).
     let all_open = expanded.contains("analysis/all");
     // Typing in the window narrows the list (the reference's analyzer has a search field).
-    let shown: Vec<(usize, &idecraft_core::depanalysis::Artifact)> = artifacts
+    let shown: Vec<(usize, &ferris_idea_core::depanalysis::Artifact)> = artifacts
         .iter()
         .enumerate()
         .filter(|(_, a)| filter.is_empty() || a.name.to_lowercase().contains(filter))
@@ -231,7 +231,7 @@ fn push_analysis(
 /// The places of artifact `a` under the row `key` at `depth`: the version asked for, whether it
 /// is used, and the path from the module.
 fn push_places(
-    a: &idecraft_core::depanalysis::Artifact,
+    a: &ferris_idea_core::depanalysis::Artifact,
     key: &str,
     depth: usize,
     out: &mut Vec<Row>,
@@ -250,7 +250,7 @@ fn push_places(
 }
 
 /// The keys that show the analyzer with every conflict opened and the list of all artifacts.
-pub fn analysis_expanded(artifacts: &[idecraft_core::depanalysis::Artifact]) -> Vec<String> {
+pub fn analysis_expanded(artifacts: &[ferris_idea_core::depanalysis::Artifact]) -> Vec<String> {
     ["analysis".to_owned(), "analysis/all".to_owned()]
         .into_iter()
         .chain(
@@ -670,7 +670,7 @@ mod tests {
             dep("org.apache.commons:commons-text", vec![omitted], false),
             lang,
         ];
-        let artifacts = idecraft_core::depanalysis::analyze("l7-core", &tree);
+        let artifacts = ferris_idea_core::depanalysis::analyze("l7-core", &tree);
         let mut test = TaskGroup {
             name: "Lifecycle".into(),
             detail: String::new(),

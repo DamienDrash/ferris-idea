@@ -1,6 +1,7 @@
 # SPEC-0017: Editing table data
 
-- **Version:** 1 · **Date:** 2026-10-31
+- **Version:** 2 · **Date:** 2026-11-23 (v2: numbers are written and compared as numbers, floats in the
+  column's own precision, behaviour 7, AK-8 — OBS-0120 X1); 2026-10-31 (v1)
 - **Sources:** GEN (database tools let users change cells, add and delete rows in a result grid and submit
   the changes; F-055), STD (`UPDATE`/`INSERT`/`DELETE`; NULL-safe comparison: PostgreSQL `IS NOT DISTINCT
   FROM`, MySQL `<=>`, SQLite `IS`; transactions), OBS-0005 (reference grid: add/delete row, revert, submit,
@@ -29,6 +30,21 @@ transaction, and never overwrite a row that someone else changed in the meantime
    partially applied. [GEN]
 6. MCP tool `edit_table_data` (connection, table, changes, `apply`): without `apply` it only returns the SQL;
    it needs `read-schema`, and `modify-data` to apply (SPEC-0012). [IMP-0007, ADR-0008]
+7. **v2 – Numbers as numbers (OBS-0120 X1):** for a column whose declared type is an integer, a
+   decimal or a float, a value that reads as a plain number (sign, digits, at most one point, an
+   optional exponent) is written as a number literal, in `SET`, `VALUES`, the row identity and the
+   concurrency check alike; anything else (`NaN`, `$1.50`) stays a string literal as in behaviour 3.
+   The check compares a decimal or integer exactly with the number, and a float with the loaded
+   text converted to the column's own precision (`CAST(0.1 AS real)`, `BINARY_FLOAT` in Oracle,
+   `DOUBLE` in MySQL and MariaDB), since 0.1 as a single-precision float is not 0.1 as a double.
+   MySQL and MariaDB send a `FLOAT` with six significant digits (16777216 as `16777200`), so there
+   the server's own text of the value (`CAST(col AS CHAR)`) is compared with the loaded text: a change
+   the shown digits cannot tell apart is not seen, as it was not seen when the row was loaded.
+   Comparing as text failed in Oracle, which turns the number 0.05 into the text `.05`, so every
+   cell below 1 was a false conflict; in MySQL and MariaDB a decimal compared with a string is
+   compared as a double, so a change in the last digits of a large-scale decimal went unseen.
+   SQLite keeps its string literals: it compares by column affinity. A number literal is never
+   built from text that is not a number, so nothing reaches the statement unquoted. [STD, GEN]
 
 ## Acceptance criteria
 - **AK-1** Two cell edits in one row produce one `UPDATE … SET a = '…', b = '…' WHERE "id" = '1' AND "a"
@@ -42,6 +58,13 @@ transaction, and never overwrite a row that someone else changed in the meantime
 - **AK-6** A failing statement (e.g. NOT NULL violation) rolls back everything and reports the error.
 - **AK-7** `edit_table_data` returns the SQL without applying, refuses to apply without `modify-data`, applies
   with it, and reports a conflict when the same changes are applied twice.
+- **AK-8 (v2, behaviour 7)** Unit `edit::tests::{numbers_are_compared_as_numbers,
+  number_kinds_and_literals}`: the statements per dialect, float casts, NULL, text that is no number.
+  Live against PostgreSQL, MySQL, MariaDB, SQL Server and Oracle Free 23
+  (`tests/it/dialect_numbers_live.rs` `numbers_in_edited_cells_and_their_scale`): cells holding 0.05,
+  -0.50, a `DECIMAL(38,10)`, single and double floats, integers and NULL are edited without a
+  conflict; a value changed meanwhile (the last digit of the large decimal, a float, 0.05 → 0.06) is a
+  conflict; deleting rows compares every loaded value.
 
 ## Out of scope
 The grid UI, editing results of joins or views, generated/default column handling beyond omitting

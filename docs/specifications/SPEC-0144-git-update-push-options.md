@@ -50,7 +50,7 @@ or over rewritten history, without a plain force push.
 8. **v4 – Update Info:** when an update (merge, rebase or reset) moved HEAD, a popup "Update Info: n
    commit(s), m file(s)" lists the commits that came in (newest first, with author) and the files that
    differ (Git's status letter and path); Enter on a commit selects it in the Git log, on a file opens
-   it (a deleted file is named in the status bar). `IDECraft.ShowUpdateInfo` shows the last one again.
+   it (a deleted file is named in the status bar). `FerrisIDEA.ShowUpdateInfo` shows the last one again.
    `git_pull` returns it as `info`. [OBS-0022 L16]
 9. **v4 – Reset to the upstream:** fetches the upstream's remote, lists the branch's own commits that
    the upstream lacks (`dropped`), stashes local changes with untracked files, `git reset --hard
@@ -94,11 +94,11 @@ Interactive rebase, choosing another remote in the push dialog, pushing several 
 reference's "Shelve" alternative to stashing, update of several repositories.
 
 ## Known deviations from the reference
-The reference's force push can also be plain; IDECraft only offers the lease variant (IMP-0029).
+The reference's force push can also be plain; Ferris IDEA only offers the lease variant (IMP-0029).
 - The reference wrote the merge commit of its own branch merge as `Merge branch
-  'refs/heads/feature/conflict'` (OBS-0022); IDECraft keeps Git's wording with the short name
+  'refs/heads/feature/conflict'` (OBS-0022); Ferris IDEA keeps Git's wording with the short name
   (IMP-0318).
-- v4: the reference resets to the remote branch without naming what is lost; IDECraft names the number
+- v4: the reference resets to the remote branch without naming what is lost; Ferris IDEA names the number
   of local commits before and their short ids after, keeps local changes, and never preselects the
   reset next time (IMP-0322). The update information is one popup with commits and files instead of a
   tool window tab plus a notification.

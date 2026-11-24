@@ -1,7 +1,7 @@
-//! One tool call without an MCP client (`SPEC-0281` behaviour 5): `idecraft call <folder> <tool>
+//! One tool call without an MCP client (`SPEC-0281` behaviour 5): `ferris-idea call <folder> <tool>
 //! [<json>]` serves the workspace over an in-memory pipe, speaks the same JSON-RPC a client would,
 //! and returns the tool's answer. So every decision a dialog asks for is also reachable from a
-//! shell, with the same rights and safe mode as `idecraft mcp`.
+//! shell, with the same rights and safe mode as `ferris-idea mcp`.
 
 use rmcp::ServiceExt;
 use serde_json::{Value, json};
@@ -43,7 +43,7 @@ pub async fn call_once(server: IdeServer, tool: &str, arguments: Value) -> Resul
         "params": {
             "protocolVersion": "2025-06-18",
             "capabilities": {},
-            "clientInfo": {"name": "idecraft-call", "version": env!("CARGO_PKG_VERSION")},
+            "clientInfo": {"name": "ferris-idea-call", "version": env!("CARGO_PKG_VERSION")},
         },
     }))
     .await?;
@@ -62,6 +62,8 @@ pub async fn call_once(server: IdeServer, tool: &str, arguments: Value) -> Resul
 /// The tools of `server` (name, description, input schema each), as `tools/list` returns them
 /// (`SPEC-0318` behaviour 29: a remote project's tools are its host's).
 pub async fn list_tools(server: IdeServer) -> Result<Value, String> {
+    // Listed for someone else: every tool (`SPEC-0006` v58 behaviour 18).
+    let server = server.with_tool_offer(crate::groups::Offer::all());
     let (client_io, server_io) = tokio::io::duplex(1 << 16);
     let serving = tokio::spawn(async move {
         if let Ok(running) = server.serve(tokio::io::split(server_io)).await {
@@ -84,7 +86,7 @@ pub async fn list_tools(server: IdeServer) -> Result<Value, String> {
         "params": {
             "protocolVersion": "2025-06-18",
             "capabilities": {},
-            "clientInfo": {"name": "idecraft-serve", "version": env!("CARGO_PKG_VERSION")},
+            "clientInfo": {"name": "ferris-idea-serve", "version": env!("CARGO_PKG_VERSION")},
         },
     }))
     .await?;

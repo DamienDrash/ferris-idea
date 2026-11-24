@@ -5,16 +5,17 @@
 
 use std::time::Duration;
 
-use idecraft_core::{
+use ferris_idea_core::{
     RunEvent, RunOutcome, load_run_configs, run_config, start_host_run, start_run,
 };
 
 fn workspace(tag: &str, script: &str) -> std::path::PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-run-eof-{tag}-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-run-eof-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir_all(root.join(".idecraft")).unwrap();
+    std::fs::create_dir_all(root.join(".ferris-idea")).unwrap();
     std::fs::write(
-        root.join(".idecraft/run.toml"),
+        root.join(".ferris-idea/run.toml"),
         format!("[[run]]\nname = \"p\"\ncommand = [\"/bin/sh\", \"-c\", \"{script}\"]\n"),
     )
     .unwrap();

@@ -100,6 +100,7 @@ fn fix(title: &str, range: std::ops::Range<usize>, with: String) -> Option<Fix> 
     Some(Fix {
         learn: None,
         keep: None,
+        bundle_key: None,
         action: None,
         title: title.to_owned(),
         edits: vec![TextEdit { range, text: with }],

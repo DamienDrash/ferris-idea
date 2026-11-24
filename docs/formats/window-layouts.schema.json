@@ -15,7 +15,7 @@
             "type": "string"
           },
           "layout": {
-            "description": "The arrangement, in the form of .idecraft/tool-windows.json (SPEC-0167).",
+            "description": "The arrangement, in the form of .ferris-idea/tool-windows.json (SPEC-0167).",
             "properties": {
               "stripes": {
                 "description": "Whether the stripes are shown.",
@@ -116,6 +116,6 @@
   "required": [
     "version"
   ],
-  "title": "IDECraft window layouts",
+  "title": "Ferris IDEA window layouts",
   "type": "object"
 }

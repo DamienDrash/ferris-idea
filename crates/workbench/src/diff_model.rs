@@ -10,14 +10,14 @@ use std::path::Path;
 pub fn syntax_by_line(path: &Path, text: &str) -> Vec<Vec<(Range<usize>, String)>> {
     let lines: Vec<&str> = text.lines().collect();
     let mut out: Vec<Vec<(Range<usize>, String)>> = vec![Vec::new(); lines.len()];
-    let Some(language) = idecraft_languages::LanguageId::detect(path) else {
+    let Some(language) = ferris_idea_languages::LanguageId::detect(path) else {
         return out;
     };
-    if text.len() > idecraft_languages::syntax::MAX_SYNTAX_BYTES {
+    if text.len() > ferris_idea_languages::syntax::MAX_SYNTAX_BYTES {
         return out;
     }
     let tsx = path.extension().is_some_and(|e| e == "tsx");
-    let Ok(doc) = idecraft_languages::syntax::SyntaxDocument::new(language, tsx, text) else {
+    let Ok(doc) = ferris_idea_languages::syntax::SyntaxDocument::new(language, tsx, text) else {
         return out;
     };
     // Char offset where each line starts (the separators `\n` count one char).

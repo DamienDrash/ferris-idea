@@ -1,10 +1,10 @@
 //! SPEC-0300 against real servers of protocol-family systems (ADR-0020). Each system is tested
-//! when `IDECRAFT_TEST_<X>` holds its URL and `IDECRAFT_TEST_<X>_PASSWORD` or
-//! `IDECRAFT_TEST_<X>_PASSWORD_FILE` its password (`connectors.sh env <system>` of the reference environment
+//! when `FERRIS_IDEA_TEST_<X>` holds its URL and `FERRIS_IDEA_TEST_<X>_PASSWORD` or
+//! `FERRIS_IDEA_TEST_<X>_PASSWORD_FILE` its password (`connectors.sh env <system>` of the reference environment
 //! prints them); without them the test passes without doing anything. Every run works in a schema or
 //! database of its own (`idc_conn_<pid>`) and drops it again.
 
-use idecraft_database::{
+use ferris_idea_database::{
     ConnectionProfile, Credentials, Dialect, OnError, Outcome, Secret, Session, current_schema,
     explain, introspect_schema, list_schemas, test_connection, view_definitions,
 };
@@ -64,6 +64,7 @@ async fn exercise(var: &str, system: &str, family: Dialect) {
     eprintln!("{system} server version: {:?}", version.first());
 
     let schema = format!("idc_conn_{}", std::process::id());
+    crate::common::drop_leftovers(&s, &["idc_conn_"]).await;
     let mysql = family.mysql_like();
     let (create, enter, drop) = if mysql {
         (
@@ -150,7 +151,7 @@ async fn exercise(var: &str, system: &str, family: Dialect) {
 #[tokio::test]
 async fn timescaledb() {
     exercise(
-        "IDECRAFT_TEST_TIMESCALE",
+        "FERRIS_IDEA_TEST_TIMESCALE",
         "timescaledb",
         Dialect::PostgreSql,
     )
@@ -159,18 +160,23 @@ async fn timescaledb() {
 
 #[tokio::test]
 async fn tidb() {
-    exercise("IDECRAFT_TEST_TIDB", "tidb", Dialect::MySql).await;
+    exercise("FERRIS_IDEA_TEST_TIDB", "tidb", Dialect::MySql).await;
 }
 
 #[tokio::test]
 async fn yugabytedb() {
-    exercise("IDECRAFT_TEST_YUGABYTE", "yugabytedb", Dialect::PostgreSql).await;
+    exercise(
+        "FERRIS_IDEA_TEST_YUGABYTE",
+        "yugabytedb",
+        Dialect::PostgreSql,
+    )
+    .await;
 }
 
 #[tokio::test]
 async fn cockroachdb() {
     exercise(
-        "IDECRAFT_TEST_COCKROACH",
+        "FERRIS_IDEA_TEST_COCKROACH",
         "cockroachdb",
         Dialect::PostgreSql,
     )

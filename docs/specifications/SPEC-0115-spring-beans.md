@@ -41,7 +41,7 @@
 
 ## Purpose
 Catch Spring wiring mistakes while typing instead of at application start, and get from where a bean
-is used to where it is declared. The reference's Spring support is proprietary; this is IDECraft's
+is used to where it is declared. The reference's Spring support is proprietary; this is Ferris IDEA's
 own model, built from the rules above in a clean room.
 
 ## Behaviour
@@ -128,8 +128,8 @@ own model, built from the rules above in a clean room.
 11. **Field injection (v4):** a field annotated `@Autowired` gets a weak warning at the
    annotation, "Field injection: constructor injection is recommended", prefixed "Spring:" like
    the other findings. The reference reported five such warnings in the controller of the sample
-   project, one at each `@Autowired` of a field, and IDECraft none. [OBS-0037 FW1; DOC for the
-   recommendation; the message is IDECraft's own]
+   project, one at each `@Autowired` of a field, and Ferris IDEA none. [OBS-0037 FW1; DOC for the
+   recommendation; the message is Ferris IDEA's own]
    - **Which fields:** every `@Autowired` field of a class in the project's own sources, whatever
      its type (a project type, a library type, a container) and whatever else it carries
      (`@Qualifier`, `required = false`). Not a constructor, a setter or a `@Bean` method, not a
@@ -143,7 +143,7 @@ own model, built from the rules above in a clean room.
    - **No quick fix:** turning the field into a constructor parameter is not offered yet.
 
 12. **Configuration keys lead to their lines and back (v5):** in the reference a key inside
-   `${…}` is a link, and Go to Declaration on it opens the line that defines it; IDECraft
+   `${…}` is a link, and Go to Declaration on it opens the line that defines it; Ferris IDEA
    answered that there is no declaration. [OBS-0037 KS2; DOC for the rules; GEN for the reverse
    direction, Find Usages and the documentation, which the run did not compare]
    - **Where a key stands in the code:** inside a `${…}` placeholder of `@Value`, with or without
@@ -199,7 +199,7 @@ own model, built from the rules above in a clean room.
      edit moves the values after it and drops the one it touches until the next save.
 14. **Gutter marks (v5):** the reference marks the line of a bean class and the line of the
    constructor that takes beans, and a click leads to the other side of the wiring. [OBS-0037
-   KS4; glyphs and tooltips are IDECraft's own]
+   KS4; glyphs and tooltips are Ferris IDEA's own]
    - **Bean:** `●` on the line of the name of every bean class and of every method or field
      that declares a bean (behaviours 1 and 9). A click leads to the injection points the bean
      fits.
@@ -218,7 +218,7 @@ own model, built from the rules above in a clean room.
      can carry both. They follow the model: an edit of a line drops its mark until the next save.
 15. **Tool window: filters, test beans, dependencies (v5):** the reference's bean window has a
    search field, filters by module and by kind of bean, and a panel with a graph of the beans
-   and documentation; it listed 16 beans where IDECraft counted 21. [OBS-0037 KS5; GEN]
+   and documentation; it listed 16 beans where Ferris IDEA counted 21. [OBS-0037 KS5; GEN]
    - **Main sources by default:** the list holds the beans of the application. A bean declared
      under `src/test/` is left out unless *Tests* is switched on, and is then marked as a test
      bean. The header counts the beans listed, of how many, and names the number in tests that
@@ -438,24 +438,24 @@ The model is read from the files on disk, so problems, marks and shown values fo
 every keystroke; types are matched by simple name.
 Compared side by side on `ProductService.java` of the Spring sample project (OBS-0037, run of
 2026-11-14), since v5:
-- **Better, kept:** IDECraft reports the `@Value` key without a default that no file defines;
+- **Better, kept:** Ferris IDEA reports the `@Value` key without a default that no file defines;
   the reference did not (KS1, IMP-0408). Values of keys that look like secrets are never shown
   (IMP-0409); whether the reference shows them was not observed.
 - **Which value:** for `shop.currency` the reference showed `USD`, the value of the document of
-  the profile `prod`; IDECraft shows `EUR`, the value of the default profile, because nothing in
+  the profile `prod`; Ferris IDEA shows `EUR`, the value of the default profile, because nothing in
   the configuration switches `prod` on. Whether a profile was set as active in the reference was
   not checked. A deviation on purpose: the value shown is the one the application gets when it
   is started as the files say.
 - **No link drawing:** a key is not underlined or coloured as a link; Go to Declaration and
   ⌘-click work on it.
-- **Mark of an injection point:** the reference marks the line of the constructor; IDECraft
+- **Mark of an injection point:** the reference marks the line of the constructor; Ferris IDEA
   marks the line of each injected type, which is the constructor's line when its parameters
   stand on it, and each field's line for field injection. Whether the reference marks fields
   was not observed.
 - **Tool window:** no diagram of the bean graph — the panel lists what the selected bean needs
   and what needs it, one level, as text — and no documentation pane; no filter by module (one
-  model per project). IDECraft's problem list in the window has no counterpart in the
-  reference. The reference listed 16 beans; IDECraft lists 18 for the main sources and 3 more
+  model per project). Ferris IDEA's problem list in the window has no counterpart in the
+  reference. The reference listed 16 beans; Ferris IDEA lists 18 for the main sources and 3 more
   with *Tests*. Which two the reference does not list was not compared.
 - **Find Usages** on a key lists places without the kind and context columns of symbol usages.
   Rerun is answered by the model while the caret is still on the key; after the caret moved it
@@ -465,7 +465,7 @@ Compared side by side on `ProductService.java` of the Spring sample project (OBS
 Earlier comparison, unchanged: Compared side by
 side for one file of the Spring sample project (OBS-0037): the two wiring problems agree, and
 behaviour 11 adds the field injection warnings the reference had. The reference showed the two
-wiring problems as errors, IDECraft shows them as warnings (behaviour 4, unchanged). Whether the
+wiring problems as errors, Ferris IDEA shows them as warnings (behaviour 4, unchanged). Whether the
 reference reports field injection in test classes, and its unused-field warning (a general Java
 inspection, not part of this model), were not compared. Find Usages and the quick documentation
 on a key, the way back from a configuration file and the prefixes were not compared (behaviour

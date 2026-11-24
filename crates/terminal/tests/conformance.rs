@@ -4,7 +4,7 @@
 //! value (`xterm-256color`) say. The recordings in `fixtures/` were made once with programs that
 //! are installed anyway (`fixtures/record.sh`).
 
-use idecraft_terminal::{Cell, Color, Terminal, key_bytes, paste_bytes};
+use ferris_idea_terminal::{Cell, Color, Terminal, key_bytes, paste_bytes};
 
 fn term(rows: usize, cols: usize, input: &[u8]) -> Terminal {
     let mut t = Terminal::new(rows, cols);
@@ -549,7 +549,7 @@ fn c28_full_reset() {
         b"1\r\n2\r\n3\x1b]0;t\x07\x1b[?1049h\x1b[?1000h\x1b[?2004h\x1b[31m\x1bc",
     );
     assert!(!t.screen.alternate() && !t.screen.bracketed_paste());
-    assert_eq!(t.screen.mouse_mode(), idecraft_terminal::MouseMode::Off);
+    assert_eq!(t.screen.mouse_mode(), ferris_idea_terminal::MouseMode::Off);
     assert_eq!(t.screen.text(), "");
     assert_eq!(t.screen.cursor(), (0, 0));
     assert_eq!(t.screen.scrollback(), ["1"], "the history stays");

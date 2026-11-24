@@ -7,8 +7,8 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use idecraft_debugger::{BrowserProfile, OLD_PROFILE, SourceBreakpoint};
-use idecraft_workbench::debug_model::{Command, Controller, Kind, Launch, Update};
+use ferris_idea_debugger::{BrowserProfile, OLD_PROFILE, SourceBreakpoint};
+use ferris_idea_workbench::debug_model::{Command, Controller, Kind, Launch, Update};
 
 /// Polls `c` until `done` accepts an update; panics with what came after 60 s or on a failure.
 fn wait_for(c: &Controller, seen: &mut Vec<Update>, done: impl Fn(&Update) -> bool) {
@@ -61,7 +61,7 @@ fn page(root: &Path) -> PathBuf {
 
 #[test]
 fn rerun_restarts_the_page_session() {
-    let Some(adapter) = idecraft_debugger::known_adapters()
+    let Some(adapter) = ferris_idea_debugger::known_adapters()
         .into_iter()
         .find(|a| a.name == "js-debug")
         .and_then(|a| a.command)
@@ -69,19 +69,20 @@ fn rerun_restarts_the_page_session() {
         eprintln!("skipped: node or js-debug is not installed");
         return;
     };
-    if idecraft_debugger::chrome().is_none() {
+    if ferris_idea_debugger::chrome().is_none() {
         eprintln!("skipped: no Chrome or Chromium");
         return;
     }
-    idecraft_workbench::debug_model::set_browser_headless(true);
-    let dir = std::env::temp_dir().join(format!("idecraft-browser-rerun-{}", std::process::id()));
+    ferris_idea_workbench::debug_model::set_browser_headless(true);
+    let dir =
+        std::env::temp_dir().join(format!("ferris-idea-browser-rerun-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let root = dir.join("web");
     std::fs::create_dir_all(root.join(OLD_PROFILE).join("Default")).unwrap();
     let dir = dir.canonicalize().unwrap();
     let root = root.canonicalize().unwrap();
     std::fs::write(root.join(OLD_PROFILE).join("Default/Cookies"), "c").unwrap();
-    idecraft_core::trust::trust_for_process(&root);
+    ferris_idea_core::trust::trust_for_process(&root);
     let script = page(&root);
     let profile = BrowserProfile::in_cache(&dir.join("cache"), &root);
     let launch = Launch {
@@ -109,7 +110,7 @@ fn rerun_restarts_the_page_session() {
         seen.iter()
             .any(|u| matches!(u, Update::Output(t) if t.contains("moved out of the project")))
     );
-    assert!(!idecraft_debugger::lifetime::using_profile(&profile.folder).is_empty());
+    assert!(!ferris_idea_debugger::lifetime::using_profile(&profile.folder).is_empty());
 
     // Rerun: Stop to the old session, the new one starts at once.
     first.send(Command::Stop);
@@ -121,7 +122,7 @@ fn rerun_restarts_the_page_session() {
     second.send(Command::Stop);
     wait_for(&second, &mut seen, |u| matches!(u, Update::Exited(_)));
     assert!(
-        settles(|| idecraft_debugger::lifetime::using_profile(&profile.folder).is_empty()),
+        settles(|| ferris_idea_debugger::lifetime::using_profile(&profile.folder).is_empty()),
         "a browser still uses the profile after Stop"
     );
     let _ = std::fs::remove_dir_all(&dir);

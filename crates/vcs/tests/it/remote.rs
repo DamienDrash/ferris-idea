@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
-use idecraft_vcs::{MergeKind, PushOptions, Repo};
+use ferris_idea_vcs::{MergeKind, PushOptions, Repo};
 
 const WAIT: Duration = Duration::from_secs(60);
 
@@ -30,7 +30,7 @@ impl Setup {
     /// `remote.git` (bare), `a` and `b` cloned from it with one commit on `main`.
     fn new(tag: &str) -> Self {
         let dir =
-            std::env::temp_dir().join(format!("idecraft-remote-{tag}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("ferris-idea-remote-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let dir = dir.canonicalize().unwrap();

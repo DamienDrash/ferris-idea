@@ -4,7 +4,7 @@
 
 use std::sync::mpsc;
 
-use idecraft_database::{
+use ferris_idea_database::{
     Applied, ConnectionProfile, EditSet, OnError, Outcome, Session, SystemStore, TableQuery,
     introspect, resolve_credentials,
 };
@@ -102,7 +102,7 @@ pub fn read_table(
     rt: &tokio::runtime::Runtime,
     session: &Session,
     name: &str,
-) -> Result<idecraft_database::Table, String> {
+) -> Result<ferris_idea_database::Table, String> {
     rt.block_on(introspect(session))
         .map_err(|e| e.to_string())?
         .into_iter()
@@ -157,14 +157,14 @@ pub fn apply(
     session: &Session,
     set: &EditSet,
     savepoint: Option<(&str, bool)>,
-    isolation: idecraft_database::Isolation,
+    isolation: ferris_idea_database::Isolation,
 ) -> Result<Applied, String> {
     Ok(match savepoint {
         None => rt.block_on(set.apply(session)),
         Some((name, begin)) => {
             if begin {
                 // SPEC-0190 v3 behaviour 13: the transaction opens at the chosen isolation.
-                for sql in idecraft_database::begin_statements(session.dialect(), isolation)? {
+                for sql in ferris_idea_database::begin_statements(session.dialect(), isolation)? {
                     execute(rt, session, &sql)?;
                 }
             }

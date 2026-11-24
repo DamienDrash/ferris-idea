@@ -1,6 +1,9 @@
 # SPEC-0127: Breakpoint properties in the window
 
-- **Version:** 14 · **Date:** 2026-11-16 (v14: the popup's and the dialog's keys in the system's
+- **Version:** 15 · **Date:** 2026-11-16 (v15: Toggle Breakpoint Enabled and ⌥-click on a line
+  number, behaviour 31; Remove All Breakpoints and Remove All Breakpoints in File, also through
+  `set_breakpoint`'s `remove_all`, behaviour 32; AK-20 to AK-22; F-071 checked without a screen;
+  behaviour 30 and AK-19 belong to v14 on another branch); 2026-11-16 (v14: the popup's and the dialog's keys in the system's
   notation, More from the keymap, behaviour 30 — PR #866 Linux window self-test); 2026-11-16 (v13.1: AK-3 follows behaviour 19 — on the caret's breakpoint ⇧⌘F8 opens its popup and ⇧⌘F8 there the dialog; its wording from before v10 had ⇧⌘F8 open the dialog at once; no change of behaviour, found by the Linux window self-test; v13: one breakpoint, two views — the popup and the dialog show a line breakpoint's Enabled, Suspend and All/Thread by one rule from the breakpoint's own state, the popup's switches in the semantic tree, behaviour 29; OBS-0056 D1, D2; v12: the dialog shows All chosen and its switches as a vertical list of check boxes, behaviours 27 and 28; OBS-0056 D1, D2; the dependency chosen by clicks in a window test, OBS-0054 B4; v11: the popup's title, check boxes and options, All chosen, Watch, the condition's expansion and history; OBS-0056 P2–P6; v10: the small popup at the gutter, Suspend All/Thread, a check box per row, "Disable until hitting" chosen from the breakpoints; OBS-0054 B2–B4; v9: acceptance criterion AK-14, the rest of hand test 54 in a window of the test harness with real keys; v8: Toggle Temporary Line Breakpoint, the keymap's `ToggleTemporaryLineBreakpoint`; v7: Go sessions, where Delve evaluates the properties; v6: agents get the breakpoints as the adapter has them after the first wait, change them while a session goes on and start with the saved ones; v5: a breakpoint the running session cannot bind is
   drawn hollow and its tooltip says why, agents get `verified` and the reason, OBS-0035 L14; v2: no line background for a switched-off breakpoint; v3:
   suspend policy, hit message and stack, removal after the hit, dependent breakpoints, instance,
@@ -13,10 +16,15 @@
   Ctrl+Shift+F8), STD (DAP `SourceBreakpoint`: `condition`, `hitCondition`, `logMessage`),
   SPEC-0039 v2 (capability check), SPEC-0091 (breakpoints in the editor), ADR-0008, OBS v3
   (OBS-0025 item 14: the reference's breakpoint options), third-party open source v3 (java-debug
-  stops only the hitting thread; its `pauseOthers` and `continueAll`), SPEC-0178 (IDECraft
+  stops only the hitting thread; its `pauseOthers` and `continueAll`), OSS v15 (action ids
+  `ToggleBreakpointEnabled` in the Run menu's breakpoint group, `Debugger.RemoveAllBreakpoints`
+  and `Debugger.RemoveAllBreakpointsInFile` without a menu, in the platform's debugger action
+  files of `JetBrains/intellij-community`; ids only, no code), DOC v15 (holding Alt while
+  clicking a breakpoint in the gutter switches it off or on; on a line without one it sets a
+  temporary breakpoint), SPEC-0178 (Ferris IDEA
   evaluates what the adapter cannot, at each hit), STD v5 (DAP `Breakpoint.verified` and
   `Breakpoint.message` in the answer to `setBreakpoints` and in `breakpoint` events), SPEC-0039
-  behaviour 8 (IDECraft's hint for a breakpoint that is not bound), OBS v5 (OBS-0035 L14: a
+  behaviour 8 (Ferris IDEA's hint for a breakpoint that is not bound), OBS v5 (OBS-0035 L14: a
   breakpoint that never stops looked like any other), STD v6 (DAP `setBreakpoints` replaces a
   source's breakpoints at any time, also while the program runs; tried 2026-11-13 with lldb-dap,
   debugpy 1.8.21, js-debug 1.95.3 and java-debug 0.53.1), OBS v10 (OBS-0054: the small popup on ⇧⌘F8 with a breakpoint at the caret, Suspend with All/Thread, check boxes in the list, the dependency chosen from a list with "disable again / leave enabled")
@@ -39,7 +47,7 @@ without leaving the window.
    the breakpoint, Tab moves between the fields, Enter (Done) applies and closes, F4 or a double
    click applies and shows the line, Escape closes without applying the open form. [GEN, DOC]
 3. **Applying:** changed properties are saved with the workspace
-   (`.idecraft/breakpoint-properties.json` beside `.idecraft/breakpoints`; plain breakpoints need
+   (`.ferris-idea/breakpoint-properties.json` beside `.ferris-idea/breakpoints`; plain breakpoints need
    no entry) and sent to a running debug session at once; a new session starts with them. A
    switched-off breakpoint is not sent. The adapter's capabilities are checked as in SPEC-0039 v2.
    [STD]
@@ -73,7 +81,7 @@ without leaving the window.
 12. **Groups (v3):** the dialog lists Line Breakpoints, Exception Breakpoints, Method Breakpoints and
    Field Watchpoints (SPEC-0146 v3) under headings, and is larger (760 × 560), its form scrolling.
    [OBS]
-13. **How (v3):** behaviours 6–11 are IDECraft's own at each hit (as SPEC-0178 for conditions the
+13. **How (v3):** behaviours 6–11 are Ferris IDEA's own at each hit (as SPEC-0178 for conditions the
    adapter cannot evaluate): a breakpoint with such an option stops the program briefly at every
    hit, also when it then goes on. The options are saved in `breakpoints.toml` as the table `rules`
    of the breakpoint (`depends_on` relative to the workspace, SPEC-0303), and agents set them
@@ -93,7 +101,7 @@ gutter's, a switched-off one grey. [OBS]
    hollow: a ring two pixels wide in its colour (red, amber for one that logs), its line keeping
    the breakpoint background — so it differs from a switched-off breakpoint, a thin ring without
    that background. Its tooltip adds a line `Not bound: <reason>`, the reason being the adapter's
-   message, else IDECraft's hint of SPEC-0039 behaviour 8 (the file does not exist; the path is
+   message, else Ferris IDEA's hint of SPEC-0039 behaviour 8 (the file does not exist; the path is
    reached through a symbolic link; no code at this line in the loaded program, or the program
    was built from another path or without debug information). The breakpoint is matched to its
    gutter line by the line asked for, not the line the adapter moved it to. Without a session —
@@ -104,7 +112,7 @@ gutter's, a switched-off one grey. [OBS]
 **(v5)** 15. **Agents:** the debugging tools that place breakpoints (`debug_start`, also for
    attaching and remote hosts) list each placed breakpoint with `verified`, the line asked for
    (`requested_line`) and the adapter's `reason` when it gave one; the breakpoints still not bound
-   in a state (`pending_breakpoints`) carry that `reason` beside IDECraft's `hint`.
+   in a state (`pending_breakpoints`) carry that `reason` beside Ferris IDEA's `hint`.
    `saved_breakpoints` stays a list of the saved breakpoints and says nothing about binding, as no
    session is involved. [ADR-0008]
 
@@ -116,7 +124,7 @@ gutter's, a switched-off one grey. [OBS]
 
 **(v6)** 16. **Agents and a running session:** `debug_breakpoints` (session; optional `path` and
    `breakpoints`) lists every file's line breakpoints as the adapter has them now (`verified`,
-   `line`, `requested_line`, `reason`), the ones not bound with IDECraft's hint, and the debug
+   `line`, `requested_line`, `reason`), the ones not bound with Ferris IDEA's hint, and the debug
    console. With `path` and `breakpoints` it first replaces that file's line breakpoints by the
    list (line, condition, hit_condition, log_message, `enabled`; an empty list takes them all
    away) — while the program is stopped or while it runs, as the dialog does for the window's
@@ -134,7 +142,7 @@ gutter's, a switched-off one grey. [OBS]
     message are Delve's own: the condition is a Go expression, the pass count has the forms of
     SPEC-0178 (`N` alone is the N-th hit) and a log message's `{expr}` parts are Go expressions.
     The message reaches the debug console with Delve's goroutine prefix. The options of behaviours
-    6–11 stay IDECraft's at each hit. [OSS: Delve's public documentation]
+    6–11 stay Ferris IDEA's at each hit. [OSS: Delve's public documentation]
 
 18. **Toggle Temporary Line Breakpoint (v8):** `ToggleTemporaryLineBreakpoint` (⌥⇧⌘F8 in the
     macOS keymap, Ctrl+Alt+Shift+F8 in the default one; Run › Toggle Temporary Line Breakpoint,
@@ -190,14 +198,14 @@ gutter's, a switched-off one grey. [OBS]
 25. **Watch (v11, OBS-0056 P5):** for a method breakpoint Method entry and Method exit stand under
     the heading "Watch", one under the other. The reference's third option there, Emulated, is not
     offered: it switches between the debugger's own method events and breakpoints the IDE sets on
-    the method's first and last lines; IDECraft has only one way (a function breakpoint for the
+    the method's first and last lines; Ferris IDEA has only one way (a function breakpoint for the
     entry, its own emulation of the exit, SPEC-0146 v6 behaviour 13), so the switch would change
     nothing. Named under Known deviations. [OBS, GEN]
 26. **Condition (v11, OBS-0056 P6):** ⇧↩ in the condition field expands it to five lines (and back);
     while expanded, ↩ starts a new line and ⌘↩ (Ctrl+Enter) is Done; collapsed, ↩ is Done. ↑ and ↓
     in the collapsed field step through the conditions used last — the most recent first, at most
     20, the same condition once — and back to the text being typed. A condition becomes recent when
-    the popup applies it. The list is kept while IDECraft runs, not in a file. [OBS,
+    the popup applies it. The list is kept while Ferris IDEA runs, not in a file. [OBS,
     GEN]
 
 27. **All chosen in the dialog (v12, OBS-0056 D1):** the Breakpoints dialog shows a line breakpoint
@@ -232,10 +240,30 @@ gutter's, a switched-off one grey. [OBS]
     (⇧⌘N)", "(⌥D)", "(⌥K)", "(⌥C)", "(⌥U)"), are written for the platform as SPEC-0028 v7
     behaviour 12 says: `Alt+E`, `Shift+Enter collapse · Ctrl+Enter done`, `Ctrl+N`, `Ctrl+Shift+N`.
     The keys themselves do not change. [GEN]
+31. **Switching a breakpoint off and on (v15):** `ToggleBreakpointEnabled` (Run › Toggle
+    Breakpoint Enabled, after Toggle Temporary Line Breakpoint; Search Everywhere; no shortcut in
+    the bundled keymaps) switches the breakpoint on the caret line of the active editor off, or
+    on again, and keeps its condition and every other property; on a line without a breakpoint
+    it does nothing. ⌥-click (Alt-click) on a line number does the same for that line's
+    breakpoint and, on a line without one, sets a temporary breakpoint as
+    `ToggleTemporaryLineBreakpoint` does (behaviour 18); a plain click still sets or removes. The
+    change is saved and sent to a running session as any change of Enabled (behaviour 3); the
+    gutter shows the ring of behaviour 1. MCP: `set_breakpoint` with `enabled` (behaviour 5).
+    [OSS, DOC]
+32. **Remove all (v15):** `Debugger.RemoveAllBreakpoints` removes every line breakpoint of the
+    workspace, also of files without an editor, and `Debugger.RemoveAllBreakpointsInFile` those
+    of the active editor's file, each with its properties; both are reached through Search
+    Everywhere ("Remove All Breakpoints", "Remove All Breakpoints in File", group Run) and have no
+    menu item and no shortcut, as in the reference. The change is saved and sent to a running
+    session; the status bar says how many were removed ("3 breakpoints removed", "1 breakpoint
+    removed in this file", "No breakpoints to remove"). Exception, method and field breakpoints
+    (SPEC-0146) are kept. MCP: `set_breakpoint` with `remove_all: true` removes those of `path`,
+    or of the whole workspace with `path` `.`, answers `removed` with the count and, as every
+    write of the tool, only previews with the default `dry_run: true`. [OSS, GEN, ADR-0008]
 
 ## Acceptance criteria
 - **AK-1** Looks, properties following moved breakpoints, what is sent to the debugger (switched-off
-  ones left out), saving and reading (`idecraft_debugger::saved` tests).
+  ones left out), saving and reading (`ferris_idea_debugger::saved` tests).
 - **AK-2** MCP: list, preview, set, switch off, remove, removing a missing breakpoint refused
   (`crates/mcp/tests/it/protocol.rs`: `saved_breakpoint_tools`).
 - **AK-3** Window self-test (`breakpoint_steps`): ⇧⌘F8 on the caret's breakpoint opens its popup,
@@ -283,7 +311,7 @@ gutter's, a switched-off one grey. [OBS]
 - **AK-13 (v8, behaviour 18)** The properties of a temporary breakpoint (only "Remove once hit",
   not plain, the look of a breakpoint with an option), toggling on a free line and on a line with
   a breakpoint, and the properties of the other lines staying
-  (`idecraft_debugger::saved::tests::a_temporary_breakpoint_is_removed_once_hit_and_toggles`);
+  (`ferris_idea_debugger::saved::tests::a_temporary_breakpoint_is_removed_once_hit_and_toggles`);
   the action has its title, its place in the Run menu and a shortcut in both keymaps
   (`everywhere::tests::run_debug_and_window_actions_from_the_keymap`,
   `menus::tests::run_debug_and_window_actions_are_in_their_menus`). In a window of the test
@@ -351,6 +379,27 @@ gutter's, a switched-off one grey. [OBS]
 - **AK-19 (v14, behaviour 30)** Unit test `breakpoint_popup::tests::keys_follow_the_platform`:
   "More (⇧⌘F8)" with the bundled macOS keymap on macOS, "More (Ctrl+Shift+F8)" with the default
   keymap on Linux, "More" without a shortcut; the hint and a mnemonic for both.
+- **AK-20 (v15, behaviours 31 and 32)** Unit tests: switching Enabled keeps the condition, does
+  nothing without a breakpoint and switches back to a plain breakpoint; removing all of one file
+  keeps the other file's breakpoints and properties, removing all removes the rest, each counted
+  (`ferris_idea_debugger::saved::tests::enabled_is_toggled_and_all_breakpoints_are_removed`); the
+  status bar's text for none, one and several
+  (`debug_model::tests::the_removal_of_all_breakpoints_is_counted`).
+- **AK-21 (v15, behaviour 32)** MCP (`saved_breakpoints_are_removed_all_at_once`): three saved
+  breakpoints in two files; `remove_all` on `.` as a dry run reports 3 and removes nothing; on
+  `a.py` it removes its two and keeps `b.py`'s with its condition; on `.` the last one, after which
+  the breakpoints file is gone.
+- **AK-22 (v15, behaviours 31 and 32)** In a window of the test harness
+  (`crates/workbench/tests/it/breakpoint_toggles.rs`): Toggle Breakpoint Enabled does nothing on a
+  free line, switches a breakpoint with a condition off and on with the condition kept and the
+  breakpoint still in the gutter (`enabled_is_toggled_by_the_action_and_by_alt_click`); a real ⌥
+  click on its line number switches it off and on, on a free line sets a temporary breakpoint, and
+  a plain click removes that one again; Remove All Breakpoints in File empties the editor's gutter
+  and keeps the saved breakpoint of a file without an editor, Remove All Breakpoints removes that
+  one too, the status bar says "2 breakpoints removed in this file", "1 breakpoint removed" and
+  "No breakpoints to remove", and the three actions have their titles in Search Everywhere
+  (`all_breakpoints_are_removed_in_the_file_and_everywhere`). Not covered: a real mouse and the
+  look on screen.
 
 ## Out of scope
 Conditions with completion, breakpoints of the reference's own project files, user-made groups of
@@ -358,12 +407,12 @@ breakpoints (the reference can move breakpoints into named groups), evaluate-and
 expression besides the log message (the log message's `{expr}` parts do that).
 
 ## Known deviations from the reference
-The reference's dialog also lists exception breakpoints and offers more options; IDECraft offers
+The reference's dialog also lists exception breakpoints and offers more options; Ferris IDEA offers
 line breakpoints with the DAP properties. Not compared side by side. **(v3)** The reference opens a
-small window on a right click and the large dialog with "More"; IDECraft opens the dialog at once
+small window on a right click and the large dialog with "More"; Ferris IDEA opens the dialog at once
 (OBS-0025 L13). The options of behaviours 6–11 cost a short stop at each hit, also for hits that
 go on. The dependency is written as `path:line` instead of chosen from a list (v10: chosen from the list). **(v5)** The
-reference's own mark for a breakpoint that cannot be bound was not compared; IDECraft's hollow
+reference's own mark for a breakpoint that cannot be bound was not compared; Ferris IDEA's hollow
 ring and its tooltip line are its own. **(v11)** The popup offers no Emulated switch for method
 breakpoints (behaviour 25); the recent conditions are kept for the running IDE only, the
 reference keeps them across restarts (behaviour 26). **(v13)** Neither the popup nor the dialog

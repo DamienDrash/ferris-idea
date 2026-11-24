@@ -1,13 +1,13 @@
 //! The file type actions in the window (`SPEC-0004` v5 behaviours 12, 13): Override File Type,
 //! Revert File Type Override and Associate with File Type on the Project tree's selection or the
 //! active file. What a file's language is and where the associations are kept is in
-//! [`idecraft_languages::file_types`].
+//! [`ferris_idea_languages::file_types`].
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_languages::LanguageId;
+use ferris_idea_languages::file_types::{self as ft, Choice};
 use gpui::{Context, Window};
-use idecraft_languages::LanguageId;
-use idecraft_languages::file_types::{self as ft, Choice};
 
 use super::WorkbenchView;
 use crate::context_menu::{self as model, FileTypeTarget};

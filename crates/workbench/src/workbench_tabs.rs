@@ -9,9 +9,9 @@
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_core::{CloseButtonPlace, EditorTabSettings, TabPlacement, TabRows};
+use ferris_idea_ui::tool_windows::ToolWindow;
 use gpui::{Context, Entity, MouseButton, Window, div, prelude::*, px};
-use idecraft_core::{CloseButtonPlace, EditorTabSettings, TabPlacement, TabRows};
-use idecraft_ui::tool_windows::ToolWindow;
 
 use super::{EditorEvent, EditorView, Split, WorkbenchView, c, icon, island, problem_mark};
 use crate::editor_layout::{GroupId, Layout, MAIN, Node, SavedEditors, SavedGroup, SplitPath};
@@ -143,14 +143,22 @@ impl WorkbenchView {
     ///
     /// A file whose language an override, a pattern or its hashbang line decided shows that
     /// language's icon (`SPEC-0004` v6 behaviour 15).
+    ///
+    /// A file whose name gives no icon shows the text icon when it opens as text, and the
+    /// unknown icon only when it does not (a binary file, `SPEC-0004` v12 behaviour 15).
     pub fn icon_of(&self, path: &Path, cx: &gpui::App) -> &'static str {
-        let plain = || idecraft_ui::icons::file_icon(&file_name(path));
-        if let Some(t) = self.file_type_icon(path)
+        let decided = self.file_type_icon(path);
+        let plain =
+            || crate::file_type_icons::name_icon(path, decided.is_some_and(|t| t.opens_as_text));
+        if let Some(t) = decided
             && let Some(icon) = t.icon
         {
             let stays_jvm = matches!(
                 t.language,
-                Some(idecraft_languages::LanguageId::Java | idecraft_languages::LanguageId::Kotlin)
+                Some(
+                    ferris_idea_languages::LanguageId::Java
+                        | ferris_idea_languages::LanguageId::Kotlin
+                )
             );
             if !(stays_jvm && crate::decl_icon_model::has_kinds(path)) {
                 return icon;
@@ -343,6 +351,7 @@ impl WorkbenchView {
             twin.update(cx, |t, cx| t.set_project_root(&root, cx));
         }
         self.show_bookmark_marks(&twin, cx);
+        self.show_profile_lines(&twin, cx);
         let sub = cx.subscribe_in(&twin, window, {
             let path = path.to_path_buf();
             move |this, editor, event: &EditorEvent, window, cx| match event {
@@ -351,6 +360,9 @@ impl WorkbenchView {
                 EditorEvent::BookmarkEdits(edits) => this.bookmark_edits(&path, edits, cx),
                 EditorEvent::EditBreakpoint(line) => {
                     this.open_breakpoints(Some((path.clone(), *line)), window, cx)
+                }
+                EditorEvent::AltClickBreakpoint(line) => {
+                    this.alt_click_breakpoint(&path, *line, cx)
                 }
                 EditorEvent::Edited(edits) => {
                     this.keep_preview(&path);
@@ -373,6 +385,9 @@ impl WorkbenchView {
                 EditorEvent::FrameworkMark(line) => this.framework_mark(&path, *line, window, cx),
                 // A click on an annotation of the second view (SPEC-0277 v2 behaviour 13).
                 EditorEvent::ShowCommit(id) => this.show_commit_in_log(id, window, cx),
+                EditorEvent::ProfileLine(line) => {
+                    this.reveal_profile_line(&path, *line, window, cx)
+                }
                 EditorEvent::ChangeMarker(index, at) => {
                     this.open_change_bar(&path, editor, *index, *at, window, cx)
                 }
@@ -386,6 +401,16 @@ impl WorkbenchView {
                     }
                     this.toggle_annotations_of(&path, editor, cx)
                 }
+                EditorEvent::UsagesOf(line) => {
+                    if let Some(g) = this
+                        .groups
+                        .iter()
+                        .find(|g| g.editors.get(&path) == Some(editor))
+                    {
+                        this.focused_group = g.id;
+                    }
+                    this.find_usages_of_count(&path, editor, *line, window, cx)
+                }
                 EditorEvent::InlineAlternative(_)
                 | EditorEvent::GroupUndo(..)
                 | EditorEvent::Undid(..)
@@ -394,6 +419,9 @@ impl WorkbenchView {
                 EditorEvent::Note(note) => {
                     this.status = Some(note.clone());
                     cx.notify();
+                }
+                EditorEvent::RoomComments(line) => {
+                    this.room_comment_mark_clicked(&path, *line, window, cx)
                 }
             }
         });
@@ -552,7 +580,7 @@ impl WorkbenchView {
         &mut self,
         path: &Path,
         from: Option<&Entity<EditorView>>,
-        edits: &[idecraft_editor::Edit],
+        edits: &[ferris_idea_editor::Edit],
         cx: &mut Context<Self>,
     ) {
         let Some(source) = from.cloned().or_else(|| self.editors.get(path).cloned()) else {
@@ -1231,10 +1259,10 @@ impl WorkbenchView {
             "TabList" => self.open_tab_list(self.focused_group, None, window, cx),
             "Switcher" => self.open_switcher(false, window, cx),
             "MaximizeEditorInSplit" => self.toggle_maximize_editor(window, cx),
-            "IDECraft.ConfigureEditorTabs" => {
+            "FerrisIDEA.ConfigureEditorTabs" => {
                 self.open_settings(crate::settings_model::Page::EditorTabs, window, cx)
             }
-            "IDECraft.OpenTabInNewWindow" => {
+            "FerrisIDEA.OpenTabInNewWindow" => {
                 self.status = Some(crate::context_menu::NO_NEW_WINDOW.into());
                 cx.notify();
             }
@@ -1293,7 +1321,7 @@ impl WorkbenchView {
             .shortcuts(action)
             .iter()
             .find_map(|s| match s {
-                idecraft_ui::keymap::Shortcut::Keyboard {
+                ferris_idea_ui::keymap::Shortcut::Keyboard {
                     first,
                     second: None,
                 } => {
@@ -1310,7 +1338,7 @@ impl WorkbenchView {
     /// The character of `action`'s shortcut when that is ⌃ with one character: the menu bar
     /// may take such a key before the Switcher sees it (behaviour 27b).
     fn control_character(action: &str) -> Option<char> {
-        use idecraft_ui::keymap::{Modifier, Shortcut};
+        use ferris_idea_ui::keymap::{Modifier, Shortcut};
         crate::keymaps::current()
             .shortcuts(action)
             .iter()
@@ -1691,7 +1719,7 @@ impl WorkbenchView {
         }
     }
 
-    /// Writes the editor area to `.idecraft/editor-tabs.json` (not for a remote project, whose
+    /// Writes the editor area to `.ferris-idea/editor-tabs.json` (not for a remote project, whose
     /// files live on the host).
     pub(super) fn save_editors(&self) {
         if self.editors_restored && self.remote_project.is_none() {
@@ -1901,7 +1929,7 @@ impl WorkbenchView {
                             .group_hover(hover_group.clone(), |s| s.opacity(1.))
                     })
                     .child(icon(if pin {
-                        "idecraft/pin"
+                        "ferris-idea/pin"
                     } else {
                         "general/closeSmall"
                     }))
@@ -1946,7 +1974,7 @@ impl WorkbenchView {
             };
             let tab = crate::metrics::tab(id, on, focused)
                 .group(hover_group.clone())
-                .pr(px(idecraft_ui::metrics::TAB_CLOSE_PADDING - 1.))
+                .pr(px(ferris_idea_ui::metrics::TAB_CLOSE_PADDING - 1.))
                 .relative()
                 .flex_none()
                 .when(settings.rows == TabRows::Squeeze, |d| {
@@ -1957,7 +1985,7 @@ impl WorkbenchView {
             } else {
                 String::new()
             };
-            let tab = tab.tip_text(hit, idecraft_ui::tooltip::Tip::plain(tip));
+            let tab = tab.tip_text(hit, ferris_idea_ui::tooltip::Tip::plain(tip));
             let (close_left, close_right) = if left_close {
                 (close, None)
             } else {
@@ -2046,7 +2074,9 @@ impl WorkbenchView {
                                     } else {
                                         format!("tab-list-{gid}")
                                     },
-                                    idecraft_ui::tooltip::Tip::plain("Show Hidden Tabs".to_owned()),
+                                    ferris_idea_ui::tooltip::Tip::plain(
+                                        "Show Hidden Tabs".to_owned(),
+                                    ),
                                 )
                                 .relative()
                                 .flex_none()
@@ -2383,7 +2413,7 @@ impl WorkbenchView {
                     move |b, _, _| {
                         bounds.borrow_mut().insert(
                             key.clone(),
-                            idecraft_ui::tool_windows::Rect {
+                            ferris_idea_ui::tool_windows::Rect {
                                 x: f32::from(b.origin.x),
                                 y: f32::from(b.origin.y),
                                 w: f32::from(b.size.width),

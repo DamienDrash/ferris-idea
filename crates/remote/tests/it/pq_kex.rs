@@ -6,9 +6,9 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use idecraft_remote::testing::TestHost;
-use idecraft_remote::testing::shared_options as ssh_options;
-use idecraft_remote::{PQ_KEX, Remote, RemoteError};
+use ferris_idea_remote::testing::TestHost;
+use ferris_idea_remote::testing::shared_options as ssh_options;
+use ferris_idea_remote::{PQ_KEX, Remote, RemoteError};
 
 fn scratch(name: &str) -> PathBuf {
     std::env::temp_dir().join(format!("idc-pq-{name}-{}", std::process::id()))
@@ -37,7 +37,7 @@ fn sec_classical_host_is_refused() {
             "touch \"$1\"",
             &[&marker.display().to_string()],
             None,
-            idecraft_remote::TIMEOUT,
+            ferris_idea_remote::TIMEOUT,
         )
         .unwrap_err();
     assert_eq!(e, RemoteError::NoPqKex(h.target.host.clone()), "{e:?}");
@@ -48,7 +48,7 @@ fn sec_classical_host_is_refused() {
     assert!(!marker.exists(), "nothing may run on a refused host");
     assert!(matches!(r.home(), Err(RemoteError::NoPqKex(_))));
     // The same host is reachable with OpenSSH's own defaults, which would fall back to a classical
-    // exchange: the refusal comes from IDECraft's options, not from a broken test server.
+    // exchange: the refusal comes from Ferris IDEA's options, not from a broken test server.
     let classic = Command::new("ssh")
         .args(["-o", "BatchMode=yes", "-o", "ControlMaster=no", "-v"])
         .args(&h.target.extra)
@@ -71,7 +71,7 @@ fn sec_post_quantum_host_is_accepted() {
     };
     let r = Remote::new(h.target.clone());
     assert!(r.home().unwrap().starts_with('/'));
-    let out = idecraft_remote::SshCommand::new(idecraft_remote::SshPurpose::Host)
+    let out = ferris_idea_remote::SshCommand::new(ferris_idea_remote::SshPurpose::Host)
         .option("ControlMaster=no")
         .args(["-v"])
         .extra(&h.target.extra)
@@ -85,6 +85,27 @@ fn sec_post_quantum_host_is_accepted() {
     assert!(out.status.success(), "{stderr}");
     let kex = negotiated(&stderr).expect("ssh -v names the key exchange");
     assert!(PQ_KEX.contains(&kex.as_str()), "negotiated {kex}");
+}
+
+/// Whether `file` is a module that its parent (`main.rs`, `lib.rs` or `mod.rs` beside it) declares
+/// only under a `#[cfg(...)]` attribute that names `test`, such as `#[cfg(all(test, target_os =
+/// "macos"))] mod f083_driver_tests;`.
+fn test_only_module(file: &Path) -> bool {
+    let (Some(dir), Some(stem)) = (file.parent(), file.file_stem().and_then(|s| s.to_str())) else {
+        return false;
+    };
+    let declaration = format!("mod {stem};");
+    ["main.rs", "lib.rs", "mod.rs"].iter().any(|parent| {
+        let text = std::fs::read_to_string(dir.join(parent)).unwrap_or_default();
+        let lines: Vec<&str> = text.lines().map(str::trim).collect();
+        lines.iter().enumerate().any(|(i, line)| {
+            line.ends_with(&declaration)
+                && !line.starts_with("pub")
+                && i > 0
+                && lines[i - 1].starts_with("#[cfg(")
+                && lines[i - 1].contains("test")
+        })
+    })
 }
 
 fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
@@ -303,7 +324,7 @@ fn the_scan_finds_ssh_through_variables_too() {
         "struct S {\n    /// The docker CLI.\n    program: String,\n}\nfn a(&self) { Command::new(&self.program); }",
         "/// Runs a build.\nfn run(program: &str) { Command::new(program); }",
         "fn a() { let p = \"cargo\"; Command::new(p); }",
-        "fn a() { cmd.env(\"GIT_SSH_COMMAND\", idecraft_remote::SshCommand::git_ssh_command()); }",
+        "fn a() { cmd.env(\"GIT_SSH_COMMAND\", ferris_idea_remote::SshCommand::git_ssh_command()); }",
     ] {
         assert!(found(code).is_empty(), "{code}: {:?}", ssh_starts(code));
     }
@@ -327,6 +348,10 @@ fn ssh_starts_only_at_the_one_start_point() {
     let mut start_point = 0;
     let mut users = Vec::new();
     for f in &files {
+        // A whole file that its parent declares only under `#[cfg(test)]` is test code.
+        if test_only_module(f) {
+            continue;
+        }
         let text = std::fs::read_to_string(f).unwrap_or_default();
         // Unit tests at the end of a file may start `ssh` on purpose.
         let code = text.split("#[cfg(test)]").next().unwrap_or_default();
@@ -403,8 +428,8 @@ fn azure_exception_follows_the_resolved_host_name() {
     std::fs::create_dir_all(&tmp).unwrap();
     let ssh = fake_ssh(&dir);
     let strict = ssh_options("ssh");
-    let azure_kex = idecraft_remote::git_kex(
-        idecraft_remote::KexPolicy::Hybrid,
+    let azure_kex = ferris_idea_remote::git_kex(
+        ferris_idea_remote::KexPolicy::Hybrid,
         true,
         "ssh.dev.azure.com",
         &[
@@ -425,13 +450,14 @@ fn azure_exception_follows_the_resolved_host_name() {
     let script = dir.join("git-ssh");
     std::fs::write(
         &script,
-        idecraft_remote::git_shim_script(
+        ferris_idea_remote::git_shim_script(
             &ssh.display().to_string(),
             &strict,
             Some(&azure),
             &tmp,
             "/no/hop",
             false,
+            None,
         ),
     )
     .unwrap();
@@ -450,7 +476,7 @@ fn azure_exception_follows_the_resolved_host_name() {
         (out, args)
     };
     // An alias of ~/.ssh/config whose Hostname is Azure DevOps: the exception applies.
-    for resolved in idecraft_remote::AZURE_DEVOPS_HOSTS {
+    for resolved in ferris_idea_remote::AZURE_DEVOPS_HOSTS {
         let (out, args) = run("my-azure", resolved);
         assert_eq!(out.status.code(), Some(7), "ssh's status is kept");
         assert!(
@@ -468,7 +494,7 @@ fn azure_exception_follows_the_resolved_host_name() {
             !stderr.contains("debug1:") && !stderr.contains("Transferred:"),
             "{stderr}"
         );
-        let (reports, _) = idecraft_remote::take_kex_reports(&stderr);
+        let (reports, _) = ferris_idea_remote::take_kex_reports(&stderr);
         assert_eq!(reports.len(), 1, "{stderr}");
         assert_eq!(reports[0].host, resolved);
         assert_eq!(reports[0].pq(), Some(false));
@@ -494,7 +520,7 @@ fn azure_exception_follows_the_resolved_host_name() {
         assert!(!args.lines().any(|l| l == "-E"), "{args}");
         assert!(args.contains("KexAlgorithms="), "{args}");
         let stderr = String::from_utf8_lossy(&out.stderr);
-        assert!(idecraft_remote::take_kex_reports(&stderr).0.is_empty());
+        assert!(ferris_idea_remote::take_kex_reports(&stderr).0.is_empty());
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -503,7 +529,10 @@ fn azure_exception_follows_the_resolved_host_name() {
 /// Azure DevOps host name carry only post-quantum methods.
 #[test]
 fn non_git_paths_to_azure_get_no_exception() {
-    let remote = Remote::new(idecraft_remote::SshTarget::parse("ssh.dev.azure.com", &[]));
+    let remote = Remote::new(ferris_idea_remote::SshTarget::parse(
+        "ssh.dev.azure.com",
+        &[],
+    ));
     let Ok(line) = remote.ssh_args() else {
         eprintln!("skipped: no ssh with a post-quantum key exchange");
         return;
@@ -521,14 +550,14 @@ fn non_git_paths_to_azure_get_no_exception() {
 
 /// Re-check of the Azure DevOps exception (ADR-0025 section 1a, PO-STATUS question 30); ignored by
 /// default, run by hand or in the nightly job:
-/// `cargo test -p idecraft-remote --test it -- --ignored pq_kex::azure_devops`. It connects without a
+/// `cargo test -p ferris-idea-remote --test it -- --ignored pq_kex::azure_devops`. It connects without a
 /// key or login (the connection ends at the key exchange or at host key verification) and fails
 /// when Azure DevOps offers a post-quantum key exchange — then the exception is to be removed — or
 /// no longer offers an allowed classical one.
 #[test]
 #[ignore = "network: re-check of the Azure DevOps exception"]
 fn azure_devops_still_lacks_post_quantum() {
-    for host in idecraft_remote::AZURE_DEVOPS_HOSTS {
+    for host in ferris_idea_remote::AZURE_DEVOPS_HOSTS {
         let probe = |kex: &str| {
             Command::new("ssh")
                 .args(["-F", "/dev/null", "-o", "BatchMode=yes"])
@@ -558,7 +587,7 @@ fn azure_devops_still_lacks_post_quantum() {
              (ADR-0025 section 1a, AZURE_CLASSIC_KEX in crates/remote/src/pq_git.rs, setting \
              git.ssh.allowClassicKexForAzureDevOps)"
         );
-        let classic = probe(&idecraft_remote::AZURE_CLASSIC_KEX.join(","));
+        let classic = probe(&ferris_idea_remote::AZURE_CLASSIC_KEX.join(","));
         assert!(
             classic.contains("host key verification failed"),
             "{host} no longer offers an allowed classical key exchange; check its offer and \

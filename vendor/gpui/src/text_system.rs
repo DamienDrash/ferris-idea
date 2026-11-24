@@ -1,4 +1,5 @@
-// Modified by IDECraft: layout_line joins runs of the same font only (see ../IDECRAFT.md).
+// Modified by Ferris IDEA: layout_line joins runs of the same font only; resolve_font has a last
+// resort font the application sets (see ../FERRIS_IDEA.md).
 mod font_fallbacks;
 mod font_features;
 mod line;
@@ -60,6 +61,8 @@ pub struct TextSystem {
     wrapper_pool: Mutex<FxHashMap<FontIdWithSize, Vec<LineWrapper>>>,
     font_runs_pool: Mutex<Vec<Vec<FontRun>>>,
     fallback_font_stack: SmallVec<[Font; 2]>,
+    // Ferris IDEA change: the font used when neither a font nor any fallback resolves.
+    last_resort_font: RwLock<Option<Font>>,
 }
 
 impl TextSystem {
@@ -84,6 +87,7 @@ impl TextSystem {
                 font("DejaVu Sans"),
                 font("Arial"), // macOS, Windows
             ],
+            last_resort_font: RwLock::default(),
         }
     }
 
@@ -99,6 +103,14 @@ impl TextSystem {
         names.sort();
         names.dedup();
         names
+    }
+
+    /// Ferris IDEA change: sets the font `resolve_font` uses when neither the requested font nor any of
+    /// the fallbacks resolves, typically a font the application added with `add_fonts`. A system
+    /// without any font configuration (Linux without fontconfig files) then draws text in it
+    /// instead of panicking.
+    pub fn set_last_resort_font(&self, font: Font) {
+        *self.last_resort_font.write() = Some(font);
     }
 
     /// Add a font's data to the text system.
@@ -154,6 +166,18 @@ impl TextSystem {
         }
         for fallback in &self.fallback_font_stack {
             if let Ok(font_id) = self.font_id(fallback) {
+                return font_id;
+            }
+        }
+        // Ferris IDEA change: a font the application brings, before giving up; in the requested
+        // weight and style where it has them.
+        let last_resort = self.last_resort_font.read().clone();
+        if let Some(last_resort) = last_resort {
+            let styled = Font {
+                family: last_resort.family.clone(),
+                ..font.clone()
+            };
+            if let Ok(font_id) = self.font_id(&styled).or_else(|_| self.font_id(&last_resort)) {
                 return font_id;
             }
         }
@@ -542,7 +566,7 @@ impl WindowTextSystem {
     ) -> Arc<LineLayout> {
         let mut font_runs = self.font_runs_pool.lock().pop().unwrap_or_default();
         font_runs.clear();
-        // IDECraft change: neighbouring runs share a font run only when they resolve to the same
+        // Ferris IDEA change: neighbouring runs share a font run only when they resolve to the same
         // font (see font_runs_of).
         font_runs.extend(
             font_runs_of(runs, |font| self.resolve_font(font))
@@ -563,7 +587,7 @@ impl WindowTextSystem {
     }
 }
 
-/// IDECraft change: the font runs of `runs` as `(length, font)`, with the font of each run from
+/// Ferris IDEA change: the font runs of `runs` as `(length, font)`, with the font of each run from
 /// `resolve`. A run joins the one before it only when it resolves to the same font and has the
 /// same colour, underline and strikethrough, as in `shape_text` (a change of decoration still
 /// starts a font run of its own, so no ligature spans it). gpui 0.2.2's `layout_line` joined a

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Builds the headless backend `idecraft-serve` for every platform of SPEC-0321 into
+# Builds the headless backend `ferris-idea-serve` for every platform of SPEC-0321 into
 # dist/backends/<target>/ and writes dist/backends/SHA256SUMS.
 #
 #   build-backends.sh [--mac-only | --linux-only] [<target> ...]
@@ -39,9 +39,9 @@ if [ "$mac" = 1 ] && [ "$(uname -s)" = Darwin ]; then
     want "$t" || continue
     echo "== $t (native)"
     rustup target add "$t" >/dev/null 2>&1 || true
-    cargo build --release -p idecraft-serve --target "$t"
+    cargo build --release -p ferris-idea-serve --target "$t"
     mkdir -p "$OUT/$t"
-    cp "target/$t/release/idecraft-serve" "$OUT/$t/idecraft-serve"
+    cp "target/$t/release/ferris-idea-serve" "$OUT/$t/ferris-idea-serve"
   done
 fi
 
@@ -57,10 +57,10 @@ if [ "$docker" = 1 ]; then
     fi
     echo "== linux, windows in $RUST_IMAGE:$need"
     docker run --rm \
-      -v "$PWD:/src" -v idecraft-cargo-registry:/usr/local/cargo/registry \
+      -v "$PWD:/src" -v ferris-idea-cargo-registry:/usr/local/cargo/registry \
       -e TARGETS="$need" -e LLVM_MINGW_VERSION="$LLVM_MINGW_VERSION" -w /src \
       "$RUST_IMAGE" sh /src/scripts/build-backends-inner.sh
   fi
 fi
 
-( cd "$OUT"; find . -type f -name 'idecraft-serve*' | sort | xargs shasum -a 256 > SHA256SUMS; cat SHA256SUMS )
+( cd "$OUT"; find . -type f -name 'ferris-idea-serve*' | sort | xargs shasum -a 256 > SHA256SUMS; cat SHA256SUMS )

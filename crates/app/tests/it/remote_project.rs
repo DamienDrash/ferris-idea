@@ -1,7 +1,7 @@
 //! SPEC-0317 AK-3, AK-4 and the SSH parts of AK-5 (SEC-2, -7, -9, -10, -11, -14): a folder as a
 //! remote project against a real `sshd` started as the current user (skipped without one). This
 //! binary is uploaded to a test folder below the home folder, checked by SHA-256 and started as
-//! `idecraft serve --stdio`; the window half runs in this test. One test function on purpose: the
+//! `ferris-idea serve --stdio`; the window half runs in this test. One test function on purpose: the
 //! listening-socket checks look at this process, which must not run other tests meanwhile.
 
 use std::io::Read;
@@ -9,10 +9,10 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-use idecraft_remote::{
+use ferris_idea_remote::{
     Installed, Remote, RemoteError, RemoteProject, ServeOptions, Unsaved, testing::TestHost,
 };
-use idecraft_session::{Op, Reconnected};
+use ferris_idea_session::{Op, Reconnected};
 
 fn op(at: usize, delete: usize, insert: &str) -> Op {
     Op {
@@ -56,7 +56,7 @@ fn mode(p: &Path) -> u32 {
 }
 
 /// Reads stream `id` until its text contains `needle`.
-fn read_until(conn: &idecraft_session::Connection, id: u32, needle: &str) -> String {
+fn read_until(conn: &ferris_idea_session::Connection, id: u32, needle: &str) -> String {
     let t0 = Instant::now();
     let mut all = Vec::new();
     while t0.elapsed() < Duration::from_secs(20) {
@@ -98,7 +98,7 @@ fn host_functions_over_ssh(p: &mut RemoteProject, project: &Path, backend: &str)
         .unwrap_err();
     assert_eq!(
         refused.code,
-        idecraft_session::ErrorCode::Denied,
+        ferris_idea_session::ErrorCode::Denied,
         "{refused:?}"
     );
     // A terminal on the host: a pseudo terminal of the backend, no second ssh process.
@@ -139,7 +139,7 @@ fn host_functions_over_ssh(p: &mut RemoteProject, project: &Path, backend: &str)
             .session
             .call_within("port.forward", json!({ "port": port }), long)
             .unwrap();
-        let local = idecraft_session::forward::LocalForward::start(
+        let local = ferris_idea_session::forward::LocalForward::start(
             conn.clone(),
             f["forward"].as_str().unwrap(),
             0,
@@ -171,7 +171,7 @@ fn host_functions_over_ssh(p: &mut RemoteProject, project: &Path, backend: &str)
             .session
             .call_within("port.forward", json!({ "port": 5005 }), long)
             .unwrap_err();
-        assert_eq!(e.code, idecraft_session::ErrorCode::Denied);
+        assert_eq!(e.code, ferris_idea_session::ErrorCode::Denied);
         local.close();
         p.session
             .call_within("port.close", json!({ "forward": f["forward"] }), long)
@@ -236,8 +236,8 @@ impl Drop for Cleanup {
 #[test]
 fn a_folder_on_an_ssh_host_opens_survives_breaks_and_stays_private() {
     // One test at a time uploads and starts a backend on a test host (see the helper).
-    let _turn = idecraft_remote::testing::one_host_at_a_time();
-    let base = std::env::temp_dir().join(format!("idecraft-rproj-{}", std::process::id()));
+    let _turn = ferris_idea_remote::testing::one_host_at_a_time();
+    let base = std::env::temp_dir().join(format!("ferris-idea-rproj-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
     std::fs::create_dir_all(base.join("home")).unwrap();
     let base = std::fs::canonicalize(&base).unwrap();
@@ -270,12 +270,12 @@ fn a_folder_on_an_ssh_host_opens_survives_breaks_and_stays_private() {
     let _ = std::fs::remove_dir_all(&run);
     let recovery = base.join("window-state/recovery");
     let opts = ServeOptions {
-        backend_dir: format!(".cache/idecraft-test-rp-{}", std::process::id()),
+        backend_dir: format!(".cache/ferris-idea-test-rp-{}", std::process::id()),
         state_dir: Some(state.display().to_string()),
         run_dir: Some(run.display().to_string()),
         reattach_minutes: None,
     };
-    let binary = Path::new(env!("CARGO_BIN_EXE_idecraft"));
+    let binary = Path::new(env!("CARGO_BIN_EXE_ferris-idea"));
     let folder = project.display().to_string();
     // The uploaded backend (a debug build is gigabytes), the run folder and the test's folder go
     // also when the test fails.
@@ -324,7 +324,7 @@ fn a_folder_on_an_ssh_host_opens_survives_breaks_and_stays_private() {
         "{:?}",
         p.installed
     );
-    assert!(p.session.info.build.starts_with("idecraft "));
+    assert!(p.session.info.build.starts_with("ferris-idea "));
     // SEC-9: a backend that gets no session.hello closes after 10 s. It is started now and checked
     // at the end, so the test does not wait those 10 s on their own.
     let stalled = {
@@ -334,9 +334,9 @@ fn a_folder_on_an_ssh_host_opens_survives_breaks_and_stays_private() {
             state_dir: Some(base.join("stalled").display().to_string()),
             ..opts.clone()
         };
-        let line = idecraft_remote::serve_line(p.installed.path(), &own);
+        let line = ferris_idea_remote::serve_line(p.installed.path(), &own);
         let mut child = remote
-            .line(idecraft_remote::SshPurpose::Serve)
+            .line(ferris_idea_remote::SshPurpose::Serve)
             .unwrap()
             .command()
             .arg(line)
@@ -368,7 +368,7 @@ fn a_folder_on_an_ssh_host_opens_survives_breaks_and_stays_private() {
     );
     #[cfg(unix)]
     assert_eq!(mode(&project.join("run.sh")), 0o750);
-    let history = idecraft_core::LocalHistory::open(&project).unwrap();
+    let history = ferris_idea_core::LocalHistory::open(&project).unwrap();
     assert!(!history.revisions("run.sh").is_empty());
     // A host-side change while unmodified reloads; while modified it is refused for compare.
     std::fs::write(project.join("notes.txt"), "changed on the host\n").unwrap();
@@ -384,7 +384,7 @@ fn a_folder_on_an_ssh_host_opens_survives_breaks_and_stays_private() {
         p.session.doc("run.sh").unwrap().disk_changed
     }));
     let conflict = p.session.save("run.sh", false).unwrap_err();
-    assert_eq!(conflict.code, idecraft_session::ErrorCode::Conflict);
+    assert_eq!(conflict.code, ferris_idea_session::ErrorCode::Conflict);
     p.session.save("run.sh", true).unwrap();
     // A host-side create appears through fs.watch.
     std::fs::write(project.join("created.rs"), "fn c() {}\n").unwrap();
@@ -415,7 +415,16 @@ fn a_folder_on_an_ssh_host_opens_survives_breaks_and_stays_private() {
     assert!(listed, "lsof -U for {pid}: {unix:?}");
     let me = std::process::id().to_string();
     let mine = output("lsof", &["-nP", "-a", "-p", &me, "-iTCP", "-sTCP:LISTEN"]);
-    assert!(mine.trim().is_empty(), "{mine}");
+    // The SSH test host may run inside this test process; its port is the test's, not the window's.
+    let test_host = host
+        .port_in_this_process()
+        .map(|port| format!("127.0.0.1:{port} (LISTEN)"));
+    let window: Vec<&str> = mine
+        .lines()
+        .filter(|l| !l.starts_with("COMMAND"))
+        .filter(|l| test_host.as_ref().is_none_or(|h| !l.contains(h.as_str())))
+        .collect();
+    assert!(window.is_empty(), "{mine}");
 
     // SEC-10 and SEC-11: the token is nowhere outside the channel; folders 0700, files 0600.
     let token = p.session.resume_token().expose();
@@ -426,7 +435,7 @@ fn a_folder_on_an_ssh_host_opens_survives_breaks_and_stays_private() {
         "the backend should be visible: {}",
         processes
             .lines()
-            .filter(|l| l.contains("idecraft"))
+            .filter(|l| l.contains("ferris-idea"))
             .collect::<Vec<_>>()
             .join("\n")
     );
@@ -536,7 +545,7 @@ fn a_folder_on_an_ssh_host_opens_survives_breaks_and_stays_private() {
     // reconnects by itself through `serve --attach`, and what was typed during the break is kept
     // and saved on the host.
     {
-        use idecraft_remote::{ConnState, LiveProject, Timing};
+        use ferris_idea_remote::{ConnState, LiveProject, Timing};
         let open = || {
             RemoteProject::open(
                 remote.clone(),
@@ -605,7 +614,7 @@ fn a_folder_on_an_ssh_host_opens_survives_breaks_and_stays_private() {
     // Behaviour 4: a copy whose SHA-256 differs from this build is deleted and refused.
     let wrong = "0".repeat(64);
     let size = std::fs::metadata(binary).unwrap().len();
-    let e = idecraft_remote::verify_backend(&remote, &installed, &wrong, size).unwrap_err();
+    let e = ferris_idea_remote::verify_backend(&remote, &installed, &wrong, size).unwrap_err();
     assert!(e.to_string().contains("does not match this build"), "{e}");
     let copy = installed.replace("$HOME", &home.display().to_string());
     assert!(!Path::new(&copy).exists(), "{copy}");

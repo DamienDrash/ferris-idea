@@ -5,16 +5,18 @@
 
 #![cfg(target_os = "macos")]
 
+use ferris_idea_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
+use ferris_idea_workbench::{ServicesView, WorkbenchView, semantics};
 use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext, point, px};
-use idecraft_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
-use idecraft_workbench::{ServicesView, WorkbenchView, semantics};
 
 const WIDTH: f32 = 1372.;
 
 /// A request file with two environments; `name` keeps temporary folders of the tests apart.
 fn workspace(name: &str, envs: &str) -> std::path::PathBuf {
-    let root =
-        std::env::temp_dir().join(format!("idecraft-http-h1h3-{name}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!(
+        "ferris-idea-http-h1h3-{name}-{}",
+        std::process::id()
+    ));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     std::fs::write(
@@ -37,7 +39,7 @@ fn open<'a>(
     cx.update(|cx| {
         cx.set_global(IdeSettingsFile(settings.join("settings.toml")));
         cx.set_global(ThemeFile(settings.join("theme")));
-        cx.set_global(CurrentIdeSettings(idecraft_core::IdeSettings::default()));
+        cx.set_global(CurrentIdeSettings(ferris_idea_core::IdeSettings::default()));
     });
     let at = root.to_path_buf();
     let window = cx.add_window(move |_, cx| WorkbenchView::new(&at, cx));

@@ -30,7 +30,7 @@ terminal.
      widget only asked whether the project had `.py` files.) [GEN]
 2. **Choosing:** a click on the widget or `Python.SelectInterpreter` lists every interpreter found
    (version, kind, how it was found, path; the selected one marked), then "Automatic choice" and
-   "New virtual environment in .venv". A choice is saved in `.idecraft/python.toml`
+   "New virtual environment in .venv". A choice is saved in `.ferris-idea/python.toml`
    (workspace-relative inside the workspace) and used by SPEC-0050 as the configured interpreter;
    the automatic choice removes the file. [GEN]
 3. **New environment:** `Python.CreateVirtualEnv` (also from the chooser and the tool window) runs
@@ -59,7 +59,7 @@ terminal.
    declaration; `dry_run` default true; running needs the `run` right; v5: the preview's
    `would_run` is the command that will really run, with `installer` (`uv` or `pip`) and `notes`
    (why this installer), and both refusals of behaviour 5 are errors in the preview too). Runs are logged in
-   `.idecraft/agent-log.jsonl`. `python_environments` uses the saved choice unless an interpreter is
+   `.ferris-idea/agent-log.jsonl`. `python_environments` uses the saved choice unless an interpreter is
    given. [ADR-0008, SPEC-0053]
 7. **Imports follow an install (v3, D25):** pyright reads the environment's packages when it starts
    and does not notice new ones, so `import rich` stayed marked as unresolved after `rich` was
@@ -68,7 +68,7 @@ terminal.
    the marks follow the environment without reopening the project. [GEN, STD]
 8. **Installing from an unresolved import (v4, OBS-0034 L2):** with the caret on a line of a Python
    file where the language server marks an import as unresolved (pyright's rules
-   `reportMissingImports` and `reportMissingModuleSource`), ⌥↩ lists first, before IDECraft's
+   `reportMissingImports` and `reportMissingModuleSource`), ⌥↩ lists first, before Ferris IDEA's
    other fixes and the language server's actions:
    - `Install package <distribution>` for each module marked on that line. The marked text is the
      module (`yaml`, `google.cloud.storage`, the module after `from`); its first part is the import
@@ -134,8 +134,8 @@ terminal.
   (unit tests `python_manage::tests`).
 - **AK-9 (v4)** Quick-fix entries from the editor's problems: only the two pyright rules, only on
   the caret's line, the module read from the marked text, nothing for other rules (unit tests
-  `python_fixes::tests`); window self-test: ⌥↩ on `import idecraft_demo_pkg` offers
-  `Install package idecraft-demo-pkg` first, Enter installs the declared requirement through
+  `python_fixes::tests`); window self-test: ⌥↩ on `import ferris_idea_demo_pkg` offers
+  `Install package ferris-idea-demo-pkg` first, Enter installs the declared requirement through
   behaviour 5 and its failure is reported.
 - **AK-10 (v4)** MCP: `python_install_packages` with `imports` previews the mapped command with the
   mapping (`crates/mcp/tests/it/protocol.rs`: `python_manage_tools`).
@@ -149,7 +149,7 @@ terminal.
   failure block's lines and the 12-line tail (unit test `python_view::tests`).
 - **AK-12 (v5)** Window self-test with stubs: after pip is taken out of the fixture environment,
   ⌥↩ → Enter with a stub `uv` on the injected `PATH` runs
-  `uv pip install --python … idecraft-demo-pkg>=1`; its failure shows in the window and in the
+  `uv pip install --python … ferris-idea-demo-pkg>=1`; its failure shows in the window and in the
   status bar over the import's problem.
 - **AK-6 (v2)** Visibility by active file: shown for Python files and declarations, hidden for a
   Java or TypeScript file, shown with no editor in a Python project, never outside one (unit test

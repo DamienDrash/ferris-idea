@@ -1,4 +1,4 @@
-//! CPU profiling for IDECraft (`SPEC-0120`).
+//! CPU profiling for Ferris IDEA (`SPEC-0120`).
 //!
 //! A program is run once under a profiler and the result becomes one call tree with total and
 //! self cost per function: native programs on macOS through `/usr/bin/sample` attached right after
@@ -13,6 +13,7 @@ mod jfr;
 mod memory;
 mod model;
 mod perf;
+mod project;
 mod run;
 mod sample;
 
@@ -26,11 +27,14 @@ pub use memory::{
     ALL_ALLOCATIONS, TRACEMALLOC_RUNNER, parse_malloc_history, parse_massif, parse_tracemalloc,
     size_label,
 };
-pub use model::{HotSpot, Profile, ProfileNode, StackFrame, StackTree, Unit, hot_spots};
-pub use perf::{gradle_init_script, is_gradle_run, parse_perf_script};
+pub use model::{HotSpot, LineCost, Profile, ProfileNode, StackFrame, StackTree, Unit, hot_spots};
+pub use perf::{
+    gradle_init_script, is_gradle_run, parse_perf_script, perf_blocked, perf_blocked_by,
+};
+pub use project::{SourceIndex, VIEW_FILE, ViewSettings, prepare};
 pub use run::{
     Engine, Kind, LAST, LEAKS, MALLOC_HISTORY, PROFILES_DIR, ProfilePlan, ProfileRun,
-    ProfileTarget, SAMPLE, SAMPLE_REFUSED, WINDOWS_REFUSED, find_source, last_profile, plan,
-    plan_kind, profile, profile_config, profile_config_kind, profile_kind,
+    ProfileTarget, SAMPLE, SAMPLE_REFUSED, WINDOWS_REFUSED, can_profile, find_source, last_profile,
+    plan, plan_kind, profile, profile_config, profile_config_kind, profile_kind,
 };
 pub use sample::parse_sample;

@@ -6,10 +6,10 @@
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use idecraft_languages::insight::CallNode;
-use idecraft_languages::java_structure::{TypeDirection, type_hierarchy_in};
-use idecraft_languages::pool;
-use idecraft_languages::watched_files::DiskWatch;
+use ferris_idea_languages::insight::CallNode;
+use ferris_idea_languages::java_structure::{TypeDirection, type_hierarchy_in};
+use ferris_idea_languages::pool;
+use ferris_idea_languages::watched_files::DiskWatch;
 
 const DEADLINE: Duration = Duration::from_secs(300);
 
@@ -56,15 +56,16 @@ async fn hierarchy_becomes(root: &Path, watch: &mut DiskWatch, want: &[&str]) ->
 
 #[tokio::test]
 async fn a_subclass_written_outside_shows_in_the_type_hierarchy() {
-    if idecraft_languages::servers::resolve(idecraft_languages::LanguageId::Java).is_err() {
+    if ferris_idea_languages::servers::resolve(ferris_idea_languages::LanguageId::Java).is_err() {
         assert!(
-            std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+            ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
             "required tool missing: jdtls"
         );
         eprintln!("skipped: jdtls not installed");
         return;
     }
-    let root = std::env::temp_dir().join(format!("idecraft-java-watched-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-java-watched-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src/main/java/shop")).unwrap();
     let root = root.canonicalize().unwrap();
@@ -92,7 +93,7 @@ async fn a_subclass_written_outside_shows_in_the_type_hierarchy() {
     watch.round(&root);
     assert_eq!(pool::forwarded_events(), 0);
 
-    // Another program writes a subclass (and build output, which is never told); IDECraft does
+    // Another program writes a subclass (and build output, which is never told); Ferris IDEA does
     // not open it.
     write(
         &root,

@@ -1,3 +1,3 @@
 #![no_main]
 
-libfuzzer_sys::fuzz_target!(|data: &[u8]| idecraft_hardening::targets::mcp_jsonrpc(data));
+libfuzzer_sys::fuzz_target!(|data: &[u8]| ferris_idea_hardening::targets::mcp_jsonrpc(data));

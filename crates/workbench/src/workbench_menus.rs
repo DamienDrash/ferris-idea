@@ -4,15 +4,15 @@
 //!
 //! The menu items and their enabled state come from [`crate::context_menu`]; files are created,
 //! renamed, deleted, copied and moved (Cut, Copy, Paste: v2 behaviours 17–22, model in
-//! [`crate::file_clipboard`]) by [`idecraft_core::file_ops`], the same code as the MCP tools.
+//! [`crate::file_clipboard`]) by [`ferris_idea_core::file_ops`], the same code as the MCP tools.
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_core::file_ops::{self, DeletePlan, NewKind, Transfer};
 use gpui::{
     ClickEvent, Context, Entity, KeyDownEvent, MouseDownEvent, Pixels, Point, Window, div,
     prelude::*, px,
 };
-use idecraft_core::file_ops::{self, DeletePlan, NewKind, Transfer};
 
 use super::{WorkbenchView, c};
 use crate::EditorView;
@@ -86,7 +86,7 @@ enum PromptKind {
         mode: Transfer,
     },
     /// A Maven goal or Gradle task line to run in this module (`SPEC-0100` v2 behaviour 5).
-    BuildCommand(Box<idecraft_core::Module>),
+    BuildCommand(Box<ferris_idea_core::Module>),
     /// A build file to link (`SPEC-0100` v3 behaviour 16).
     LinkBuildFile,
     /// The name of an extracted interface or superclass (`SPEC-0320`).
@@ -95,7 +95,7 @@ enum PromptKind {
         place: crate::nav_model::Place,
     },
     /// The name of a new tool window layout holding this arrangement (`SPEC-0333` behaviour 4).
-    NewLayout(Box<idecraft_ui::window_layouts::Arrangement>),
+    NewLayout(Box<ferris_idea_ui::window_layouts::Arrangement>),
     /// A new name for this tool window layout (`SPEC-0333` behaviour 10).
     RenameLayout(String),
 }
@@ -108,7 +108,10 @@ pub(super) struct Suggest {
     /// The project's Maven profiles with their defaults.
     profiles: Vec<(String, bool)>,
     /// The line the suggestions were made for and the suggestions.
-    cache: std::cell::RefCell<(Option<String>, Vec<idecraft_core::buildtasks::Suggestion>)>,
+    cache: std::cell::RefCell<(
+        Option<String>,
+        Vec<ferris_idea_core::buildtasks::Suggestion>,
+    )>,
 }
 
 /// The name field of New and Rename (behaviours 3 and 5).
@@ -231,19 +234,24 @@ impl WorkbenchView {
                 let request_file = self
                     .active_path()
                     .is_some_and(|p| crate::http_model::is_request_file(&p));
+                let room = self.room_can_comment();
                 // SPEC-0096 v6 behaviour 8: Run All Requests in File in a request file's menu.
-                model::with_http_entries(
-                    model::with_sql_entries(
-                        model::editor_menu(&model::EditorTarget {
-                            selection,
-                            runnable,
-                            repository,
-                            annotated,
-                            debugging,
-                        }),
-                        sql,
+                // SPEC-0323 v8 behaviour 54: Add Comment in a room.
+                crate::room_comments_model::with_comment_entry(
+                    model::with_http_entries(
+                        model::with_sql_entries(
+                            model::editor_menu(&model::EditorTarget {
+                                selection,
+                                runnable,
+                                repository,
+                                annotated,
+                                debugging,
+                            }),
+                            sql,
+                        ),
+                        request_file,
                     ),
-                    request_file,
+                    room,
                 )
             }
             MenuPlace::Gutter => {
@@ -273,7 +281,7 @@ impl WorkbenchView {
                     command: v.is_some_and(|v| v.last_command().is_some()),
                     shared: v.is_some_and(|v| v.shared()),
                     ai: ai.enabled,
-                    lines: idecraft_ai::context::terminal_lines(ai.terminal_lines),
+                    lines: ferris_idea_ai::context::terminal_lines(ai.terminal_lines),
                 })
             }
             MenuPlace::BuildTools => self.build_tools_menu(cx),
@@ -555,7 +563,7 @@ impl WorkbenchView {
             }
             (a, _) if a.starts_with(model::DEBUG_VIEW) => {
                 if let Some(view_as) =
-                    idecraft_debugger::ViewAs::from_id(&a[model::DEBUG_VIEW.len()..])
+                    ferris_idea_debugger::ViewAs::from_id(&a[model::DEBUG_VIEW.len()..])
                 {
                     view.update(cx, |v, cx| v.set_view_selected(view_as, cx));
                 }
@@ -828,14 +836,14 @@ impl WorkbenchView {
     /// window, `SPEC-0100` v2 behaviour 5), prefilled with the tool's name.
     pub fn start_build_command(
         &mut self,
-        module: idecraft_core::Module,
+        module: ferris_idea_core::Module,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let field = cx.new(EditorView::field);
         let tool = match module.kind {
-            idecraft_core::ModuleKind::Maven => "mvn ",
-            idecraft_core::ModuleKind::Gradle => "gradle ",
+            ferris_idea_core::ModuleKind::Maven => "mvn ",
+            ferris_idea_core::ModuleKind::Gradle => "gradle ",
             _ => "",
         };
         field.update(cx, |f, cx| {
@@ -844,12 +852,12 @@ impl WorkbenchView {
             f.select_range(end..end, cx);
         });
         window.focus(&field.read(cx).focus());
-        let files = idecraft_core::Workspace::open(&self.root)
+        let files = ferris_idea_core::Workspace::open(&self.root)
             .and_then(|w| w.files())
             .unwrap_or_default();
-        let profiles = idecraft_core::buildtools::project_profiles(&idecraft_core::read_project(
-            &self.root, &files,
-        ));
+        let profiles = ferris_idea_core::buildtools::project_profiles(
+            &ferris_idea_core::read_project(&self.root, &files),
+        );
         self.name_prompt = Some(NamePrompt {
             kind: PromptKind::BuildCommand(Box::new(module)),
             field,
@@ -885,7 +893,7 @@ impl WorkbenchView {
     /// behaviour 4).
     pub(super) fn start_new_layout_prompt(
         &mut self,
-        arrangement: idecraft_ui::window_layouts::Arrangement,
+        arrangement: ferris_idea_ui::window_layouts::Arrangement,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -930,7 +938,7 @@ impl WorkbenchView {
     pub fn build_command_suggestions(
         &self,
         cx: &gpui::App,
-    ) -> Vec<idecraft_core::buildtasks::Suggestion> {
+    ) -> Vec<ferris_idea_core::buildtasks::Suggestion> {
         let Some(prompt) = &self.name_prompt else {
             return Vec::new();
         };
@@ -940,7 +948,7 @@ impl WorkbenchView {
         let line = prompt.field.read(cx).state.buffer.text();
         let mut cache = prompt.suggest.cache.borrow_mut();
         if cache.0.as_deref() != Some(line.as_str()) {
-            let list = idecraft_core::buildtasks::command_suggestions(
+            let list = ferris_idea_core::buildtasks::command_suggestions(
                 &self.root,
                 module,
                 &prompt.suggest.profiles,
@@ -961,7 +969,7 @@ impl WorkbenchView {
             return false;
         };
         let line = prompt.field.read(cx).state.buffer.text();
-        let new = idecraft_core::buildtasks::complete_line(&line, &s.text);
+        let new = ferris_idea_core::buildtasks::complete_line(&line, &s.text);
         prompt.field.update(cx, |f, cx| {
             f.set_text(&new, cx);
             let end = new.chars().count();
@@ -1393,7 +1401,7 @@ impl WorkbenchView {
         let canonical = |p: &Path| p.canonicalize().unwrap_or(p.to_path_buf());
         mode == Transfer::Move
             && from.is_file()
-            && idecraft_languages::move_file::has_package_line(from)
+            && ferris_idea_languages::move_file::has_package_line(from)
             && from
                 .file_name()
                 .is_some_and(|n| n.to_string_lossy() == name)
@@ -1402,7 +1410,7 @@ impl WorkbenchView {
 
     /// Copies or moves one item plainly; open tabs of moved files follow; a Java or Kotlin file
     /// gets the package line of its new folder (v2 behaviours 21, 22; v3 behaviour 26).
-    fn transfer_one(
+    pub(super) fn transfer_one(
         &mut self,
         from: &Path,
         dir: &Path,
@@ -1420,7 +1428,7 @@ impl WorkbenchView {
                 if !plan.dir
                     && let Some(old_dir) = plan.from.parent()
                 {
-                    let _ = idecraft_languages::move_file::update_package_line(
+                    let _ = ferris_idea_languages::move_file::update_package_line(
                         &root, &plan.to, old_dir,
                     );
                 }
@@ -1601,7 +1609,7 @@ impl WorkbenchView {
                             .enable_all()
                             .build()
                             .map_err(|e| e.to_string())?;
-                        rt.block_on(idecraft_languages::move_file::plan_move(
+                        rt.block_on(ferris_idea_languages::move_file::plan_move(
                             &root,
                             &file,
                             &target,
@@ -2291,6 +2299,8 @@ impl WorkbenchView {
 
 /// Status text when Rename is asked for with several items selected (v3 behaviour 25).
 pub(super) const ONE_TO_RENAME: &str = "Select one file or folder to rename it";
+/// The status when F6 in the Project tree has no single item to move (`SPEC-0275` v22 behaviour 49).
+pub(super) const ONE_TO_MOVE: &str = "Select one file or folder to move it";
 
 /// The title of the name field.
 fn prompt_title(kind: &PromptKind, root: &Path) -> String {
@@ -2311,8 +2321,8 @@ fn prompt_title(kind: &PromptKind, root: &Path) -> String {
         PromptKind::BuildCommand(m) => format!(
             "Execute {} in {}",
             match m.kind {
-                idecraft_core::ModuleKind::Maven => "Maven Goal",
-                idecraft_core::ModuleKind::Gradle => "Gradle Task",
+                ferris_idea_core::ModuleKind::Maven => "Maven Goal",
+                ferris_idea_core::ModuleKind::Gradle => "Gradle Task",
                 _ => "Command",
             },
             m.short_name()
@@ -2358,7 +2368,7 @@ mod tests {
     #[test]
     fn delete_alert_question_and_buttons() {
         let root =
-            std::env::temp_dir().join(format!("idecraft-delete-alert-{}", std::process::id()));
+            std::env::temp_dir().join(format!("ferris-idea-delete-alert-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("src/sub")).unwrap();
         std::fs::write(root.join("src/a.txt"), "a").unwrap();

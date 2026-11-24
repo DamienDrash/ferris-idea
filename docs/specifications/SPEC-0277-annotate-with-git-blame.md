@@ -50,7 +50,7 @@ the same blame, for a line range, over MCP.
    current buffer with the line diff of SPEC-0033: unchanged lines keep their commit, inserted and
    modified lines are uncommitted, deleted lines vanish. Typing, undo and paste remap; undoing back
    to the HEAD text shows every line's commit again. [GEN, STD]
-8. **Refresh:** after a commit made in IDECraft and whenever the HEAD text of the file changes
+8. **Refresh:** after a commit made in Ferris IDEA and whenever the HEAD text of the file changes
    (commit elsewhere, checkout, pull, noticed by the status poll of SPEC-0064), the blame of an
    annotated editor is computed again. [GEN]
 9. **Cannot annotate:** the action is always offered, and says why it cannot run in the status bar
@@ -100,7 +100,7 @@ the same blame, for a line range, over MCP.
   menu offers Close Annotations, Show in Git Log and Copy Revision Number with the enabled states of
   behaviour 6, the main menu has Git › Current File › Annotate with Git Blame, and Find Action finds
   it by its title. (`context_menu::tests`, `tabs::tests`, `menu_bar::tests`,
-  `idecraft_languages::everywhere` tests)
+  `ferris_idea_languages::everywhere` tests)
 - **AK-4** Given the error kinds, then the status texts are those of behaviour 9.
   (`blame_model::tests::reasons_name_the_file`)
 - **AK-5** Given MCP, when `git_blame` runs with and without a line range, on an open edited

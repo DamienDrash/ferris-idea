@@ -8,8 +8,8 @@
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_workbench::{EditorView, WorkbenchView};
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_workbench::{EditorView, WorkbenchView};
 
 const FOLD: &str = "import java.util.ArrayList;
 import java.util.List;
@@ -65,7 +65,7 @@ const APP: &str = "public class App {
 ";
 
 fn workspace() -> PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-unused-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-unused-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src")).unwrap();
     std::fs::write(root.join("src/Fold.java"), FOLD).unwrap();
@@ -141,10 +141,10 @@ fn unused_declarations_appear_in_the_editor(cx: &mut TestAppContext) {
     assert_eq!(
         unused(&editor, cx),
         [
-            "IDECraft: Method 'getCount()' is never used",
-            "IDECraft: Field 'task' is never used",
-            "IDECraft: Class 'Inner' is never used",
-            "IDECraft: Field 'sizes' is never used",
+            "Ferris IDEA: Method 'getCount()' is never used",
+            "Ferris IDEA: Field 'task' is never used",
+            "Ferris IDEA: Class 'Inner' is never used",
+            "Ferris IDEA: Field 'sizes' is never used",
         ]
     );
     assert_eq!(editor.read_with(cx, |e, _| e.status().problems.1), 4);

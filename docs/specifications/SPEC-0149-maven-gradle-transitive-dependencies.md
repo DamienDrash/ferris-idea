@@ -1,6 +1,6 @@
 # SPEC-0149: Transitive Maven and Gradle dependencies
 
-- **Version:** 5 · **Date:** 2026-11-17 (v5: a library source shows no problems at all, also none of IDECraft's own inspections, however it was opened, AK-10, beta finding B2 of hand test 209); 2026-11-06 (v2 after OBS-0024: missing artifacts, the build tools
+- **Version:** 5 · **Date:** 2026-11-17 (v5: a library source shows no problems at all, also none of Ferris IDEA's own inspections, however it was opened, AK-10, beta finding B2 of hand test 209); 2026-11-06 (v2 after OBS-0024: missing artifacts, the build tools
   window's options in the resolution, Gradle's task list; behaviours 6–8 new; v3 for the open gap L7
   of OBS-0024: the entries Maven leaves out (conflicts, duplicates), downloading sources and
   documentation, library sources in the editor; behaviours 9–11 new; v4 after the window check:
@@ -30,7 +30,7 @@ See what a Maven or Gradle module really pulls in, not only what its build file 
    dependencies under it; a version Gradle replaced reads `2.0.7 → 2.0.9`; repeated subtrees are
    marked; constraints and unresolvable entries are left out; `project :lib` appears as `:lib`.
    Only the module's own project is read from a report that covers sub-projects too. [STD]
-4. **Keeping and reloading:** the output is kept in `.idecraft/deps/` and used until a build file
+4. **Keeping and reloading:** the output is kept in `.ferris-idea/deps/` and used until a build file
    of the module changes (`pom.xml`; `build.gradle[.kts]`, `settings.gradle[.kts]`,
    `gradle/libs.versions.toml`, also those at the root). Opening the Build Tools window resolves
    modules whose result is missing or stale in the background ("Resolving dependencies…"); the
@@ -40,7 +40,7 @@ See what a Maven or Gradle module really pulls in, not only what its build file 
    it. [GEN]
 5. **MCP:** `dependency_tree` returns the kept tree for Maven and Gradle modules and `resolved`
    (whether it is current); `resolve: true` runs the build tool first, needs the `run` right and
-   is logged in `.idecraft/agent-log.jsonl`. [ADR-0008]
+   is logged in `.ferris-idea/agent-log.jsonl`. [ADR-0008]
 6. **(v2) Missing artifacts:** Maven lists an artifact it could not download like any other; a Maven
    entry whose file is not in the local repository (`~/.m2/repository`, or `localRepository` of
    `~/.m2/settings.xml`; a jar, a POM for `pom`, the classifier in the name) is marked `missing`.
@@ -60,7 +60,7 @@ See what a Maven or Gradle module really pulls in, not only what its build file 
 10. **(v3) Sources and documentation:** downloading runs the build tool, with the window's options:
     for each Maven module `mvn -B -N dependency:sources` and `mvn -B -N dependency:resolve
     -Dclassifier=javadoc` in its folder; for each Gradle build `gradle --init-script
-    <.idecraft/gradle/idecraft-sources.gradle> -PidecraftKinds=sources,javadoc idecraftDownloadSources`
+    <.ferris-idea/gradle/ferris-idea-sources.gradle> -PferrisIdeaKinds=sources,javadoc ferrisIdeaDownloadSources`
     from its root, a task the init script adds to every project, which asks Gradle for the sources
     and Javadoc artifacts of the components on the resolvable classpaths. Whether a library has
     them is read from the local caches: for Maven `<artifact>-<version>-sources.jar` and
@@ -71,7 +71,7 @@ See what a Maven or Gradle module really pulls in, not only what its build file 
 11. **(v3) Library sources in the editor:** when a declaration, type or implementation found by the
     language server is only in a library class (SPEC-0042 v7 behaviour 16), its source is read from
     the library's sources archive (as in behaviour 10, also the Gradle cache's other folders, and
-    the JDK's `lib/src.zip`), copied to IDECraft's cache folder
+    the JDK's `lib/src.zip`), copied to Ferris IDEA's cache folder
     (`<user cache>/library-sources/<archive>/<package path>/<Class>.java`) and opened at the
     declaration (the place the language server named; else the line that declares the class). The
     copy is written again from the archive each time. (v4) The jump scrolls the declaration into
@@ -81,7 +81,7 @@ See what a Maven or Gradle module really pulls in, not only what its build file 
     server reports errors that are none). Without a sources archive the status line
     names the class and says that Download Sources in the build tools window fetches it.
     (v5) "Not checked" holds for every source of problems: neither the language server's
-    diagnostics nor IDECraft's own inspections (SPEC-0098) nor the project's or a plugin's
+    diagnostics nor Ferris IDEA's own inspections (SPEC-0098) nor the project's or a plugin's
     findings are shown in the editor, and the Problems window's File tab lists nothing for it.
     This holds for every editor of a file below `<user cache>/library-sources`, however it was
     opened (⌘B, the Recent Files list, a restored tab), and such an editor is always read-only.

@@ -1,4 +1,4 @@
-; IDECraft's colour roles for R (SPEC-0027 v13). Placed before the grammar's own query: for the
+; Ferris IDEA's colour roles for R (SPEC-0027 v13). Placed before the grammar's own query: for the
 ; same node the earlier pattern wins, and the grammar's query names every identifier a variable
 ; first, so its function patterns never apply.
 

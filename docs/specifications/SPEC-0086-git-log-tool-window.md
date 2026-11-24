@@ -153,7 +153,7 @@ See what happened in the repository — who changed what, when and why — witho
     reference greys these entries without a reason (OBS-0022).
 
     **Hard reset** first keeps the uncommitted changes of tracked files in a stash
-    "IDECraft: before hard reset to <id>" and says so in the status bar (IMP-0320). A **revert
+    "Ferris IDEA: before hard reset to <id>" and says so in the status bar (IMP-0320). A **revert
     that conflicts** is aborted, so nothing changes, and the status bar names the files.
     The Git operations run in the background and report in the status bar like SPEC-0106; the log
     reads the history again afterwards (behaviour 6).
@@ -255,7 +255,7 @@ See what happened in the repository — who changed what, when and why — witho
 - **AK-2** `Repo::commit_details`, `Repo::ref_labels` and `Repo::side_by_side_in_commit` on a repository
   with a root commit, a later commit, a branch and a tag (integration test).
 - **AK-3** `git_show` returns details, changes and the diff of one file (protocol test).
-- **AK-4** In a real window (`idecraft ui --selftest`): ⌘9 lists the fixture's commits newest first with
+- **AK-4** In a real window (`ferris-idea ui --selftest`): ⌘9 lists the fixture's commits newest first with
   no commit selected and the hint in the details pane (v3); Down shows the details of the newest; the
   graph has a dot in a lane for every listed commit (v3); filtering keeps the matching commit; the diff of a changed file opens and
   Escape returns; a commit made outside on another branch appears while the window is open; ⌘9 closes.
@@ -294,7 +294,7 @@ See what happened in the repository — who changed what, when and why — witho
   summer_times_keep_their_offset_in_winter`).
 - **AK-17 (v6)** In the release bundle next to the reference: the rows of HEAD's history are tinted
   (OBS-0022 Nachprüfung).
-- **AK-18 (v7)** Menu rules (unit tests `idecraft_vcs` `log_actions::tests`): every entry once in
+- **AK-18 (v7)** Menu rules (unit tests `ferris_idea_vcs` `log_actions::tests`): every entry once in
   order with ids that round-trip; HEAD unpushed allows all but Cherry-Pick, Reset and Go to Child;
   pushed commits refuse rewriting with a reason; other branches allow Cherry-Pick only; merges
   after the commit, the first commit and a detached HEAD. Facts from the loaded history
@@ -360,7 +360,7 @@ The graph's lanes are laid out by the rules
 of behaviour 8, so line shapes can differ from the reference's in histories with many crossing
 branches. The regional date format is taken from a table of common regions, not from the
 system's full locale data; rarer regions fall back to `2026-11-05 14:05`. The reference does not see commits and branches made
-outside until its refresh button is pressed (OBS-0009); IDECraft reads them by itself (IMP-0282).
+outside until its refresh button is pressed (OBS-0009); Ferris IDEA reads them by itself (IMP-0282).
 v7: Create Patch… copies the patch to the clipboard (Copy as Patch) instead of asking for a file;
 disabled menu entries name their reason (IMP-0278); a hard reset keeps the local changes in a
 stash (IMP-0320); a conflicting revert is aborted instead of stopping with conflicts; tag labels

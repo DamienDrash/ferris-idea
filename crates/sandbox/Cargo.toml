@@ -1,0 +1,32 @@
+[package]
+name = "ferris-idea-sandbox"
+description = "Sandbox for agent processes on the desktop: policy, Seatbelt profile, Landlock launcher, allowlist proxy (SPEC-0347, ROADMAP M19.9)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[[bin]]
+# The Linux launcher (SPEC-0347 behaviour 8), shipped beside the Ferris IDEA executable. On other
+# systems it refuses.
+name = "ferris-idea-sandbox-launch"
+path = "src/bin/ferris-idea-sandbox-launch.rs"
+
+[dependencies]
+serde.workspace = true
+serde_json = "1"
+
+[target."cfg(target_os = \"linux\")".dependencies]
+# Safe bindings for the Landlock system calls (MIT OR Apache-2.0, by the Landlock maintainers), so
+# the crate keeps the workspace's `forbid(unsafe_code)`.
+landlock = "0.4.7"
+# `unshare` for the user and network namespace; the same version as ferris-idea-core.
+nix = { version = "0.28", default-features = false, features = ["sched", "user"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true

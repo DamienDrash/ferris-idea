@@ -14,7 +14,7 @@ pub enum PopupRow {
     Clone,
     /// Remote Development… (`SPEC-0317` v3 behaviour 1).
     RemoteDevelopment,
-    /// A project open in a window of this IDECraft; choosing it brings that window to the front.
+    /// A project open in a window of this Ferris IDEA; choosing it brings that window to the front.
     OpenProject {
         /// The project folder.
         root: PathBuf,
@@ -65,10 +65,10 @@ pub fn popup_rows(open: &[PathBuf], current: &Path, recent: &[PathBuf]) -> Vec<P
 pub fn clone_plan(
     url: &str,
     location: &str,
-) -> Result<(idecraft_vcs::CloneSource, PathBuf), String> {
-    let source = idecraft_vcs::check_clone_url(url)?;
+) -> Result<(ferris_idea_vcs::CloneSource, PathBuf), String> {
+    let source = ferris_idea_vcs::check_clone_url(url)?;
     let target = expand_home(location.trim()).join(&source.folder_name);
-    idecraft_vcs::check_new_folder(&target)?;
+    ferris_idea_vcs::check_new_folder(&target)?;
     Ok((source, target))
 }
 
@@ -82,8 +82,49 @@ pub fn new_project_plan(location: &str, name: &str) -> Result<PathBuf, String> {
         return Err("The name must be one folder name.".into());
     }
     let target = expand_home(location.trim()).join(name);
-    idecraft_vcs::check_new_folder(&target)?;
+    ferris_idea_vcs::check_new_folder(&target)?;
     Ok(target)
+}
+
+/// Trusts the project New Project just made at `target` (window check A16, NP2): Ferris IDEA created
+/// the folder a moment ago and it holds nothing but what `git init` wrote, so there is no code of
+/// anyone else to guard against. `file` is the trust file (`None`: trust is not enforced, nothing
+/// is written). A folder with anything else in it is left to the trust question; clones always
+/// are (`SPEC-0278`).
+pub fn trust_new_project(file: Option<&Path>, target: &Path) -> Result<bool, String> {
+    let Some(file) = file else {
+        return Ok(false);
+    };
+    let only_git = std::fs::read_dir(target)
+        .map_err(|e| e.to_string())?
+        .flatten()
+        .all(|e| e.file_name() == ".git");
+    if !only_git {
+        return Ok(false);
+    }
+    ferris_idea_core::trust::add_location(
+        file,
+        target,
+        ferris_idea_core::trust::TrustKind::Project,
+    )?;
+    Ok(true)
+}
+
+/// The trust file New Project writes to: the user's while trust is enforced (the application).
+pub fn new_project_trust_file() -> Option<PathBuf> {
+    ferris_idea_core::trust::enforced()
+        .then(ferris_idea_core::trust::trust_file)
+        .flatten()
+}
+
+/// The line under a form while it names no folder: the rule of its first field (window check
+/// A16, NP1: New Project showed the clone's hint).
+pub fn form_hint(clone: bool) -> &'static str {
+    if clone {
+        "Only HTTPS and SSH; no password or token in the address."
+    } else {
+        "One folder name; the new folder goes into the Location, which must exist."
+    }
 }
 
 /// `~` and `~/…` in the home folder.
@@ -105,7 +146,7 @@ pub fn default_location(current: &Path) -> String {
 }
 
 /// The text of a clone's progress (behaviour 13).
-pub fn progress_text(name: &str, progress: Option<&idecraft_vcs::CloneProgress>) -> String {
+pub fn progress_text(name: &str, progress: Option<&ferris_idea_vcs::CloneProgress>) -> String {
     match progress {
         Some(p) => match p.percent {
             Some(n) => format!("Cloning {name}: {} {n}%", p.phase),
@@ -159,7 +200,7 @@ mod tests {
     /// SPEC-0094 v5 AK-11: the forms name the new folder or the reason it cannot be made.
     #[test]
     fn the_forms_name_the_new_folder_or_the_reason() {
-        let dir = std::env::temp_dir().join(format!("idecraft-popup-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-popup-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("taken")).unwrap();
         let loc = dir.display().to_string();
@@ -181,7 +222,7 @@ mod tests {
         assert!(new_project_plan(&loc, "a/b").is_err());
         assert!(new_project_plan(&loc, "taken").is_err());
         assert_eq!(default_location(&dir.join("x")), loc);
-        let p = idecraft_vcs::CloneProgress {
+        let p = ferris_idea_vcs::CloneProgress {
             phase: "Receiving objects".into(),
             percent: Some(45),
         };
@@ -189,6 +230,31 @@ mod tests {
             progress_text("shop", Some(&p)),
             "Cloning shop: Receiving objects 45%"
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// SPEC-0094 v10 AK-22 (window check A16, NP1 and NP2): each form has its own hint; a folder
+    /// New Project just made with `git init` is trusted, one with other files is not, and nothing
+    /// is written while trust is not enforced.
+    #[test]
+    fn new_projects_are_trusted_and_hints_belong_to_their_form() {
+        assert!(form_hint(true).contains("HTTPS"));
+        assert!(!form_hint(false).contains("HTTPS"));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-np-trust-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("fresh/.git")).unwrap();
+        std::fs::create_dir_all(dir.join("other")).unwrap();
+        std::fs::write(dir.join("other/build.sh"), "echo hi\n").unwrap();
+        let file = dir.join("trusted.toml");
+        assert!(!trust_new_project(None, &dir.join("fresh")).unwrap());
+        assert!(
+            !file.exists(),
+            "nothing written while trust is not enforced"
+        );
+        assert!(trust_new_project(Some(&file), &dir.join("fresh")).unwrap());
+        assert!(!trust_new_project(Some(&file), &dir.join("other")).unwrap());
+        let listed = ferris_idea_core::trust::load_locations(&file).unwrap();
+        assert_eq!(listed.len(), 1, "{listed:?}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

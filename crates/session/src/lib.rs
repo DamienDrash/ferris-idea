@@ -1,4 +1,4 @@
-//! The session protocol between the window and `idecraft serve` (`ADR-0026`, `SPEC-0317` v2;
+//! The session protocol between the window and `ferris-idea serve` (`ADR-0026`, `SPEC-0317` v2;
 //! security per `ADR-0025`).
 //!
 //! Layers: [`frame`] (length, type, stream id, payload; at most 1 MiB), [`rpc`] (JSON-RPC 2.0 with

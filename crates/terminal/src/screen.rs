@@ -179,6 +179,8 @@ pub struct Screen {
     links: Vec<String>,
     /// Current folder the shell reported with OSC 7 (`SPEC-0161`).
     cwd: Option<String>,
+    /// How many OSC 7 reports came, so that a repeated report is seen (`SPEC-0161` v2).
+    cwd_reports: u64,
     /// History lines that left the front of the scrollback; history line `i` has the stable
     /// number `dropped + i` (`SPEC-0206` behaviour 2).
     dropped: u64,
@@ -255,6 +257,7 @@ impl Screen {
             responses: Vec::new(),
             links: Vec::new(),
             cwd: None,
+            cwd_reports: 0,
             dropped: 0,
             prompts: Vec::new(),
             command_start: None,
@@ -324,6 +327,12 @@ impl Screen {
     /// The folder the shell last reported with OSC 7 (`file://host/path`), decoded (`SPEC-0161`).
     pub fn reported_dir(&self) -> Option<&str> {
         self.cwd.as_deref()
+    }
+
+    /// How many OSC 7 reports came so far: changes with every report, the same folder again
+    /// included (`SPEC-0161` v2 behaviour 4).
+    pub fn dir_reports(&self) -> u64 {
+        self.cwd_reports
     }
 
     /// Address of the OSC 8 hyperlink `id` (`Style::link`).
@@ -1202,7 +1211,10 @@ impl Screen {
         // Lines in the history keep their hyperlinks.
         let links = std::mem::take(&mut self.links);
         let (dropped, prompts) = (self.dropped, std::mem::take(&mut self.prompts));
+        let cwd_reports = self.cwd_reports;
         *self = Self::new(self.rows, self.cols);
+        // Counted on, so that a report after the reset is still seen as new.
+        self.cwd_reports = cwd_reports;
         self.scrollback = scrollback;
         self.link_bytes = links.iter().map(String::len).sum();
         self.links = links;
@@ -1400,6 +1412,7 @@ impl vte::Perform for Screen {
                 && path.len() <= MAX_DIR
             {
                 self.cwd = Some(percent_decode(path));
+                self.cwd_reports += 1;
             }
         }
         if let [kind, mark, rest @ ..] = params
@@ -1651,7 +1664,11 @@ mod tests {
         let t = term(2, 10, "\x1b]7;file://mac.local/Users/a/my%20dir\x07x");
         assert_eq!(t.screen.reported_dir(), Some("/Users/a/my dir"));
         assert_eq!(t.screen.text(), "x");
+        assert_eq!(t.screen.dir_reports(), 1);
         assert_eq!(term(2, 10, "").screen.reported_dir(), None);
+        // The same folder again is a new report (`SPEC-0161` v2).
+        let twice = term(2, 10, "\x1b]7;file:///a\x07\x1b]7;file:///a\x07");
+        assert_eq!(twice.screen.dir_reports(), 2);
     }
 
     #[test]

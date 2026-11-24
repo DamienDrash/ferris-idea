@@ -130,7 +130,7 @@ impl Render for UsagesView {
                                 .whitespace_nowrap()
                                 .when(i == selected, |d| d.bg(c(p.tree_selection)))
                                 .when(i != selected, |d| d.hover(|s| s.bg(c(p.tree_hover))))
-                                .child(icon(idecraft_ui::icons::symbol_icon(&o.kind)))
+                                .child(icon(ferris_idea_ui::icons::symbol_icon(&o.kind)))
                                 .child(div().flex_none().child(o.name.clone()))
                                 .child(
                                     div()
@@ -168,7 +168,7 @@ impl Render for UsagesView {
                             .whitespace_nowrap()
                             .when(i == selected, |d| d.bg(c(p.tree_selection)))
                             .when(i != selected, |d| d.hover(|s| s.bg(c(p.tree_hover))))
-                            .child(icon(idecraft_ui::icons::file_icon(&name)))
+                            .child(icon(ferris_idea_ui::icons::file_icon(&name)))
                             .child(
                                 div()
                                     .flex_1()

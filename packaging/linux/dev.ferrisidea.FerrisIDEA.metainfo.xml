@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metainfo of the Linux packages (SPEC-0354 behaviour 6). scripts/release-linux.sh
+     writes the version and the date of the release for @VERSION@ and @DATE@. -->
+<component type="desktop-application">
+  <id>dev.ferrisidea.FerrisIDEA</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>LicenseRef-PolyForm-Shield-1.0.0</project_license>
+  <name>Ferris IDEA</name>
+  <summary>Experimental Rust-native IDE for code and databases</summary>
+  <description>
+    <p>
+      Ferris IDEA is an integrated development environment written in Rust. It edits, navigates,
+      runs and debugs code in many languages, works with databases, and offers its operations to
+      AI agents through the Model Context Protocol.
+    </p>
+    <p>
+      It sends no telemetry and does not look for updates by itself.
+    </p>
+  </description>
+  <developer id="dev.ferrisidea">
+    <name>Ferris IDEA project</name>
+  </developer>
+  <launchable type="desktop-id">ferris-idea.desktop</launchable>
+  <url type="homepage">https://github.com/DamienDrash/ferris-idea</url>
+  <url type="bugtracker">https://github.com/DamienDrash/ferris-idea/issues</url>
+  <categories>
+    <category>Development</category>
+    <category>IDE</category>
+  </categories>
+  <provides>
+    <binary>ferris-idea</binary>
+    <mediatype>application/x-ferris-idea-connector</mediatype>
+    <mediatype>application/x-ferris-idea-sources</mediatype>
+    <mediatype>application/x-ferris-idea-run</mediatype>
+    <mediatype>application/x-ferris-idea-keymap</mediatype>
+    <mediatype>application/x-ferris-idea-theme</mediatype>
+    <mediatype>application/x-ferris-idea-code-style</mediatype>
+    <mediatype>application/x-ferris-idea-live-templates</mediatype>
+    <mediatype>application/x-ferris-idea-settings</mediatype>
+    <mediatype>application/x-ferris-idea-plugin</mediatype>
+  </provides>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="@VERSION@" date="@DATE@"/>
+  </releases>
+</component>

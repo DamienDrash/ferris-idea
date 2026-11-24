@@ -52,6 +52,7 @@ fn config(name: String, command: Vec<String>, cwd: &str, kind: RunKind) -> RunCo
         allow_multiple: false,
         before_launch: Vec::new(),
         verbatim: false,
+        http: None,
     }
 }
 
@@ -292,9 +293,219 @@ pub fn single_test_config(
     }
 }
 
+/// A Java module without a build tool whose sources are compiled together (`SPEC-0097` v4
+/// behaviour 10): its name, source folders, output folder and the class path of its libraries,
+/// all relative to the project.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JavaModule {
+    /// Module name: of its `.iml` file, else the project folder's.
+    pub name: String,
+    /// Source folders compiled together.
+    pub sources: Vec<String>,
+    /// Where the classes go: the module's own output, else `<project output>/production/<name>`.
+    pub output: String,
+    /// JARs and class folders of its libraries.
+    pub classpath: Vec<String>,
+}
+
+/// The module without a build tool whose source folder holds the Java file `rel`, or `None` when
+/// `rel` lies in no source folder (then the JDK's source launcher runs it alone). The project's
+/// `.idea` files name the modules, their source folders, output and libraries; without them a
+/// folder counts as a source folder when the file's folders below it equal its declared package
+/// and it is `src` or ends in `/src`, `src/main/java` or `src/test/java`.
+pub fn java_module(root: Option<&Path>, rel: &str, text: &str) -> Option<JavaModule> {
+    let inside = |dir: &str| dir == "." || rel.starts_with(&format!("{dir}/"));
+    if let Some(project) = root.and_then(crate::ideaproject::read_idea_project) {
+        for m in &project.modules {
+            let folders: Vec<&crate::ideaproject::SourceFolder> =
+                m.content_roots.iter().flat_map(|c| &c.sources).collect();
+            let Some(own) = folders.iter().find(|f| {
+                matches!(
+                    f.kind,
+                    crate::ideaproject::SourceKind::Source | crate::ideaproject::SourceKind::Test
+                ) && inside(&f.dir)
+            }) else {
+                continue;
+            };
+            let test = own.kind == crate::ideaproject::SourceKind::Test;
+            let sources = folders
+                .iter()
+                .filter(|f| {
+                    f.kind == crate::ideaproject::SourceKind::Source
+                        || (test && f.kind == crate::ideaproject::SourceKind::Test)
+                })
+                .map(|f| f.dir.clone())
+                .collect();
+            let base = project.output.clone().unwrap_or_else(|| "out".into());
+            let output = match (&m.output, m.inherit_output) {
+                (Some(o), false) => o.clone(),
+                _ => format!("{base}/production/{}", m.name),
+            };
+            let mut classpath: Vec<String> = Vec::new();
+            for d in &m.dependencies {
+                match d.kind.as_str() {
+                    "module-library" => classpath.extend(d.roots.iter().cloned()),
+                    "library" => {
+                        if let Some(l) = project.libraries.iter().find(|l| l.name == d.name) {
+                            classpath.extend(l.classes.iter().cloned());
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            return Some(JavaModule {
+                name: m.name.clone(),
+                sources,
+                output,
+                classpath,
+            });
+        }
+        return None;
+    }
+    // Without `.idea`: the folder above the package's folders.
+    let parent = Path::new(rel)
+        .parent()?
+        .to_string_lossy()
+        .replace('\\', "/");
+    let source = match package(text) {
+        Some(p) => {
+            let tail = p.replace('.', "/");
+            if parent == tail {
+                String::new()
+            } else {
+                parent.strip_suffix(&format!("/{tail}"))?.to_owned()
+            }
+        }
+        None => parent,
+    };
+    let conventional = source == "src"
+        || source.ends_with("/src")
+        || source.ends_with("src/main/java")
+        || source.ends_with("src/test/java");
+    if !conventional {
+        return None;
+    }
+    // The module's folder: above `src`; its `.iml` file names it, else the folder does.
+    let module_dir = source
+        .strip_suffix("src/main/java")
+        .or_else(|| source.strip_suffix("src/test/java"))
+        .or_else(|| source.strip_suffix("src"))
+        .unwrap_or("")
+        .trim_end_matches('/')
+        .to_owned();
+    let name = root
+        .and_then(|r| {
+            let dir = if module_dir.is_empty() {
+                r.to_path_buf()
+            } else {
+                r.join(&module_dir)
+            };
+            let iml = std::fs::read_dir(&dir)
+                .ok()?
+                .filter_map(|e| e.ok())
+                .filter_map(|e| e.file_name().to_str().map(str::to_owned))
+                .filter(|n| n.ends_with(".iml"))
+                .min()
+                .map(|n| n.trim_end_matches(".iml").to_owned());
+            iml.or_else(|| dir.file_name().map(|n| n.to_string_lossy().into_owned()))
+        })
+        .or_else(|| {
+            module_dir
+                .rsplit('/')
+                .next()
+                .filter(|n| !n.is_empty())
+                .map(str::to_owned)
+        })
+        .unwrap_or_else(|| "main".into());
+    Some(JavaModule {
+        output: format!("out/production/{name}"),
+        name,
+        sources: vec![source],
+        classpath: Vec::new(),
+    })
+}
+
+/// A word for `sh -c`: in single quotes.
+fn quoted(word: &str) -> String {
+    format!("'{}'", word.replace('\'', "'\\''"))
+}
+
+/// A path for a command line that no program reads as an option: a relative path that starts
+/// with `-` gets `./` before it (a source folder named `-delete` must not reach `find` as its
+/// expression).
+fn path_word(path: &str) -> String {
+    if path.starts_with('-') {
+        quoted(&format!("./{path}"))
+    } else {
+        quoted(path)
+    }
+}
+
+/// The command that compiles every source of `module` with `javac` and runs `class` with the
+/// module's classes and libraries on the class path (`SPEC-0097` v4 behaviour 10), run in the
+/// project folder. `javac` reads the list of sources from a file under `.ferris-idea/run`.
+pub fn java_module_command(module: &JavaModule, class: &str) -> Vec<String> {
+    let safe: String = module
+        .name
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let list = format!(".ferris-idea/run/{safe}.sources");
+    let sources: Vec<String> = module.sources.iter().map(|s| path_word(s)).collect();
+    let libraries = module.classpath.join(":");
+    let compile_cp = if libraries.is_empty() {
+        String::new()
+    } else {
+        format!(" -cp {}", quoted(&libraries))
+    };
+    let run_cp = std::iter::once(module.output.as_str())
+        .chain(module.classpath.iter().map(String::as_str))
+        .collect::<Vec<_>>()
+        .join(":");
+    let script = format!(
+        "mkdir -p .ferris-idea/run {out} && find {sources} -name '*.java' > {list} && \
+         javac -d {out}{compile_cp} @{list} && java -cp {run_cp} {class}",
+        out = path_word(&module.output),
+        class = quoted(class),
+        sources = sources.join(" "),
+        list = quoted(&list),
+        run_cp = quoted(&run_cp),
+    );
+    words(&["sh", "-c", &script])
+}
+
 /// The configuration that runs `rel` (workspace-relative) with content `text`, or `None` when the
-/// file cannot be run (behaviour 3). Test sources run their tests with a result tree.
+/// file cannot be run (behaviour 3). Test sources run their tests with a result tree. Without the
+/// project folder a Java file of a module without a build tool is recognised by its path only
+/// (see [`context_config_in`]).
 pub fn context_config(model: &ProjectModel, rel: &str, text: &str) -> Option<RunConfig> {
+    context_config_at(None, model, rel, text)
+}
+
+/// [`context_config`] of the project at `root`: its `.idea` files name the modules of a project
+/// without a build tool, their source folders, output and libraries (`SPEC-0097` v4 behaviour
+/// 10).
+pub fn context_config_in(
+    root: &Path,
+    model: &ProjectModel,
+    rel: &str,
+    text: &str,
+) -> Option<RunConfig> {
+    context_config_at(Some(root), model, rel, text)
+}
+
+fn context_config_at(
+    root: Option<&Path>,
+    model: &ProjectModel,
+    rel: &str,
+    text: &str,
+) -> Option<RunConfig> {
     let path = Path::new(rel);
     let stem = path.file_stem()?.to_string_lossy().into_owned();
     let ext = path.extension()?.to_string_lossy().to_ascii_lowercase();
@@ -360,6 +571,16 @@ pub fn context_config(model: &ProjectModel, rel: &str, text: &str) -> Option<Run
             if !has_main(text, java) {
                 return None;
             }
+            // A file in a source folder of a module without a build tool: the module is compiled,
+            // then the class runs with its classes (`SPEC-0097` v4 behaviour 10); Maven and
+            // Gradle modules build as before.
+            if java
+                && !matches!(tool, Some(ModuleKind::Maven | ModuleKind::Gradle))
+                && let Some(m) = java_module(root, rel, text)
+            {
+                let command = java_module_command(&m, &class);
+                return Some(config(stem, command, ".", RunKind::Run));
+            }
             let command = match (tool, java) {
                 (Some(ModuleKind::Maven), true) => words(&[
                     "mvn",
@@ -392,7 +613,7 @@ pub fn context_config(model: &ProjectModel, rel: &str, text: &str) -> Option<Run
                     &format!("mvn -q compile && kotlin -cp target/classes {kotlin_main}"),
                 ]),
                 (_, false) => {
-                    let jar = format!(".idecraft/run/{stem}.jar");
+                    let jar = format!(".ferris-idea/run/{stem}.jar");
                     words(&[
                         "sh",
                         "-c",
@@ -414,13 +635,13 @@ pub fn context_config(model: &ProjectModel, rel: &str, text: &str) -> Option<Run
                         "-m",
                         "pytest",
                         &local,
-                        "--junitxml=.idecraft/pytest.xml",
+                        "--junitxml=.ferris-idea/pytest.xml",
                     ]),
                     dir,
                     RunKind::Test,
                 );
                 c.report = Some("junit".into());
-                c.report_file = Some(in_module(".idecraft/pytest.xml"));
+                c.report_file = Some(in_module(".ferris-idea/pytest.xml"));
                 return Some(c);
             }
             Some(config(name, words(&["python3", &local]), dir, RunKind::Run))
@@ -434,13 +655,13 @@ pub fn context_config(model: &ProjectModel, rel: &str, text: &str) -> Option<Run
                 let (runner, report, mut command) = if uses("vitest") {
                     (
                         "vitest",
-                        ".idecraft/vitest.json",
+                        ".ferris-idea/vitest.json",
                         words(&["npx", "vitest", "run", "--reporter=json"]),
                     )
                 } else {
                     (
                         "jest",
-                        ".idecraft/jest.json",
+                        ".ferris-idea/jest.json",
                         words(&["npx", "jest", "--json"]),
                     )
                 };
@@ -492,16 +713,23 @@ pub fn context_config(model: &ProjectModel, rel: &str, text: &str) -> Option<Run
                 };
                 return Some(cargo_test(&local, dir, &[], false, name));
             }
-            let bin = if stem == "main" {
-                None
-            } else if rel.contains("/bin/") {
-                Some(stem.clone())
-            } else {
-                return None;
+            // The target by Cargo's default layout (`SPEC-0097` v3 behaviour 8): a binary in its
+            // own folder under `src/bin/` and the examples too.
+            let parts: Vec<&str> = local.split('/').collect();
+            let (flag, bin) = match parts.as_slice() {
+                ["src", "bin", dir, "main.rs"] => ("--bin", Some((*dir).to_owned())),
+                ["examples", dir, "main.rs"] => ("--example", Some((*dir).to_owned())),
+                ["examples", _] => ("--example", Some(stem.clone())),
+                // The package's own binary by name: a plain `cargo run` refuses to choose once
+                // `src/bin/` holds another one (`SPEC-0097` v3 behaviour 3).
+                ["src", "main.rs"] => ("--bin", Some(m.name.clone())),
+                _ if stem == "main" => ("--bin", None),
+                _ if rel.contains("/bin/") => ("--bin", Some(stem.clone())),
+                _ => return None,
             };
             let mut command = words(&["cargo", "run"]);
             if let Some(b) = &bin {
-                command.extend(words(&["--bin", b]));
+                command.extend(words(&[flag, b]));
             }
             text.contains("fn main(").then(|| {
                 config(

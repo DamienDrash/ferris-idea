@@ -16,12 +16,12 @@
 
 ## Purpose
 Every change is checked against stated budgets for typing, start, memory, large files and large
-projects, so IDECraft stays faster and leaner than the reference measured in OBS-0001 to OBS-0003 and
-regressions fail CI instead of being noticed by users. The budgets also fix how IDECraft treats very
+projects, so Ferris IDEA stays faster and leaner than the reference measured in OBS-0001 to OBS-0003 and
+regressions fail CI instead of being noticed by users. The budgets also fix how Ferris IDEA treats very
 large files and projects.
 
 ## Budgets
-The bar is the reference's measurement or an improvement target; the budget is IDECraft's limit. A
+The bar is the reference's measurement or an improvement target; the budget is Ferris IDEA's limit. A
 value above the budget is reported as a warning, a value above budget plus tolerance fails CI. The
 machine-readable form is `crates/bench/budgets.toml`; both change together.
 
@@ -49,7 +49,7 @@ machine-readable form is `crates/bench/budgets.toml`; both change together.
 | Peak memory of the editor phase (both files and the reference index; v6) | 500 MiB | 20 % | the bound these steps had inside the indexing phase (v4, v5) | headless |
 
 ## Behaviour
-1. **Headless measurement.** `idecraft-bench run` (release build) measures every headless budget and
+1. **Headless measurement.** `ferris-idea-bench run` (release build) measures every headless budget and
    fails when one is exceeded beyond its tolerance or not measured. Each phase (typing, large files,
    indexing, editor; v6: the editor is its own phase) runs in a child process whose peak resident
    memory and CPU time are sampled every 50 ms from outside with `ps` (`{phase}_peak_rss_mib`,
@@ -91,15 +91,15 @@ machine-readable form is `crates/bench/budgets.toml`; both change together.
      after the file's first parse) and of the whole phase (`editor_cpu_s`) is recorded without a
      budget: each step runs on one thread and its wall-clock p95 is budgeted. The phase's peak
      memory keeps the 500 MiB bound it had inside indexing (`editor_peak_rss_mib`).
-   Fixtures are generated once into `$IDECRAFT_BENCH_DIR` (default `~/.cache/idecraft-bench`). [GEN]
-3. **Window measurement, nightly.** `scripts/perf-window.sh` starts the release build of `idecraft ui`
+   Fixtures are generated once into `$FERRIS_IDEA_BENCH_DIR` (default `~/.cache/ferris-idea-bench`). [GEN]
+3. **Window measurement, nightly.** `scripts/perf-window.sh` starts the release build of `ferris-idea ui`
    on an empty folder with its own settings folder and in its own process group, after one
-   `idecraft --version` (macOS checks a newly linked executable at its first start, which is not the
+   `ferris-idea --version` (macOS checks a newly linked executable at its first start, which is not the
    app's start time), and measures from outside, as OBS-0002 measured the reference: wall clock from the launch to the first window at least 1000 px wide; CPU share from
    CPU-time deltas once per second until it stays below 5 % of one core for 10 s; resident memory then
-   and after 10 minutes without input. Keystroke-to-frame latency comes from `idecraft spike-editor`
+   and after 10 minutes without input. Keystroke-to-frame latency comes from `ferris-idea spike-editor`
    (M3.4). `scripts/ci-window.sh` runs both at night when the Mac is idle and checks the window budgets
-   with `idecraft-bench check window`. [GEN, OBS-0002]
+   with `ferris-idea-bench check window`. [GEN, OBS-0002]
 4. **Large texts in the editor.** A text over 1 MiB gets its syntax tree, inspections and fold regions on
    a background thread when it is opened and shows plain text until they arrive; opening never waits for
    a parse. A text over 8 MiB gets no syntax tree: a tree costs up to ~45 bytes per byte of text (a
@@ -115,7 +115,7 @@ machine-readable form is `crates/bench/budgets.toml`; both change together.
    fold regions to positions is linear in the text: offsets are counted on from the previous position,
    never from the start of the text, and no tree node is asked for its parent. [GEN]
 7. **History.** Every headless run and every nightly window run appends one JSON line (date, commit,
-   host, one-minute load average, mode, metrics) to `history.jsonl` in `$IDECRAFT_BENCH_DIR`, outside the
+   host, one-minute load average, mode, metrics) to `history.jsonl` in `$FERRIS_IDEA_BENCH_DIR`, outside the
    repository; the numbers quoted in `ROADMAP.md` and the status file come from there. [GEN]
 8. **Cold start.** The extra time with an empty file cache needs `sudo purge`, which CI cannot run; it is
    measured by hand with `scripts/perf-window.sh` right after `purge` and recorded in the status file.
@@ -125,7 +125,7 @@ machine-readable form is `crates/bench/budgets.toml`; both change together.
 - **AK-1** `crates/bench/budgets.toml` parses, names every metric once, and the check reports a value at
   the budget as within, above budget but inside the tolerance as warning, beyond it as failure, and a
   missing metric as not measured.
-- **AK-2** `idecraft-bench run` produces every headless metric of the table, appends to the history and
+- **AK-2** `ferris-idea-bench run` produces every headless metric of the table, appends to the history and
   passes on the self-hosted runner as a step of `scripts/ci-local.sh`.
 - **AK-3** The nightly window job measures start, idle and memory of the release build and the typing
   latency and fails when a window budget is exceeded beyond its tolerance.
@@ -140,15 +140,15 @@ machine-readable form is `crates/bench/budgets.toml`; both change together.
 - Start of a non-empty project in the window (restored session, language servers); measured once the
   window opens projects with language servers in its own budget.
 - Indexing with build models (Maven/Gradle import, JDK library) — OBS-0006 measured the reference with
-  Maven; IDECraft has no persistent index yet.
+  Maven; Ferris IDEA has no persistent index yet.
 - An MCP tool: the budgets are a property of CI, not a feature of the IDE (ADR-0008 does not apply).
 
 ## Known deviations from the reference
 - Files over 2.5 MB keep full highlighting, inspections and folding up to 8 MiB, and files over 50 MB open
-  editable instead of read-only in parts (DOC); above 8 MiB IDECraft shows plain text. IMP-0260.
+  editable instead of read-only in parts (DOC); above 8 MiB Ferris IDEA shows plain text. IMP-0260.
 - Start-up work is bounded: idle within 10 s of the project window instead of minutes (IMP-0063); memory
   stays below 300 MiB with an empty project instead of 2–3 GB (IMP-0003).
 - Measurement method: idle is judged from CPU-time deltas per second, while OBS-0002 used the decaying
-  CPU average `ps` reports; a decaying average lags behind, so IDECraft's idle times are not inflated by
+  CPU average `ps` reports; a decaying average lags behind, so Ferris IDEA's idle times are not inflated by
   the method, and the reference's are slightly. The window budgets are far enough from the reference
   that this does not change the comparison.

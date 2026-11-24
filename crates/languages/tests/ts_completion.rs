@@ -1,30 +1,30 @@
 //! SPEC-0072 v8 AK-19 (OBS-0017 step 9, defect F031-3): TypeScript completion through
 //! typescript-language-server: member types from resolving, functions with parentheses, and
-//! IDECraft's own postfix templates. A test binary of its own, because the pool is switched on for
+//! Ferris IDEA's own postfix templates. A test binary of its own, because the pool is switched on for
 //! the whole process. Skipped without `typescript-language-server`.
 
 use std::time::Duration;
 
-use idecraft_languages::insight::{CompletionItem, complete_in, resolve_details_in};
-use idecraft_languages::pool;
-use idecraft_languages::script_completion::detail_parts;
+use ferris_idea_languages::insight::{CompletionItem, complete_in, resolve_details_in};
+use ferris_idea_languages::pool;
+use ferris_idea_languages::script_completion::detail_parts;
 
 const INVENTORY: &str = "export interface Item {\n  sku: string;\n  name: string;\n  qty: number;\n}\n\nexport function bySku<T extends { sku: string }>(items: T[]): Map<string, T> {\n  return new Map(items.map((item) => [item.sku, item]));\n}\n";
 
 #[tokio::test]
 async fn types_parentheses_and_postfix_templates() {
     // Only typescript-language-server: TypeScript 7's own server is checked in servers.rs.
-    if !idecraft_languages::servers::resolve(idecraft_languages::LanguageId::TypeScript)
+    if !ferris_idea_languages::servers::resolve(ferris_idea_languages::LanguageId::TypeScript)
         .is_ok_and(|r| r.candidate.program == "typescript-language-server")
     {
         assert!(
-            std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+            ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
             "required tool missing: typescript-language-server"
         );
         eprintln!("skipped: typescript-language-server not installed");
         return;
     }
-    let root = std::env::temp_dir().join(format!("idecraft-ts-cmp-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-ts-cmp-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src")).unwrap();
     let root = root.canonicalize().unwrap();

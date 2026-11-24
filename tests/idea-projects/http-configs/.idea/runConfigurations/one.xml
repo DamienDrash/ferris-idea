@@ -1,0 +1,7 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="one" type="HttpClient.HttpRequestRunConfigurationType" factoryName="HTTP Request">
+    <option name="path" value="$PROJECT_DIR$/http/one.http" />
+    <option name="runType" value="Run single request" />
+    <method v="2" />
+  </configuration>
+</component>

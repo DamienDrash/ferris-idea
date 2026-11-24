@@ -17,12 +17,10 @@ use crate::insight::{CallNode, Location, Opened, Range, parse_locations};
 use crate::java_structure::TypeDirection;
 use crate::lsp::{LspError, file_uri};
 use crate::syntax::SyntaxDocument;
-use crate::usages::UsageCount;
+use crate::usages::{Counted, Plan, UsageCount};
 
 /// At most this many nodes in a hierarchy (behaviour 4).
 const NODE_LIMIT: usize = 500;
-/// At most this many declarations counted per file (behaviour 5).
-const MAX_DECLARATIONS: usize = 200;
 
 /// Whether `path` is a JavaScript or TypeScript file.
 pub fn is_script(path: &Path) -> bool {
@@ -1786,14 +1784,7 @@ pub fn counted_declarations(symbols: &Value) -> Vec<UsageCount> {
                 && let (Some(line), Some(character)) =
                     (at["line"].as_u64(), at["character"].as_u64())
             {
-                out.push(UsageCount {
-                    name: name.to_owned(),
-                    kind: kind(k),
-                    line,
-                    character,
-                    count: 0,
-                    inheritors: 0,
-                });
+                out.push(UsageCount::new(name, kind(k), line, character));
             }
             if is_type {
                 walk(&s["children"], true, out);
@@ -1803,20 +1794,21 @@ pub fn counted_declarations(symbols: &Value) -> Vec<UsageCount> {
     let mut out = Vec::new();
     walk(symbols, false, &mut out);
     out.sort_by_key(|u| (u.line, u.character));
-    out.truncate(MAX_DECLARATIONS);
     out
 }
 
 /// Usage counts of a script file: members too, unused ones too, types with inheritors
-/// (behaviours 5–7).
+/// (behaviours 5–7); those `plan` chooses, in its order, within `wait` (`SPEC-0292` v8
+/// behaviour 12).
 pub async fn usage_counts_in(
     root: &Path,
     file: &Path,
     text: Option<&str>,
     wait: Duration,
-) -> Result<Vec<UsageCount>, LspError> {
+    plan: &Plan,
+) -> Result<Counted, LspError> {
     let mut s = Session::open(root, file, text, wait).await?;
-    let result = counts(&mut s).await;
+    let result = counts(&mut s, plan).await;
     s.close().await;
     result
 }
@@ -1859,7 +1851,7 @@ async fn below_member(s: &mut Session, d: &mut UsageCount) -> Result<(), LspErro
     Ok(())
 }
 
-async fn counts(s: &mut Session) -> Result<Vec<UsageCount>, LspError> {
+async fn counts(s: &mut Session, plan: &Plan) -> Result<Counted, LspError> {
     let uri = s.server()?.uri.clone();
     let symbols = s
         .server()?
@@ -1870,12 +1862,14 @@ async fn counts(s: &mut Session) -> Result<Vec<UsageCount>, LspError> {
         .await?;
     let main = s.main();
     let mut found = Vec::new();
-    for mut d in counted_declarations(&symbols) {
+    let mut complete = true;
+    for mut d in plan.order(counted_declarations(&symbols)) {
         if s.left().is_zero() {
+            complete = false;
             break;
         }
         let left = s.left();
-        let references = s
+        let references = match s
             .server()?
             .ask_bounded(
                 "textDocument/references",
@@ -1885,7 +1879,16 @@ async fn counts(s: &mut Session) -> Result<Vec<UsageCount>, LspError> {
                 left,
                 None,
             )
-            .await?;
+            .await
+        {
+            Ok(r) => r,
+            // The budget ended within the question: what was counted stands (v8 behaviour 12).
+            Err(LspError::Timeout(..)) if !found.is_empty() => {
+                complete = false;
+                break;
+            }
+            Err(e) => return Err(e),
+        };
         // The places Find Usages lists, so the count and the list agree (`SPEC-0320` v8
         // behaviour 5a): not the declarations of members that implement or override this one.
         let declaration = crate::insight::Location {
@@ -1917,7 +1920,7 @@ async fn counts(s: &mut Session) -> Result<Vec<UsageCount>, LspError> {
         }
         found.push(d);
     }
-    Ok(found)
+    Ok(Counted::new(found, complete))
 }
 
 #[cfg(test)]
@@ -2077,7 +2080,7 @@ mod tests {
     /// A small project for the answers without a language server (SPEC-0320 v5 AK-14).
     fn tree_project(name: &str) -> PathBuf {
         let root =
-            std::env::temp_dir().join(format!("idecraft-ts-tree-{name}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("ferris-idea-ts-tree-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let files = [
             (
@@ -2257,14 +2260,7 @@ mod tests {
     async fn members_count_their_implementations_and_overrides() {
         let root = tree_project("members");
         let mut s = tree_session(&root, "shapes/base.ts");
-        let count = |name: &str, line: u64| UsageCount {
-            name: name.to_owned(),
-            kind: "method",
-            line,
-            character: 2,
-            count: 0,
-            inheritors: 0,
-        };
+        let count = |name: &str, line: u64| UsageCount::new(name, "method", line, 2);
         let mut area = count("area", 1);
         below_member(&mut s, &mut area).await.unwrap();
         assert_eq!((area.kind, area.inheritors), ("abstract method", 2));

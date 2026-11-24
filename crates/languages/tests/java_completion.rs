@@ -9,8 +9,8 @@
 
 use std::time::{Duration, Instant};
 
-use idecraft_languages::insight::{CompletionItem, complete_in, resolve_completion_in};
-use idecraft_languages::pool;
+use ferris_idea_languages::insight::{CompletionItem, complete_in, resolve_completion_in};
+use ferris_idea_languages::pool;
 
 const HEAD: &str =
     "package demo;\n\nclass A {\n    void m(java.util.List<String> names, String s) {\n        ";
@@ -31,15 +31,15 @@ fn has(items: &[CompletionItem], label: &str) -> bool {
 
 #[tokio::test]
 async fn snippets_postfix_templates_and_imports() {
-    if idecraft_languages::servers::resolve(idecraft_languages::LanguageId::Java).is_err() {
+    if ferris_idea_languages::servers::resolve(ferris_idea_languages::LanguageId::Java).is_err() {
         assert!(
-            std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+            ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
             "required tool missing: jdtls"
         );
         eprintln!("skipped: jdtls not installed");
         return;
     }
-    let root = std::env::temp_dir().join(format!("idecraft-java-cmp-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-java-cmp-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src/main/java/demo")).unwrap();
     let root = root.canonicalize().unwrap();
@@ -143,7 +143,10 @@ async fn snippets_postfix_templates_and_imports() {
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
     .expect("documentation of isBlank");
-    assert!(!idecraft_languages::javadoc::looks_garbled(&doc), "{doc}");
+    assert!(
+        !ferris_idea_languages::javadoc::looks_garbled(&doc),
+        "{doc}"
+    );
     assert!(!doc.contains("jdt://"), "{doc}");
     assert!(doc.contains("`true`"), "{doc}");
 

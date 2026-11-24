@@ -58,19 +58,19 @@ memory, and answer "which keys run this action" and "what does this key do".
    bundled keymap adds or removes is listed in `crates/ui/keymaps/macos-deviations.json` with the
    specification or improvement entry that decides it and a reason. A deviation is allowed when
    (a) the reference binds the key in the declaration of an action or plugin instead of in the keymap
-   files, (b) the action is IDECraft's own or has no key upstream, (c) macOS takes the reference's chord
+   files, (b) the action is Ferris IDEA's own or has no key upstream, (c) macOS takes the reference's chord
    itself, or (d) a specification names the difference. The two upstream files stay byte for byte the
    copies of the pinned commit; a newer revision is taken only together with its entry in
    `crates/ui/keymaps/README.md` and `docs/legal/PROVENANCE.md`. [OSS, GEN]
-8. **Search in selection (v4).** `ToggleInSelection`, IDECraft's id of the find bar's search in selection
+8. **Search in selection (v4).** `ToggleInSelection`, Ferris IDEA's id of the find bar's search in selection
    (SPEC-0065 behaviour 12), is bound to the key the upstream files give `ToggleFindInSelection`, the
    reference's id of the same command (⌃⌥E in both bundled keymaps), beside that action. Before v4 it
    was bound only "where free", which the key never was, so it had no shortcut. [OSS]
 9. **Coverage document (v4).** `scripts/keymap-coverage.py` writes `docs/research/KEYMAP_COVERAGE.md`
    from the repository alone: for every action the upstream macOS keymap binds, its shortcuts there,
-   whether IDECraft carries the action out (its id in the sources that dispatch actions, or a mapped
-   action), IDECraft's shortcuts, and one of same / different shortcut / action exists without shortcut
-   / action missing; the chords on which IDECraft binds an action the upstream keymap does not bind
+   whether Ferris IDEA carries the action out (its id in the sources that dispatch actions, or a mapped
+   action), Ferris IDEA's shortcuts, and one of same / different shortcut / action exists without shortcut
+   / action missing; the chords on which Ferris IDEA binds an action the upstream keymap does not bind
    there; counts and shares, also by area; and the missing actions by area with the specification that
    would own each. The same input gives the same document; `--check` fails when the document is out of
    date. Missing actions are listed, not invented. [GEN]
@@ -127,7 +127,7 @@ memory, and answer "which keys run this action" and "what does this key do".
       the keymap.
    e. **Nothing.** A chord the keymap binds to no action that runs does nothing in a text input.
 
-   This order is IDECraft's choice. Its consequences on macOS, for ⌃ with a letter:
+   This order is Ferris IDEA's choice. Its consequences on macOS, for ⌃ with a letter:
    - The text-field chords macOS users know stay, because the bundled macOS keymap binds them to
      the same editing: ⌃A and ⌃E (start and end of the line), ⌃B and ⌃F (one character back and
      forward), ⌃P and ⌃N (one line up and down). In an input they go before an action of the part
@@ -297,7 +297,7 @@ German ⌃⇧2 arrives as `"` and is not the digit's chord); it needs the key co
 key event does not carry.
 
 ## Known deviations from the reference
-The bindings are the upstream files. Action ids only take effect where IDECraft implements the action;
+The bindings are the upstream files. Action ids only take effect where Ferris IDEA implements the action;
 `docs/research/KEYMAP_COVERAGE.md` lists which do. The bundled macOS keymap adds these shortcuts
 (behaviour 7; all are additions, no upstream shortcut is removed or moved):
 
@@ -313,12 +313,12 @@ The bindings are the upstream files. Action ids only take effect where IDECraft 
 | `CodeCompletion` | ⌥Esc beside ⌃Space | (c) macOS switches the input source with ⌃Space | IMP-0032 |
 | `StepOutOfBlock` | ⌃⌥⇧F10 | (b) no key upstream | SPEC-0091 |
 | `Hotswap` | ⌃⌥⇧F9 | (b) no key upstream | SPEC-0091 |
-| `IDECraft.Database.ShowDdl` | ⌥⇧⌘D | (b) IDECraft's own action | SPEC-0089 |
+| `FerrisIDEA.Database.ShowDdl` | ⌥⇧⌘D | (b) Ferris IDEA's own action | SPEC-0089 |
 | `ReopenClosedTab` | ⇧⌘T | (b), (d): no key upstream; of the chord's upstream actions `ServiceView.ShowServices` is not carried out and `GotoTest` yields the chord: it runs from the Navigate menu and Find Action (SPEC-0071 v10 behaviour 16) | SPEC-0059 |
 | `MaximizeEditorInSplit` | ⇧⌘' | (d) shares the key of `MaximizeToolWindow`, the focused part decides | SPEC-0059 |
-| `ToggleInSelection` | ⌃⌥E | (d) the same command as `ToggleFindInSelection` under IDECraft's id | behaviour 8 |
+| `ToggleInSelection` | ⌃⌥E | (d) the same command as `ToggleFindInSelection` under Ferris IDEA's id | behaviour 8 |
 
-v5: the upstream keymaps name keys; IDECraft's toolkit reports characters, so behaviour 10 works the
+v5: the upstream keymaps name keys; Ferris IDEA's toolkit reports characters, so behaviour 10 works the
 key out from the character and the layout's stand-ins. For the digit row that gives the key pressed
 on the layouts the toolkit describes on macOS and on a US layout everywhere; it does not on other
 layouts under Linux and Windows (out of scope above), and for punctuation keys with Shift the key is

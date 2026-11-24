@@ -85,14 +85,14 @@ do it, without leaving the editor.
 6. **(v4) Optimize Imports** (`OptimizeImports`, ⌃⌥O; SPEC-0122 owns the action for Java and
    Kotlin, SPEC-0329 for Python) works in `.ts .tsx .mts .cts .js .jsx .mjs .cjs` files and in
    `.vue` and `.svelte` files (the imports of their script blocks). It stands here because it is
-   a JavaScript/TypeScript action done by a tool outside IDECraft, like behaviours 3 and 4, and
+   a JavaScript/TypeScript action done by a tool outside Ferris IDEA, like behaviours 3 and 4, and
    because it has to say how it relates to ESLint and Prettier.
    - **Who does it:** the file's language server (SPEC-0042, SPEC-0141) with its organize-imports
-     code actions, on the editor's text — saved or not. IDECraft has no import sorter of its own
+     code actions, on the editor's text — saved or not. Ferris IDEA has no import sorter of its own
      for these languages. ESLint and Prettier of the project are **not** run by this action, even
      when their rules or plugins would order the imports differently; Fix ESLint Problems
      (behaviour 3) and Reformat with Prettier (behaviour 4) stay the way to apply those. [GEN, STD]
-   - **Which code actions:** IDECraft reads the kinds the server announces. A server that
+   - **Which code actions:** Ferris IDEA reads the kinds the server announces. A server that
      announces both `source.removeUnusedImports` and `source.sortImports` (or kinds below them,
      such as `source.removeUnusedImports.ts`) is asked for the first, and then, on the text that
      results, for the second: remove the unused imports, then sort and combine the rest. Any
@@ -154,7 +154,7 @@ do it, without leaving the editor.
 - **AK-7 (v2)** `js_tools::fixes_at`: UTF-16 fix ranges become byte ranges, one entry per fixable
   finding at the caret, a whole-file entry, nothing away from a finding (unit test).
 - **AK-8 (v3, behaviours 3 and 4)** Formatting and fixes keep carets and selections on their text
-  (`idecraft_editor::reformat` unit tests, shared with SPEC-0329 AK-9).
+  (`ferris_idea_editor::reformat` unit tests, shared with SPEC-0329 AK-9).
 - **AK-13 (v5, behaviour 5a; OBS-0028 T3)** `format_file` on a JavaScript file of a workspace with
   the project's Prettier: the plan's text is Prettier's (the same text `prettier_file` gives),
   `formatter` is `prettier`, `formatter_path` ends in `node_modules/.bin/prettier`, a dry run
@@ -162,7 +162,7 @@ do it, without leaving the editor.
   (`crates/mcp/tests/it/protocol.rs`: `format_file_uses_the_projects_prettier` with a stand-in
   Prettier, `eslint_and_prettier_tools` with Prettier 3, skipped without it); with
   typescript-language-server and without Prettier the answer names the server
-  (`format_file_names_the_language_server`, skipped without the server); `idecraft call` on the
+  (`format_file_names_the_language_server`, skipped without the server); `ferris-idea call` on the
   file of OBS-0028 T3.
 - **AK-14 (v6, behaviour 2a)** ESLint 9.17's note on a `.ts` file outside its configuration and on
   an ignored file give no findings, a fatal parse error still one
@@ -173,7 +173,7 @@ do it, without leaving the editor.
 ## Out of scope
 Fix or format on save, ESLint suggestions (fixes the user must choose), suppression comments, ESLint and Prettier
 in other folders than the project's, Stylelint, TSLint, the Prettier "run for files" pattern.
-Optimize Imports (v4): an import order of IDECraft's own or of the project's ESLint/Prettier
+Optimize Imports (v4): an import order of Ferris IDEA's own or of the project's ESLint/Prettier
 rules, adding missing imports, removing other unused code, optimizing on save or for a whole folder.
 
 ## Known deviations from the reference

@@ -1,6 +1,6 @@
 # SPEC-0068: Branch popup
 
-- **Version:** 9 · **Date:** 2026-11-13 (v9: New Branch and Rename as actions of their own, behaviours 32–33; docs/research/KEYMAP_COVERAGE.md; v8 2026-11-06: favourite branches with a star, favourites first, Space and Mark/Unmark as Favorite, kept per repository in IDECraft's settings, behaviours 25–31; planned by the project owner, partly not observed yet; v7: the actions at the top show their shortcuts, behaviour 24; v6: Compare with, Show Diff with Working Tree and Push… in the submenu of a branch; window comparison after #392; v5: actions at the top, Checkout Tag or Revision, Recent, folders, tracking, tags, a submenu per branch, the offer to delete a merged branch; OBS-0022 L12, L20; v2: "New Branch…" entry, look, fallback identity; from hand test 8; v3: ahead/behind and stopped operations in the widget, Continue/Abort/Skip, merge into current, smart checkout; v4: the widget follows changes made outside without leaving the window; OBS-0022)
+- **Version:** 10 · **Date:** 2026-11-18 (v10: "Recent" lists the current branch too, first, as the reference does; window check 2026-11-18 gap BR1, F-074); 2026-11-13 (v9: New Branch and Rename as actions of their own, behaviours 32–33; docs/research/KEYMAP_COVERAGE.md; v8 2026-11-06: favourite branches with a star, favourites first, Space and Mark/Unmark as Favorite, kept per repository in Ferris IDEA's settings, behaviours 25–31; planned by the project owner, partly not observed yet; v7: the actions at the top show their shortcuts, behaviour 24; v6: Compare with, Show Diff with Working Tree and Push… in the submenu of a branch; window comparison after #392; v5: actions at the top, Checkout Tag or Revision, Recent, folders, tracking, tags, a submenu per branch, the offer to delete a merged branch; OBS-0022 L12, L20; v2: "New Branch…" entry, look, fallback identity; from hand test 8; v3: ahead/behind and stopped operations in the widget, Continue/Abort/Skip, merge into current, smart checkout; v4: the widget follows changes made outside without leaving the window; OBS-0022)
 - **Sources:** GEN (the branch widget of the main toolbar opens a list of local and remote branches with a
   filter, "new branch" and checkout; F-074), SPEC-0033 (branches), SPEC-0034 (create branch), SPEC-0035
   (switch branch), SPEC-0061 (branch widget)
@@ -36,7 +36,7 @@ Switch and create branches from the toolbar, as with the reference's branch widg
    the filter field shows a magnifier and the placeholder "Filter branches". A mouse click keeps the
    keyboard focus in the filter field. [GEN]
 9. **v2 – Fallback identity:** in a repository without `user.name`/`user.email` (none in any config file),
-   creating and checking out branches still works: like git, IDECraft uses the user name and
+   creating and checking out branches still works: like git, Ferris IDEA uses the user name and
    `<user>@<host>` for the reflog. The identity is held in memory only; no config file is written. [STD
    (git's fallback identity)]
 
@@ -44,7 +44,7 @@ Switch and create branches from the toolbar, as with the reference's branch widg
     ahead of and behind its upstream as of the last fetch — when the branch has an upstream and the count
     is not zero. While a merge, rebase or cherry-pick waits on conflicts, the widget shows a warning icon
     and "Merging <branch>", "Rebasing <branch>" or "Cherry-picking" instead. The widget is refreshed after
-    every Git operation of IDECraft and when the window gets the focus. [GEN, OBS-0009]
+    every Git operation of Ferris IDEA and when the window gets the focus. [GEN, OBS-0009]
 11. **v3 – Stopped operation:** while an operation waits, the popup starts with a group named after it
     ("Rebase in progress", …) with the rows "Continue Rebase", "Abort Rebase" and, for a rebase or
     cherry-pick, "Skip Commit" (Git: Continue / Abort / Skip, SPEC-0106 v2). [OBS-0009]
@@ -68,8 +68,11 @@ Switch and create branches from the toolbar, as with the reference's branch widg
     checks it out as a detached HEAD (`git switch --detach`), Git refusing when local changes would be
     overwritten; Escape returns to the list. A tag row checks out the same way. [STD, OBS-0022 L12]
 17. **v5 – Recent:** a group "Recent" lists up to five local branches checked out recently, newest
-    first, read from HEAD's reflog (`checkout: moving from A to B`), without the current branch and
-    without branches deleted since. [STD, OBS-0009 item 1]
+    first, read from HEAD's reflog (`checkout: moving from A to B`), without branches deleted since.
+    **v10:** the current branch is listed too, first, being the newest checkout (also after a
+    rename the reflog does not name); `main` current after `feature` lists `main`, `feature`. The
+    popup still opens with the current branch selected under "Local". `git_branches` `recent`
+    follows the same list. [STD, OBS-0009 item 1; window check 2026-11-18 BR1]
 18. **v5 – Folders and tracking:** in "Local" branches with a `/` sit in a folder named after the part
     before the first `/` (the current branch's folder first, then in name order); in "Remote" every
     remote is a folder. A folder row shows a chevron; Enter, a click or → opens or closes it, ← closes
@@ -113,8 +116,8 @@ Switch and create branches from the toolbar, as with the reference's branch widg
 
 25. **v8 – Favourites:** any local or remote-tracking branch can be marked as a favourite. The
     favourites are kept per repository (keyed by its work tree relative to the workspace root) in the
-    workspace's IDECraft settings, `.idecraft/branch-favorites.toml`, which is machine-local state
-    (listed in `.idecraft/.gitignore`); nothing is written into `.git`. Local and remote-tracking
+    workspace's Ferris IDEA settings, `.ferris-idea/branch-favorites.toml`, which is machine-local state
+    (listed in `.ferris-idea/.gitignore`); nothing is written into `.git`. Local and remote-tracking
     branches are kept apart: marking `main` does not mark `origin/main`. `main` and `master`, and
     `<remote>/main` and `<remote>/master` on every remote, are favourites until the user unmarks them;
     an unmarked default stays unmarked. [DOC (JetBrains help "Manage branches": the main branch is a
@@ -145,7 +148,7 @@ Switch and create branches from the toolbar, as with the reference's branch widg
 30. **v8 – MCP:** `git_branches` gives every branch `favorite`; the new tool `git_branch_favorite`
     marks (`favorite: true`), unmarks (`false`) or toggles (left out) branch `name` (`remote: true`
     picks the remote-tracking branch when a local branch has the same name; by default the local one
-    when it exists) and returns the new state. It changes only IDECraft's own settings, not the
+    when it exists) and returns the new state. It changes only Ferris IDEA's own settings, not the
     repository or the user's files, so it needs no right; the popup and the Git log show the change
     the next time they read the branches. [ADR-0008]
 31. **v8 – Rename keeps the mark:** renaming a favourite from the popup's submenu or with
@@ -158,7 +161,7 @@ Switch and create branches from the toolbar, as with the reference's branch widg
   branch, new branch, an existing name refused (integration test on a scratch repository).
 - **AK-2** Rows, current selection, filter, new-branch row and its selection, name validation, wrapping
   (unit tests).
-- **AK-3** In a real window (`idecraft ui --selftest`): the popup selects `main`; typing a new name and
+- **AK-3** In a real window (`ferris-idea ui --selftest`): the popup selects `main`; typing a new name and
   Enter creates and checks out `topic`; typing `main` and Enter switches back.
 - **AK-4** Use by hand with the mouse and with remote branches.
 - **AK-5 (v2)** Rows with the "New Branch…" entry and naming rows (unit tests); in a real window the entry
@@ -172,14 +175,14 @@ Switch and create branches from the toolbar, as with the reference's branch widg
 - **AK-7 (v4)** In the release bundle: `git checkout main` from a shell while the window keeps the
   focus changes the widget within 2 seconds (OBS-0022 Nachprüfung).
 
-- **AK-8 (v5)** Git, headless (`crates/vcs/tests/it/branch_ops.rs`): tags peeled, recent branches newest
-  first without the current and deleted ones, detached checkout of a tag, an option-like revision
+- **AK-8 (v5, v10)** Git, headless (`crates/vcs/tests/it/branch_ops.rs`): tags peeled, recent branches newest
+  first with the current branch first (also after a rename) and without deleted ones, detached checkout of a tag, an option-like revision
   refused; delete refused while not merged and for the current branch, rename, checkout and rebase,
   `is_merged`.
 - **AK-9 (v5)** Model and MCP: rows with actions, Recent, folders (open/closed), tracking hints, tags,
   filter over tags, submenus per kind of row, revision rows (`branches_model::tests`); `git_branches`
   with `tracking`/`recent`/`tags` and `git_branch_action` (`protocol.rs`: `git_branch_popup_tools`).
-- **AK-10 (v5)** In a real window (`idecraft ui --selftest`): the popup starts with Update, lists the
+- **AK-10 (v5)** In a real window (`ferris-idea ui --selftest`): the popup starts with Update, lists the
   recent branch, → opens the current branch's submenu, Delete in a branch's submenu deletes it.
 - **AK-11 (v5)** In the window next to the reference: look of the actions, folders, tracking and the
   submenu; the delete offer after a merge (window check after the parallel work, OBS-0022 L12, L20).
@@ -190,15 +193,15 @@ Switch and create branches from the toolbar, as with the reference's branch widg
   (`protocol.rs`).
 - **AK-13 (v7)** By hand in the window: the three actions show ⌘T, ⌘K, ⇧⌘K.
 
-- **AK-14 (v8)** Store (`idecraft_core` `branch_favorites::tests`): `main`/`master` and
+- **AK-14 (v8)** Store (`ferris_idea_core` `branch_favorites::tests`): `main`/`master` and
   `<remote>/main` by default, marking, unmarking a default and marking it again, local and remote
-  apart, per repository, saved under `.idecraft/` and not in `.git`.
+  apart, per repository, saved under `.ferris-idea/` and not in `.git`.
 - **AK-15 (v8)** Rows (`branches_model::tests`): favourites after the current branch in Local and
   Remote, a folder moving up with its favourite, stars per row, filter order unchanged, the submenu's
   last entry Mark/Unmark as Favorite; both star icons bundled light and dark (`icons::tests`).
 - **AK-16 (v8)** MCP (`protocol.rs`: `git_branch_favorites_tool`): `git_branches` with `favorite`,
   `git_branch_favorite` marks, unmarks and toggles; `git_branch_action` `rename` moves the mark.
-- **AK-17 (v8)** In a real window (`idecraft ui --selftest`): Space on a branch marks it and its row
+- **AK-17 (v8)** In a real window (`ferris-idea ui --selftest`): Space on a branch marks it and its row
   moves up with the star; the submenu's Unmark as Favorite unmarks it again, the popup stays open.
 - **AK-18 (v8)** In the window next to the reference (open, not observed yet): look and place of the
   star, hover, order with folders and while filtering, Space, the defaults `main`/`master` and the
@@ -213,7 +216,7 @@ instead of a log tab of its own.
 
 ## Known deviations from the reference
 A local branch created from a remote branch has no upstream configured yet. Not compared side by side.
-The popup reads the branches each time it opens, so branches and commits made outside IDECraft
+The popup reads the branches each time it opens, so branches and commits made outside Ferris IDEA
 show up without a manual refresh (IMP-0038).
 - v5: all folders start open and only the tags start closed; the reference started with its "Local"
   group closed (OBS-0009 item 1), which hides the branches one most often wants (IMP-0323).

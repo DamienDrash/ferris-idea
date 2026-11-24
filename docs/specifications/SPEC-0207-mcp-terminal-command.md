@@ -22,7 +22,7 @@
    result is the exit code (null after the timeout, which ends the group), `timed_out`, the duration
    and the output as the terminal shows it: scrollback and screen as text without trailing empty
    lines, capped at the last 256 KiB, with `truncated`. [GEN, SPEC-0053]
-4. **Log:** every run is logged in `.idecraft/agent-log.jsonl` (command, folder, exit code, timed out),
+4. **Log:** every run is logged in `.ferris-idea/agent-log.jsonl` (command, folder, exit code, timed out),
    like `run_command`. [SPEC-0053]
 
 ## Acceptance criteria

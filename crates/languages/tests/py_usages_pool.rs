@@ -4,23 +4,24 @@
 
 use std::time::Duration;
 
-use idecraft_languages::find_usages::{UsageSource, find_usages_in};
-use idecraft_languages::pool;
+use ferris_idea_languages::find_usages::{UsageSource, find_usages_in};
+use ferris_idea_languages::pool;
 
 #[tokio::test]
 async fn pooled_pyright_finds_usages_in_other_files_at_once() {
-    let python = idecraft_languages::servers::resolve(idecraft_languages::LanguageId::Python)
+    let python = ferris_idea_languages::servers::resolve(ferris_idea_languages::LanguageId::Python)
         .ok()
-        .filter(|r| idecraft_languages::python_server::is_python_server(r.candidate.program));
+        .filter(|r| ferris_idea_languages::python_server::is_python_server(r.candidate.program));
     if python.is_none() {
         assert!(
-            std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+            ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
             "required tool missing: pyright-langserver"
         );
         eprintln!("skipped: no pyright or basedpyright installed");
         return;
     }
-    let root = std::env::temp_dir().join(format!("idecraft-py-pool-usages-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-py-pool-usages-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     let root = root.canonicalize().unwrap();

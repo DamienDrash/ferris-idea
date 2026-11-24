@@ -1,6 +1,12 @@
-//! A real SSH server for tests: the system `sshd` started as the current user on a free loopback
-//! port, with its own host key, a client key made for the test and a private client config.
-//! Nothing of the user's SSH setup is read or changed.
+//! A real SSH server for tests on a free loopback port, with its own host key, a client key made
+//! for the test and a private client config; nothing of the user's SSH setup is read or changed.
+//!
+//! With the feature `test-host` (turned on by the dev-dependencies of the crates whose tests use
+//! it, never in the product) and a local `ssh` that knows `mlkem768x25519-sha256`, the server runs
+//! inside the test process (`test_host`): the session process of macOS's `sshd` hangs under heavy
+//! load before it runs its command. Otherwise (the product's built-in self-test, or an OpenSSH
+//! client before 9.9, which offers only `sntrup761x25519-sha512`, a method the in-process server
+//! lacks) it is the system `sshd` started as the current user.
 
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -17,7 +23,7 @@ pub fn shared_options(program: &str) -> Vec<String> {
 }
 
 /// Writes the log of connections through a `ProxyCommand` of the user's own into `dir` instead of
-/// the IDECraft log folder, for the rest of the process (first call wins).
+/// the Ferris IDEA log folder, for the rest of the process (first call wins).
 pub fn redirect_logs(dir: &Path) {
     let _ = crate::jump::LOG_DIR.set(dir.to_path_buf());
 }
@@ -135,7 +141,7 @@ pub(crate) fn stretched(limit: Duration) -> Duration {
 /// siblings'.
 ///
 /// The turn is taken within the process (a lock) and across the user's processes (an exclusive
-/// `flock` on `/tmp/idecraft-ssh-turn-<user>`, created with mode 0600 and not used when it is
+/// `flock` on `/tmp/ferris-idea-ssh-turn-<user>`, created with mode 0600 and not used when it is
 /// a link; a file others may read or write is not used, and then the turn is only the
 /// process's). The file holds nothing; nothing else is shared between the tests (each keeps its
 /// own server, folders, connections and home folder). A failed test does not block the others: a
@@ -156,7 +162,7 @@ pub fn one_host_at_a_time() -> HostTurn {
 fn turn_file() -> Option<std::fs::File> {
     use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
     let user = std::env::var("USER").unwrap_or_else(|_| "user".into());
-    let path = PathBuf::from(format!("/tmp/idecraft-ssh-turn-{user}"));
+    let path = PathBuf::from(format!("/tmp/ferris-idea-ssh-turn-{user}"));
     let file = std::fs::OpenOptions::new()
         .read(true)
         .write(true)
@@ -310,13 +316,72 @@ fn elapsed_seconds(etime: &str) -> Option<u64> {
 
 /// A running test server; ends with the value.
 pub struct TestHost {
-    /// How to reach it (alias `idecraft-test` with `-F <config>`).
+    /// How to reach it (alias `ferris-idea-test` with `-F <config>`).
     pub target: SshTarget,
     /// The test folder with keys and configs.
     pub dir: PathBuf,
-    child: Child,
-    /// Ends the server's [`watch_stalled_sessions`] thread.
-    watch: std::sync::Arc<AtomicBool>,
+    server: Server,
+}
+
+/// The server behind a [`TestHost`].
+enum Server {
+    /// The system `sshd`, and the flag that ends its [`watch_stalled_sessions`] thread.
+    System {
+        child: Child,
+        watch: std::sync::Arc<AtomicBool>,
+    },
+    /// The server inside this process; it stops when dropped.
+    #[cfg(feature = "test-host")]
+    InProcess { server: crate::test_host::Server },
+}
+
+impl Server {
+    /// The system `sshd` and its watch flag, if this is one.
+    fn system(&mut self) -> Option<(&mut Child, &std::sync::Arc<AtomicBool>)> {
+        match self {
+            Self::System { child, watch } => Some((child, watch)),
+            #[cfg(feature = "test-host")]
+            Self::InProcess { .. } => None,
+        }
+    }
+}
+
+/// What a test host offers beyond a plain server.
+#[derive(Default)]
+struct Variant {
+    /// Only classical key exchanges.
+    classical: bool,
+    /// Variables every session gets (`SetEnv`).
+    env: Vec<(String, String)>,
+}
+
+impl Variant {
+    /// The lines of `sshd_config` for this variant.
+    fn sshd_lines(&self) -> String {
+        let mut lines = String::new();
+        if self.classical {
+            lines.push_str(
+                "KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org,ecdh-sha2-nistp256\n",
+            );
+        }
+        if !self.env.is_empty() {
+            let words: Vec<String> = self
+                .env
+                .iter()
+                .map(|(k, v)| format!("\"{k}={v}\""))
+                .collect();
+            lines.push_str(&format!("SetEnv {}\n", words.join(" ")));
+        }
+        lines
+    }
+}
+
+/// Whether test hosts run inside this process: the feature is on and the local `ssh` knows the
+/// one post-quantum key exchange the in-process server has.
+fn in_process() -> bool {
+    cfg!(feature = "test-host")
+        && crate::pq::known_kex("ssh")
+            .is_ok_and(|k| k.iter().any(|m| m == crate::pq::PQ_KEX_ML_KEM[0]))
 }
 
 fn sshd() -> Option<PathBuf> {
@@ -337,18 +402,22 @@ fn keygen(path: &Path) -> bool {
 }
 
 impl TestHost {
-    /// Starts a server with its files in `dir`; `None` when `sshd` or `ssh-keygen` is missing or
-    /// the server does not come up.
+    /// Starts a server with its files in `dir`; `None` when `ssh-keygen` is missing, when the
+    /// server runs as the system `sshd` (see the module) and there is none, or when the server does
+    /// not come up.
     pub fn start(dir: &Path) -> Option<Self> {
-        Self::start_with(dir, "")
+        Self::start_with(dir, &Variant::default())
     }
 
     /// Starts a server that offers only classical key exchanges (no post-quantum method), as an
-    /// OpenSSH before 9.0 would; IDECraft must refuse it (ADR-0025, PO-STATUS question 29).
+    /// OpenSSH before 9.0 would; Ferris IDEA must refuse it (ADR-0025, PO-STATUS question 29).
     pub fn start_classical(dir: &Path) -> Option<Self> {
         Self::start_with(
             dir,
-            "KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org,ecdh-sha2-nistp256\n",
+            &Variant {
+                classical: true,
+                ..Variant::default()
+            },
         )
     }
 
@@ -356,14 +425,20 @@ impl TestHost {
     /// a `HOME` of the test's own, so that nothing the test brings to the host lands in the user's
     /// home folder, or a `PATH` with a folder the test installs a program into.
     pub fn start_with_env(dir: &Path, env: &[(&str, &str)]) -> Option<Self> {
-        if env.is_empty() {
-            return Self::start(dir);
-        }
-        let words: Vec<String> = env.iter().map(|(k, v)| format!("\"{k}={v}\"")).collect();
-        Self::start_with(dir, &format!("SetEnv {}\n", words.join(" ")))
+        let env = env
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+            .collect();
+        Self::start_with(
+            dir,
+            &Variant {
+                env,
+                ..Variant::default()
+            },
+        )
     }
 
-    /// Waits until a whole session through IDECraft's own `ssh` succeeds on the server (`true`
+    /// Waits until a whole session through Ferris IDEA's own `ssh` succeeds on the server (`true`
     /// there): the ready signal of a server that accepts connections but, under load, takes long
     /// to log a user in. A test that waits for it measures its own steps, not the server's start.
     /// Returns the last failure when `limit` passes first.
@@ -383,25 +458,32 @@ impl TestHost {
         }
     }
 
-    /// Starts a server with `extra` lines appended to its `sshd_config`. Everything a run shares
-    /// with a run of the test suite beside it is made its own: the port is a free one picked anew
-    /// (a server that lost the port to another run between the pick and its start is started again
-    /// on another), the folder of shared connections (`ControlPath`) is one of this process, the
+    /// Starts a server of `variant`. Everything a run shares with a run of the test suite beside it
+    /// is made its own: the port is a free one (the in-process server binds it itself; a system
+    /// `sshd` that lost the port to another run between the pick and its start is started again on
+    /// another), the folder of shared connections (`ControlPath`) is one of this process, the
     /// client uses no SSH agent, and the time limits of calls are stretched for a machine under the
     /// load of parallel runs ([`stretch_limits`], [`DEFAULT_STRETCH`]).
-    fn start_with(dir: &Path, extra: &str) -> Option<Self> {
-        sshd()?;
+    fn start_with(dir: &Path, variant: &Variant) -> Option<Self> {
+        let inside = in_process();
+        if !inside {
+            sshd()?;
+        }
         let user = std::env::var("USER").unwrap_or_else(|_| "user".into());
         // Short: Unix socket paths are limited to about 100 bytes.
         let _ = CONTROL_DIR.set(PathBuf::from(format!(
-            "/tmp/idecraft-ssh-{user}-t{}",
+            "/tmp/ferris-idea-ssh-{user}-t{}",
             std::process::id()
         )));
         if STRETCH.load(Ordering::SeqCst) < DEFAULT_STRETCH {
             stretch_limits(DEFAULT_STRETCH);
         }
+        if inside {
+            return Self::start_in_process(dir, variant);
+        }
+        let extra = variant.sshd_lines();
         for _ in 0..5 {
-            match Self::start_once(dir, extra) {
+            match Self::start_once(dir, &extra) {
                 Ok(host) => return Some(host),
                 Err(true) => continue,
                 Err(false) => return None,
@@ -414,15 +496,8 @@ impl TestHost {
     /// another start may succeed, `Err(false)` when it cannot.
     fn start_once(dir: &Path, extra: &str) -> Result<Self, bool> {
         let sshd = sshd().ok_or(false)?;
-        let _ = std::fs::remove_dir_all(dir);
-        std::fs::create_dir_all(dir).map_err(|_| false)?;
-        let dir = dir.canonicalize().map_err(|_| false)?;
-        let (host_key, client_key) = (dir.join("host_key"), dir.join("client_key"));
-        if !keygen(&host_key) || !keygen(&client_key) {
-            return Err(false);
-        }
-        std::fs::copy(dir.join("client_key.pub"), dir.join("authorized_keys"))
-            .map_err(|_| false)?;
+        let dir = Self::keys(dir).ok_or(false)?;
+        let host_key = dir.join("host_key");
         let port = std::net::TcpListener::bind("127.0.0.1:0")
             .map_err(|_| false)?
             .local_addr()
@@ -440,24 +515,7 @@ impl TestHost {
             ),
         )
         .map_err(|_| false)?;
-        let host_pub = std::fs::read_to_string(dir.join("host_key.pub")).map_err(|_| false)?;
-        std::fs::write(
-            dir.join("known_hosts"),
-            format!("[127.0.0.1]:{port} {}", host_pub.trim()),
-        )
-        .map_err(|_| false)?;
-        let user = std::env::var("USER").unwrap_or_else(|_| "root".into());
-        std::fs::write(
-            dir.join("ssh_config"),
-            format!(
-                "Host idecraft-test\n  HostName 127.0.0.1\n  Port {port}\n  User {user}\n  \
-                 IdentityFile {}\n  IdentitiesOnly yes\n  IdentityAgent none\n  \
-                 UserKnownHostsFile {}\n",
-                client_key.display(),
-                dir.join("known_hosts").display()
-            ),
-        )
-        .map_err(|_| false)?;
+        let target = Self::client_files(&dir, port).ok_or(false)?;
         let child = Command::new(sshd)
             .arg("-D")
             .arg("-f")
@@ -469,17 +527,13 @@ impl TestHost {
             .stderr(Stdio::null())
             .spawn()
             .map_err(|_| false)?;
-        let target = SshTarget {
-            host: "idecraft-test".into(),
-            port: None,
-            extra: vec!["-F".into(), dir.join("ssh_config").display().to_string()],
-            program: None,
-        };
         let mut host = Self {
             target,
             dir,
-            child,
-            watch: std::sync::Arc::new(AtomicBool::new(false)),
+            server: Server::System {
+                child,
+                watch: std::sync::Arc::new(AtomicBool::new(false)),
+            },
         };
         // Generous: under heavy load `sshd` takes long to start, and giving up here would skip the
         // test as if there were no `sshd`. A server that never listens still ends the wait.
@@ -487,17 +541,97 @@ impl TestHost {
         while start.elapsed() < Duration::from_secs(90) {
             // Our server must still run: a connection alone could reach another run's server
             // that took the port.
-            if !matches!(host.child.try_wait(), Ok(None)) {
+            let Some((child, watch)) = host.server.system() else {
+                return Err(false);
+            };
+            if !matches!(child.try_wait(), Ok(None)) {
                 return Err(true);
             }
             if std::net::TcpStream::connect(("127.0.0.1", port)).is_ok() {
-                let (server, stop) = (host.child.id(), std::sync::Arc::clone(&host.watch));
+                let (server, stop) = (child.id(), std::sync::Arc::clone(watch));
                 std::thread::spawn(move || watch_stalled_sessions(server, &stop));
                 return Ok(host);
             }
             std::thread::sleep(Duration::from_millis(50));
         }
         Err(false)
+    }
+
+    /// A fresh test folder `dir` with a host key, a client key made for the test and the client
+    /// key as the only authorised one; the folder with links resolved.
+    fn keys(dir: &Path) -> Option<PathBuf> {
+        let _ = std::fs::remove_dir_all(dir);
+        std::fs::create_dir_all(dir).ok()?;
+        let dir = dir.canonicalize().ok()?;
+        if !keygen(&dir.join("host_key")) || !keygen(&dir.join("client_key")) {
+            return None;
+        }
+        std::fs::copy(dir.join("client_key.pub"), dir.join("authorized_keys")).ok()?;
+        Some(dir)
+    }
+
+    /// Writes the client's own `known_hosts` (the server's host key on `port`) and `ssh_config`
+    /// (alias `ferris-idea-test`, the test's key only, no agent) into `dir`; the target that uses them.
+    fn client_files(dir: &Path, port: u16) -> Option<SshTarget> {
+        let host_pub = std::fs::read_to_string(dir.join("host_key.pub")).ok()?;
+        std::fs::write(
+            dir.join("known_hosts"),
+            format!("[127.0.0.1]:{port} {}", host_pub.trim()),
+        )
+        .ok()?;
+        let user = std::env::var("USER").unwrap_or_else(|_| "root".into());
+        std::fs::write(
+            dir.join("ssh_config"),
+            format!(
+                "Host ferris-idea-test\n  HostName 127.0.0.1\n  Port {port}\n  User {user}\n  \
+                 IdentityFile {}\n  IdentitiesOnly yes\n  IdentityAgent none\n  \
+                 UserKnownHostsFile {}\n",
+                dir.join("client_key").display(),
+                dir.join("known_hosts").display()
+            ),
+        )
+        .ok()?;
+        Some(SshTarget {
+            host: "ferris-idea-test".into(),
+            port: None,
+            extra: vec!["-F".into(), dir.join("ssh_config").display().to_string()],
+            program: None,
+        })
+    }
+
+    /// Starts the server inside this process (`test_host`); it binds its port itself, so no other
+    /// run can take it.
+    #[cfg(feature = "test-host")]
+    fn start_in_process(dir: &Path, variant: &Variant) -> Option<Self> {
+        let dir = Self::keys(dir)?;
+        let server = crate::test_host::Server::start(crate::test_host::Setup {
+            host_key: dir.join("host_key"),
+            client_key: dir.join("client_key.pub"),
+            user: std::env::var("USER").unwrap_or_else(|_| "root".into()),
+            classical: variant.classical,
+            env: variant.env.clone(),
+        })?;
+        let target = Self::client_files(&dir, server.port)?;
+        Some(Self {
+            target,
+            dir,
+            server: Server::InProcess { server },
+        })
+    }
+
+    #[cfg(not(feature = "test-host"))]
+    fn start_in_process(_dir: &Path, _variant: &Variant) -> Option<Self> {
+        None
+    }
+
+    /// The port on `127.0.0.1` this process listens on for the server, when it runs inside this
+    /// process: a test that checks its own process opens no port leaves this one out.
+    pub fn port_in_this_process(&self) -> Option<u16> {
+        match &self.server {
+            Server::System { .. } => None,
+            #[cfg(feature = "test-host")]
+            Server::InProcess { server } => Some(server.port),
+        }
     }
 
     /// The same server reached with an empty `known_hosts` (host key unknown).
@@ -524,11 +658,11 @@ impl TestHost {
                 &self.dir.join("known_hosts").display().to_string(),
                 &known_file.display().to_string(),
             )
-            .replace("Host idecraft-test", &format!("Host idecraft-{name}"));
+            .replace("Host ferris-idea-test", &format!("Host ferris-idea-{name}"));
         let file = self.dir.join(format!("ssh_config_{name}"));
         let _ = std::fs::write(&file, config);
         SshTarget {
-            host: format!("idecraft-{name}"),
+            host: format!("ferris-idea-{name}"),
             port: None,
             extra: vec!["-F".into(), file.display().to_string()],
             program: None,
@@ -538,9 +672,11 @@ impl TestHost {
 
 impl Drop for TestHost {
     fn drop(&mut self) {
-        self.watch.store(true, Ordering::SeqCst);
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        if let Some((child, watch)) = self.server.system() {
+            watch.store(true, Ordering::SeqCst);
+            let _ = child.kill();
+            let _ = child.wait();
+        }
     }
 }
 
@@ -580,7 +716,7 @@ mod tests {
             use std::os::unix::fs::PermissionsExt;
             assert!(first.file.is_some(), "the turn across processes is taken");
             let user = std::env::var("USER").unwrap_or_else(|_| "user".into());
-            let meta = std::fs::metadata(format!("/tmp/idecraft-ssh-turn-{user}")).unwrap();
+            let meta = std::fs::metadata(format!("/tmp/ferris-idea-ssh-turn-{user}")).unwrap();
             assert_eq!(meta.permissions().mode() & 0o077, 0);
             assert_eq!(meta.len(), 0, "the file holds nothing");
         }

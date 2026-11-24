@@ -1,4 +1,4 @@
-; IDECraft's colour roles for C++ (SPEC-0027 v13), after the C roles and before the grammar's own
+; Ferris IDEA's colour roles for C++ (SPEC-0027 v13), after the C roles and before the grammar's own
 ; queries: methods declared in a class and qualified names.
 
 ; Methods declared or defined in a class body, and `Class::method` defined outside it.

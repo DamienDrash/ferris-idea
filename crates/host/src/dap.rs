@@ -15,8 +15,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::Duration;
 
-use idecraft_languages::java_debug::{DebugEndpoint, JavaDebugServer};
-use idecraft_session::{Backend, Call, ErrorCode, Right, RpcError, SessionHandle, StreamIn};
+use ferris_idea_languages::java_debug::{DebugEndpoint, JavaDebugServer};
+use ferris_idea_session::{Backend, Call, ErrorCode, Right, RpcError, SessionHandle, StreamIn};
 use serde_json::{Value, json};
 
 use crate::ring::Output;
@@ -66,7 +66,7 @@ struct Known {
 
 /// The adapters of this host.
 fn adapters(options: &HostOptions) -> Vec<Known> {
-    let mut out: Vec<Known> = idecraft_debugger::known_adapters()
+    let mut out: Vec<Known> = ferris_idea_debugger::known_adapters()
         .into_iter()
         .map(|a| Known {
             name: a.name.to_owned(),
@@ -77,7 +77,7 @@ fn adapters(options: &HostOptions) -> Vec<Known> {
     out.push(Known {
         name: "java-debug".into(),
         transport: Transport::Jdtls,
-        command: idecraft_languages::java_debug::java_debug_plugin()
+        command: ferris_idea_languages::java_debug::java_debug_plugin()
             .map(|p| vec![p.display().to_string()]),
     });
     for (id, cmd) in &options.extra_adapters {
@@ -104,7 +104,7 @@ struct Group {
     child: Mutex<Option<Child>>,
     /// Ends the adapter and what it started should this process end without ending them
     /// (`SPEC-0263` v2 behaviour 3).
-    guard: Mutex<Option<idecraft_debugger::lifetime::ExitGuard>>,
+    guard: Mutex<Option<ferris_idea_debugger::lifetime::ExitGuard>>,
     tunnel: Mutex<Option<Child>>,
     folder: Mutex<Option<PathBuf>>,
     /// The adapter's TCP port on the host, which `port.forward` refuses while it is open.
@@ -123,7 +123,7 @@ impl Group {
     /// Keeps the adapter's process, guarded so it never outlives this process.
     fn keep_child(&self, child: Child) {
         *self.guard.lock().unwrap_or_else(|e| e.into_inner()) =
-            idecraft_debugger::lifetime::ExitGuard::watch(child.id());
+            ferris_idea_debugger::lifetime::ExitGuard::watch(child.id());
         *self.child.lock().unwrap_or_else(|e| e.into_inner()) = Some(child);
     }
 
@@ -131,7 +131,7 @@ impl Group {
         drop(self.guard.lock().unwrap_or_else(|e| e.into_inner()).take());
         // The adapter with what it started (js-debug's debugged program).
         if let Some(mut c) = self.child.lock().unwrap_or_else(|e| e.into_inner()).take() {
-            idecraft_debugger::lifetime::end_tree(&mut c, Duration::from_secs(2));
+            ferris_idea_debugger::lifetime::end_tree(&mut c, Duration::from_secs(2));
         }
         if let Some(mut c) = self.tunnel.lock().unwrap_or_else(|e| e.into_inner()).take() {
             let _ = c.kill();
@@ -360,7 +360,7 @@ fn tcp_connect(address: SocketAddr) -> Connect {
 /// would not fit `sun_path` (104 bytes on macOS, 108 on Linux; behaviour 2).
 #[cfg(unix)]
 fn socket_parent(temporary: PathBuf) -> PathBuf {
-    /// The longest `/idecraft-dap-<pid>-<nanos>/dap.sock`, and the smaller limit.
+    /// The longest `/ferris-idea-dap-<pid>-<nanos>/dap.sock`, and the smaller limit.
     const NAME: usize = 58;
     const LIMIT: usize = 104;
     if temporary.as_os_str().len() + NAME < LIMIT {
@@ -380,7 +380,7 @@ fn private_folder() -> Result<PathBuf, RpcError> {
         .map(|d| d.as_nanos())
         .unwrap_or_default();
     let dir = socket_parent(std::env::temp_dir())
-        .join(format!("idecraft-dap-{}-{nanos}", std::process::id()));
+        .join(format!("ferris-idea-dap-{}-{nanos}", std::process::id()));
     std::fs::DirBuilder::new()
         .mode(0o700)
         .create(&dir)
@@ -429,31 +429,32 @@ fn unix_connect(adapter: String, path: PathBuf) -> Connect {
     })
 }
 
+/// Without Unix sockets the adapter could only listen on a loopback port every local account can
+/// reach, so it is refused (`SPEC-0322` v6 behaviour 2).
 #[cfg(not(unix))]
 fn start_socket(
-    _adapter: &str,
+    adapter: &str,
     command: &[String],
     root: &Path,
     group: &Group,
 ) -> Result<Connect, RpcError> {
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .and_then(|l| l.local_addr())
-        .map_err(internal)?
-        .port();
-    let mut child = spawn_listening(command, &[port.to_string(), "127.0.0.1".into()], root)?;
-    let waited = wait_line(&mut child, "js-debug", |l: &str| {
-        l.contains("listening").then_some(())
-    });
-    group.keep_child(child);
-    waited?;
-    group.hold_port(port);
-    Ok(tcp_connect(SocketAddr::from(([127, 0, 0, 1], port))))
+    let _ = (command, root, group);
+    Err(run_error(format!(
+        "{adapter} is not supported on this platform yet: it cannot listen privately"
+    )))
 }
 
 /// Starts a TCP adapter on a free loopback port of the host (behaviour 3): the `127.0.0.1:…` it
 /// prints is what the backend connects to.
 fn start_tcp(command: &[String], root: &Path, group: &Group) -> Result<Connect, RpcError> {
     let name = command.first().cloned().unwrap_or_default();
+    // Off Unix a loopback port has no per-user check (dlv's `--only-same-user` needs Unix), so the
+    // adapter is refused (`SPEC-0322` v6 behaviour 3).
+    if cfg!(not(unix)) {
+        return Err(run_error(format!(
+            "{name} is not supported on this platform yet: it cannot listen privately"
+        )));
+    }
     let mut child = spawn_listening(command, &["--listen=127.0.0.1:0".to_owned()], root)?;
     let waited = wait_line(&mut child, &name, |line: &str| {
         line.split_whitespace()
@@ -481,7 +482,7 @@ fn start_java(
         let candidates: Vec<PathBuf> = [root.join(&relative), root.join(format!("{simple}.java"))]
             .into_iter()
             .chain(
-                idecraft_languages::java_roots::source_roots(root)
+                ferris_idea_languages::java_roots::source_roots(root)
                     .iter()
                     .map(|r| root.join(r).join(&relative)),
             )
@@ -569,7 +570,7 @@ pub fn bind(backend: &Backend, options: &HostOptions) {
         plan(call)
     });
     add(backend, "dap", "dap.processes", Right::Debug, false, |_| {
-        let list: Vec<Value> = idecraft_debugger::processes()
+        let list: Vec<Value> = ferris_idea_debugger::processes()
             .into_iter()
             .map(|p| {
                 // Only the program: arguments may hold secrets (SEC-10).
@@ -687,13 +688,13 @@ fn plan(call: &Call) -> Result<Value, RpcError> {
     let cwd = root.join(config.cwd.as_deref().unwrap_or(""));
     // The command as it starts, with the host workspace's Python interpreter (SPEC-0050 v2).
     let (kind, interpreter, program, args) =
-        idecraft_languages::debug_plan::plan_run_config(&root, config, &cwd)
+        ferris_idea_languages::debug_plan::plan_run_config(&root, config, &cwd)
             .map_err(|why| RpcError::new(ErrorCode::Unavailable, why))?
             .ok_or_else(|| {
                 RpcError::new(ErrorCode::Unavailable, format!("{name} cannot be debugged"))
             })?;
     // For Kotlin the plan's arguments are the build command (SPEC-0132 behaviour 2).
-    let (args, prepare) = if kind == idecraft_debugger::Kind::Kotlin {
+    let (args, prepare) = if kind == ferris_idea_debugger::Kind::Kotlin {
         (Vec::new(), args.join(" "))
     } else {
         (args, String::new())
@@ -714,7 +715,7 @@ fn start(call: &Call, options: &HostOptions, channels: &Arc<Channels>) -> Result
         .filter(|p| !p.trim().is_empty());
     let root = call.root.clone();
     if (!attach || prepare.is_some() || name == "java-debug")
-        && !idecraft_core::trust::allows_project_code(&root)
+        && !ferris_idea_core::trust::allows_project_code(&root)
     {
         return Err(crate::run::trust_refusal(&root));
     }
@@ -722,8 +723,11 @@ fn start(call: &Call, options: &HostOptions, channels: &Arc<Channels>) -> Result
         .into_iter()
         .find(|a| a.name == name)
         .ok_or_else(|| RpcError::new(ErrorCode::NotFound, format!("no adapter {name:?}")))?;
-    // `debugpy --listen` is the adapter itself: nothing has to run besides it (behaviour 10).
-    let direct = attach && name == "debugpy" && call.params["attach"]["kind"] != "pid";
+    // `debugpy --listen` and a headless Delve server are the adapter themselves: nothing has to
+    // run besides them, the backend talks to them directly (behaviour 10).
+    let direct = attach
+        && matches!(name.as_str(), "debugpy" | "dlv")
+        && call.params["attach"]["kind"] != "pid";
     if known.command.is_none() && !direct {
         return Err(RpcError::new(
             ErrorCode::Unavailable,
@@ -786,7 +790,16 @@ fn start_inner(
         let (host, port) = resolved
             .as_ref()
             .and_then(|r| r.address.clone())
-            .ok_or_else(|| invalid("a debugpy attach needs an address"))?;
+            .ok_or_else(|| invalid(format!("a {name} attach needs an address")))?;
+        // A Delve server's port is neither encrypted nor authenticated: only one on the host's
+        // own loopback is talked to (behaviour 10, SPEC-0147 v3 behaviour 7).
+        if name == "dlv" && !ferris_idea_debugger::is_loopback(&host) {
+            return Err(RpcError::new(
+                ErrorCode::Denied,
+                format!("a Delve server is attached to on the host's loopback only, not on {host}"),
+            )
+            .hint("its port is not protected: start it with --listen=127.0.0.1:<port> on the host where the program runs"));
+        }
         let address = (host.as_str(), port)
             .to_socket_addrs()
             .ok()

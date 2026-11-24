@@ -13,7 +13,7 @@
 Get back a version of a file that was never committed.
 
 ## Behaviour
-1. **Open:** `LocalHistory.ShowHistory` (e.g. from Search Everywhere, which also lists IDECraft actions
+1. **Open:** `LocalHistory.ShowHistory` (e.g. from Search Everywhere, which also lists Ferris IDEA actions
    without a shortcut) opens the history of the active file over the editor area. Without saved versions
    the status bar says "No local history for this file yet." [GEN, OSS]
 2. **List:** on the left, the file's revisions newest first, each as its age ("5 min ago", "yesterday")
@@ -45,7 +45,7 @@ Get back a version of a file that was never committed.
    clears it. The list says "No entry contains <text>" when none does. [OBS]
 11. **Patch (v2, OBS-0057 H4):** Create Patch copies a unified patch from the left side to the
    current text, headed `--- a/<path>` and `+++ b/<path>`, to the clipboard; the status bar says
-   "Patch copied to the clipboard". The reference writes a patch file through a dialog; IDECraft
+   "Patch copied to the clipboard". The reference writes a patch file through a dialog; Ferris IDEA
    copies it (Known deviations). [OBS, GEN]
 12. **Stepping (v2, OBS-0057 H4):** the comparison's header has Previous Difference and Next
    Difference (also F7 / ⇧F7 as before) and the number of differences. [OBS]
@@ -56,7 +56,7 @@ Get back a version of a file that was never committed.
 
 ## Acceptance criteria
 - **AK-1** Ages, row texts and the filter of workspace labels (unit tests of `history_model`).
-- **AK-2** In a real window (`idecraft ui --selftest`, workspace in the temp folder behind `/var`):
+- **AK-2** In a real window (`ferris-idea ui --selftest`, workspace in the temp folder behind `/var`):
   after a save the history of `bad.c` lists at least two revisions; Escape closes it.
 - **AK-3** Use by hand: Revert and ⌘Z, older revisions, Search Everywhere finds the action.
 
@@ -74,10 +74,10 @@ History of a directory or the whole project, a selection's history, putting labe
 recent changes across files, the history of deleted files.
 
 ## Known deviations from the reference
-The reference shows the history in a separate window and offers Revert for single changes; IDECraft
+The reference shows the history in a separate window and offers Revert for single changes; Ferris IDEA
 shows it over the editor area and reverts the whole revision. **(v2)** The window stays the editor
 area's view (behaviour 7): a separate window brings its own focus and window handling for one list
-and one comparison. IDECraft's history does not record whether a change came from the editor or
+and one comparison. Ferris IDEA's history does not record whether a change came from the editor or
 from outside, so every change is "Change" and none "External change" (behaviour 8). The patch goes
 to the clipboard instead of a file chosen in a dialog (behaviour 11). The comparison has no editing,
 no collapsing of unchanged parts and no settings of its own; Side-by-side/Unified stays.

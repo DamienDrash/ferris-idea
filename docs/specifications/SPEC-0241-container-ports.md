@@ -28,21 +28,21 @@ numbers or keeping a terminal open for `kubectl port-forward`.
    `<kind>/<name> 127.0.0.1:<local> → <remote>` with their context and namespace. `o` opens
    `http://127.0.0.1:<local>`, `x` or Delete stops the forward. A forward whose kubectl ended (pod
    gone) shows `ended` with kubectl's last message until it is stopped. [GEN]
-5. **Lifetime:** forwards belong to the IDECraft process: the window and agents see the same list;
+5. **Lifetime:** forwards belong to the Ferris IDEA process: the window and agents see the same list;
    all forwards stop when the process ends. [GEN]
 6. **MCP:** `kubernetes_port_forward` with `action` `list`, `start` (`context`, `namespace`, `kind`,
    `name`, optional `remote_port`, `local_port`) or `stop` (`id`). `start` defaults to `dry_run: true`
    and returns the command; starting and stopping for real need the `run` right and are logged in
-   `.idecraft/agent-log.jsonl`. [ADR-0008, SPEC-0053]
+   `.ferris-idea/agent-log.jsonl`. [ADR-0008, SPEC-0053]
 
 ## Acceptance criteria
 - **AK-1** Unit: published port parsing and browser addresses, local port choice, the forwarding
   line, kubectl argument lists, ports of pods, workloads and services (`ports::tests`, `kube::tests`).
 - **AK-2** Against the fake kubectl: a forward starts, is listed, its process ends on stop; a forward
   whose kubectl fails reports the message (`crates/containers/tests/containers.rs`).
-- **AK-3** Live against k3s (`IDECRAFT_TEST_KUBECONFIG`): an nginx pod and service, a forward to the
+- **AK-3** Live against k3s (`FERRIS_IDEA_TEST_KUBECONFIG`): an nginx pod and service, a forward to the
   service answers HTTP on 127.0.0.1, stopping closes the port; against a real engine
-  (`IDECRAFT_TEST_DOCKER`): a container published on 127.0.0.1 answers on the port shown
+  (`FERRIS_IDEA_TEST_DOCKER`): a container published on 127.0.0.1 answers on the port shown
   (`crates/containers/tests/live.rs`).
 - **AK-4** MCP: list, preview, refusal without `run`, start and stop with `run`, log entries
   (`crates/mcp/tests/it/protocol.rs`: `port_forward_tools`).

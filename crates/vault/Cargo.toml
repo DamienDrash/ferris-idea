@@ -1,0 +1,28 @@
+[package]
+name = "ferris-idea-vault"
+description = "The internal vault for agents: encrypted entries addressed by handles, scopes, audit log and redaction (SPEC-0353, ADR-0033)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+# A small, audited set on purpose (ADR-0033 D8): RustCrypto primitives already in the tree, the
+# operating system's random source, constant-time encodings.
+[dependencies]
+chacha20poly1305 = { version = "0.10", default-features = false, features = ["alloc"] }
+data-encoding = "2"
+getrandom = "0.3"
+hkdf = "0.12"
+hmac = "0.12"
+serde.workspace = true
+serde_json = "1"
+sha2 = "0.10"
+zeroize = "1"
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true

@@ -5,7 +5,7 @@
 #        scripts/crate-graph.sh --check  fail when the block differs from the workspace
 set -eu
 cd "$(dirname "$0")/.."
-meta="${TMPDIR:-/tmp}/idecraft-metadata.$$.json"
+meta="${TMPDIR:-/tmp}/ferris-idea-metadata.$$.json"
 trap 'rm -f "$meta"' EXIT
 cargo metadata --format-version 1 --no-deps >"$meta"
 python3 -I - "$meta" "${1:-}" <<'PY'
@@ -13,7 +13,7 @@ import json, pathlib, sys
 meta = json.load(open(sys.argv[1], encoding='utf-8'))
 check = sys.argv[2] == '--check'
 def short(name):
-    return 'app' if name == 'idecraft' else name.removeprefix('idecraft-')
+    return 'app' if name == 'ferris-idea' else name.removeprefix('ferris-idea-')
 names = {p['name'] for p in meta['packages']}
 deps = {short(p['name']): {short(d['name']) for d in p['dependencies']
                            if d['name'] in names and d['kind'] is None}

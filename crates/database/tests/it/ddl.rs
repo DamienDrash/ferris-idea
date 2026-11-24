@@ -1,12 +1,12 @@
 //! SPEC-0018 round trips: generated DDL, run on a real database and read back, leaves no
-//! differences. SQLite always; PostgreSQL/MySQL when `IDECRAFT_TEST_PG` / `IDECRAFT_TEST_MYSQL` / `IDECRAFT_TEST_MARIADB`
+//! differences. SQLite always; PostgreSQL/MySQL when `FERRIS_IDEA_TEST_PG` / `FERRIS_IDEA_TEST_MYSQL` / `FERRIS_IDEA_TEST_MARIADB`
 //! are set (work happens in a scratch schema/database that is dropped afterwards).
 
 use crate::common;
 
 use std::path::{Path, PathBuf};
 
-use idecraft_database::{
+use ferris_idea_database::{
     ConnectionProfile, DdlStatement, Dialect, OnError, Outcome, Session, Table, compare,
     create_script, introspect, migration,
 };
@@ -39,22 +39,6 @@ async fn run(s: &Session, sql: &str) {
     assert_eq!(run.not_run, 0);
 }
 
-/// The first column of the rows `sql` returns.
-async fn leftovers(s: &Session, sql: &str) -> Vec<String> {
-    s.run_script(sql, OnError::Stop)
-        .await
-        .outcomes
-        .into_iter()
-        .flat_map(|o| match o.outcome {
-            Outcome::ResultSet { rows, .. } => rows
-                .into_iter()
-                .filter_map(|r| r.into_iter().next().flatten())
-                .collect(),
-            _ => Vec::new(),
-        })
-        .collect()
-}
-
 async fn apply(s: &Session, statements: &[DdlStatement]) {
     let script: Vec<&str> = statements.iter().map(|d| d.sql.as_str()).collect();
     run(s, &script.join(";\n")).await;
@@ -75,7 +59,8 @@ struct Dir(PathBuf);
 
 impl Dir {
     fn new(tag: &str) -> Self {
-        let dir = std::env::temp_dir().join(format!("idecraft-ddl-{tag}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("ferris-idea-ddl-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         Self(dir)
@@ -103,7 +88,11 @@ async fn sqlite_migration_round_trip() {
     let (s, t) = (read(&source).await, read(&target).await);
     assert!(!compare(&s, &t, Dialect::Sqlite).is_empty());
     let statements = migration(&s, &t, Dialect::Sqlite);
-    assert!(statements.iter().any(|d| d.sql.contains("__idecraft_new")));
+    assert!(
+        statements
+            .iter()
+            .any(|d| d.sql.contains("__ferris_idea_new"))
+    );
     apply(&target, &statements).await;
     let diff = compare(&s, &read(&target).await, Dialect::Sqlite);
     assert!(diff.is_empty(), "{diff:#?}");
@@ -136,35 +125,11 @@ async fn server_round_trips(
     let pid = std::process::id();
     // D22: scratch namespaces of earlier runs that ended early (a failed assertion skips the drop at
     // the end) are dropped first; those of runs still alive, e.g. in another worktree, stay.
-    let list = match dialect {
-        Dialect::PostgreSql => {
-            "select nspname from pg_namespace where nspname like 'idecraft\\_ddl\\_%'"
-        }
-        _ => {
-            "select schema_name from information_schema.schemata where schema_name like 'idecraft\\_ddl\\_%'"
-        }
-    };
-    for name in leftovers(s, list).await {
-        let alive = name
-            .rsplit('_')
-            .next()
-            .and_then(|p| p.parse::<u32>().ok())
-            .is_some_and(|p| {
-                p == pid
-                    || std::process::Command::new("kill")
-                        .args(["-0", &p.to_string()])
-                        .stderr(std::process::Stdio::null())
-                        .status()
-                        .is_ok_and(|s| s.success())
-            });
-        if !alive {
-            run(s, &drop(&name)).await;
-        }
-    }
+    common::drop_leftovers(s, &["ferris_idea_ddl_"]).await;
     let names = [
-        format!("idecraft_ddl_src_{pid}"),
-        format!("idecraft_ddl_tgt_{pid}"),
-        format!("idecraft_ddl_copy_{pid}"),
+        format!("ferris_idea_ddl_src_{pid}"),
+        format!("ferris_idea_ddl_tgt_{pid}"),
+        format!("ferris_idea_ddl_copy_{pid}"),
     ];
     for n in &names {
         run(s, &drop(n)).await;
@@ -199,7 +164,7 @@ async fn server_round_trips(
 
 #[tokio::test]
 async fn postgres_round_trips() {
-    let Ok(url) = std::env::var("IDECRAFT_TEST_PG") else {
+    let Ok(url) = ferris_idea_core::product_var("FERRIS_IDEA_TEST_PG") else {
         return;
     };
     let s = connect(&url).await;
@@ -216,7 +181,7 @@ async fn postgres_round_trips() {
 
 #[tokio::test]
 async fn mysql_round_trips() {
-    let Ok(url) = std::env::var("IDECRAFT_TEST_MYSQL") else {
+    let Ok(url) = ferris_idea_core::product_var("FERRIS_IDEA_TEST_MYSQL") else {
         return;
     };
     let s = connect(&url).await;
@@ -233,7 +198,7 @@ async fn mysql_round_trips() {
 
 #[tokio::test]
 async fn mariadb_round_trips() {
-    let Ok(url) = std::env::var("IDECRAFT_TEST_MARIADB") else {
+    let Ok(url) = ferris_idea_core::product_var("FERRIS_IDEA_TEST_MARIADB") else {
         return;
     };
     let s = connect(&url).await;

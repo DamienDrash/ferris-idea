@@ -5,9 +5,9 @@
 
 #![cfg(target_os = "macos")]
 
+use ferris_idea_workbench::usages_model::NO_NAME_AT_CARET;
+use ferris_idea_workbench::{EditorView, WorkbenchView};
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_workbench::usages_model::NO_NAME_AT_CARET;
-use idecraft_workbench::{EditorView, WorkbenchView};
 
 const CART: &str = "package shop;
 
@@ -29,7 +29,7 @@ fn open(
     &'static mut VisualTestContext,
 ) {
     let root = std::env::temp_dir().join(format!(
-        "idecraft-usages-without-symbol-{tag}-{}",
+        "ferris-idea-usages-without-symbol-{tag}-{}",
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&root);
@@ -78,7 +78,7 @@ fn the_four_usage_actions_say_at_once_that_there_is_no_name(cx: &mut TestAppCont
                 b.menu_action("UsageGrouping.Module", window, cx);
                 assert_eq!(
                     b.status_note(),
-                    Some(idecraft_workbench::keymap_actions::NO_USAGES_TO_GROUP)
+                    Some(ferris_idea_workbench::keymap_actions::NO_USAGES_TO_GROUP)
                 );
                 b.menu_action(id, window, cx);
             });

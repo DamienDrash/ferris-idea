@@ -1,4 +1,4 @@
-//! Change Signature (`SPEC-0113`): IDECraft's own refactoring. The language server only finds the
+//! Change Signature (`SPEC-0113`): Ferris IDEA's own refactoring. The language server only finds the
 //! declaration and the references; the parameter list of the declaration and the argument list of
 //! every call are rewritten here, on the text, for C-like, Rust, Go, Python, JavaScript/TypeScript,
 //! Java, Kotlin, PHP and Ruby syntax.

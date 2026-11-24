@@ -8,15 +8,15 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use idecraft_session::frame::{Frame, MAX_FRAME, read_frame};
-use idecraft_session::{
+use ferris_idea_session::frame::{Frame, MAX_FRAME, read_frame};
+use ferris_idea_session::{
     Backend, BackendConfig, ClientSession, Connection, ErrorCode, Inbound, Message, Op,
     Reconnected, Recovery, Right, in_process,
 };
 use serde_json::json;
 
 fn scratch(tag: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("idecraft-sess-{tag}-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-sess-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("project")).unwrap();
     std::fs::canonicalize(dir).unwrap()
@@ -31,7 +31,7 @@ fn backend(dir: &Path) -> Backend {
     })
 }
 
-fn connect(b: &Backend) -> idecraft_session::Transport {
+fn connect(b: &Backend) -> ferris_idea_session::Transport {
     let (window, server) = in_process();
     let b = b.clone();
     std::thread::spawn(move || b.serve(server));
@@ -72,7 +72,7 @@ fn raw_hello(
     conn: &Connection,
     project: &str,
     majors: serde_json::Value,
-) -> Result<serde_json::Value, idecraft_session::RpcError> {
+) -> Result<serde_json::Value, ferris_idea_session::RpcError> {
     conn.call(
         "session.hello",
         json!({"protocol": "idecraft-session", "majors": majors, "build": "t", "client": "window", "project": project}),
@@ -164,7 +164,7 @@ fn rights_cancellation_and_deadlines() {
         "test",
         "test.wait",
         Right::View,
-        Arc::new(move |call: &idecraft_session::Call| {
+        Arc::new(move |call: &ferris_idea_session::Call| {
             flag.store(true, Ordering::SeqCst);
             while call.cancel.stopped().is_none() {
                 std::thread::sleep(Duration::from_millis(5));
@@ -201,7 +201,7 @@ fn edits_of_two_windows_meet_and_large_texts_stream_with_credit() {
     std::fs::write(dir.join("project/a.txt"), "hello").unwrap();
     let big = "x".repeat(700 << 10);
     std::fs::write(dir.join("project/big.txt"), &big).unwrap();
-    let registry = idecraft_editor::documents::DocumentRegistry::default();
+    let registry = ferris_idea_editor::documents::DocumentRegistry::default();
     let b = Backend::new(BackendConfig {
         registry: registry.clone(),
         ..BackendConfig::default()
@@ -586,7 +586,7 @@ fn the_window_refuses_a_backend_older_than_itself() {
         let answer = Message::Response {
             id,
             result: Ok(json!({
-                "session": "ab", "client": "c1", "major": 1, "build": "idecraft 0.11.0",
+                "session": "ab", "client": "c1", "major": 1, "build": "ferris-idea 0.11.0",
                 "token": "11".repeat(32),
             })),
         };
@@ -609,7 +609,7 @@ fn the_window_refuses_a_backend_older_than_itself() {
         panic!("a backend without a revision was accepted");
     };
     assert_eq!(e.code, ErrorCode::UnsupportedVersion);
-    assert!(e.message.contains("idecraft 0.11.0"), "{e}");
+    assert!(e.message.contains("ferris-idea 0.11.0"), "{e}");
     assert!(e.message.contains("build-backends.sh"), "{e}");
     assert!(backend.join().unwrap(), "the window ended the session");
 }
@@ -630,7 +630,7 @@ fn the_window_refuses_what_a_hostile_backend_sends() {
             id,
             result: Ok(json!({
                 "session": "ab", "client": "c1", "major": 1,
-                "minor": idecraft_session::hello::MINOR, "token": "11".repeat(32),
+                "minor": ferris_idea_session::hello::MINOR, "token": "11".repeat(32),
             })),
         };
         let mut w = server.writer;
@@ -704,7 +704,7 @@ fn the_reattach_socket_is_private_and_speaks_only_resume() {
     let stream = UnixStream::connect(&sock).unwrap();
     let reader = stream.try_clone().unwrap();
     let closing = stream.try_clone().unwrap();
-    let t = idecraft_session::Transport {
+    let t = ferris_idea_session::Transport {
         reader: Box::new(reader),
         writer: Box::new(stream),
         closer: Arc::new(move || {
@@ -806,7 +806,7 @@ fn breaks_host_changes_and_concurrent_writers_converge() {
 /// device can resume it, even with the right token.
 #[test]
 fn a_session_of_a_device_cannot_be_taken_over_by_another_device() {
-    use idecraft_session::{Peer, Right, in_process};
+    use ferris_idea_session::{Peer, Right, in_process};
     let dir = scratch("takeover");
     let b = backend(&dir);
     let peer = |name: &str| Peer {

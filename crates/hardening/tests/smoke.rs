@@ -1,7 +1,7 @@
 //! M8.2 in `cargo test`: every fuzz target on its seeds plus a short mutation run, and every
 //! minimised crash input in `regressions/<target>/` (one per fixed finding) replayed.
 
-use idecraft_hardening::{Budget, TARGETS, run, target};
+use ferris_idea_hardening::{Budget, TARGETS, run, target};
 
 #[test]
 fn every_target_survives_a_short_run() {

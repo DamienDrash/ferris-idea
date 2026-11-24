@@ -7,7 +7,7 @@
 - **Sources:** GEN (list every use of a symbol and jump to one; F-034), OSS (action ids `FindUsages` ⌥F7
   and `ShowUsages` ⌥⌘F7 / Ctrl+Alt+F7 of the ported keymaps), SPEC-0024 (references from the language
   server), SPEC-0071 (navigation history), SPEC-0072 (requests on unsaved text), OBS-0012 (side by side 2026-11-05:
-  the reference opens a tool window on ⌥F7 and a popup on ⌥⌘F7; on the JDK type `String` IDECraft showed
+  the reference opens a tool window on ⌥F7 and a popup on ⌥⌘F7; on the JDK type `String` Ferris IDEA showed
   nothing for more than 25 s), SPEC-0293 (Find tool window and its bounded search)
 - **Feature matrix rows:** F-034
 
@@ -47,12 +47,12 @@ See where a symbol is used and go there.
    shows it in the Find tool window`. Otherwise the caret jumps to the usage (the place left is
    recorded for Back) and the hint below it says `Only usage of <symbol> in project files`. The
    hint closes like the documentation popup (SPEC-0077 behaviour 3). The reference shows such a
-   hint with a link to its search options (OBS-0016 Nr. 8); IDECraft has no options dialog and
+   hint with a link to its search options (OBS-0016 Nr. 8); Ferris IDEA has no options dialog and
    names ⌥F7 instead. [OBS-0016]
 
 ## Acceptance criteria
 - **AK-1** Sorting, de-duplication, relative paths, line text, identifier at a column (unit test).
-- **AK-2** In a real window (`idecraft ui --selftest`, with clangd): ⌥⌘F7 (v3; ⌥F7 before) on `helper` lists
+- **AK-2** In a real window (`ferris-idea ui --selftest`, with clangd): ⌥⌘F7 (v3; ⌥F7 before) on `helper` lists
   lines 1 and 2; Escape closes with the caret unchanged. (v5: replaced by AK-6, the declaration is
   no longer listed.)
 - **AK-3** Use by hand: many usages across files, mouse.

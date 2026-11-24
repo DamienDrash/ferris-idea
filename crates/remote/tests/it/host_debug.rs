@@ -8,10 +8,10 @@ use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use idecraft_debugger::{DebugSession, PathMap, SourceBreakpoint, StopState};
-use idecraft_remote::host_debug::{HostLink, start_host_debug};
-use idecraft_remote::inprocess::{HostSwitch, InProcessProject, Setup};
-use idecraft_remote::{ConnState, LiveProject, Timing};
+use ferris_idea_debugger::{DebugSession, PathMap, SourceBreakpoint, StopState};
+use ferris_idea_remote::host_debug::{HostLink, start_host_debug};
+use ferris_idea_remote::inprocess::{HostSwitch, InProcessProject, Setup};
+use ferris_idea_remote::{ConnState, LiveProject, Timing};
 use serde_json::json;
 
 fn scratch(tag: &str) -> PathBuf {
@@ -34,13 +34,13 @@ fn fast() -> Timing {
 
 fn open(dir: &Path) -> (LiveProject, HostSwitch) {
     let setup: Setup = Arc::new(|b| {
-        idecraft_host::bind(
+        ferris_idea_host::bind(
             b,
-            idecraft_host::HostOptions {
+            ferris_idea_host::HostOptions {
                 language_servers: false,
                 poll: Duration::from_millis(200),
                 shell: Some("/bin/sh".into()),
-                ..idecraft_host::HostOptions::default()
+                ..ferris_idea_host::HostOptions::default()
             },
         );
     });
@@ -96,7 +96,7 @@ fn debugpy_on_the_host_through_the_window_link_and_a_break() {
     }
     let dir = scratch("py");
     let project = dir.join("project");
-    idecraft_core::trust::trust_for_process(&project);
+    ferris_idea_core::trust::trust_for_process(&project);
     std::fs::write(project.join("app.py"), "a = 1\nb = a + 1\nprint(b)\n").unwrap();
     let (live, switch) = open(&dir);
     assert!(wait_until(Duration::from_secs(10), || matches!(
@@ -231,7 +231,7 @@ fn assert_private_socket(marker: &str) {
 /// `dap.connect` for the child session.
 #[test]
 fn js_debug_on_a_private_unix_socket() {
-    let Some(_) = idecraft_debugger::js_debug_server() else {
+    let Some(_) = ferris_idea_debugger::js_debug_server() else {
         eprintln!("js-debug not installed; skipped");
         return;
     };
@@ -240,7 +240,7 @@ fn js_debug_on_a_private_unix_socket() {
     }
     let dir = scratch("js");
     let project = dir.join("project");
-    idecraft_core::trust::trust_for_process(&project);
+    ferris_idea_core::trust::trust_for_process(&project);
     std::fs::write(project.join("app.js"), "const a = 1;\nconsole.log(a);\n").unwrap();
     let (live, _switch) = open(&dir);
     assert!(wait_until(Duration::from_secs(10), || matches!(
@@ -256,7 +256,7 @@ fn js_debug_on_a_private_unix_socket() {
 
     let mut breakpoints = BTreeMap::new();
     breakpoints.insert(stand.join("app.js"), vec![line_breakpoint(2)]);
-    let launch = idecraft_debugger::node_launch(
+    let launch = ferris_idea_debugger::node_launch(
         &project.join("app.js"),
         None,
         &[],
@@ -289,7 +289,7 @@ fn js_debug_on_a_private_unix_socket() {
 #[cfg(unix)]
 #[test]
 fn dlv_on_a_private_unix_socket() {
-    let installed = idecraft_debugger::known_adapters()
+    let installed = ferris_idea_debugger::known_adapters()
         .into_iter()
         .any(|a| a.name == "dlv" && a.command.is_some());
     if !installed || Command::new("go").arg("version").output().is_err() {
@@ -298,7 +298,7 @@ fn dlv_on_a_private_unix_socket() {
     }
     let dir = scratch("dlv");
     let project = dir.join("project");
-    idecraft_core::trust::trust_for_process(&project);
+    ferris_idea_core::trust::trust_for_process(&project);
     std::fs::write(project.join("go.mod"), "module app\n\ngo 1.21\n").unwrap();
     std::fs::write(
         project.join("main.go"),
@@ -316,7 +316,7 @@ fn dlv_on_a_private_unix_socket() {
     let debug = start_host_debug(&link, "dlv", json!({}), Some(paths)).unwrap();
     assert_private_socket("--listen=unix:");
     assert_eq!(debug.adapter.port, None, "a socket adapter has no port");
-    if !idecraft_debugger::can_debug_unattended() {
+    if !ferris_idea_debugger::can_debug_unattended() {
         eprintln!("this machine asks before debugging; the session itself is skipped");
         live.disconnect();
         return;
@@ -351,15 +351,15 @@ fn dlv_on_a_private_unix_socket() {
 /// listens on another interface.
 #[test]
 fn java_debug_on_the_host() {
-    if !idecraft_languages::java_debug::java_debug_usable()
-        || idecraft_languages::servers::resolve(idecraft_languages::LanguageId::Java).is_err()
+    if !ferris_idea_languages::java_debug::java_debug_usable()
+        || ferris_idea_languages::servers::resolve(ferris_idea_languages::LanguageId::Java).is_err()
     {
         eprintln!("jdtls or java-debug not installed; skipped");
         return;
     }
     let dir = scratch("java");
     let project = dir.join("project");
-    idecraft_core::trust::trust_for_process(&project);
+    ferris_idea_core::trust::trust_for_process(&project);
     std::fs::write(
         project.join("App.java"),
         "public class App {\n    public static void main(String[] a) {\n        int n = 41;\n        System.out.println(n + 1);\n    }\n}\n",
@@ -515,13 +515,16 @@ fn attaching_to_a_listening_debugpy() {
         }
     });
     let debug = debug.unwrap_or_else(|| panic!("attach failed: {last:?}"));
-    let target = idecraft_debugger::Target::Address {
+    let target = ferris_idea_debugger::Target::Address {
         host: "127.0.0.1".into(),
         port,
     };
-    let arguments =
-        idecraft_debugger::attach_arguments(idecraft_debugger::Runtime::Python, &target, &project)
-            .unwrap();
+    let arguments = ferris_idea_debugger::attach_arguments(
+        ferris_idea_debugger::Runtime::Python,
+        &target,
+        &project,
+    )
+    .unwrap();
     let mut breakpoints = BTreeMap::new();
     breakpoints.insert(project.join("srv.py"), vec![line_breakpoint(3)]);
     let (mut session, _) = DebugSession::attach_on(

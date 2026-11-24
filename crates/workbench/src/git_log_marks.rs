@@ -5,7 +5,7 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use idecraft_vcs::{CommitFacts, CommitInfo};
+use ferris_idea_vcs::{CommitFacts, CommitInfo};
 
 use crate::git_log_model::reachable;
 

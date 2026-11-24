@@ -3,7 +3,7 @@
 **Status:** v1 · 2026-11-17 · Experimental: not yet run with a Developer ID. How the signed and notarized macOS download of a release is built
 ([SPEC-0282](specifications/SPEC-0282-macos-app-bundle.md) v3, behaviours 4a and 9–15).
 
-The download is a DMG with `IDECraft.app`, signed with the project's Developer ID, notarized by
+The download is a DMG with `FerrisIDEA.app`, signed with the project's Developer ID, notarized by
 Apple and stapled, so it opens on any Mac without a Gatekeeper warning, also offline.
 `scripts/release-macos.sh` builds and checks it. It uploads nothing: publishing the DMG on the
 release page is a separate step that needs the project owner's approval.
@@ -45,8 +45,8 @@ Only the holder of the Apple developer account can do these steps.
    ```
 
    After storing, move the `.p8` file into the password manager and delete the copy on disk.
-   The script can also take the key directly (`IDECRAFT_NOTARY_KEY`, `IDECRAFT_NOTARY_KEY_ID`,
-   `IDECRAFT_NOTARY_ISSUER`); it then refuses a key file that anyone but its owner can read.
+   The script can also take the key directly (`FERRIS_IDEA_NOTARY_KEY`, `FERRIS_IDEA_NOTARY_KEY_ID`,
+   `FERRIS_IDEA_NOTARY_ISSUER`); it then refuses a key file that anyone but its owner can read.
 
 3. **First signing.** The first time codesign uses the new key, macOS asks for the login keychain
    password and whether to allow codesign: choose Always Allow, so later runs do not stop there.
@@ -56,15 +56,15 @@ Only the holder of the Apple developer account can do these steps.
 On a clean checkout of the release commit (the commit tagged `vX.Y.Z`):
 
 ```sh
-export IDECRAFT_SIGN_IDENTITY='Developer ID Application: …'   # full name or SHA-1, from find-identity
-export IDECRAFT_NOTARY_PROFILE=<profile>
+export FERRIS_IDEA_SIGN_IDENTITY='Developer ID Application: …'   # full name or SHA-1, from find-identity
+export FERRIS_IDEA_NOTARY_PROFILE=<profile>
 scripts/release-macos.sh --check   # preconditions only: clean tree, identity, credentials
 scripts/release-macos.sh           # build, sign, notarize, staple, check
 ```
 
 The run takes the release build's time plus two notarization rounds of usually a few minutes each
 (the app, then the DMG). It ends with the commit, the version, the DMG's path
-(`target/release-macos/IDECraft-<version>-macos-<arch>.dmg`) and its SHA-256, which is also
+(`target/release-macos/FerrisIDEA-<version>-macos-<arch>.dmg`) and its SHA-256, which is also
 written next to it as `<dmg>.sha256`.
 
 What it refuses: uncommitted or untracked changes; an identity that is not a Developer ID
@@ -82,13 +82,13 @@ If notarization is not accepted, the script prints the submission ID; Apple's re
 ## Without a Developer ID
 
 `scripts/bundle-macos.sh` alone builds a bundle for the Mac it runs on, signed ad hoc. With
-`IDECRAFT_SIGN_IDENTITY` set to any signing identity it signs with the hardened runtime, which is
+`FERRIS_IDEA_SIGN_IDENTITY` set to any signing identity it signs with the hardened runtime, which is
 how the runtime is checked without the Developer ID; such a bundle is not distributed.
 
 ## Hardened runtime and entitlements
 
-The app runs with the hardened runtime. `packaging/macos/IDECraft.entitlements` grants only Apple
+The app runs with the hardened runtime. `packaging/macos/FerrisIDEA.entitlements` grants only Apple
 Events, microphone and camera, each matching a usage description in the app's Info.plist, because
-programs started in IDECraft's terminal count as IDECraft for the system's privacy prompts. It
+programs started in Ferris IDEA's terminal count as Ferris IDEA for the system's privacy prompts. It
 grants no code-signing exception: no JIT, no unsigned executable memory, no disabled library
 validation. The reasons are in SPEC-0282 behaviour 4a.

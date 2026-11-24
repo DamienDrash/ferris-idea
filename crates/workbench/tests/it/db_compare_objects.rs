@@ -5,8 +5,8 @@
 
 #![cfg(target_os = "macos")]
 
+use ferris_idea_workbench::{DatabaseView, MenuPlace, WorkbenchView};
 use gpui::{Entity, TestAppContext, VisualTestContext, point, px};
-use idecraft_workbench::{DatabaseView, MenuPlace, WorkbenchView};
 
 fn sqlite(db: &std::path::Path, sql: &str) -> bool {
     std::process::Command::new("sqlite3")
@@ -19,9 +19,9 @@ fn sqlite(db: &std::path::Path, sql: &str) -> bool {
 /// One SQLite connection `shop` with `item`, `item_copy` (another column) and `other`; `None`
 /// without the `sqlite3` program.
 fn workspace() -> Option<std::path::PathBuf> {
-    let root = std::env::temp_dir().join(format!("idecraft-dbcmpobj-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-dbcmpobj-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir_all(root.join(".idecraft")).unwrap();
+    std::fs::create_dir_all(root.join(".ferris-idea")).unwrap();
     let shop = root.join("shop.db");
     let made = sqlite(
         &shop,
@@ -34,7 +34,7 @@ fn workspace() -> Option<std::path::PathBuf> {
         return None;
     }
     std::fs::write(
-        root.join(".idecraft/connections.toml"),
+        root.join(".ferris-idea/connections.toml"),
         format!(
             "[[connection]]\nid = \"shop\"\nname = \"shop\"\ndialect = \"sqlite\"\npath = \"{}\"\n",
             shop.display()
@@ -85,7 +85,7 @@ fn compare_with_compares_two_tables(cx: &mut TestAppContext) {
         .expect("the Database window is open");
     let row = |v: &DatabaseView, name: &str| v.visible().iter().position(|(_, n, _)| n == name);
     view.update(cx, |v, cx| {
-        v.expand(idecraft_workbench::db_tree_model::Node::Conn(0), cx)
+        v.expand(ferris_idea_workbench::db_tree_model::Node::Conn(0), cx)
     });
     wait(cx, "shop is read", |cx| {
         view.read_with(cx, |v, _| row(v, "tables").is_some())

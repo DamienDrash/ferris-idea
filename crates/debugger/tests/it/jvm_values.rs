@@ -8,7 +8,7 @@ use std::io::BufReader;
 use std::net::TcpListener;
 use std::sync::{Arc, Mutex};
 
-use idecraft_debugger::{DapClient, DebugSession, read_message, write_message};
+use ferris_idea_debugger::{DapClient, DebugSession, read_message, write_message};
 use serde_json::{Value, json};
 
 type Log = Arc<Mutex<Vec<Value>>>;

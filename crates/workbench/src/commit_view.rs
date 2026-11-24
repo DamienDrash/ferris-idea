@@ -6,9 +6,9 @@
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
+use ferris_idea_ui::theme::Rgba;
+use ferris_idea_vcs::{CommitOptions, Repo};
 use gpui::{Context, Entity, FocusHandle, KeyDownEvent, Window, div, prelude::*, px, rgb, rgba};
-use idecraft_ui::theme::Rgba;
-use idecraft_vcs::{CommitOptions, Repo};
 
 use crate::EditorView;
 use crate::changelist_model::ListStrip;
@@ -16,7 +16,7 @@ use crate::commit_model::{
     AmendMessage, CommitList, GroupBy, HISTORY_VISIBLE_ROWS, ListGroup, MessageHistory, Row,
     RowKind, module_folder, status_color_key,
 };
-use idecraft_core::changelists::Changelists;
+use ferris_idea_core::changelists::Changelists;
 
 mod changelists;
 use crate::icon_images::icon;
@@ -32,22 +32,22 @@ pub const MESSAGE_PLACEHOLDER: &str = "Commit message";
 
 /// The toolbar's buttons with their icons, in order (`SPEC-0063` v7 behaviour 25: icons, no text
 /// glyphs; OBS-0022 L15).
-pub const TOOLBAR_ICONS: [(&idecraft_ui::tooltip::Control, &str); 6] = [
+pub const TOOLBAR_ICONS: [(&ferris_idea_ui::tooltip::Control, &str); 6] = [
     (
         declared!(COMMIT_TOOLBAR, "commit-tool-refresh"),
         "general/refresh",
     ),
     (
         declared!(COMMIT_TOOLBAR, "commit-tool-rollback"),
-        "idecraft/rollback",
+        "ferris-idea/rollback",
     ),
     (
         declared!(COMMIT_TOOLBAR, "commit-tool-diff"),
-        "idecraft/diff",
+        "ferris-idea/diff",
     ),
     (
         declared!(COMMIT_TOOLBAR, "commit-tool-group"),
-        "idecraft/groupBy",
+        "ferris-idea/groupBy",
     ),
     (
         declared!(COMMIT_TOOLBAR, "commit-tool-expand"),
@@ -141,7 +141,7 @@ pub struct CommitView {
     /// The changelists of the project (`SPEC-0335`); the one list `Changes` in a remote project.
     lists: Changelists,
     /// Why the state file of the changelists was not used at the last look.
-    lists_problem: Option<idecraft_core::changelists::Unreadable>,
+    lists_problem: Option<ferris_idea_core::changelists::Unreadable>,
     /// Modification time and size of the state file at the last look (behaviour 17).
     lists_stamp: Option<(std::time::SystemTime, u64)>,
     /// The selected changelist (`SPEC-0335` behaviour 14); a selected file is in `current`.
@@ -161,7 +161,7 @@ pub struct CommitView {
 /// Status and last commit of the host repository.
 fn host_status(
     host: &crate::workbench_view::HostCall,
-) -> Result<(Vec<idecraft_vcs::FileStatus>, Option<LastCommit>), String> {
+) -> Result<(Vec<ferris_idea_vcs::FileStatus>, Option<LastCommit>), String> {
     let v = host("git.status", serde_json::json!({}))?;
     // A path outside the project comes as `{outside: name}` (behaviour 3): not listed.
     let status = v["files"]
@@ -173,7 +173,7 @@ fn host_status(
         .collect();
     let last = host("git.show", serde_json::json!({ "id": "HEAD" }))
         .ok()
-        .and_then(|d| serde_json::from_value::<idecraft_vcs::CommitDetails>(d).ok())
+        .and_then(|d| serde_json::from_value::<ferris_idea_vcs::CommitDetails>(d).ok())
         .map(|d| LastCommit {
             short_id: d.info.short_id,
             summary: d.info.summary,
@@ -372,7 +372,8 @@ impl CommitView {
             ));
             return;
         }
-        let (history, problem) = idecraft_core::commit_messages::CommitMessages::load(&self.root);
+        let (history, problem) =
+            ferris_idea_core::commit_messages::CommitMessages::load(&self.root);
         self.history = MessageHistory::new(history.newest_first());
         match (&self.history, problem) {
             (_, Some(why)) => cx.emit(CommitEvent::Status(
@@ -801,7 +802,7 @@ impl CommitView {
             && crate::commit_model::remembers_message(self.amend, paths.len())
             && crate::goto_model::refresh_local_state_ignore(&self.root)
             && let Err(e) =
-                idecraft_core::commit_messages::remember_commit_message(&self.root, &message)
+                ferris_idea_core::commit_messages::remember_commit_message(&self.root, &message)
         {
             cx.emit(CommitEvent::Status(crate::commit_model::history_not_saved(
                 &e,
@@ -832,10 +833,10 @@ impl CommitView {
                         .and_then(|v| v["note"].as_str().map(str::to_owned));
                     let outcome = result
                         .and_then(|v| {
-                            serde_json::from_value::<idecraft_vcs::CommitOutcome>(v)
+                            serde_json::from_value::<ferris_idea_vcs::CommitOutcome>(v)
                                 .map_err(|e| e.to_string())
                         })
-                        .map_err(idecraft_vcs::GitError::Git);
+                        .map_err(ferris_idea_vcs::GitError::Git);
                     this.finish(outcome, cx);
                     if let (Some(note), Some((text, true))) = (note, &this.note) {
                         this.note = Some((format!("{text} ({note})"), true));
@@ -879,12 +880,12 @@ impl CommitView {
     /// Shows a commit's result; a blocked commit keeps message and checks (SPEC-0230 behaviour 3).
     fn finish(
         &mut self,
-        result: Result<idecraft_vcs::CommitOutcome, idecraft_vcs::GitError>,
+        result: Result<ferris_idea_vcs::CommitOutcome, ferris_idea_vcs::GitError>,
         cx: &mut Context<Self>,
     ) {
         let push = std::mem::take(&mut self.push_after);
         match result {
-            Err(idecraft_vcs::GitError::HookFailed {
+            Err(ferris_idea_vcs::GitError::HookFailed {
                 hook,
                 status,
                 output,
@@ -925,7 +926,7 @@ impl CommitView {
     /// A toolbar button; its tooltip is its declared control (`SPEC-0294` behaviour 9).
     fn tool(
         &self,
-        control: &'static idecraft_ui::tooltip::Control,
+        control: &'static ferris_idea_ui::tooltip::Control,
         icon_key: &'static str,
         on: bool,
         cx: &mut Context<Self>,
@@ -1171,7 +1172,7 @@ impl CommitView {
                                 cx.notify();
                             })),
                     )
-                    .child(icon(idecraft_ui::icons::file_icon(&row.label)))
+                    .child(icon(ferris_idea_ui::icons::file_icon(&row.label)))
                     .child(div().text_color(rgb(color)).child(row.label.clone()))
                     .when_some(dir.clone(), |d, dir| {
                         d.child(div().text_color(c(p.ui_dim)).child(dir))
@@ -1609,7 +1610,7 @@ impl Render for CommitView {
 mod tests {
     use super::*;
 
-    /// SPEC-0063 v7 AK-9: every toolbar button shows a bundled icon in both themes, in order.
+    /// SPEC-0063 v7 AK-11: every toolbar button shows a bundled icon in both themes, in order.
     #[test]
     fn toolbar_buttons_have_bundled_icons() {
         let names: Vec<&str> = TOOLBAR_ICONS.iter().map(|(c, _)| c.name).collect();
@@ -1632,7 +1633,7 @@ mod tests {
             .iter(),
         ) {
             for dark in [false, true] {
-                assert!(idecraft_ui::icons::svg(key, dark).is_some(), "{key}");
+                assert!(ferris_idea_ui::icons::svg(key, dark).is_some(), "{key}");
             }
         }
     }

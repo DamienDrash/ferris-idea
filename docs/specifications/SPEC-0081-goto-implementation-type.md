@@ -35,7 +35,7 @@ Get from an interface method to the code that runs, or from a variable to the ty
    first target, with its parameter types when the server gives them: `Choose implementation of
    apply(int) (2)`. A target outside every type (a C function), or a file whose symbols do not
    arrive in time, keeps the row of behaviour 2. The reference names class, outer class, package
-   and module per row, sorted alphabetically; IDECraft showed two equal code lines (OBS-0016 Nr. 5).
+   and module per row, sorted alphabetically; Ferris IDEA showed two equal code lines (OBS-0016 Nr. 5).
    [OBS-0016, STD, GEN]
    4a. **Java without symbols (v3):** when the symbols of a Java target's file do not arrive in time,
    the row takes the innermost type around the target and the file's `package` line from the syntax
@@ -50,7 +50,7 @@ Get from an interface method to the code that runs, or from a variable to the ty
 ## Acceptance criteria
 - **AK-1** With clangd on unsaved C++ text: the type declaration of a variable, and both overrides of a
   virtual method (integration test).
-- **AK-2** In a real window (`idecraft ui --selftest`, with clangd): after typing
+- **AK-2** In a real window (`ferris-idea ui --selftest`, with clangd): after typing
   `typedef int num; num g;`, ⇧⌘B on `g` jumps to the typedef.
 - **AK-3** Use by hand: ⌥⌘B with several implementations (chooser), Back after the jump, ⌘B with
   several definitions.
@@ -65,7 +65,7 @@ Get from an interface method to the code that runs, or from a variable to the ty
 - **AK-7 (v4, behaviour 7)** MCP `quick_definition` is listed with its schema and refuses a path outside the workspace (protocol test `navigation_tools_from_the_keymap_coverage`); with a language server: open.
 
 ## Out of scope
-Implementations searched by IDECraft itself (without a server), editing or navigating inside the
+Implementations searched by Ferris IDEA itself (without a server), editing or navigating inside the
 Quick Definition popup and stepping through its targets with keys (v4 shows them one below the other),
 Go to Super Method (⌘U), gutter icons for implemented and overriding methods.
 

@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use idecraft_core::trust::{self, TrustKind};
+use ferris_idea_core::trust::{self, TrustKind};
 
 /// An answer to the trust question.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -54,6 +54,27 @@ pub fn answers(root: &Path, opening: bool) -> Vec<(String, Answer)> {
     list
 }
 
+/// What follows *Don't Open* (`SPEC-0278` v4 behaviour 2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AfterDontOpen {
+    /// Other project windows stay open; only this window goes.
+    Nothing,
+    /// It was the only project window: the Welcome window, as after the last Close Project.
+    Welcome,
+    /// It was the only project window and the app has no Welcome window (a harness): quit.
+    Quit,
+}
+
+/// What follows *Don't Open* in a window: `other_windows` whether other project windows stay
+/// open, `welcome` whether the app shows a Welcome window after the last project window.
+pub fn after_dont_open(other_windows: bool, welcome: bool) -> AfterDontOpen {
+    match (other_windows, welcome) {
+        (true, _) => AfterDontOpen::Nothing,
+        (false, true) => AfterDontOpen::Welcome,
+        (false, false) => AfterDontOpen::Quit,
+    }
+}
+
 /// Remembers the answer in `file`; returns the status line, or `None` when nothing was trusted.
 pub fn apply(answer: &Answer, root: &Path, file: &Path) -> Result<Option<String>, String> {
     match answer {
@@ -91,7 +112,7 @@ mod tests {
     /// Mode, also when Don't Open, the cancel answer, is offered; Return gives it too.
     #[test]
     fn the_trust_question_focuses_preview_in_safe_mode() {
-        let dir = std::env::temp_dir().join(format!("idecraft-trust-f-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-trust-f-{}", std::process::id()));
         let root = dir.join("projects/app");
         std::fs::create_dir_all(&root).unwrap();
         for opening in [true, false] {
@@ -111,7 +132,7 @@ mod tests {
 
     #[test]
     fn question_answers_and_banner() {
-        let dir = std::env::temp_dir().join(format!("idecraft-trust-q-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-trust-q-{}", std::process::id()));
         let root = dir.join("projects/app");
         std::fs::create_dir_all(&root).unwrap();
         let opening = answers(&root, true);
@@ -151,5 +172,15 @@ mod tests {
         assert!(settings.status(&root).trusted);
         assert!(settings.status(&dir.join("projects/other")).trusted);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// SPEC-0278 v4 AK-9 (behaviour 2, OBS-0102 W1): Don't Open in the only project window shows
+    /// the Welcome window instead of quitting; with other windows open only this one goes.
+    #[test]
+    fn dont_open_in_the_only_window_shows_the_welcome_window() {
+        assert_eq!(after_dont_open(false, true), AfterDontOpen::Welcome);
+        assert_eq!(after_dont_open(true, true), AfterDontOpen::Nothing);
+        assert_eq!(after_dont_open(true, false), AfterDontOpen::Nothing);
+        assert_eq!(after_dont_open(false, false), AfterDontOpen::Quit);
     }
 }

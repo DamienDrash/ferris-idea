@@ -3,15 +3,15 @@
 
 use std::path::Path;
 
-use gpui::{Context, Window, prelude::*};
-use idecraft_languages::java_marks::is_java;
-use idecraft_languages::kotlin_structure::is_kotlin;
-use idecraft_languages::rename::FileEdits;
-use idecraft_languages::ts_refactor::{
+use ferris_idea_languages::java_marks::is_java;
+use ferris_idea_languages::kotlin_structure::is_kotlin;
+use ferris_idea_languages::rename::FileEdits;
+use ferris_idea_languages::ts_refactor::{
     ClassMembers, class_members, extract_interface_in, extract_superclass, pull_members_up_in,
     pull_targets_in,
 };
-use idecraft_languages::ts_structure::{declaration_marks_in, is_script};
+use ferris_idea_languages::ts_structure::{declaration_marks_in, is_script};
+use gpui::{Context, Window, prelude::*};
 
 use super::WorkbenchView;
 use super::java_actions::{WAIT, blocking};
@@ -33,7 +33,7 @@ impl WorkbenchView {
     /// behaviour 6): the language server's organize-imports actions on the editor's text, in the
     /// background, as one undo step that keeps carets and selections on their text.
     pub(super) fn js_optimize_imports(&mut self, cx: &mut Context<Self>) {
-        use idecraft_languages::js_imports;
+        use ferris_idea_languages::js_imports;
         let (Some(path), Some(editor)) = (self.active_path(), self.active_editor()) else {
             return;
         };
@@ -82,7 +82,7 @@ impl WorkbenchView {
     /// Computes the gutter marks of a script file in the background (`SPEC-0320` behaviour 9).
     /// Kotlin marks come from the syntax trees and need no server (v3 behaviour 19).
     pub(super) fn request_declaration_marks(&mut self, path: &Path, cx: &mut Context<Self>) {
-        let served = idecraft_languages::pool::enabled() && (is_script(path) || is_java(path));
+        let served = ferris_idea_languages::pool::enabled() && (is_script(path) || is_java(path));
         if self.remote_project.is_some() || !(served || is_kotlin(path)) {
             return;
         }
@@ -102,7 +102,7 @@ impl WorkbenchView {
         let job = blocking(async move {
             let wait = std::time::Duration::from_secs(60);
             if is_java(&from) || is_kotlin(&from) {
-                idecraft_languages::java_marks::declaration_marks_in(
+                ferris_idea_languages::java_marks::declaration_marks_in(
                     &root,
                     &from,
                     Some(&text),
@@ -421,7 +421,7 @@ impl WorkbenchView {
     fn member_chooser(
         &mut self,
         title: String,
-        rows: Vec<idecraft_languages::ts_refactor::ClassMember>,
+        rows: Vec<ferris_idea_languages::ts_refactor::ClassMember>,
         check_all: bool,
         window: &mut Window,
         cx: &mut Context<Self>,

@@ -111,7 +111,7 @@ pub fn max_scroll(total: usize, line_height: f32) -> f32 {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MarkerSpan {
     /// Added, modified or deleted lines.
-    pub kind: idecraft_vcs::LineChangeKind,
+    pub kind: ferris_idea_vcs::LineChangeKind,
     /// Row relative to the first visible line.
     pub row: usize,
     /// Rows covered; 0 for a deletion.
@@ -120,7 +120,7 @@ pub struct MarkerSpan {
 
 /// Markers of `changes` that fall into the visible lines `first..first + count` (0-based), clipped.
 pub fn marker_spans(
-    changes: &[idecraft_vcs::LineChange],
+    changes: &[ferris_idea_vcs::LineChange],
     first: usize,
     count: usize,
 ) -> Vec<MarkerSpan> {
@@ -130,7 +130,7 @@ pub fn marker_spans(
         .filter_map(|c| {
             // 0-based half-open range of new lines; a deletion is the boundary before `new_start - 1`.
             let (from, to) = (c.new_start - 1, c.new_end);
-            if c.kind == idecraft_vcs::LineChangeKind::Deleted {
+            if c.kind == ferris_idea_vcs::LineChangeKind::Deleted {
                 return (from >= first && from <= end).then(|| MarkerSpan {
                     kind: c.kind,
                     row: from - first,
@@ -188,7 +188,7 @@ mod tests {
 
     #[test]
     fn markers_are_clipped_to_the_visible_lines() {
-        use idecraft_vcs::{LineChange, LineChangeKind::*};
+        use ferris_idea_vcs::{LineChange, LineChangeKind::*};
         let ch = |kind, new_start, new_end| LineChange {
             kind,
             new_start,

@@ -1,4 +1,4 @@
-//! IDECraft's own Extract Variable for JavaScript and TypeScript (`SPEC-0320` v7 behaviours 23–27):
+//! Ferris IDEA's own Extract Variable for JavaScript and TypeScript (`SPEC-0320` v7 behaviours 23–27):
 //! used when the language server offers no extraction there, as TypeScript 7's `tsc --lsp` offers
 //! none (OBS-0028 T4). The selected expression becomes `const name = expression;` before its
 //! statement, and the expression is replaced by the name. Wherever moving the evaluation in front of

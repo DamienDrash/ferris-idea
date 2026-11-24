@@ -1,6 +1,6 @@
 //! Retest of hand test 43 of F-060 (SQL Server, `SPEC-0116`) in a window of the test harness, with
 //! keys, without the screen and without the keychain, against the SQL Server of the reference
-//! environment (`IDECRAFT_TEST_SQLSERVER` with its password file, `mssql.sh start` and `init`;
+//! environment (`FERRIS_IDEA_TEST_SQLSERVER` with its password file, `mssql.sh start` and `init`;
 //! skipped without): Test Connection, the tree with tables and keys, a script whose `GO` line
 //! separates two batches with the error of the second one and its line, a cell of a result changed
 //! and submitted, Explain Plan with costs and the whole index name in its column (the side finding
@@ -10,8 +10,8 @@
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_workbench::WorkbenchView;
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_workbench::WorkbenchView;
 
 /// The copy of the test password in the test secrets folder, removed when dropped (also when the
 /// test fails).
@@ -23,36 +23,37 @@ impl Drop for SecretFile {
     }
 }
 
-/// The server of `IDECRAFT_TEST_SQLSERVER` as connection `mssql`, its password copied from the
-/// file named by `IDECRAFT_TEST_SQLSERVER_PASSWORD_FILE` into this process's test secrets folder
+/// The server of `FERRIS_IDEA_TEST_SQLSERVER` as connection `mssql`, its password copied from the
+/// file named by `FERRIS_IDEA_TEST_SQLSERVER_PASSWORD_FILE` into this process's test secrets folder
 /// (0700, the file 0600): the window never asks the keychain.
-fn reference() -> Option<(idecraft_database::ConnectionProfile, SecretFile)> {
-    use idecraft_database::SecretStore;
-    let url = std::env::var("IDECRAFT_TEST_SQLSERVER").ok()?;
-    let file = std::env::var("IDECRAFT_TEST_SQLSERVER_PASSWORD_FILE").ok()?;
+fn reference() -> Option<(ferris_idea_database::ConnectionProfile, SecretFile)> {
+    use ferris_idea_database::SecretStore;
+    let url = ferris_idea_core::product_var("FERRIS_IDEA_TEST_SQLSERVER").ok()?;
+    let file = ferris_idea_core::product_var("FERRIS_IDEA_TEST_SQLSERVER_PASSWORD_FILE").ok()?;
     let password = std::fs::read_to_string(file).ok()?;
-    let base = std::env::temp_dir().join(format!("idecraft-mssql-secrets-{}", std::process::id()));
+    let base =
+        std::env::temp_dir().join(format!("ferris-idea-mssql-secrets-{}", std::process::id()));
     std::fs::create_dir_all(&base).unwrap();
     {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&base, std::fs::Permissions::from_mode(0o700)).unwrap();
     }
-    let dir = idecraft_database::test_store::use_dir(base);
+    let dir = ferris_idea_database::test_store::use_dir(base);
     let account = format!("connection:mssql-{}", std::process::id());
-    let reference = idecraft_database::SecretRef {
-        service: "idecraft".into(),
+    let reference = ferris_idea_database::SecretRef {
+        service: "ferris-idea".into(),
         account: account.clone(),
     };
-    idecraft_database::test_store::DirStore::new(&dir)
+    ferris_idea_database::test_store::DirStore::new(&dir)
         .set(
             &reference,
-            &idecraft_database::Secret::new(password.trim_end()),
+            &ferris_idea_database::Secret::new(password.trim_end()),
         )
         .unwrap();
-    let mut profile = idecraft_database::ConnectionProfile::from_url("mssql", &url).unwrap();
+    let mut profile = ferris_idea_database::ConnectionProfile::from_url("mssql", &url).unwrap();
     profile.id = "mssql".into();
     profile.secret = Some(reference);
-    Some((profile, SecretFile(dir.join("idecraft").join(account))))
+    Some((profile, SecretFile(dir.join("ferris-idea").join(account))))
 }
 
 fn until(
@@ -100,7 +101,7 @@ fn plan_of(
     bench: &Entity<WorkbenchView>,
     cx: &mut VisualTestContext,
     analyze: bool,
-) -> idecraft_database::Plan {
+) -> ferris_idea_database::Plan {
     bench.update_in(cx, |b, window, cx| {
         b.focus_editor(window, cx);
         b.menu_action(
@@ -135,14 +136,14 @@ fn plan_of(
 #[gpui::test]
 fn hand_test_43_sql_server(cx: &mut TestAppContext) {
     let Some((profile, secret)) = reference() else {
-        eprintln!("skipped: IDECRAFT_TEST_SQLSERVER or its password file is not set");
+        eprintln!("skipped: FERRIS_IDEA_TEST_SQLSERVER or its password file is not set");
         return;
     };
-    let root = std::env::temp_dir().join(format!("idecraft-mssql-43-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-mssql-43-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     let root = root.canonicalize().unwrap();
-    idecraft_database::save_profiles(&root, std::slice::from_ref(&profile)).unwrap();
+    ferris_idea_database::save_profiles(&root, std::slice::from_ref(&profile)).unwrap();
     let file = root.join("ms.sql");
     std::fs::write(&file, "select 1;\n").unwrap();
     cx.executor().allow_parking();
@@ -258,7 +259,7 @@ fn hand_test_43_sql_server(cx: &mut TestAppContext) {
         e.set_text("select city from warehouse where id = 1\n", cx)
     });
     let plan = plan_of(&bench, cx, false);
-    let rows = idecraft_workbench::db_compare_model::plan_rows(&plan);
+    let rows = ferris_idea_workbench::db_compare_model::plan_rows(&plan);
     assert!(rows.iter().any(|r| !r.estimate.is_empty()), "{}", plan.raw);
     let seek = rows
         .iter()
@@ -275,9 +276,9 @@ fn hand_test_43_sql_server(cx: &mut TestAppContext) {
         Some(index.clone()),
         "the plan names the whole index"
     );
-    let width = idecraft_workbench::db_compare_model::plan_object_width(&rows, 7.8);
+    let width = ferris_idea_workbench::db_compare_model::plan_object_width(&rows, 7.8);
     let measured = cx.update(|window, _| {
-        let font = gpui::font(idecraft_workbench::fonts::editor_family());
+        let font = gpui::font(ferris_idea_workbench::fonts::editor_family());
         let run = gpui::TextRun {
             len: seek.object.len(),
             font,
@@ -291,7 +292,7 @@ fn hand_test_43_sql_server(cx: &mut TestAppContext) {
                 .text_system()
                 .shape_line(
                     seek.object.clone().into(),
-                    px(idecraft_workbench::fonts::EDITOR_FONT_SIZE),
+                    px(ferris_idea_workbench::fonts::EDITOR_FONT_SIZE),
                     &[run],
                     None,
                 )
@@ -309,7 +310,7 @@ fn hand_test_43_sql_server(cx: &mut TestAppContext) {
         e.set_text("select city from warehouse where id = 1\n", cx)
     });
     let analyzed = plan_of(&bench, cx, true);
-    let rows = idecraft_workbench::db_compare_model::plan_rows(&analyzed);
+    let rows = ferris_idea_workbench::db_compare_model::plan_rows(&analyzed);
     assert!(
         rows.iter().any(|r| r.actual.contains("rows")),
         "{}",

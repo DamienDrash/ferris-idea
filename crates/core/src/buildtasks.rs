@@ -167,6 +167,7 @@ pub fn task_config(
         allow_multiple: false,
         before_launch: Vec::new(),
         verbatim: false,
+        http: None,
     }
 }
 
@@ -220,8 +221,8 @@ pub fn listening_count(output: &str, port: u16) -> usize {
 
 /// The init script that puts the agent into a Gradle run's `Test` and `JavaExec` tasks
 /// (behaviour 17).
-pub const GRADLE_DEBUG_SCRIPT: &str = r#"// IDECraft: debugs the test and application JVMs of a Gradle run (SPEC-0100 v3 behaviour 17).
-def port = gradle.startParameter.projectProperties['idecraftDebugPort']
+pub const GRADLE_DEBUG_SCRIPT: &str = r#"// Ferris IDEA: debugs the test and application JVMs of a Gradle run (SPEC-0100 v3 behaviour 17).
+def port = gradle.startParameter.projectProperties['ferrisIdeaDebugPort']
 if (port) {
     def agent = "-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=localhost:${port}".toString()
     allprojects {
@@ -237,13 +238,13 @@ if (port) {
 }
 "#;
 
-/// Writes init script `name` with `text` to `.idecraft/gradle/` of `root` and returns its path.
+/// Writes init script `name` with `text` to `.ferris-idea/gradle/` of `root` and returns its path.
 pub fn write_init_script(
     root: &Path,
     name: &str,
     text: &str,
 ) -> Result<std::path::PathBuf, String> {
-    let file = root.join(".idecraft/gradle").join(name);
+    let file = root.join(".ferris-idea/gradle").join(name);
     if std::fs::read_to_string(&file).ok().as_deref() != Some(text) {
         std::fs::create_dir_all(file.parent().unwrap_or(root)).map_err(|e| e.to_string())?;
         crate::write_atomic(&file, text.as_bytes()).map_err(|e| e.to_string())?;
@@ -295,10 +296,11 @@ pub fn debug_config(root: &Path, config: &RunConfig, port: u16) -> Result<RunCon
             }
         }
         "gradle" | "gradlew" | "gradle.bat" | "gradlew.bat" => {
-            let script = write_init_script(root, "idecraft-debug.gradle", GRADLE_DEBUG_SCRIPT)?;
+            let script = write_init_script(root, "ferris-idea-debug.gradle", GRADLE_DEBUG_SCRIPT)?;
             out.command.insert(1, "--init-script".into());
             out.command.insert(2, script.display().to_string());
-            out.command.insert(3, format!("-PidecraftDebugPort={port}"));
+            out.command
+                .insert(3, format!("-PferrisIdeaDebugPort={port}"));
         }
         _ => {
             return Err(format!(
@@ -513,7 +515,7 @@ pub fn before_launch_build(root: &Path) -> Result<Vec<RunConfig>, String> {
     }
     if steps.is_empty() {
         return Err(
-            "the project has no build IDECraft knows (Cargo, Maven, Gradle, Go, or a package \
+            "the project has no build Ferris IDEA knows (Cargo, Maven, Gradle, Go, or a package \
              script named build)"
                 .into(),
         );
@@ -788,8 +790,10 @@ mod tests {
     use super::*;
 
     fn tmp(name: &str) -> std::path::PathBuf {
-        let d =
-            std::env::temp_dir().join(format!("idecraft-buildtasks-{name}-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!(
+            "ferris-idea-buildtasks-{name}-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
@@ -890,7 +894,7 @@ mod tests {
             "{dirs:?}"
         );
         // A file outside the workspace is in none of its modules.
-        let outside = std::env::temp_dir().join("idecraft-recompile-outside.txt");
+        let outside = std::env::temp_dir().join("ferris-idea-recompile-outside.txt");
         assert_eq!(recompile_step(&flat, &model, &options, &outside), None);
     }
 
@@ -981,6 +985,7 @@ mod tests {
             allow_multiple: false,
             before_launch: Vec::new(),
             verbatim: false,
+            http: None,
         };
         let test = debug_config(&root, &config(&["mvn", "-o", "test"]), 5123).unwrap();
         assert_eq!(
@@ -1002,13 +1007,13 @@ mod tests {
         let gradle = debug_config(&root, &config(&["./gradlew", ":lib:test"]), 5126).unwrap();
         assert_eq!(gradle.command[1], "--init-script");
         let script = std::path::PathBuf::from(&gradle.command[2]);
-        assert!(script.ends_with(".idecraft/gradle/idecraft-debug.gradle"));
+        assert!(script.ends_with(".ferris-idea/gradle/ferris-idea-debug.gradle"));
         assert!(
             std::fs::read_to_string(&script)
                 .unwrap()
                 .contains("tasks.withType(Test)")
         );
-        assert_eq!(gradle.command[3], "-PidecraftDebugPort=5126");
+        assert_eq!(gradle.command[3], "-PferrisIdeaDebugPort=5126");
         assert_eq!(gradle.command[4], ":lib:test");
         assert!(debug_config(&root, &config(&["npm", "test"]), 1).is_err());
         let out = "[INFO] T E S T S\nListening for transport dt_socket at address: 5123\n";

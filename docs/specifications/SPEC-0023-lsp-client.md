@@ -58,7 +58,7 @@ lose the reason when a server misbehaves.
     starting may not know a request yet. [STD, OSS, GEN]
 
 12. **(v4) Severity filter:** `file_diagnostics` takes `min_severity` (`error`, `warning`, `information`
-    or `hint`) and returns only the findings of that severity or a more severe one, IDECraft's own
+    or `hint`) and returns only the findings of that severity or a more severe one, Ferris IDEA's own
     findings included; without it every finding is returned as before. Another value is refused and
     the answer names the four. A finding without a severity counts as `error`, as the protocol says
     the client decides. [STD, GEN; OBS-0071 G4]
@@ -66,7 +66,7 @@ lose the reason when a server misbehaves.
 13. **(v5) Several files in one call:** `file_diagnostics` takes `paths` instead of `path` — one of
     the two, never both or neither, at most 50 files; a path given twice is answered once. The answer
     has `files` in the order asked, each with its `path` and either its `diagnostics` (the language
-    server's and IDECraft's own, as for one file, narrowed by `min_severity`) or its `error`: outside
+    server's and Ferris IDEA's own, as for one file, narrowed by `min_severity`) or its `error`: outside
     the workspace, missing, no server for it (with the command), or no diagnostics within the wait.
     `failed` counts the files with an error. One file's error never fails the call or another file.
     Files served by the same server program share one start of it: all are opened, then the first

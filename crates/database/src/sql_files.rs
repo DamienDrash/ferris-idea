@@ -8,9 +8,9 @@ use std::path::{Path, PathBuf};
 use crate::ConnectionProfile;
 
 /// Bindings of `.sql` files to connections, relative to the workspace.
-pub const SQL_FILES: &str = ".idecraft/sql-files.toml";
+pub const SQL_FILES: &str = ".ferris-idea/sql-files.toml";
 /// Folder of the consoles, one subfolder per connection id.
-pub const CONSOLES_DIR: &str = ".idecraft/consoles";
+pub const CONSOLES_DIR: &str = ".ferris-idea/consoles";
 
 #[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
 struct Bindings {
@@ -33,7 +33,7 @@ fn read(root: &Path) -> Bindings {
     // reads as none and is not overwritten.
     std::fs::read_to_string(root.join(SQL_FILES))
         .ok()
-        .filter(|t| idecraft_core::format::project_format(t, "sql-files").is_ok())
+        .filter(|t| ferris_idea_core::format::project_format(t, "sql-files").is_ok())
         .and_then(|t| toml::from_str(&t).ok())
         .unwrap_or_default()
 }
@@ -79,9 +79,9 @@ pub fn bind_file(root: &Path, file: &Path, id: Option<&str>) -> io::Result<()> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    idecraft_core::format::prepare_write(&path, "sql-files")?;
-    let text = idecraft_core::format::write(
-        &idecraft_core::format::Envelope::current("sql-files"),
+    ferris_idea_core::format::prepare_write(&path, "sql-files")?;
+    let text = ferris_idea_core::format::write(
+        &ferris_idea_core::format::Envelope::current("sql-files"),
         &bindings,
     )
     .map_err(io::Error::other)?;
@@ -125,9 +125,9 @@ mod tests {
     /// one is not overwritten.
     #[test]
     fn old_binding_files_gain_the_envelope() {
-        let root = std::env::temp_dir().join(format!("idecraft-sqlmig-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("ferris-idea-sqlmig-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
-        std::fs::create_dir_all(root.join(".idecraft")).unwrap();
+        std::fs::create_dir_all(root.join(".ferris-idea")).unwrap();
         let profiles = [profile("shop"), profile("audit")];
         std::fs::write(root.join(SQL_FILES), "[files]\n\"a.sql\" = \"shop\"\n").unwrap();
         let a = root.join("a.sql");
@@ -138,10 +138,10 @@ mod tests {
         bind_file(&root, &root.join("b.sql"), Some("audit")).unwrap();
         let text = std::fs::read_to_string(root.join(SQL_FILES)).unwrap();
         assert!(
-            text.starts_with("[idecraft]\nkind = \"sql-files\"\nformat = 1\n"),
+            text.starts_with("[ferris-idea]\nkind = \"sql-files\"\nformat = 1\n"),
             "{text}"
         );
-        assert!(root.join(".idecraft/sql-files.toml.bak").exists());
+        assert!(root.join(".ferris-idea/sql-files.toml.bak").exists());
         assert_eq!(
             bound_connection(&root, &a, &profiles).as_deref(),
             Some("shop")
@@ -153,18 +153,19 @@ mod tests {
         .unwrap();
         assert_eq!(bound_connection(&root, &a, &profiles), None);
         let e = bind_file(&root, &a, None).unwrap_err().to_string();
-        assert!(e.contains("newer IDECraft (format 7)"), "{e}");
+        assert!(e.contains("newer Ferris IDEA (format 7)"), "{e}");
         let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
     fn folder_binding_and_file_winning() {
-        let root = std::env::temp_dir().join(format!("idecraft-sqlfiles-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("ferris-idea-sqlfiles-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         let profiles = [profile("shop"), profile("audit")];
         let console = create_console(&root, "shop").unwrap();
-        assert!(console.ends_with(".idecraft/consoles/shop/console.sql"));
+        assert!(console.ends_with(".ferris-idea/consoles/shop/console.sql"));
         assert!(next_console(&root, "shop").ends_with("console_2.sql"));
         assert_eq!(
             bound_connection(&root, &console, &profiles).as_deref(),

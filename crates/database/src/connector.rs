@@ -1,7 +1,7 @@
 //! Database connectors (`SPEC-0300`, ADR-0020): one database system on top of a protocol family,
 //! described by a declarative, versioned TOML definition. The built-in systems are such files,
 //! compiled in; users add more in their connectors folder. A definition is data only — it never
-//! names anything IDECraft would execute or fetch.
+//! names anything Ferris IDEA would execute or fetch.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -105,14 +105,14 @@ const FAMILY_SCHEMES: &[&str] = &[
     "rediss",
 ];
 
-/// Protocol family of a connector: an IDECraft driver, or the generic ODBC route (ADR-0020).
+/// Protocol family of a connector: a Ferris IDEA driver, or the generic ODBC route (ADR-0020).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Family {
-    /// One of IDECraft's own drivers.
+    /// One of Ferris IDEA's own drivers.
     Native(Dialect),
     /// Through an ODBC driver manager; not connectable yet.
     Odbc,
-    /// A non-relational store family of `idecraft-nosql` (ADR-0022): `mongodb` or `redis`.
+    /// A non-relational store family of `ferris-idea-nosql` (ADR-0022): `mongodb` or `redis`.
     /// Connected through store profiles (SPEC-0310), not through SQL sessions.
     Store(&'static str),
     /// A non-relational system planned in ADR-0022 (`cassandra`, `dynamodb`, `couchbase`);
@@ -258,7 +258,7 @@ impl Category {
     }
 }
 
-/// How far IDECraft vouches for a system (behaviour 4, ADR-0020 decision 5).
+/// How far Ferris IDEA vouches for a system (behaviour 4, ADR-0020 decision 5).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Status {
@@ -288,7 +288,7 @@ impl Status {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase", tag = "kind", content = "path")]
 pub enum Origin {
-    /// Compiled into IDECraft.
+    /// Compiled into Ferris IDEA.
     BuiltIn,
     /// A file in the connectors folder written or copied by the user.
     User(PathBuf),
@@ -453,7 +453,7 @@ impl Connector {
         self.family.dialect().is_some()
     }
 
-    /// How far IDECraft vouches for the system, one line for the connection dialog
+    /// How far Ferris IDEA vouches for the system, one line for the connection dialog
     /// (`SPEC-0116` v3 behaviour 10, `SPEC-0300` behaviour 4).
     pub fn test_level(&self) -> String {
         match self.status {
@@ -461,9 +461,9 @@ impl Connector {
                 Some(v) => format!("Tested with {v}"),
                 None => "Supported".into(),
             },
-            Status::Beta => "Beta: IDECraft has not tested this system against a server".into(),
-            Status::User => "Your own definition; IDECraft has not tested it".into(),
-            Status::Imported => "Imported definition; IDECraft has not tested it".into(),
+            Status::Beta => "Beta: Ferris IDEA has not tested this system against a server".into(),
+            Status::User => "Your own definition; Ferris IDEA has not tested it".into(),
+            Status::Imported => "Imported definition; Ferris IDEA has not tested it".into(),
         }
     }
 
@@ -489,7 +489,7 @@ impl Connector {
     pub fn shown_note(&self) -> Option<String> {
         match self.family {
             Family::Odbc => {
-                return Some("Needs the ODBC route, which IDECraft does not have yet.".into());
+                return Some("Needs the ODBC route, which Ferris IDEA does not have yet.".into());
             }
             Family::Planned(_) => {
                 return Some(
@@ -500,7 +500,7 @@ impl Connector {
             }
             Family::Plugin(_) => {
                 return Some(format!(
-                    "Connects through the WebAssembly plugin `{}`; IDECraft does not review its code.",
+                    "Connects through the WebAssembly plugin `{}`; Ferris IDEA does not review its code.",
                     self.plugin.as_deref().unwrap_or("?")
                 ));
             }
@@ -687,16 +687,17 @@ pub fn parse_definition(text: &str, origin: Origin) -> Result<Connector, Vec<Pro
         r.problem("", "the file is larger than 64 KiB");
         return Err(r.problems);
     }
-    let table: toml::Table = match toml::from_str(text) {
+    let mut table: toml::Table = match toml::from_str(text) {
         Ok(t) => t,
         Err(e) => {
             r.problem("", format!("not valid TOML: {}", e.message()));
             return Err(r.problems);
         }
     };
+    ferris_idea_core::format::adopt_former_envelope(&mut table);
     // The exchange layout of ADR-0021 / SPEC-0302 behaviour 0 is read into the plain layout; its
     // problems are reported with the table they belong to.
-    let envelope = table.contains_key("idecraft");
+    let envelope = table.contains_key("ferris-idea");
     let Some(table) = unwrap_envelope(table, &mut r) else {
         return Err(r.problems);
     };
@@ -715,11 +716,11 @@ pub fn parse_definition(text: &str, origin: Origin) -> Result<Connector, Vec<Pro
         let mapped = problems.into_iter().map(|mut p| {
             let head = p.path.split(['.', '[']).next().unwrap_or("");
             if matches!(head, "id" | "name" | "homepage") {
-                p.path = format!("idecraft.{}", p.path);
+                p.path = format!("ferris-idea.{}", p.path);
             } else if !p.path.is_empty()
                 && !matches!(
                     head,
-                    "connection" | "sql" | "introspection" | "plugin" | "idecraft"
+                    "connection" | "sql" | "introspection" | "plugin" | "ferris-idea"
                 )
             {
                 p.path = format!("connector.{}", p.path);
@@ -753,30 +754,33 @@ const ENVELOPE_KEYS: &[&str] = &[
     "min_version",
 ];
 
-/// `table` in the plain layout: unchanged without `[idecraft]`; with it, the envelope checked and
+/// `table` in the plain layout: unchanged without `[ferris-idea]`; with it, the envelope checked and
 /// `[connector]` lifted to the top. `None` after a problem that makes the rest meaningless (wrong
 /// kind or a newer format).
 fn unwrap_envelope(mut table: toml::Table, r: &mut Reader) -> Option<toml::Table> {
-    let Some(envelope) = table.remove("idecraft") else {
+    let Some(envelope) = table.remove("ferris-idea") else {
         return Some(table);
     };
     let toml::Value::Table(envelope) = envelope else {
-        r.problem("idecraft", "must be a table");
+        r.problem("ferris-idea", "must be a table");
         return None;
     };
     for key in envelope.keys() {
         if !ENVELOPE_KEYS.contains(&key.as_str()) {
-            r.problem(&format!("idecraft.{key}"), "unknown key");
+            r.problem(&format!("ferris-idea.{key}"), "unknown key");
         }
     }
     match envelope.get("kind") {
         Some(toml::Value::String(k)) if k == "connector" => {}
         Some(toml::Value::String(k)) => {
-            r.problem("idecraft.kind", format!("is a `{k}` file, not `connector`"));
+            r.problem(
+                "ferris-idea.kind",
+                format!("is a `{k}` file, not `connector`"),
+            );
             return None;
         }
         _ => {
-            r.problem("idecraft.kind", "is missing; write kind = \"connector\"");
+            r.problem("ferris-idea.kind", "is missing; write kind = \"connector\"");
             return None;
         }
     }
@@ -784,15 +788,15 @@ fn unwrap_envelope(mut table: toml::Table, r: &mut Reader) -> Option<toml::Table
         Some(toml::Value::Integer(FORMAT)) => {}
         Some(toml::Value::Integer(n)) if *n > FORMAT => {
             r.problem(
-                "idecraft.format",
+                "ferris-idea.format",
                 format!(
-                    "written by a newer IDECraft (format {n}); this version reads connector files up to format {FORMAT}"
+                    "written by a newer Ferris IDEA (format {n}); this version reads connector files up to format {FORMAT}"
                 ),
             );
             return None;
         }
         _ => {
-            r.problem("idecraft.format", "must be an integer ≥ 1");
+            r.problem("ferris-idea.format", "must be an integer ≥ 1");
             return None;
         }
     }
@@ -800,16 +804,16 @@ fn unwrap_envelope(mut table: toml::Table, r: &mut Reader) -> Option<toml::Table
         && newer_than_this(min)
     {
         r.problem(
-            "idecraft.min_version",
+            "ferris-idea.min_version",
             format!(
-                "needs IDECraft {min} or newer; this is {}",
+                "needs Ferris IDEA {min} or newer; this is {}",
                 env!("CARGO_PKG_VERSION")
             ),
         );
     }
     for key in ["author", "licence"] {
         if envelope.get(key).is_some_and(|v| !v.is_str()) {
-            r.problem(&format!("idecraft.{key}"), "must be a string");
+            r.problem(&format!("ferris-idea.{key}"), "must be a string");
         }
     }
     let mut out = toml::Table::new();
@@ -831,7 +835,7 @@ fn unwrap_envelope(mut table: toml::Table, r: &mut Reader) -> Option<toml::Table
             "connection" | "sql" | "introspection" | "plugin" => {
                 out.insert(key, value);
             }
-            "format" => r.problem("format", "give the format once, in [idecraft]"),
+            "format" => r.problem("format", "give the format once, in [ferris-idea]"),
             other => r.problem(other, "unknown key"),
         }
     }
@@ -843,7 +847,7 @@ fn unwrap_envelope(mut table: toml::Table, r: &mut Reader) -> Option<toml::Table
     Some(out)
 }
 
-/// Whether version `min` (`a.b.c`) is newer than this IDECraft.
+/// Whether version `min` (`a.b.c`) is newer than this Ferris IDEA.
 fn newer_than_this(min: &str) -> bool {
     let parse = |v: &str| -> Vec<u64> {
         v.trim()
@@ -885,7 +889,7 @@ fn parse_table(
         Some(toml::Value::Integer(FORMAT)) => {}
         Some(toml::Value::Integer(n)) => r.problem(
             "format",
-            format!("format {n} is not known; this IDECraft reads format 1"),
+            format!("format {n} is not known; this Ferris IDEA reads format 1"),
         ),
         Some(_) => r.problem("format", "must be the number 1"),
         None => r.problem("format", "is missing; write `format = 1`"),
@@ -1242,20 +1246,13 @@ pub const IMPORTED_FILE: &str = "imported.json";
 /// Extension of shared connector files (ADR-0021).
 pub const EXTENSION: &str = "idcconnector";
 
-/// The user's connectors folder: `$IDECRAFT_CONNECTORS_DIR`, else `connectors/` in the IDECraft
-/// settings folder (`$IDECRAFT_CONFIG_DIR`, `$XDG_CONFIG_HOME/idecraft`, `~/.config/idecraft`).
+/// The user's connectors folder: `$FERRIS_IDEA_CONNECTORS_DIR`, else `connectors/` in the Ferris IDEA
+/// settings folder (`$FERRIS_IDEA_CONFIG_DIR`, `$XDG_CONFIG_HOME/ferris-idea`, `~/.config/ferris-idea`).
 pub fn connectors_dir() -> Option<PathBuf> {
-    if let Some(d) = std::env::var_os("IDECRAFT_CONNECTORS_DIR") {
+    if let Some(d) = ferris_idea_core::product_var_os("FERRIS_IDEA_CONNECTORS_DIR") {
         return Some(PathBuf::from(d));
     }
-    let config = if let Some(d) = std::env::var_os("IDECRAFT_CONFIG_DIR") {
-        PathBuf::from(d)
-    } else if let Some(d) = std::env::var_os("XDG_CONFIG_HOME") {
-        PathBuf::from(d).join("idecraft")
-    } else {
-        PathBuf::from(std::env::var_os("HOME")?).join(".config/idecraft")
-    };
-    Some(config.join("connectors"))
+    Some(ferris_idea_core::user_config_dir()?.join("connectors"))
 }
 
 /// Ids of the definitions in `dir` that were imported, from [`IMPORTED_FILE`].
@@ -1719,7 +1716,8 @@ mod tests {
 
     #[test]
     fn folder_adds_valid_files_and_lists_the_rest() {
-        let dir = std::env::temp_dir().join(format!("idecraft-connectors-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("ferris-idea-connectors-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let def = |id: &str, scheme: &str| {
@@ -1770,7 +1768,7 @@ mod tests {
 
     #[test]
     fn exchange_layout_reads_like_the_plain_one() {
-        let text = "[idecraft]\nkind = \"connector\"\nformat = 1\nid = \"acme\"\nname = \"Acme DB\"\n\
+        let text = "[ferris-idea]\nkind = \"connector\"\nformat = 1\nid = \"acme\"\nname = \"Acme DB\"\n\
                     author = \"Ada\"\nlicence = \"MIT\"\n\n[connector]\nfamily = \"mysql\"\n\
                     category = \"cloud\"\n\n[connection]\nschemes = [\"acme\"]\ndefault_port = 3307\n";
         let c = user(text).unwrap();
@@ -1783,19 +1781,19 @@ mod tests {
         let wrong = user(&text.replace("kind = \"connector\"", "kind = \"keymap\"")).unwrap_err();
         assert_eq!(
             wrong[0].to_string(),
-            "idecraft.kind: is a `keymap` file, not `connector`"
+            "ferris-idea.kind: is a `keymap` file, not `connector`"
         );
         let newer = user(&text.replace("format = 1", "format = 2")).unwrap_err();
         assert_eq!(
             newer[0].message,
-            "written by a newer IDECraft (format 2); this version reads connector files up to format 1"
+            "written by a newer Ferris IDEA (format 2); this version reads connector files up to format 1"
         );
         let both = user(&format!("format = 1\n{text}")).unwrap_err();
         assert_eq!(both[0].path, "format");
         let future = user(&text.replace("author", "min_version = \"99.0.0\"\nauthor")).unwrap_err();
-        assert_eq!(future[0].path, "idecraft.min_version");
+        assert_eq!(future[0].path, "ferris-idea.min_version");
         let odd = user(&text.replace("author", "colour = 1\nauthor")).unwrap_err();
-        assert_eq!(odd[0].path, "idecraft.colour");
+        assert_eq!(odd[0].path, "ferris-idea.colour");
     }
 
     #[test]

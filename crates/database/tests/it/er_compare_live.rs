@@ -1,5 +1,5 @@
-//! Live checks against the reference servers (`IDECRAFT_TEST_PG`, `IDECRAFT_TEST_MYSQL`,
-//! `IDECRAFT_TEST_MARIADB`; without them nothing is done). Changes happen only in throwaway
+//! Live checks against the reference servers (`FERRIS_IDEA_TEST_PG`, `FERRIS_IDEA_TEST_MYSQL`,
+//! `FERRIS_IDEA_TEST_MARIADB`; without them nothing is done). Changes happen only in throwaway
 //! schemas (PostgreSQL) or databases (MySQL, MariaDB) that are dropped afterwards.
 //! - SPEC-0013/AK-6, SPEC-0022/AK-10: view definitions and what `stock_value` uses; constraint names.
 //! - SPEC-0018/AK-6: a target with a view on tables the source lacks migrates without error.
@@ -11,7 +11,7 @@
 
 use crate::common;
 
-use idecraft_database::{
+use ferris_idea_database::{
     ConnectionProfile, DdlStatement, Dialect, OnError, Outcome, Session, Table, ViewDef,
     compare_between, compare_with_views, constraint_names, derived_renames, er_model_with_views,
     introspect, introspect_schema, migration_between, migration_script, migration_script_in,
@@ -89,9 +89,9 @@ async fn reference_view(var: &str) {
 
 #[tokio::test]
 async fn reference_views_and_constraints() {
-    reference_view("IDECRAFT_TEST_PG").await;
-    reference_view("IDECRAFT_TEST_MYSQL").await;
-    reference_view("IDECRAFT_TEST_MARIADB").await;
+    reference_view("FERRIS_IDEA_TEST_PG").await;
+    reference_view("FERRIS_IDEA_TEST_MYSQL").await;
+    reference_view("FERRIS_IDEA_TEST_MARIADB").await;
 }
 
 /// Opens two throwaway namespaces named after `label` on the server of `var`: (source, target,
@@ -99,6 +99,7 @@ async fn reference_views_and_constraints() {
 async fn namespaces(var: &str, label: &str) -> Option<(Session, Session, Vec<String>)> {
     let src = session(var).await?;
     let tgt = session(var).await?;
+    common::drop_leftovers(&src, &["m57_"]).await;
     let tag = std::process::id();
     let (a, b) = (
         format!("m57_{label}_src_{tag}"),
@@ -254,7 +255,7 @@ async fn unchanged_view_stays(var: &str) {
 /// target's `pd_note` has a fill factor the source's lacks; `pd_new` is only in the source.
 #[tokio::test]
 async fn storage_parameters_reach_the_target() {
-    let Some((src, tgt, cleanup)) = namespaces("IDECRAFT_TEST_PG", "storage").await else {
+    let Some((src, tgt, cleanup)) = namespaces("FERRIS_IDEA_TEST_PG", "storage").await else {
         return;
     };
     ok(
@@ -280,7 +281,7 @@ async fn storage_parameters_reach_the_target() {
     };
     let (st, sv) = read(&src).await;
     let (tt, tv) = read(&tgt).await;
-    let table = |tables: &[idecraft_database::Table], name: &str| {
+    let table = |tables: &[ferris_idea_database::Table], name: &str| {
         tables
             .iter()
             .find(|t| t.name == name)
@@ -326,21 +327,21 @@ async fn storage_parameters_reach_the_target() {
 
 #[tokio::test]
 async fn hand_test_121_unchanged_view_stays_on_the_servers() {
-    unchanged_view_stays("IDECRAFT_TEST_PG").await;
-    unchanged_view_stays("IDECRAFT_TEST_MYSQL").await;
-    unchanged_view_stays("IDECRAFT_TEST_MARIADB").await;
+    unchanged_view_stays("FERRIS_IDEA_TEST_PG").await;
+    unchanged_view_stays("FERRIS_IDEA_TEST_MYSQL").await;
+    unchanged_view_stays("FERRIS_IDEA_TEST_MARIADB").await;
 }
 
 #[tokio::test]
 async fn migration_with_views_runs_on_the_servers() {
-    migrate_with_views("IDECRAFT_TEST_PG").await;
-    migrate_with_views("IDECRAFT_TEST_MYSQL").await;
-    migrate_with_views("IDECRAFT_TEST_MARIADB").await;
+    migrate_with_views("FERRIS_IDEA_TEST_PG").await;
+    migrate_with_views("FERRIS_IDEA_TEST_MYSQL").await;
+    migrate_with_views("FERRIS_IDEA_TEST_MARIADB").await;
 }
 
 #[tokio::test]
 async fn postgres_renames_a_column_and_its_check_constraint() {
-    let Some((s, _, cleanup)) = namespaces("IDECRAFT_TEST_PG", "ren").await else {
+    let Some((s, _, cleanup)) = namespaces("FERRIS_IDEA_TEST_PG", "ren").await else {
         return;
     };
     ok(
@@ -398,10 +399,11 @@ async fn value(s: &Session, sql: &str) -> String {
 /// definitions; views and defaults of a schema outside the search path are written relative to it.
 #[tokio::test]
 async fn postgres_reads_constraints_and_views_relative_to_their_schema() {
-    let Some(s) = session("IDECRAFT_TEST_PG").await else {
+    let Some(s) = session("FERRIS_IDEA_TEST_PG").await else {
         return;
     };
     let x = format!("m68_rel_{}", std::process::id());
+    common::drop_leftovers(&s, &["m68_rel_"]).await;
     let _ = s
         .run_script(
             &format!("drop schema if exists {x} cascade"),
@@ -544,7 +546,7 @@ fn script_in(statements: &[DdlStatement], selected: &[bool], target: &str) -> St
 /// keep constraints and foreign keys, write view bodies for the target and leave no differences.
 #[tokio::test]
 async fn obs_0068_schemas_migrate_both_ways() {
-    let Some(s) = session("IDECRAFT_TEST_PG").await else {
+    let Some(s) = session("FERRIS_IDEA_TEST_PG").await else {
         return;
     };
     let d = Dialect::PostgreSql;
@@ -692,11 +694,12 @@ async fn columns_of(s: &Session, schema: &str, table: &str) -> String {
 /// everything in the target, and the session's `search_path` is the same afterwards, also after a
 /// script that fails.
 async fn pins_on_postgres() {
-    let Some(s) = session("IDECRAFT_TEST_PG").await else {
+    let Some(s) = session("FERRIS_IDEA_TEST_PG").await else {
         return;
     };
     let d = Dialect::PostgreSql;
     let tag = std::process::id();
+    common::drop_leftovers(&s, &["pin_src_", "pin_tgt_", "pin_wrong_"]).await;
     let (a, b, w) = (
         format!("pin_src_{tag}"),
         format!("pin_tgt_{tag}"),
@@ -850,6 +853,7 @@ async fn pins_with_use(var: &str) {
     };
     let d = s.dialect();
     let tag = std::process::id();
+    common::drop_leftovers(&s, &["pin_src_", "pin_tgt_", "pin_wrong_"]).await;
     let (a, b, w) = (
         format!("pin_src_{tag}"),
         format!("pin_tgt_{tag}"),
@@ -923,6 +927,6 @@ async fn pins_with_use(var: &str) {
 #[tokio::test]
 async fn the_script_pins_its_target_schema() {
     pins_on_postgres().await;
-    pins_with_use("IDECRAFT_TEST_MYSQL").await;
-    pins_with_use("IDECRAFT_TEST_MARIADB").await;
+    pins_with_use("FERRIS_IDEA_TEST_MYSQL").await;
+    pins_with_use("FERRIS_IDEA_TEST_MARIADB").await;
 }

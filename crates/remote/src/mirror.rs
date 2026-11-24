@@ -6,19 +6,19 @@ use std::path::{Component, Path, PathBuf};
 
 use crate::ssh::SshTarget;
 
-/// The user's cache folder for IDECraft (`$XDG_CACHE_HOME`, else `~/Library/Caches` on macOS,
+/// The user's cache folder for Ferris IDEA (`$XDG_CACHE_HOME`, else `~/Library/Caches` on macOS,
 /// else `~/.cache`).
 pub fn cache_dir() -> PathBuf {
     if let Some(dir) = std::env::var_os("XDG_CACHE_HOME").filter(|d| !d.is_empty()) {
-        return PathBuf::from(dir).join("idecraft");
+        return PathBuf::from(dir).join("ferris-idea");
     }
     let home = std::env::var_os("HOME")
         .map(PathBuf::from)
         .unwrap_or_else(std::env::temp_dir);
     if cfg!(target_os = "macos") {
-        home.join("Library/Caches/idecraft")
+        home.join("Library/Caches/ferris-idea")
     } else {
-        home.join(".cache/idecraft")
+        home.join(".cache/ferris-idea")
     }
 }
 

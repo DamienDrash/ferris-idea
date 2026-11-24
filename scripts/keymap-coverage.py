@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""How much of the reference's macOS keymap IDECraft covers (SPEC-0028 v4 behaviour 9).
+"""How much of the reference's macOS keymap Ferris IDEA covers (SPEC-0028 v4 behaviour 9).
 
 Compares, without a window, the macOS keymap of the bundled upstream keymap files
 (`crates/ui/keymaps/`, intellij-community, Apache-2.0, pinned in `crates/ui/keymaps/README.md`)
-with the keymap IDECraft bundles (those files plus `crates/ui/keymaps/macos-deviations.json`) and
-with the action ids IDECraft's sources carry out, and writes
+with the keymap Ferris IDEA bundles (those files plus `crates/ui/keymaps/macos-deviations.json`) and
+with the action ids Ferris IDEA's sources carry out, and writes
 `docs/research/KEYMAP_COVERAGE.md`. Reads only files of this repository; the output depends on
 nothing else (no date, no commit, sorted rows).
 
@@ -28,7 +28,7 @@ MODIFIERS = ["control", "alt", "shift", "meta", "altGraph"]
 DISPATCH_DIRS = ["crates/workbench/src"]
 DISPATCH_FILES = ["crates/editor/src/commands.rs", "crates/ui/src/tool_windows.rs"]
 
-# Reference actions IDECraft carries out under another id or with a fixed key:
+# Reference actions Ferris IDEA carries out under another id or with a fixed key:
 # reference id -> (what carries it out, the keymap id whose shortcuts count or None, fixed keys).
 MAPPED = {
     "EditorDelete": ("`$Delete`", "$Delete", []),
@@ -118,7 +118,7 @@ RULES = [
     (r"^(ReformatCode$|ShowReformatFileDialog$|AutoIndentLines$|OptimizeImports$|ReformatWithPrettierAction$)", "editor", "SPEC-0075 (Reformat Code)"),
     (r"^(Generate$|OverrideMethods$|ImplementMethods$|DelegateMethods$|SurroundWith$|Unwrap$|MoveStatement|MoveLine|MoveElement|CommentBy|EditorCompleteStatement$|BraceOrQuoteOut$|FillParagraph$)", "editor", "SPEC-0056 (editor actions), SPEC-0122 (Java and Kotlin editor)"),
     (r"^(Editor|\$|SelectNextOccurrence$|SelectAllOccurrences$|UnselectPreviousOccurrence$|FindWordAtCaret$|PasteMultiple$|CopyPaths$|CopyReference$|CutCopyPasteGroup)", "editor", "SPEC-0057 (editor commands), SPEC-0058 (editor view)"),
-    (r"^(FileChooser\.)", "other", "no specification yet (IDECraft uses the system's file dialog)"),
+    (r"^(FileChooser\.)", "other", "no specification yet (Ferris IDEA uses the system's file dialog)"),
     (r"^(ShowSettings$|ShowProjectStructureSettings$)", "other", "SPEC-0105 (settings dialog)"),
     (r"^(NewElement|NewScratchFile$|SaveAll$|SaveAs$|Synchronize$|ForceRefresh$|ExportToTextFile$|\$?Print$)", "other", "SPEC-0059 (project tree and tabs)"),
     (r"^(NextWindow$|PreviousWindow$|NextProjectWindow$|PreviousProjectWindow$|ToggleFullScreen$|MinimizeCurrentWindow$|Exit$|ZoomInIdeAction$|ZoomOutIdeAction$|ResetIdeScaleAction$|ManageRecentProjects$|EmojiAndSymbols$)", "other", "SPEC-0124 (menu bar), SPEC-0061 (window chrome)"),
@@ -290,7 +290,7 @@ def build():
     w("**Reference:** the macOS keymap of the open keymap files of `JetBrains/intellij-community`")
     w(f"(Apache-2.0) at commit `{pinned_commit()}`, bundled unchanged in `crates/ui/keymaps/`:")
     w("`Mac OS X 10.5+.xml` over `$default.xml`, inherited shortcuts with Control and Meta exchanged")
-    w("(SPEC-0028 behaviours 3 and 3a). **IDECraft:** the bundled macOS keymap, which is these files plus")
+    w("(SPEC-0028 behaviours 3 and 3a). **Ferris IDEA:** the bundled macOS keymap, which is these files plus")
     w("the shortcuts listed in `crates/ui/keymaps/macos-deviations.json`.")
     w("")
     w("## What is measured, and what is not")
@@ -300,10 +300,10 @@ def build():
     w("  modules and comments left out), or when it is one of the mapped actions below. This is evidence")
     w("  from the source text, not from running the action: it says neither that the action does all the")
     w("  reference's action does, nor in which focus it works.")
-    w("- **same** means every shortcut the reference keymap gives the action is bound in IDECraft's keymap;")
-    w("  additional shortcuts of IDECraft are listed under the deviations. Mouse shortcuts and gestures are")
+    w("- **same** means every shortcut the reference keymap gives the action is bound in Ferris IDEA's keymap;")
+    w("  additional shortcuts of Ferris IDEA are listed under the deviations. Mouse shortcuts and gestures are")
     w("  compared as keymap entries only.")
-    w("- A chord an action yields to another action of IDECraft's keymap (`GotoTest` on the chord of")
+    w("- A chord an action yields to another action of Ferris IDEA's keymap (`GotoTest` on the chord of")
     w("  `ReopenClosedTab`, SPEC-0071 v10) does not count as its shortcut: the action exists and the")
     w("  chord does not run it.")
     w("- The reference also binds keys in the declarations of its actions and plugins, outside the keymap")
@@ -322,8 +322,8 @@ def build():
     w(f"| action missing | {count['action missing']} | {pct(count['action missing'], total)} | — |")
     w(f"| **action present** | **{have}** | **{pct(have, total)}** | 100.0 % |")
     w("")
-    w(f"Chords on which IDECraft's keymap binds an action the reference keymap does not bind there: {len(conflicts)}")
-    w(f"(table below). Shortcuts of IDECraft on chords the reference keymap leaves free: {len(own)}.")
+    w(f"Chords on which Ferris IDEA's keymap binds an action the reference keymap does not bind there: {len(conflicts)}")
+    w(f"(table below). Shortcuts of Ferris IDEA on chords the reference keymap leaves free: {len(own)}.")
     w("")
     w("| Area | Bound in the reference | same | different shortcut | exists without shortcut | missing | present |")
     w("|---|---:|---:|---:|---:|---:|---:|")
@@ -336,9 +336,9 @@ def build():
     w("")
     w("## Mapped actions")
     w("")
-    w("Reference actions IDECraft carries out under another id or with a fixed key.")
+    w("Reference actions Ferris IDEA carries out under another id or with a fixed key.")
     w("")
-    w("| Reference action | Carried out by | Reference shortcuts | IDECraft shortcuts | Result |")
+    w("| Reference action | Carried out by | Reference shortcuts | Ferris IDEA shortcuts | Result |")
     w("|---|---|---|---|---|")
     for r in rows:
         if r["action"] in MAPPED:
@@ -357,32 +357,32 @@ def build():
     w("")
     w("## Conflicts: the same chord, another action")
     w("")
-    w("Chords on which IDECraft's keymap binds an action that the reference keymap does not bind there,")
+    w("Chords on which Ferris IDEA's keymap binds an action that the reference keymap does not bind there,")
     w("while the reference keymap binds other actions to it.")
     w("")
-    w("| Chord | IDECraft's action | Reference's actions on the chord | Effect in IDECraft |")
+    w("| Chord | Ferris IDEA's action | Reference's actions on the chord | Effect in Ferris IDEA |")
     w("|---|---|---|---|")
     for d, theirs in conflicts:
         present = [a for a in theirs if carried_or_mapped(a)]
         names = ", ".join(f"`{a}`" + (" (present)" if a in present else " (missing)") for a in theirs)
         yielding = [a for a in present if YIELDS.get(a) == d["action"]]
         if yielding and len(yielding) == len(present):
-            effect = "IDECraft's action runs; " + ", ".join(f"`{a}`" for a in yielding) + " yields the chord and is reached through its menu and Find Action"
+            effect = "Ferris IDEA's action runs; " + ", ".join(f"`{a}`" for a in yielding) + " yields the chord and is reached through its menu and Find Action"
         elif not present:
-            effect = "only IDECraft's action can run"
+            effect = "only Ferris IDEA's action can run"
         elif MAPPED.get(present[0], (None, None))[1] == d["action"] and len(present) == 1:
-            effect = "the same command under IDECraft's id"
+            effect = "the same command under Ferris IDEA's id"
         else:
             effect = "shared: the keymap offers both, the focused part decides"
         w(f"| `{d['shortcut']}` | `{d['action']}` | {names} | {effect} |")
     if not conflicts:
         w("| — | — | — | — |")
     w("")
-    w("## Shortcuts of IDECraft on chords the reference keymap leaves free")
+    w("## Shortcuts of Ferris IDEA on chords the reference keymap leaves free")
     w("")
     w("Free in the keymap files; the reference's plugins may still use them.")
     w("")
-    w("| Chord | IDECraft's action | Decided by |")
+    w("| Chord | Ferris IDEA's action | Decided by |")
     w("|---|---|---|")
     for d, _ in own:
         w(f"| `{d['shortcut']}` | `{d['action']}` | {d['decided_by']} |")
@@ -390,10 +390,10 @@ def build():
     w("## Reference shortcuts on chords macOS takes itself")
     w("")
     w("With macOS's default settings these chords may not reach an application. They are kept as the")
-    w("reference has them (the user can free them in System Settings); where IDECraft adds a second key,")
+    w("reference has them (the user can free them in System Settings); where Ferris IDEA adds a second key,")
     w("the deviations above say so.")
     w("")
-    w("| Chord | macOS uses it for | Reference actions | Present in IDECraft |")
+    w("| Chord | macOS uses it for | Reference actions | Present in Ferris IDEA |")
     w("|---|---|---|---|")
     for chord in sorted(MACOS_SYSTEM):
         actions = sorted(by_chord.get(chord, []))
@@ -403,7 +403,7 @@ def build():
     w("")
     w("## Missing actions by area")
     w("")
-    w("Bound in the reference's macOS keymap, no action in IDECraft. The owner is the existing")
+    w("Bound in the reference's macOS keymap, no action in Ferris IDEA. The owner is the existing")
     w("specification that would take the action, assigned by the id's pattern; nothing is implied about")
     w("whether or when it is built.")
     for area in AREAS:
@@ -421,7 +421,7 @@ def build():
     w("")
     w("## Every action the reference's macOS keymap binds")
     w("")
-    w("| Action | Area | Reference shortcuts | IDECraft action | IDECraft shortcuts | Result |")
+    w("| Action | Area | Reference shortcuts | Ferris IDEA action | Ferris IDEA shortcuts | Result |")
     w("|---|---|---|---|---|---|")
     for r in rows:
         w(f"| `{r['action']}` | {r['area']} | {code(r['ref'])} | {r['how'] or '—'} | {code(r['mine'])} | {r['status']} |")

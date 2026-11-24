@@ -1,17 +1,17 @@
 //! The Endpoints tool window (`SPEC-0103`): the HTTP endpoints declared in the project's code; Enter
-//! opens the declaration, "Request" writes a request for it into `.idecraft/generated-requests.http`.
+//! opens the declaration, "Request" writes a request for it into `.ferris-idea/generated-requests.http`.
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_languages::endpoints::{Endpoint, EndpointKind, project_endpoints};
 use gpui::{Context, EventEmitter, FocusHandle, KeyDownEvent, Window, div, prelude::*, px};
-use idecraft_languages::endpoints::{Endpoint, EndpointKind, project_endpoints};
 
 use crate::palette::Palette;
 use crate::tips::Tipped;
 use crate::workbench_view::c;
 
 /// The file generated requests are added to, workspace-relative.
-pub const GENERATED_REQUESTS: &str = ".idecraft/generated-requests.http";
+pub const GENERATED_REQUESTS: &str = ".ferris-idea/generated-requests.http";
 
 /// What the window asks the workbench to do.
 pub enum EndpointsEvent {
@@ -32,7 +32,7 @@ pub struct EndpointsView {
 
 impl EventEmitter<EndpointsEvent> for EndpointsView {}
 
-pub use idecraft_languages::endpoints::request_text;
+pub use ferris_idea_languages::endpoints::request_text;
 
 impl EndpointsView {
     /// A window for the workspace at `root`; scans it in the background.

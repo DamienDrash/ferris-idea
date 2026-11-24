@@ -5,7 +5,7 @@ use std::net::{TcpListener, TcpStream};
 use std::sync::mpsc::{Sender, channel};
 use std::time::Duration;
 
-use idecraft_http::{ResolvedRequest, SendOptions, send, send_with};
+use ferris_idea_http::{ResolvedRequest, SendOptions, send, send_with};
 
 /// What the server saw: request line, headers, body.
 type Seen = (String, Vec<(String, String)>, String);
@@ -88,7 +88,7 @@ fn get_with_content_length() {
     assert_eq!(line, "GET /a?b=1 HTTP/1.1");
     let get = |n: &str| headers.iter().find(|(k, _)| k == n).map(|(_, v)| v.clone());
     assert_eq!(get("Host"), Some(format!("127.0.0.1:{port}")));
-    assert_eq!(get("User-Agent").as_deref(), Some("IDECraft"));
+    assert_eq!(get("User-Agent").as_deref(), Some("FerrisIDEA"));
     assert_eq!(get("Connection").as_deref(), Some("close"));
 }
 
@@ -341,7 +341,7 @@ fn unresolved_placeholders_are_never_sent() {
     const SENDS: usize = 12;
     let ok = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok".to_owned();
     let (port, seen) = server(vec![ok; SENDS]);
-    let file = idecraft_http::parse(
+    let file = ferris_idea_http::parse(
         "@host = 127.0.0.1:{{port}}\n\n\
          ### unknown\nGET http://{{host}}/u?x={{$foo bar}}\n\n\
          ### not closed\nGET http://{{host}}/n\nX-Id: {{$random.integer(1,\n\n\
@@ -349,7 +349,7 @@ fn unresolved_placeholders_are_never_sent() {
          ### OBS-0061\nGET http://{{host}}/d?u={{$uuid}}&t={{$timestamp}}&i={{$randomInt}}&r={{$random.integer(1, 5)}}\n",
     );
     let env = std::collections::BTreeMap::from([("port".to_owned(), port.to_string())]);
-    let requests = idecraft_http::resolve(&file, &env);
+    let requests = ferris_idea_http::resolve(&file, &env);
     assert_eq!(requests[0].unresolved, ["$foo bar"]);
     assert_eq!(requests[1].unresolved, ["{{$random.integer(1,"]);
     assert_eq!(requests[2].unresolved, ["$random.nothing(1, 2)"]);
@@ -360,7 +360,7 @@ fn unresolved_placeholders_are_never_sent() {
     assert!(requests[3].unresolved.is_empty(), "{:?}", requests[3]);
     // The values are generated afresh for each send.
     for _ in 0..SENDS {
-        let again = idecraft_http::resolve(&file, &env).remove(3);
+        let again = ferris_idea_http::resolve(&file, &env).remove(3);
         assert_eq!(send(&again, WAIT).unwrap().status, 200);
         // The server sees only these: the refused requests never connected.
         let (line, _, _) = seen.recv_timeout(WAIT).unwrap();

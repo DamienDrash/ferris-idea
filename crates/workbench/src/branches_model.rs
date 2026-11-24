@@ -3,8 +3,8 @@
 
 use std::collections::BTreeSet;
 
-use idecraft_core::{fuzzy_match, rank};
-use idecraft_vcs::{Branch, Operation, Tag, Tracking};
+use ferris_idea_core::{fuzzy_match, rank};
+use ferris_idea_vcs::{Branch, Operation, Tag, Tracking};
 
 /// What a row of a waiting operation does (`SPEC-0068` v3 behaviour 11).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -62,7 +62,7 @@ pub const FOOTER: &str = "↩ Checkout · → More · ⌥↩ Rebase onto · ⌘�
 /// What the branch widget says (v3 behaviour 10): the branch with `↑n ↓m`, or the waiting
 /// operation; `None` without branch and operation (detached HEAD). The flag asks for the warning
 /// icon.
-pub fn widget_label(state: &idecraft_vcs::BranchState) -> Option<(String, bool)> {
+pub fn widget_label(state: &ferris_idea_vcs::BranchState) -> Option<(String, bool)> {
     if let Some(op) = state.operation {
         return Some((
             match op {
@@ -101,7 +101,7 @@ pub struct PopupData {
     /// The operation that waits on conflicts (v3 behaviour 11).
     pub operation: Option<Operation>,
     /// The repository's favourite branches (v8 behaviour 25).
-    pub favorites: idecraft_core::RepoFavorites,
+    pub favorites: ferris_idea_core::RepoFavorites,
 }
 
 impl PopupData {
@@ -188,10 +188,10 @@ impl PopupAction {
     /// Its icon (own drawings, ADR-0009).
     pub fn icon(self) -> &'static str {
         match self {
-            Self::Update => "idecraft/vcsUpdate",
-            Self::Commit => "idecraft/vcsCommit",
-            Self::Push => "idecraft/vcsPush",
-            Self::CheckoutRevision => "idecraft/tag",
+            Self::Update => "ferris-idea/vcsUpdate",
+            Self::Commit => "ferris-idea/vcsCommit",
+            Self::Push => "ferris-idea/vcsPush",
+            Self::CheckoutRevision => "ferris-idea/tag",
         }
     }
 }
@@ -468,7 +468,7 @@ impl BranchList {
             let recent: Vec<&Branch> = data
                 .recent
                 .iter()
-                .filter_map(|n| local.iter().find(|b| &b.name == n && !b.current))
+                .filter_map(|n| local.iter().find(|b| &b.name == n))
                 .collect();
             if !recent.is_empty() {
                 list.push(BranchRow::Header("Recent"), 0);
@@ -545,7 +545,8 @@ impl BranchList {
         list.selected = if filter.is_empty() {
             list.rows
                 .iter()
-                .position(|r| matches!(r, BranchRow::Branch(b) if b.current))
+                // The current branch's row under "Local", not its entry in "Recent".
+                .rposition(|r| matches!(r, BranchRow::Branch(b) if b.current))
                 .or_else(|| {
                     list.rows
                         .iter()
@@ -656,7 +657,7 @@ mod tests {
 
     #[test]
     fn operation_rows_footer_and_widget_labels() {
-        use idecraft_vcs::BranchState;
+        use ferris_idea_vcs::BranchState;
         let list = BranchList::build_with(&[b("main", false, true)], "", Some(Operation::Rebase));
         assert_eq!(list.rows[0], BranchRow::Header("Rebase in progress"));
         assert_eq!(
@@ -755,7 +756,7 @@ mod tests {
                     gone: true,
                 },
             ],
-            recent: vec!["feature/discount".into(), "main".into(), "gone".into()],
+            recent: vec!["main".into(), "feature/discount".into(), "gone".into()],
             tags: vec![Tag {
                 name: "v1.0".into(),
                 target: "abc1234".into(),
@@ -768,10 +769,18 @@ mod tests {
         let at = |row: &BranchRow| list.position(row).unwrap();
         let recent = at(&BranchRow::Header("Recent"));
         assert!(
-            matches!(&list.rows[recent + 1], BranchRow::Branch(b) if b.name == "feature/discount"),
-            "Recent lists the branch, not the current one or a deleted one"
+            matches!(&list.rows[recent + 1], BranchRow::Branch(b) if b.name == "main" && b.current),
+            "v10: Recent lists the current branch first, as the reference does"
         );
-        assert!(matches!(&list.rows[recent + 2], BranchRow::Header("Local")));
+        assert!(
+            matches!(&list.rows[recent + 2], BranchRow::Branch(b) if b.name == "feature/discount"),
+            "then the branch checked out before it, not a deleted one"
+        );
+        assert!(matches!(&list.rows[recent + 3], BranchRow::Header("Local")));
+        assert!(
+            list.selected.unwrap() > recent + 3,
+            "the selection starts on the current branch under Local, not in Recent"
+        );
         let folder = at(&BranchRow::Folder(Group::Local, "feature".into(), true));
         assert_eq!(list.depth[folder + 1], 1);
         assert_eq!(

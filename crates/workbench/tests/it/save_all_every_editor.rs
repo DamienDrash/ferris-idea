@@ -11,15 +11,16 @@
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_workbench::editor_layout::MAIN;
+use ferris_idea_workbench::{EditorView, EverywhereEvent, WorkbenchView};
 use gpui::{AppContext, Entity, TestAppContext, VisualTestContext, px};
-use idecraft_workbench::editor_layout::MAIN;
-use idecraft_workbench::{EditorView, EverywhereEvent, WorkbenchView};
 
 type Bench = Entity<WorkbenchView>;
 type Editor = Entity<EditorView>;
 
 fn workspace(tag: &str, files: &[(&str, &str)]) -> PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-save-all-{tag}-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-save-all-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     for (path, text) in files {
@@ -355,7 +356,7 @@ fn save_document_writes_only_its_own_file(cx: &mut TestAppContext) {
     let _ = std::fs::remove_dir_all(&root);
 }
 
-/// Behaviour 12e: an editor outside a project window (`idecraft edit`) saves its own file on
+/// Behaviour 12e: an editor outside a project window (`ferris-idea edit`) saves its own file on
 /// `SaveAll`.
 #[gpui::test]
 fn an_editor_of_its_own_saves_its_file_on_save_all(cx: &mut TestAppContext) {

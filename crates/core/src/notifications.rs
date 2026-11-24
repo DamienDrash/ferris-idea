@@ -215,8 +215,8 @@ mod tests {
     #[test]
     fn one_log_per_project_window() {
         let registry = NotificationRegistry::default();
-        let a = std::env::temp_dir().join(format!("idecraft-notes-a-{}", std::process::id()));
-        let b = std::env::temp_dir().join(format!("idecraft-notes-b-{}", std::process::id()));
+        let a = std::env::temp_dir().join(format!("ferris-idea-notes-a-{}", std::process::id()));
+        let b = std::env::temp_dir().join(format!("ferris-idea-notes-b-{}", std::process::id()));
         assert!(registry.record(&a, "Saved", Kind::Info));
         assert!(registry.record(&b, "Cannot push", Kind::Error));
         assert_eq!(registry.list(&a).len(), 1);
@@ -226,7 +226,7 @@ mod tests {
         assert_eq!(registry.list(&b).len(), 1);
         registry.forget(&b);
         assert!(registry.list(&b).is_empty());
-        let none = std::env::temp_dir().join("idecraft-notes-none");
+        let none = std::env::temp_dir().join("ferris-idea-notes-none");
         assert!(registry.list(&none).is_empty());
     }
 }

@@ -16,14 +16,14 @@
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_core::LocalHistory;
+use ferris_idea_workbench::editor_layout::MAIN;
+use ferris_idea_workbench::{MenuPlace, WorkbenchView, hit_targets};
 use gpui::{Entity, Modifiers, MouseButton, TestAppContext, VisualTestContext, point, px};
-use idecraft_core::LocalHistory;
-use idecraft_workbench::editor_layout::MAIN;
-use idecraft_workbench::{MenuPlace, WorkbenchView, hit_targets};
 
 fn workspace(tag: &str, files: &[(&str, &str)], folders: &[&str]) -> PathBuf {
     let root = std::env::temp_dir().join(format!(
-        "idecraft-f020-handtests-{tag}-{}",
+        "ferris-idea-f020-handtests-{tag}-{}",
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&root);
@@ -45,7 +45,7 @@ fn window(
 ) -> (Entity<WorkbenchView>, &'static mut VisualTestContext) {
     hit_targets::enable();
     // The Delete question is drawn in the window, as in the window self-test.
-    cx.update(|cx| cx.set_global(idecraft_workbench::dialogs::DrawnConfirmations));
+    cx.update(|cx| cx.set_global(ferris_idea_workbench::dialogs::DrawnConfirmations));
     let at = root.to_path_buf();
     let window = cx.add_window(move |_, cx| WorkbenchView::new(&at, cx));
     let bench = window.root(cx).unwrap();
@@ -1405,7 +1405,7 @@ fn the_switcher_shows_two_columns_and_follows_the_keys(cx: &mut TestAppContext) 
 /// opens the selected file in a group on the right; Recent Locations opens its popup.
 #[gpui::test]
 fn the_switcher_takes_characters_and_opens_in_a_split(cx: &mut TestAppContext) {
-    use idecraft_ui::tool_windows::ToolWindow;
+    use ferris_idea_ui::tool_windows::ToolWindow;
     let root = workspace(
         "switcher-keys",
         &[
@@ -1450,13 +1450,13 @@ fn the_switcher_takes_characters_and_opens_in_a_split(cx: &mut TestAppContext) {
     bench.update_in(cx, |b, window, cx| b.focus_editor(window, cx));
     cx.simulate_keystrokes("ctrl-tab");
     assert!(switcher(&bench, cx).is_some());
-    let taken = idecraft_workbench::keymaps::current()
+    let taken = ferris_idea_workbench::keymaps::current()
         .actions()
         .find(|(_, shortcuts)| {
             shortcuts.iter().any(|s| {
-                matches!(s, idecraft_ui::keymap::Shortcut::Keyboard { first, second: None }
+                matches!(s, ferris_idea_ui::keymap::Shortcut::Keyboard { first, second: None }
                     if first.key == "1"
-                        && first.modifiers == [idecraft_ui::keymap::Modifier::Ctrl])
+                        && first.modifiers == [ferris_idea_ui::keymap::Modifier::Ctrl])
             })
         })
         .map(|(id, _)| id.to_owned())
@@ -1526,6 +1526,119 @@ fn the_switcher_takes_characters_and_opens_in_a_split(cx: &mut TestAppContext) {
     assert!(
         bench.read_with(cx, |b, _| b.goto_popup().is_some()),
         "Recent Locations is open"
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+// ------------------------------------------------------------------ PARITY F-017 gap N1
+
+/// The caret's place in the active editor, 0-based, and the active file's name.
+fn place(bench: &Bench, cx: &mut VisualTestContext) -> (String, usize, usize) {
+    bench.read_with(cx, |b, cx| {
+        let name = b
+            .active_path()
+            .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+            .unwrap_or_default();
+        let s = b.active_editor_entity().unwrap().read(cx).status();
+        (name, s.line - 1, s.column - 1)
+    })
+}
+
+fn caret_to(bench: &Bench, cx: &mut VisualTestContext, line: usize, column: usize) {
+    bench.update_in(cx, |b, _, cx| {
+        b.active_editor_entity()
+            .unwrap()
+            .update(cx, |e, cx| e.go_to(line, column, cx));
+    });
+    cx.run_until_parked();
+}
+
+/// SPEC-0071 AK-15 (v13, behaviour 4a), gap N1 of PARITY row F-017: a file opened by a double
+/// click in the Project tree is a jump — Back returns to the file before it at its caret, Forward
+/// to the opened file at its caret; a file opened from Recent Files is a jump too.
+#[gpui::test]
+fn back_returns_from_a_file_opened_in_the_tree(cx: &mut TestAppContext) {
+    let root = workspace(
+        "n1",
+        &[
+            (
+                "src/shop/Main.txt",
+                "class Main {\n  void run() {\n    go();\n  }\n}\n",
+            ),
+            (
+                "src/shop/Inventory.txt",
+                "class Inventory {\n  int count;\n}\n",
+            ),
+        ],
+        &[],
+    );
+    let (bench, cx) = window(&root, cx);
+    open(&bench, cx, &root.join("src/shop/Main.txt"));
+    caret_to(&bench, cx, 2, 4);
+    tree(&bench, cx, "expand", "src");
+    tree(&bench, cx, "expand", "src/shop");
+
+    // A real double click on the row of Inventory.txt.
+    let at = row_at(cx, "Inventory.txt");
+    for click_count in [1, 2] {
+        cx.simulate_event(gpui::MouseDownEvent {
+            position: at,
+            modifiers: Modifiers::none(),
+            button: MouseButton::Left,
+            click_count,
+            first_mouse: false,
+        });
+        cx.simulate_event(gpui::MouseUpEvent {
+            position: at,
+            modifiers: Modifiers::none(),
+            button: MouseButton::Left,
+            click_count,
+        });
+    }
+    cx.run_until_parked();
+    assert_eq!(
+        place(&bench, cx).0,
+        "Inventory.txt",
+        "the double click opens the file"
+    );
+    caret_to(&bench, cx, 1, 2);
+
+    let action = |bench: &Bench, cx: &mut VisualTestContext, id: &str| {
+        bench.update_in(cx, |b, window, cx| b.menu_action(id, window, cx));
+        cx.run_until_parked();
+    };
+    action(&bench, cx, "Back");
+    assert_eq!(
+        place(&bench, cx),
+        ("Main.txt".to_owned(), 2, 4),
+        "Back returns to the file before and its caret"
+    );
+    action(&bench, cx, "Forward");
+    assert_eq!(
+        place(&bench, cx),
+        ("Inventory.txt".to_owned(), 1, 2),
+        "Forward returns to the opened file and its caret"
+    );
+
+    // Recent Files: Enter right away opens the previous file (SPEC-0069 behaviour 4a); Back
+    // returns.
+    action(&bench, cx, "RecentFiles");
+    assert!(
+        bench.read_with(cx, |b, _| b.goto_popup().is_some()),
+        "the popup is open"
+    );
+    cx.simulate_keystrokes("enter");
+    cx.run_until_parked();
+    assert_eq!(
+        place(&bench, cx).0,
+        "Main.txt",
+        "Recent Files opens the previous file"
+    );
+    action(&bench, cx, "Back");
+    assert_eq!(
+        place(&bench, cx),
+        ("Inventory.txt".to_owned(), 1, 2),
+        "Back returns from a file opened from Recent Files"
     );
     let _ = std::fs::remove_dir_all(&root);
 }

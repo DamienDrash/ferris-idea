@@ -7,10 +7,12 @@ use crate::common;
 use std::time::{Duration, Instant};
 
 use common::*;
-use idecraft_uidriver::engine::{CancelHandle, Command, Engine, Op, Target};
-use idecraft_uidriver::expect::{Compare, Matcher};
-use idecraft_uidriver::trace::{AuditFacts, audit_entry};
-use idecraft_uidriver::{Action, Button, ErrorCode, Locator, StopSource};
+use ferris_idea_uidriver::engine::{CancelHandle, Command, Engine, Op, Target};
+use ferris_idea_uidriver::expect::{Compare, Matcher};
+use ferris_idea_uidriver::trace::{AuditFacts, audit_entry};
+use ferris_idea_uidriver::{
+    Action, Button, Effect, ErrorCode, Locator, Role, Semantics, StopSource,
+};
 
 const SECRET: &str = "hunter2-KNOWN-SECRET";
 
@@ -32,7 +34,7 @@ fn run_external(
     op: Op,
     grants: &[&str],
 ) -> (
-    Result<serde_json::Value, idecraft_uidriver::UiError>,
+    Result<serde_json::Value, ferris_idea_uidriver::UiError>,
     Vec<Command>,
 ) {
     let mut engine = Engine::new();
@@ -259,7 +261,7 @@ fn uisec10_emergency_stop() {
     let mine = engine
         .submit(
             WINDOW,
-            idecraft_uidriver::Request::selftest(Op::Expect {
+            ferris_idea_uidriver::Request::selftest(Op::Expect {
                 locator: Locator::id("commit-button"),
                 matcher: Matcher::Visible,
                 not: false,
@@ -271,7 +273,7 @@ fn uisec10_emergency_stop() {
     // The self-test's assertion holds at once; the external ones wait.
     assert_eq!(out.done.iter().map(|d| d.op).collect::<Vec<_>>(), [mine]);
     assert_eq!(engine.supervisor.drivers_of(WINDOW).len(), 1);
-    let before = idecraft_uidriver::security::stop_generation();
+    let before = ferris_idea_uidriver::security::stop_generation();
     let (done, ended) = engine.stop(StopSource::Escape);
     let ids: Vec<_> = done.iter().map(|d| d.op).collect();
     assert_eq!(ids, [waiting, acting]);
@@ -281,7 +283,7 @@ fn uisec10_emergency_stop() {
     );
     assert_eq!(ended.len(), 1);
     assert!(engine.supervisor.drivers().is_empty());
-    assert!(idecraft_uidriver::security::stop_generation() > before);
+    assert!(ferris_idea_uidriver::security::stop_generation() > before);
     assert_eq!(engine.pending(), 0);
     // A cancellation handle ends one call at the next frame.
     let cancel = CancelHandle::new();
@@ -407,7 +409,7 @@ fn uisec13_audit_and_trace_without_content() {
     assert!(reply.result.is_ok(), "{:?}", reply.result);
     // The text was delivered…
     assert!(commands.iter().any(|c| matches!(c, Command::Deliver { inputs, .. }
-        if inputs.iter().any(|i| matches!(i, idecraft_uidriver::Input::Text { text } if text == TYPED)))));
+        if inputs.iter().any(|i| matches!(i, ferris_idea_uidriver::Input::Text { text } if text == TYPED)))));
     // …but appears in no record.
     let trace = serde_json::to_string(engine.trace_stop().unwrap().entries()).unwrap();
     assert!(!trace.contains("KNOWN"), "{trace}");
@@ -435,12 +437,12 @@ fn uisec13_audit_and_trace_without_content() {
 /// the workbench records it: a cover over the window, the modal, reserved `alertdialog` and its
 /// reserved answers, Deny focused.
 fn drawn_question() -> Vec<El> {
-    use idecraft_uidriver::{Reserved, Role, Semantics};
+    use ferris_idea_uidriver::{Reserved, Role, Semantics};
     let answer = |ix: usize, name: &str, y: f32| {
         let mut s = Semantics::new(Role::Button)
             .name(name)
             .test_id(format!("native-prompt-answer-{ix}"))
-            .action(idecraft_uidriver::AxAction::Click)
+            .action(ferris_idea_uidriver::AxAction::Click)
             .reserved(Reserved::Decision);
         if ix == 0 {
             s = s.focused(true).keyboard_shortcut("Enter");
@@ -523,8 +525,8 @@ fn uisec14_nothing_reaches_a_window_while_a_drawn_question_is_open() {
             WINDOW,
             request(
                 press("enter"),
-                idecraft_uidriver::Actor::SelfTest,
-                idecraft_uidriver::Grants::default(),
+                ferris_idea_uidriver::Actor::SelfTest,
+                ferris_idea_uidriver::Grants::default(),
             ),
             start,
         )
@@ -565,4 +567,79 @@ fn uisec14_a_question_that_opens_during_the_highlight_gets_no_key() {
         highlighted,
         "the press was planned before the question opened"
     );
+}
+
+/// `SPEC-0319` v7 behaviour 56: a view that handles keys itself declares their effects on its
+/// element. A letter on the focused Containers list takes the list's `run` and `ports` (and a
+/// row's press the list's around it), a bound key adds them to its keymap action's; a letter with
+/// nothing declared around the focus stays `undeclared`; a key the view names as its own takes
+/// the view's effects instead of its keymap action's.
+#[test]
+fn keys_take_the_effects_of_the_view_that_handles_them() {
+    let list = |focused: bool| {
+        let mut els = commit_window();
+        els.push(El(
+            Semantics::new(Role::List)
+                .name("Containers")
+                .test_id("containers-list")
+                .focused(focused)
+                .effects(&[Effect::Run, Effect::Ports])
+                // The view takes this key before the keymap (whose action has no declared effect).
+                .handles_keys(&["cmd-alt-y"]),
+            r(0., 0., 400., 200.),
+        ));
+        els.push(El(
+            Semantics::new(Role::ListItem)
+                .name("● web nginx:1.27")
+                .test_id("containers-row-container:web")
+                .action(ferris_idea_uidriver::AxAction::Click)
+                .effects(&[Effect::None]),
+            r(0., 20., 400., 22.),
+        ));
+        els
+    };
+    let run = |target: Target, keys: &str, focused: bool, grants: &[&str]| {
+        let mut engine = Engine::new();
+        let start = Instant::now();
+        let (actor, g) = external(grants);
+        let op = Op::Act {
+            target,
+            action: Action::Press { keys: keys.into() },
+            level: None,
+            force: false,
+        };
+        let id = engine.submit(WINDOW, request(op, actor, g), start).unwrap();
+        let (done, commands, _) =
+            run_until_done(&mut engine, id, start, Duration::from_secs(2), |f, _| {
+                tree(f, list(focused))
+            });
+        (done.expect("answered").reply.result, delivered(&commands))
+    };
+    let (r, n) = run(Target::Window, "s", true, &["ui"]);
+    assert_eq!(r.unwrap_err().right.as_deref(), Some("run"));
+    assert_eq!(n, 0);
+    let (r, n) = run(Target::Window, "s", true, &["ui", "run"]);
+    assert_eq!(r.unwrap_err().right.as_deref(), Some("ports"));
+    assert_eq!(n, 0);
+    let (r, n) = run(Target::Window, "s", true, &["ui", "run", "ports"]);
+    let r = r.unwrap();
+    assert_eq!(r["effects"], serde_json::json!(["run", "ports"]), "{r}");
+    assert_eq!(n, 1);
+    // A press on a row: the list around it handles the key.
+    let row = Target::Locator(Locator::id("containers-row-container:web"));
+    let (r, _) = run(row, "x", true, &["ui"]);
+    assert_eq!(r.unwrap_err().right.as_deref(), Some("run"));
+    // A bound key adds the list's effects to its own (⌘1: none).
+    let (r, _) = run(Target::Window, "cmd-1", true, &["ui"]);
+    assert_eq!(r.unwrap_err().right.as_deref(), Some("run"));
+    // A key the view handles itself takes the view's effects instead of its keymap action's.
+    let (r, n) = run(Target::Window, "cmd-alt-y", true, &["ui", "run", "ports"]);
+    assert_eq!(r.unwrap()["effects"], serde_json::json!(["run", "ports"]));
+    assert_eq!(n, 1);
+    let (r, _) = run(Target::Window, "cmd-alt-y", false, &["ui", "run", "ports"]);
+    assert_eq!(r.unwrap_err().code, ErrorCode::Undeclared);
+    // Nothing focused, nothing declared: a letter is undeclared.
+    let (r, n) = run(Target::Window, "s", false, &["ui", "run", "ports"]);
+    assert_eq!(r.unwrap_err().code, ErrorCode::Undeclared);
+    assert_eq!(n, 0);
 }

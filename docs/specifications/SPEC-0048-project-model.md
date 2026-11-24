@@ -110,7 +110,7 @@ straight from the files the build tools use, and offer matching run configuratio
     for a Maven or Gradle module the whole tree the build tool resolved (SPEC-0149), once each, with
     the version Gradle chose, without the project's own modules and without artifacts that were not
     found; before a resolution the declared dependencies without sibling modules. [GEN, OBS-0024]
-12. **(v4) Linked and unlinked build files:** `.idecraft/build-tools.toml` lists build files linked by
+12. **(v4) Linked and unlinked build files:** `.ferris-idea/build-tools.toml` lists build files linked by
     hand (`linked`, workspace-relative) and module folders unlinked by hand (`unlinked`). A linked file
     is read like a found one, also in a folder the workspace leaves out (ignored or excluded); a
     module whose folder is unlinked, and every module inside that folder, is left out of the model,
@@ -122,7 +122,7 @@ straight from the files the build tools use, and offer matching run configuratio
     folder (the system property `java.import.generatesMetadataFilesAtProjectRoot=false` at its start,
     the same setting in its initialization options). [GEN, OBS-0024]
 
-14. **(v6) Source folders without a build file:** in a project without any build file IDECraft knew
+14. **(v6) Source folders without a build file:** in a project without any build file Ferris IDEA knew
     no source folder, so its packages were not shown as packages; the reference knew the source
     folder there from its own project file (OBS-0031, finding T1). Where the project model has no
     Maven or Gradle module for a folder, a source folder is recognised from the files themselves.
@@ -228,7 +228,7 @@ Resolving transitive dependencies, downloading dependencies or parents from repo
 scripts or Maven profiles, `go.sum`, SDK management, writing build files.
 
 ## Known deviations from the reference
-The reference imports Maven and Gradle through their tooling; IDECraft reads files statically and says
+The reference imports Maven and Gradle through their tooling; Ferris IDEA reads files statically and says
 where that is not enough (Gradle). Because the files are read at once, the modules and their folder
 roles are there when the window opens; the reference first showed the modules without them and asked
 a second time before it marked the folders (OBS-0024, IMP-0334). Library contents (the JDK's modules,

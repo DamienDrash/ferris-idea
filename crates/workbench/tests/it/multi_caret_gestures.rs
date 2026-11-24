@@ -8,16 +8,18 @@
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_languages::insight::CompletionItem;
+use ferris_idea_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
+use ferris_idea_workbench::{EditorView, WorkbenchView};
 use gpui::{Entity, Modifiers, MouseButton, TestAppContext, VisualTestContext, px};
-use idecraft_languages::insight::CompletionItem;
-use idecraft_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
-use idecraft_workbench::{EditorView, WorkbenchView};
 
 type Bench = Entity<WorkbenchView>;
 
 fn workspace(tag: &str, text: &str) -> PathBuf {
-    let root =
-        std::env::temp_dir().join(format!("idecraft-multi-caret-{tag}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!(
+        "ferris-idea-multi-caret-{tag}-{}",
+        std::process::id()
+    ));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     std::fs::write(root.join("carets.txt"), text).unwrap();
@@ -35,7 +37,7 @@ fn window(
     cx.update(|cx| {
         cx.set_global(IdeSettingsFile(settings.join("settings.toml")));
         cx.set_global(ThemeFile(settings.join("theme")));
-        cx.set_global(CurrentIdeSettings(idecraft_core::IdeSettings::default()));
+        cx.set_global(CurrentIdeSettings(ferris_idea_core::IdeSettings::default()));
     });
     let at = root.to_path_buf();
     let window = cx.add_window(move |_, cx| WorkbenchView::new(&at, cx));

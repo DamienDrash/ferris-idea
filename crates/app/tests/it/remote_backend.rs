@@ -1,15 +1,15 @@
-//! SPEC-0158 AK-2: IDECraft's backend on a host reached by SSH — against a real `sshd` started as
+//! SPEC-0158 AK-2: Ferris IDEA's backend on a host reached by SSH — against a real `sshd` started as
 //! the current user (skipped without one). The local binary is uploaded to a test folder in the
 //! sessions' home folder (one of the test's own, never the user's), started for a project folder
 //! and asked through MCP.
 
-use idecraft_remote::{Backend, Installed, Remote, ensure_backend, testing::TestHost};
+use ferris_idea_remote::{Backend, Installed, Remote, ensure_backend, testing::TestHost};
 
 #[test]
 fn backend_is_uploaded_started_and_answers_tools() {
     // One test at a time uploads and starts a backend on a test host (see the helper).
-    let _turn = idecraft_remote::testing::one_host_at_a_time();
-    let base = std::env::temp_dir().join(format!("idecraft-backend-{}", std::process::id()));
+    let _turn = ferris_idea_remote::testing::one_host_at_a_time();
+    let base = std::env::temp_dir().join(format!("ferris-idea-backend-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
     std::fs::create_dir_all(base.join("home")).unwrap();
     let base = base.canonicalize().unwrap();
@@ -24,15 +24,15 @@ fn backend_is_uploaded_started_and_answers_tools() {
     let project = base.join("project");
     std::fs::create_dir_all(project.join("src")).unwrap();
     std::fs::write(project.join("src/lib.rs"), "pub fn needle() {}\n").unwrap();
-    std::fs::create_dir_all(project.join(".idecraft")).unwrap();
+    std::fs::create_dir_all(project.join(".ferris-idea")).unwrap();
     std::fs::write(
-        project.join(".idecraft/run.toml"),
+        project.join(".ferris-idea/run.toml"),
         "[[run]]\nname = \"build\"\ncommand = [\"echo\", \"built\"]\n\n[[run]]\nname = \"app\"\ncommand = [\"sh\", \"-c\", \"echo $MODE\"]\nenv = { MODE = \"dev\" }\nbefore = [\"build\"]\n",
     )
     .unwrap();
-    let dir = format!(".cache/idecraft-test-{}", std::process::id());
+    let dir = format!(".cache/ferris-idea-test-{}", std::process::id());
     let version = env!("CARGO_PKG_VERSION");
-    let binary = std::path::Path::new(env!("CARGO_BIN_EXE_idecraft"));
+    let binary = std::path::Path::new(env!("CARGO_BIN_EXE_ferris-idea"));
 
     let first = ensure_backend(&remote, &dir, version, binary).unwrap();
     assert!(matches!(first, Installed::Uploaded(_)), "{first:?}");
@@ -41,7 +41,11 @@ fn backend_is_uploaded_started_and_answers_tools() {
 
     let mut backend =
         Backend::start(&remote, again.path(), &project.display().to_string()).unwrap();
-    assert!(backend.server.starts_with("idecraft"), "{}", backend.server);
+    assert!(
+        backend.server.starts_with("ferris-idea"),
+        "{}",
+        backend.server
+    );
     assert!(backend.tools.iter().any(|(n, _)| n == "search_in_files"));
     let found = backend
         .call("search_in_files", serde_json::json!({"pattern": "needle"}))
@@ -67,12 +71,12 @@ fn backend_is_uploaded_started_and_answers_tools() {
             serde_json::json!({"name": "app", "dry_run": true}),
         )
         .unwrap();
-    let steps = idecraft_remote::run_steps(&configs, &plan).unwrap();
+    let steps = ferris_idea_remote::run_steps(&configs, &plan).unwrap();
     let names: Vec<&str> = steps.iter().map(|s| s.name.as_str()).collect();
     assert_eq!(names, ["build", "app"]);
     assert_eq!(steps[1].env, [("MODE".to_owned(), "dev".to_owned())]);
     // The chain runs on the host as the window's SSH terminal would run it.
-    let script = idecraft_remote::run_script(&project.display().to_string(), &steps);
+    let script = ferris_idea_remote::run_script(&project.display().to_string(), &steps);
     let out = remote
         .sh(&script, &[], None, std::time::Duration::from_secs(30))
         .unwrap();

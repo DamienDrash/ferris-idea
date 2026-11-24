@@ -5,14 +5,44 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use idecraft_mcp::effects::{Check, TOOLS};
+use ferris_idea_mcp::effects::{Check, TOOLS};
 
-/// The sources that hold the tool handlers and the helpers they call.
-const SOURCES: [&str; 4] = [
-    "src/lib.rs",
-    "src/ui_tools.rs",
-    "src/dialogs.rs",
-    "src/window.rs",
+/// The sources that hold the tool handlers and the helpers they call: every file under `src/`
+/// with an `impl IdeServer` block, so a new tool module is read without being named here
+/// (ADR-0035), and the window's interface and the dialogs list.
+fn sources() -> Vec<std::path::PathBuf> {
+    fn walk(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+        let mut entries: Vec<_> = std::fs::read_dir(dir)
+            .unwrap_or_else(|e| panic!("{}: {e}", dir.display()))
+            .map(|e| e.unwrap().path())
+            .collect();
+        entries.sort();
+        for path in entries {
+            if path.is_dir() {
+                walk(&path, out);
+            } else if path.extension().is_some_and(|x| x == "rs") {
+                out.push(path);
+            }
+        }
+    }
+    let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut all = Vec::new();
+    walk(&src, &mut all);
+    all.retain(|path| {
+        let text = std::fs::read_to_string(path).unwrap_or_default();
+        text.contains("impl IdeServer")
+            || path.ends_with("dialogs.rs")
+            || path.ends_with("window.rs")
+    });
+    all
+}
+
+/// The tools that write nothing but Ferris IDEA's own records (`Check::OwnRecords`).
+const OWN_RECORDS_TOOLS: [&str; 4] = [
+    "local_history",
+    "change_set_begin",
+    "change_set_edit",
+    "change_set_reject",
 ];
 
 /// Calls in a handler's code that write a file directly. A tool whose row says it only reads
@@ -53,9 +83,9 @@ fn function_start(line: &str) -> Option<(&str, &str)> {
 /// Every function of the sources by name, with its text (a name can have several).
 pub(super) fn functions() -> BTreeMap<String, Vec<String>> {
     let mut out: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    for source in SOURCES {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(source);
-        let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{source}: {e}"));
+    for path in sources() {
+        let text =
+            std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
         let lines: Vec<&str> = text.lines().collect();
         let mut i = 0;
         while i < lines.len() {
@@ -152,7 +182,7 @@ async fn every_tool_with_a_changing_effect_checks_a_right() {
 
     // One row per tool, and no row without a tool.
     let mut rows = BTreeSet::new();
-    for row in TOOLS {
+    for row in TOOLS.iter() {
         if !rows.insert(row.tool) {
             problems.push(format!("{}: two rows in TOOLS", row.tool));
         }
@@ -163,12 +193,12 @@ async fn every_tool_with_a_changing_effect_checks_a_right() {
     for tool in &listed {
         if !rows.contains(tool.as_str()) {
             problems.push(format!(
-                "{tool}: no row in TOOLS (crates/mcp/src/effects.rs); classify the new tool by what its code does"
+                "{tool}: no row in TOOLS; classify the new tool by what its code does, in its module's TOOL_EFFECTS (crates/mcp/src/effects.rs for tools of lib.rs)"
             ));
         }
     }
 
-    for row in TOOLS {
+    for row in TOOLS.iter() {
         let Some(own) = functions.get(row.tool).map(|bodies| bodies.join("\n")) else {
             problems.push(format!("{}: no handler found in the sources", row.tool));
             continue;
@@ -202,10 +232,11 @@ async fn every_tool_with_a_changing_effect_checks_a_right() {
         } else if (!row.changes.is_empty() || row.uses_database()) && !row.logged() {
             problems.push(format!("{}: changes something but is not logged", row.tool));
         }
-        // The two exemptions are one tool each.
-        if row.checks.contains(&Check::OwnRecords) && row.tool != "local_history" {
+        // The two exemptions are named tools: the local history and the change-set tools that
+        // only propose or reject (SPEC-0340 behaviours 6 and 16).
+        if row.checks.contains(&Check::OwnRecords) && !OWN_RECORDS_TOOLS.contains(&row.tool) {
             problems.push(format!(
-                "{}: only local_history writes nothing but IDECraft's own records",
+                "{}: only {OWN_RECORDS_TOOLS:?} write nothing but Ferris IDEA's own records",
                 row.tool
             ));
         }
@@ -256,14 +287,14 @@ fn the_checks_of_the_ratchet_tell_code_apart() {
             .into_iter()
             .collect()
     );
-    let checked = "self.require(idecraft_core::Grant::Write).await?;";
+    let checked = "self.require(ferris_idea_core::Grant::Write).await?;";
     assert!(makes(
-        Check::Right(idecraft_core::Grant::Write),
+        Check::Right(ferris_idea_core::Grant::Write),
         checked,
         checked
     ));
     assert!(!makes(
-        Check::Right(idecraft_core::Grant::Run),
+        Check::Right(ferris_idea_core::Grant::Run),
         checked,
         checked
     ));

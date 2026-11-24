@@ -108,7 +108,7 @@ pub fn indent_label(unit: &str) -> String {
 /// follows Search Everywhere; the navigation bar is always last (`SPEC-0061` v6 behaviour 29,
 /// OBS-0020).
 pub fn empty_editor_hints(
-    keymap: &idecraft_ui::keymap::Keymap,
+    keymap: &ferris_idea_ui::keymap::Keymap,
     macos: bool,
     tree_shown: bool,
 ) -> Vec<(&'static str, String)> {
@@ -179,7 +179,7 @@ pub fn nav_entries(dir: &Path) -> Vec<NavEntry> {
             let icon = if dir {
                 "nodes/folder"
             } else {
-                idecraft_ui::icons::file_icon(&name)
+                ferris_idea_ui::icons::file_icon(&name)
             };
             Some(NavEntry {
                 label: if dir { format!("{name}/") } else { name },
@@ -222,12 +222,19 @@ mod tests {
     // SPEC-0059 v6 AK-9.
     #[test]
     fn navigation_bar_instead_of_project_view_while_the_tree_is_shown() {
-        let mac = empty_editor_hints(&idecraft_ui::keymap::Keymap::bundled_macos(), true, true);
+        let mac = empty_editor_hints(&ferris_idea_ui::keymap::Keymap::bundled_macos(), true, true);
         assert_eq!(mac[3], ("Navigation Bar", "⌘↑".to_owned()));
-        let default =
-            empty_editor_hints(&idecraft_ui::keymap::Keymap::bundled_default(), false, true);
+        let default = empty_editor_hints(
+            &ferris_idea_ui::keymap::Keymap::bundled_default(),
+            false,
+            true,
+        );
         assert_eq!(default[3], ("Navigation Bar", "Alt+Home".to_owned()));
-        let hidden = empty_editor_hints(&idecraft_ui::keymap::Keymap::bundled_macos(), true, false);
+        let hidden = empty_editor_hints(
+            &ferris_idea_ui::keymap::Keymap::bundled_macos(),
+            true,
+            false,
+        );
         // SPEC-0061 v6 behaviour 29 (OBS-0020): with the tree hidden "Project View" follows
         // Search Everywhere and the navigation bar line stays.
         assert_eq!(hidden[1], ("Project View", "⌘1".to_owned()));
@@ -237,7 +244,7 @@ mod tests {
     // SPEC-0059 v6 AK-9.
     #[test]
     fn nav_entries_folders_first_without_hidden_names() {
-        let dir = std::env::temp_dir().join(format!("idecraft-navbar-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-navbar-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("src/main")).unwrap();
         std::fs::create_dir_all(dir.join("__pycache__")).unwrap();
@@ -258,7 +265,7 @@ mod tests {
     // SPEC-0059 v7 AK-10.
     #[test]
     fn nav_entries_carry_icons() {
-        let dir = std::env::temp_dir().join(format!("idecraft-navicons-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-navicons-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("src")).unwrap();
         std::fs::write(dir.join("README.md"), "").unwrap();
@@ -268,8 +275,8 @@ mod tests {
             icons,
             [
                 "nodes/folder",
-                idecraft_ui::icons::file_icon("Edit.java"),
-                idecraft_ui::icons::file_icon("README.md")
+                ferris_idea_ui::icons::file_icon("Edit.java"),
+                ferris_idea_ui::icons::file_icon("README.md")
             ]
         );
         assert_ne!(icons[1], icons[2]);
@@ -279,7 +286,11 @@ mod tests {
     // SPEC-0059 v5 AK-8.
     #[test]
     fn empty_editor_hints_follow_the_keymap() {
-        let mac = empty_editor_hints(&idecraft_ui::keymap::Keymap::bundled_macos(), true, false);
+        let mac = empty_editor_hints(
+            &ferris_idea_ui::keymap::Keymap::bundled_macos(),
+            true,
+            false,
+        );
         let labels: Vec<&str> = mac.iter().map(|(l, _)| *l).collect();
         assert_eq!(
             labels,
@@ -293,10 +304,11 @@ mod tests {
         );
         let keys: Vec<&str> = mac.iter().map(|(_, k)| k.as_str()).collect();
         assert_eq!(keys, ["⇧ ⇧", "⌘1", "⇧⌘O", "⌘E", "⌘↑"]);
-        let shown = empty_editor_hints(&idecraft_ui::keymap::Keymap::bundled_macos(), true, true);
+        let shown =
+            empty_editor_hints(&ferris_idea_ui::keymap::Keymap::bundled_macos(), true, true);
         assert_eq!(shown.len(), 4, "no project view while the tree is shown");
         let default = empty_editor_hints(
-            &idecraft_ui::keymap::Keymap::bundled_default(),
+            &ferris_idea_ui::keymap::Keymap::bundled_default(),
             false,
             false,
         );
@@ -310,7 +322,7 @@ mod tests {
     // SPEC-0059 v5 AK-8.
     #[test]
     fn dropped_files_open_without_folders() {
-        let dir = std::env::temp_dir().join(format!("idecraft-drop-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-drop-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("sub")).unwrap();
         std::fs::write(dir.join("a.txt"), "a").unwrap();
@@ -326,7 +338,7 @@ mod tests {
     #[test]
     fn initials() {
         assert_eq!(project_initials("sql-basic"), "SB");
-        assert_eq!(project_initials("idecraft"), "ID");
+        assert_eq!(project_initials("ferris-idea"), "FI");
         assert_eq!(project_initials("my_cool app"), "MA");
         assert_eq!(project_initials("cmp-win-ij"), "CI");
         assert_eq!(project_initials(""), "");
@@ -334,7 +346,7 @@ mod tests {
 
     #[test]
     fn branch_from_head_and_worktree_file() {
-        let dir = std::env::temp_dir().join(format!("idecraft-chrome-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-chrome-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("repo/.git")).unwrap();
         std::fs::write(dir.join("repo/.git/HEAD"), "ref: refs/heads/feat/x\n").unwrap();

@@ -103,7 +103,7 @@ impl<'a> Instance<'a> {
     }
 }
 
-/// The value in IDECraft's form, from what one answer says without further requests:
+/// The value in Ferris IDEA's form, from what one answer says without further requests:
 /// kotlin-debug-adapter's objects as `Type@id`, with the size of the classes that are always
 /// empty or hold one element; java-debug's ` size=N` as ` size = N`; else the adapter's child
 /// count `count` as the size when it is above zero and the value is an object, not an array.
@@ -178,7 +178,7 @@ pub enum Size {
     Unknown,
 }
 
-/// The size of a collection from its `fields` as the adapter sent them (not yet in IDECraft's
+/// The size of a collection from its `fields` as the adapter sent them (not yet in Ferris IDEA's
 /// form): a field `size`; else the length of the array in a field `a`; else `head`, `tail` and
 /// the length of `elements` (a ring buffer); else the `java.util` map in a field `map` or `m`.
 pub fn size_of_fields(fields: &[Variable]) -> Size {

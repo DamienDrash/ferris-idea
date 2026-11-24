@@ -39,7 +39,7 @@ without starting a search; and keep these marks while reading through the file.
 4. **Colours:** an occurrence of kind *write* has the background of
    `WRITE_IDENTIFIER_UNDER_CARET_ATTRIBUTES`, one of kind *read* or *text* the background of
    `IDENTIFIER_UNDER_CARET_ATTRIBUTES`, both from the colour scheme in use (SPEC-0060 behaviour 3).
-   A scheme that defines no background for a key draws nothing for it; IDECraft has no colour of its
+   A scheme that defines no background for a key draws nothing for it; Ferris IDEA has no colour of its
    own for these marks. [OSS]
 5. **Layers:** from bottom to top the editor draws the caret row and line backgrounds, the
    occurrence marks, the find results (SPEC-0065 behaviour 5), the selection, the text with the wavy
@@ -95,7 +95,7 @@ without starting a search; and keep these marks while reading through the file.
     `write`, `text`), in the order of the text, not bounded by behaviour 11; `offered: false` with
     the server's name when it has no usage highlights. Unlike the editor the tool waits for a server
     that is starting, within the usual time limit of the code insight tools. [ADR-0008]
-14. **Client capability:** IDECraft announces `textDocument.documentHighlight` in `initialize`. [STD]
+14. **Client capability:** Ferris IDEA announces `textDocument.documentHighlight` in `initialize`. [STD]
 
 ### Version 2
 15. **Next and previous usage** (`GotoNextElementUnderCaretUsage`, ⌃⌥↓, and
@@ -148,7 +148,7 @@ without starting a search; and keep these marks while reading through the file.
   back for the resting caret; the status texts of behaviour 8 for one, several, more than 1000 and
   no usages, a server without the capability, a server that is not ready and a changed text.
 - **AK-5** The bundled schemes define a background for both keys, and the write background differs
-  from the read one (unit test in `idecraft-ui`); stripe lines carry the write kind when a line has
+  from the read one (unit test in `ferris-idea-ui`); stripe lines carry the write kind when a line has
   both (unit test `occurrence_model::tests`).
 - **AK-6** The setting is read, saved and listed in the settings format (`ide_settings::tests`,
   `format` schema); the Editor page has the switch under Code Insight; `set_ide_settings` changes it
@@ -180,9 +180,9 @@ separate question per view of a split file beyond each view's own caret; `worksp
 requests of servers.
 
 ## Known deviations from the reference
-The reference finds the occurrences with its own index; IDECraft asks the language server, so the
+The reference finds the occurrences with its own index; Ferris IDEA asks the language server, so the
 marks appear after the server's answer and only in files whose server offers them. Where the
-reference may fall back to other means for files it does not understand, IDECraft marks nothing
+reference may fall back to other means for files it does not understand, Ferris IDEA marks nothing
 (behaviour 2). Not compared side by side yet: which occurrences the reference marks (declarations,
 occurrences in comments and strings), after which delay, whether Escape there also takes the
 automatic marks away, what its action shows in the status bar and whether it adds to marks already
@@ -190,6 +190,6 @@ kept. A server decides what counts as a write: clangd reports a declaration with
 without a kind, so it gets the read colour (AK-7).
 
 v2: not compared with the reference. Open there: where in the usage its actions put the caret
-(IDECraft: at its start), whether they wrap around at the ends, in which order they visit usages
-(IDECraft: the order of the text), and what they do when the usages are not highlighted yet
-(IDECraft asks the server and then steps).
+(Ferris IDEA: at its start), whether they wrap around at the ends, in which order they visit usages
+(Ferris IDEA: the order of the text), and what they do when the usages are not highlighted yet
+(Ferris IDEA asks the server and then steps).

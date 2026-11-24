@@ -35,12 +35,12 @@ pub struct PairLink {
 /// Writes a pairing link.
 pub fn format_link(address: &str, key: &[u8; 32], secret: &str) -> String {
     let hexed: String = key.iter().map(|x| format!("{x:02x}")).collect();
-    format!("idecraft-pair://v1/{address}?k={hexed}&s={secret}")
+    format!("ferris-idea-pair://v1/{address}?k={hexed}&s={secret}")
 }
 
 /// Reads a pairing link; `None` when it is not one.
 pub fn parse_link(text: &str) -> Option<PairLink> {
-    let rest = text.trim().strip_prefix("idecraft-pair://v1/")?;
+    let rest = text.trim().strip_prefix("ferris-idea-pair://v1/")?;
     let (address, query) = rest.split_once('?')?;
     if address.is_empty() || address.contains('/') {
         return None;
@@ -104,7 +104,7 @@ mod tests {
         assert_eq!(parsed.address, "host:47100");
         assert_eq!(parsed.key, key);
         assert_eq!(parsed.secret, secret);
-        assert!(parse_link("idecraft-pair://v1/host:1?k=zz&s=abc").is_none());
+        assert!(parse_link("ferris-idea-pair://v1/host:1?k=zz&s=abc").is_none());
         assert!(parse_link("https://x/?k=00&s=00").is_none());
     }
 

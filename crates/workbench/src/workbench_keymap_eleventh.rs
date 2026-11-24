@@ -115,7 +115,7 @@ impl WorkbenchView {
         let Some(here) = self.here(cx) else {
             return;
         };
-        if idecraft_languages::LanguageId::detect(&here.path).is_none() {
+        if ferris_idea_languages::LanguageId::detect(&here.path).is_none() {
             self.status = Some(NO_EXTERNAL_DOC.into());
             cx.notify();
             return;
@@ -137,7 +137,7 @@ impl WorkbenchView {
                         .enable_all()
                         .build()
                         .map_err(|e| e.to_string())?;
-                    rt.block_on(idecraft_languages::insight::hover_in(
+                    rt.block_on(ferris_idea_languages::insight::hover_in(
                         &root,
                         &from.path,
                         Some(&text),
@@ -247,7 +247,7 @@ pub fn brace_or_quote_out(line: &str, column: usize) -> bool {
 pub fn template_by_tab(
     line: &str,
     column: usize,
-) -> Option<idecraft_languages::insight::CompletionItem> {
+) -> Option<ferris_idea_languages::insight::CompletionItem> {
     let chars: Vec<char> = line.chars().collect();
     let column = column.min(chars.len());
     let mut start = column;
@@ -255,7 +255,7 @@ pub fn template_by_tab(
         start -= 1;
     }
     let typed: String = chars[start..column].iter().collect();
-    idecraft_languages::python_completion::live_items(line, column)
+    ferris_idea_languages::python_completion::live_items(line, column)
         .into_iter()
         .find(|i| i.label == typed)
 }

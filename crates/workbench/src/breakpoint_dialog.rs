@@ -18,7 +18,7 @@ use crate::editor_view::EditorView;
 use crate::palette::Palette;
 use crate::semantics::{Annotated, AxAction, Effect, Role, Semantics};
 use crate::workbench_view::c;
-use idecraft_debugger::{
+use ferris_idea_debugger::{
     BreakpointRules, EXCEPTION_LANGUAGES, FieldWatchpoint, FunctionBreakpoint, LanguageExceptions,
     SpecialBreakpoints, Suspend,
 };
@@ -68,9 +68,9 @@ const DEPENDS: &str = "Disable until hitting";
 const LANGUAGES: usize = EXCEPTION_LANGUAGES.len();
 
 /// Under the condition of a Kotlin breakpoint: kotlin-debug-adapter cannot evaluate conditions, pass
-/// counts or log messages, IDECraft does it at each hit (`SPEC-0178` behaviour 6).
+/// counts or log messages, Ferris IDEA does it at each hit (`SPEC-0178` behaviour 6).
 pub const KOTLIN_HINT: &str =
-    "stop only when true, e.g. i == 3 · Kotlin: evaluated by IDECraft at each hit (slower)";
+    "stop only when true, e.g. i == 3 · Kotlin: evaluated by Ferris IDEA at each hit (slower)";
 
 fn kotlin(path: &std::path::Path) -> bool {
     path.extension().is_some_and(|e| e == "kt")
@@ -550,7 +550,7 @@ impl BreakpointDialog {
     /// The breakpoint `path:line` a dependency names, written as listed (`src/A.java:12`, a path
     /// relative to the workspace) or with an absolute path, made absolute from the listed ones.
     fn depends_path(&self, text: &str) -> String {
-        let Some((path, line)) = idecraft_debugger::breakpoint_place(text) else {
+        let Some((path, line)) = ferris_idea_debugger::breakpoint_place(text) else {
             return text.to_owned();
         };
         let listed = self.list.iter().find(|e| {
@@ -565,7 +565,7 @@ impl BreakpointDialog {
 
     /// The text of a dependency for its field: as the list shows the breakpoint.
     fn depends_label(&self, text: &str) -> String {
-        let Some((path, line)) = idecraft_debugger::breakpoint_place(text) else {
+        let Some((path, line)) = ferris_idea_debugger::breakpoint_place(text) else {
             return text.to_owned();
         };
         self.list
@@ -1343,13 +1343,13 @@ impl Render for BreakpointDialog {
 /// The dialog's own keys in the notation of the system the window runs on (`SPEC-0127` v14
 /// behaviour 30).
 fn keys(text: &str) -> String {
-    idecraft_ui::keymap::local_keys(text, cfg!(target_os = "macos"))
+    ferris_idea_ui::keymap::local_keys(text, cfg!(target_os = "macos"))
 }
 
 #[cfg(test)]
 mod tests {
     use crate::breakpoint_popup::{PopupState, RowKind};
-    use idecraft_debugger::Suspend;
+    use ferris_idea_debugger::Suspend;
 
     /// SPEC-0127 v13 AK-18: the switches the dialog shares with the popup are the popup's rows for
     /// every state; without a choice All is shown chosen, with Suspend off neither All nor Thread.

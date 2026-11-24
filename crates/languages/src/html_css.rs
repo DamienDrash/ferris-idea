@@ -1,4 +1,4 @@
-//! Navigation between HTML and stylesheets and the structure of an HTML file, from IDECraft's own
+//! Navigation between HTML and stylesheets and the structure of an HTML file, from Ferris IDEA's own
 //! syntax trees (`SPEC-0042` v17 behaviours 28–33): a class or id of an HTML file leads to the
 //! rules that define it, a jump link to the element with that id, a class or id selector of a
 //! stylesheet lists its uses in HTML files, and the elements of an HTML file are listed nested.
@@ -8,7 +8,7 @@
 //! stylesheets a page links and lists elements without their nesting; the CSS server renamed a
 //! class selector with its mark and in one file only (OBS-0069 G2).
 //!
-//! Only the project's own files are read ([`idecraft_core::OwnSources`]), each through a handle
+//! Only the project's own files are read ([`ferris_idea_core::OwnSources`]), each through a handle
 //! that follows no symbolic link, within the bounds [`MAX_STYLESHEETS`], [`MAX_HTML_FILES`] and
 //! [`MAX_FILE_BYTES`]; an address with a scheme or a host is never followed. Names are compared
 //! exactly; no pattern is built from file content.
@@ -20,7 +20,7 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::UNIX_EPOCH;
 
-use idecraft_core::{OwnSources, open_regular};
+use ferris_idea_core::{OwnSources, open_regular};
 use tree_sitter::{Node, Parser, Tree};
 
 use crate::LanguageId;
@@ -867,7 +867,7 @@ fn name_value_at(tree: &Tree, text: &str, at: usize) -> Option<(NameKind, ByteRa
 }
 
 /// What Go to Declaration finds at 0-based `line` and `character` (in chars) of the HTML file
-/// `file` with content `text` below the project folder `root`, when the place is one IDECraft
+/// `file` with content `text` below the project folder `root`, when the place is one Ferris IDEA
 /// answers itself (behaviours 28 and 29): a word of a `class` attribute or the value of an `id`
 /// attribute leads to the rules that define it, the fragment of an `href` to the element with
 /// that id. `None` for every other place: the language server is asked. `Some` of nothing when
@@ -937,6 +937,12 @@ pub fn selector_uses(
     let wanted = selectors(language, text)
         .into_iter()
         .find(|n| n.holds((line, character)))?;
+    Some(html_uses(root, wanted.kind, &wanted.name))
+}
+
+/// Every word of a `class` attribute (or every `id` value) of the project's own HTML files that
+/// equals `name`, sorted by path and place.
+fn html_uses(root: &Path, kind: NameKind, name: &str) -> Vec<Location> {
     let own = OwnSources::new(root);
     let mut out = Vec::new();
     let mut read = 0;
@@ -949,10 +955,37 @@ pub fn selector_uses(
         }
         read += 1;
         if let Some(names) = names_of(&own, &html) {
-            out.extend(places(&root.join(&html), &names, wanted.kind, &wanted.name));
+            out.extend(places(&root.join(&html), &names, kind, name));
         }
     }
-    Some(out)
+    out
+}
+
+/// A class or id name in a `class` or `id` attribute of the HTML file `file` with content `text`,
+/// at 0-based `line` and `character` (`SPEC-0042` v26 behaviours 46 and 47, OBS-0087 L5, L6): the
+/// name, whether it is a class, the rules of the project's stylesheets that define it (as Go to
+/// Declaration finds them) and its uses in the project's own HTML files. `None` elsewhere.
+pub fn html_name_uses(
+    root: &Path,
+    file: &Path,
+    text: &str,
+    line: u64,
+    character: u64,
+) -> Option<(String, bool, Vec<Location>, Vec<Location>)> {
+    if !is_html(file) {
+        return None;
+    }
+    let tree = parse(LanguageId::Html, text)?;
+    let at = Lines::new(text).offset(line, character)?;
+    let (kind, value) = name_value_at(&tree, text, at)?;
+    let word = words(text, value)
+        .into_iter()
+        .find(|(bytes, _)| bytes.start <= at && at <= bytes.end)?
+        .1
+        .to_owned();
+    let rules = declarations(root, file, text, line, character).unwrap_or_default();
+    let uses = html_uses(root, kind, &word);
+    Some((word, kind == NameKind::Class, rules, uses))
 }
 
 /// The project's own stylesheets that the HTML file `file` with content `text` links with
@@ -1015,7 +1048,7 @@ pub fn pages_linking(root: &Path, stylesheet: &Path) -> Vec<PathBuf> {
 }
 
 /// The class or id name at 0-based `line` and `character` (in chars) of `file` with content
-/// `text` that IDECraft renames itself (`SPEC-0042` v22 behaviour 38): a class or id selector of
+/// `text` that Ferris IDEA renames itself (`SPEC-0042` v22 behaviour 38): a class or id selector of
 /// a stylesheet — the caret on the mark, in the name or directly after it — or of a `<style>`
 /// block of an HTML file, a word of a `class` value or an `id` value of an HTML file.
 fn named_at(file: &Path, text: &str, line: u64, character: u64) -> Option<(NameKind, String)> {
@@ -1047,7 +1080,7 @@ fn named_at(file: &Path, text: &str, line: u64, character: u64) -> Option<(NameK
 
 /// The class or id name a rename at 0-based `line` and `character` of `file` with content `text`
 /// starts with, whole and without its mark (`SPEC-0042` v22 behaviour 38: the rename popup);
-/// `None` where IDECraft does not rename itself.
+/// `None` where Ferris IDEA does not rename itself.
 pub fn name_at(file: &Path, text: &str, line: u64, character: u64) -> Option<String> {
     named_at(file, text, line, character).map(|(_, name)| name)
 }
@@ -1159,7 +1192,7 @@ fn renamed_in(file: &Path, text: &str, kind: NameKind, old: &str, new: &str) -> 
 /// Plans renaming the class or id at 0-based `line` and `character` (in chars) of `file` with
 /// content `text` below the project folder `root` to `new_name` (`SPEC-0042` v22 behaviour 38):
 /// every selector of that name in the project's own stylesheets and `<style>` blocks and every
-/// use in its HTML files, the marks kept. `None` where IDECraft does not rename itself (the
+/// use in its HTML files, the marks kept. `None` where Ferris IDEA does not rename itself (the
 /// language server is asked); `Some(Err)` with the reason when the rename is refused: a new name
 /// that is no CSS identifier, a project beyond the bounds, a file that is not the project's own.
 pub fn rename_plan(
@@ -1214,7 +1247,7 @@ fn plan_rename(
     ] {
         if count > bound {
             return Err(format!(
-                "The project holds {count} {what}, more than the {bound} IDECraft reads for one \
+                "The project holds {count} {what}, more than the {bound} Ferris IDEA reads for one \
                  rename; nothing was renamed."
             ));
         }
@@ -1338,6 +1371,50 @@ pub fn completions(
     )
 }
 
+/// The CSS server's list without obsolete values (`SPEC-0042` v26 behaviour 45): items it marks as
+/// deprecated (LSP tag 1, `deprecated: true`) and values whose documentation says they were
+/// standardized under another name (`flexbox`, `-ms-flexbox`) go; where the list holds the values
+/// of `display` (`flow-root`) and no `flow`, `flow` (CSS Display Level 3) comes before `flow-root`.
+pub fn clean_css_values(items: &mut Vec<CompletionItem>) {
+    let deprecated = |item: &CompletionItem| {
+        item.raw.as_ref().is_some_and(|raw| {
+            raw["deprecated"].as_bool() == Some(true)
+                || raw["tags"]
+                    .as_array()
+                    .is_some_and(|t| t.iter().any(|t| t.as_u64() == Some(1)))
+        })
+    };
+    let renamed = |item: &CompletionItem| {
+        let doc = item.documentation.clone().or_else(|| {
+            let raw = item.raw.as_ref()?;
+            let d = &raw["documentation"];
+            d.as_str()
+                .map(str::to_owned)
+                .or_else(|| d["value"].as_str().map(str::to_owned))
+        });
+        doc.is_some_and(|d| d.replace('\\', "").contains("Standardized as '"))
+    };
+    items.retain(|item| !deprecated(item) && !renamed(item));
+    if items.iter().any(|i| i.label == "flow") {
+        return;
+    }
+    if let Some(at) = items.iter().position(|i| i.label == "flow-root") {
+        let root = &items[at];
+        let flow = CompletionItem {
+            label: "flow".into(),
+            insert: "flow".into(),
+            kind: root.kind.clone(),
+            sort_text: root.sort_text.clone(),
+            documentation: Some(
+                "The element lays out its contents using flow layout (block-and-inline layout)."
+                    .into(),
+            ),
+            ..Default::default()
+        };
+        items.insert(at, flow);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1389,8 +1466,10 @@ mod tests {
 
     /// A project like the one of OBS-0039 in a fresh folder: `index.html` linking `css/site.css`.
     fn project(name: &str) -> PathBuf {
-        let root =
-            std::env::temp_dir().join(format!("idecraft-html-css-{name}-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!(
+            "ferris-idea-html-css-{name}-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("css")).unwrap();
         let root = root.canonicalize().unwrap();
@@ -1559,7 +1638,7 @@ mod tests {
         std::fs::create_dir_all(root.join("ignored")).unwrap();
         std::fs::write(root.join("ignored/x.css"), ".card {}\n").unwrap();
         let outside = root.parent().unwrap().join(format!(
-            "idecraft-html-css-outside-{}.css",
+            "ferris-idea-html-css-outside-{}.css",
             std::process::id()
         ));
         std::fs::write(&outside, ".card {}\n").unwrap();
@@ -1613,7 +1692,7 @@ mod tests {
         #[cfg(unix)]
         {
             let elsewhere = root.parent().unwrap().join(format!(
-                "idecraft-html-css-linked-{}.css",
+                "ferris-idea-html-css-linked-{}.css",
                 std::process::id()
             ));
             std::fs::write(&elsewhere, ".card {}\n").unwrap();
@@ -2116,5 +2195,41 @@ mod tests {
         let (l, c) = at(page, "class=\"\"", 7);
         assert_eq!(completions(&root, &file, page, l, c, 2).unwrap().len(), 2);
         let _ = std::fs::remove_dir_all(&root);
+    }
+    /// SPEC-0042 AK-49 (v26, behaviour 45): obsolete aliases and tagged items go, `flow` comes
+    /// before `flow-root`.
+    #[test]
+    fn obsolete_css_values_are_left_out() {
+        let item = |label: &str, doc: &str| CompletionItem {
+            label: label.into(),
+            insert: label.into(),
+            kind: Some("value".into()),
+            documentation: (!doc.is_empty()).then(|| doc.to_owned()),
+            ..Default::default()
+        };
+        let mut tagged = item("-moz-box", "");
+        tagged.raw = Some(serde_json::json!({"label": "-moz-box", "tags": [1]}));
+        let mut items = vec![
+            item("flex", "Flex container. _Widely available_"),
+            item("flexbox", "Flow layout\\. Standardized as 'flex'\\."),
+            item("-ms-flexbox", "Standardized as 'flex'."),
+            item(
+                "-ms-inline-flexbox",
+                "Inline\\-level. Standardized as 'inline\\-flex'",
+            ),
+            item("-webkit-flex", "Flow layout."),
+            item("flow-root", "Block container."),
+            item("inline-flex", "Inline-level flex container."),
+            tagged,
+        ];
+        clean_css_values(&mut items);
+        let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
+        assert_eq!(
+            labels,
+            ["flex", "-webkit-flex", "flow", "flow-root", "inline-flex"]
+        );
+        let mut colors = vec![item("red", ""), item("blue", "")];
+        clean_css_values(&mut colors);
+        assert_eq!(colors.len(), 2, "no `flow` without the values of `display`");
     }
 }

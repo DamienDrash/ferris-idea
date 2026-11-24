@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Ferris IDEA
+GenericName=Integrated Development Environment
+Comment=Experimental Rust-native IDE for code and databases
+Exec=ferris-idea launch %f
+Icon=ferris-idea
+Terminal=false
+Categories=Development;IDE;
+StartupWMClass=ferris-idea
+MimeType=application/x-ferris-idea-connector;application/x-ferris-idea-sources;application/x-ferris-idea-run;application/x-ferris-idea-keymap;application/x-ferris-idea-theme;application/x-ferris-idea-code-style;application/x-ferris-idea-live-templates;application/x-ferris-idea-settings;application/x-ferris-idea-plugin;

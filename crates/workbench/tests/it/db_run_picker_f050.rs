@@ -7,8 +7,8 @@
 
 use std::path::Path;
 
+use ferris_idea_workbench::{DatabaseView, WorkbenchView};
 use gpui::{Entity, TestAppContext, VisualTestContext};
-use idecraft_workbench::{DatabaseView, WorkbenchView};
 
 use crate::db_refactor_retest::{has_sqlite, until, window, workspace};
 
@@ -17,7 +17,7 @@ use crate::db_refactor_retest::{has_sqlite, until, window, workspace};
 fn two_connections(tag: &str, files: &[(&str, &str)]) -> std::path::PathBuf {
     let root = workspace(tag, "create table item (id integer primary key);", files);
     std::fs::write(
-        root.join(".idecraft/connections.toml"),
+        root.join(".ferris-idea/connections.toml"),
         format!(
             "[[connection]]\nid = \"duck\"\nname = \"duck\"\ndialect = \"duckdb\"\npath = \"{}\"\n\n\
              [[connection]]\nid = \"shop\"\nname = \"shop\"\ndialect = \"sqlite\"\npath = \"{}\"\n",
@@ -65,8 +65,8 @@ fn run(bench: &Entity<WorkbenchView>, cx: &mut VisualTestContext, file: &Path) {
 }
 
 fn bound(root: &Path, file: &Path) -> Option<String> {
-    let profiles = idecraft_database::load_profiles(root).unwrap();
-    idecraft_database::bound_connection(root, file, &profiles)
+    let profiles = ferris_idea_database::load_profiles(root).unwrap();
+    ferris_idea_database::bound_connection(root, file, &profiles)
 }
 
 /// The shown result's first cell, once a run is over.
@@ -97,7 +97,7 @@ fn an_untouched_database_tree_selects_nothing(cx: &mut TestAppContext) {
         assert_eq!(v.selected_label(), None);
         assert_eq!(
             v.target(),
-            idecraft_workbench::context_menu::DbTarget::Nothing
+            ferris_idea_workbench::context_menu::DbTarget::Nothing
         );
         assert!(v.quick_doc().is_none());
     });

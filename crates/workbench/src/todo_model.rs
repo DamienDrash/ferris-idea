@@ -1,12 +1,12 @@
 //! What the TODO tool window shows (`SPEC-0334` behaviours 14–19, 22): the rows of its tree for
 //! a grouping and a filter, their counts and labels, and the way through the items. No window
-//! is needed here; the items come from [`idecraft_languages::todo`], the view is
+//! is needed here; the items come from [`ferris_idea_languages::todo`], the view is
 //! [`crate::todo_view`].
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Range;
 
-use idecraft_languages::todo::{Item, MAX_ITEMS, Pattern};
+use ferris_idea_languages::todo::{Item, MAX_ITEMS, Pattern};
 
 /// The filter of the toolbar (behaviour 17).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

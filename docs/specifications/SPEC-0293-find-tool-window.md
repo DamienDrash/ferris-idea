@@ -1,13 +1,13 @@
 # SPEC-0293: Find tool window for Find Usages
 
-- **Version:** 11 · **Date:** 2026-11-17 (v11: without a language server for the file the window and MCP list the text occurrences with the reason, and in JavaScript and TypeScript a text occurrence inside a string or a comment is no usage, behaviours 10a and 11, AK-9 and AK-17; found on a CI runner without Node language servers, where `find_usages` failed instead of answering from the text as AK-9 asks); 2026-11-16 (v10: Find Usages with a choice of scope, behaviour 28, AK-16; eleventh package of docs/research/KEYMAP_COVERAGE.md); 2026-11-14 (v9: the filters by read access, write access and import statements, the nested folders, the module groups, Exclude and Include, and the export to a text file, under the ids of the bundled keymaps, behaviours 22–26, AK-14 and AK-15; sixth package of docs/research/KEYMAP_COVERAGE.md; v8: a place without a name is not searched and a search never stays in its searching state, behaviours 20 and 21, AK-13; window check of 2026-11-14: Find Usages in File at the first column of an annotated line opened the window searching for a symbol without a name); 2026-11-13 (v7: `FindUsagesInFile` shows only the usages in the file of the caret, behaviour 19, AK-12; v6: the grouping toggles under the ids of the bundled keymaps, behaviour 18, AK-11; docs/research/KEYMAP_COVERAGE.md; v5: a class or id selector of a stylesheet also lists its uses in HTML files, from IDECraft's own index and marked so, behaviour 17, AK-10; v4: in JavaScript and TypeScript the kinds come from the syntax tree and the members that implement or override the searched one are no usages, OBS-0028 T5, behaviours 14a and 16, AK-9); 2026-11-05 (v2: only the name is marked, OBS-0016; v3: grouped by usage kind, module, package, class and method, OBS-0016 defect F034-3)
+- **Version:** 12 · **Date:** 2026-11-19 (v12: Go usages are grouped by their syntax — receivers, struct initializations, types, calls — and the mentions of a Go function, method or type in comments are a group of their own, counted apart; the symbol's own declaration is never listed, also when the server names no declaration and in a text answer; behaviours 14b, 29 and 30, AK-18 and AK-19; side-by-side comparison of 2026-11-19, F-038 gaps GO1 and RS1); 2026-11-17 (v11: without a language server for the file the window and MCP list the text occurrences with the reason, and in JavaScript and TypeScript a text occurrence inside a string or a comment is no usage, behaviours 10a and 11, AK-9 and AK-17; found on a CI runner without Node language servers, where `find_usages` failed instead of answering from the text as AK-9 asks); 2026-11-16 (v10: Find Usages with a choice of scope, behaviour 28, AK-16; eleventh package of docs/research/KEYMAP_COVERAGE.md); 2026-11-14 (v9: the filters by read access, write access and import statements, the nested folders, the module groups, Exclude and Include, and the export to a text file, under the ids of the bundled keymaps, behaviours 22–26, AK-14 and AK-15; sixth package of docs/research/KEYMAP_COVERAGE.md; v8: a place without a name is not searched and a search never stays in its searching state, behaviours 20 and 21, AK-13; window check of 2026-11-14: Find Usages in File at the first column of an annotated line opened the window searching for a symbol without a name); 2026-11-13 (v7: `FindUsagesInFile` shows only the usages in the file of the caret, behaviour 19, AK-12; v6: the grouping toggles under the ids of the bundled keymaps, behaviour 18, AK-11; docs/research/KEYMAP_COVERAGE.md; v5: a class or id selector of a stylesheet also lists its uses in HTML files, from Ferris IDEA's own index and marked so, behaviour 17, AK-10; v4: in JavaScript and TypeScript the kinds come from the syntax tree and the members that implement or override the searched one are no usages, OBS-0028 T5, behaviours 14a and 16, AK-9); 2026-11-05 (v2: only the name is marked, OBS-0016; v3: grouped by usage kind, module, package, class and method, OBS-0016 defect F034-3)
 - **Sources:** OBS-0012 (side-by-side 2026-11-05 with `Inventory.java` of `java-basic`, record `Item`:
   ⌥F7 in the reference opens a tool window at the bottom, not a popup; its tab is named after the
   search, "<symbol> in Project Files"; a tree starts with the searched symbol, then a group of usages in
   project files with a count, then the files with their usages; a preview on the right shows the
   selected usage in its file with the usage marked; a vertical toolbar on the left offers rerun,
   previous/next, settings and grouping toggles. On the JDK type `String` in a parameter the reference
-  answers at once, IDECraft said "Finding usages of String…" and then showed nothing at all for more
+  answers at once, Ferris IDEA said "Finding usages of String…" and then showed nothing at all for more
   than 25 s), OSS (action ids `FindUsages` ⌥F7, `ShowUsages` ⌥⌘F7, `PreviousOccurence` ⌥⌘↑,
   `NextOccurence` ⌥⌘↓, `HideActiveWindow` ⇧Esc of the ported keymaps), STD (LSP 3.17
   `textDocument/references` with `includeDeclaration`, `textDocument/definition`, `$/cancelRequest`),
@@ -67,7 +67,7 @@ each use in view, without the list closing when you jump.
     Project Files` with a note that the language server did not answer within 20 s; without any
     occurrence it says that no usages were found and why. The status bar says the same. [GEN]
     10a. **No language server (v11):** when no usable language server is available for the file
-    (none of its servers is installed, or IDECraft knows none for its language), the window lists
+    (none of its servers is installed, or Ferris IDEA knows none for its language), the window lists
     the text occurrences as in behaviour 10, under the same group row and marked the same way (MCP
     `source` `text`), with a note that gives the reason in the words of the server lookup — which
     server is missing and how to install it, e.g. `No usable language server for typescript:
@@ -112,7 +112,7 @@ each use in view, without the list closing when you jump.
     Group by Module, Group by Package, Group by Class and Method, all on by default; ⌥⌘↑/⌥⌘↓ and the
     preview follow the shown order. The target row shows the symbol's kind before its name (`method
     apply`), from the declaration's symbol. The reference groups by target kind, usage kind,
-    module, package, class and method (OBS-0016 Nr. 8); IDECraft grouped by file only. [OBS-0016,
+    module, package, class and method (OBS-0016 Nr. 8); Ferris IDEA grouped by file only. [OBS-0016,
     STD, GEN]
     14a. **Kinds from the syntax tree (v4):** in `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`,
     `.mjs` and `.cjs` files the kind is read from the syntax tree instead of the line: `Calls` for
@@ -124,6 +124,20 @@ each use in view, without the list closing when you jump.
     rule saw `(` after the name and called `area(): number {` a call. Other languages keep the
     line rule. The group order is imports, calls, writes, reads, type usages, declarations,
     others. [OBS-0028 item 7, STD]
+    14b. **Go kinds from the syntax tree (v12):** in `.go` files the kind is read from the syntax
+    tree: `Receivers` for the type of a method's receiver (`func (r Rect) Area()`, also `*Rect`),
+    `Struct initializations` for the type of a composite literal (`Rect{W: 2, H: 3}`, `&Rect{}`,
+    `pkg.Rect{}`), `Calls` for the function of a call (a conversion `Rect(x)` included), `Writes`
+    for the left side of an assignment and for `++`/`--`, `Imports` inside an import declaration,
+    `Declarations` for the name of a type, function, method, constant, variable or field declared
+    there, `Type usages` for any other place where a type is named (a parameter, a result, a
+    variable's type, a slice's element), `Usages in comments` for a place inside a comment
+    (behaviour 30); a place inside a string is text, no usage (as in behaviour 10a); everywhere
+    else the line rule stays. The group order is imports, calls, writes, reads, type usages,
+    receivers, struct initializations, declarations, others, usages in comments. MCP kinds:
+    `receiver`, `struct_initialization` and `comment`. Before v12 gopls's two usages of a struct
+    type were both `Other usages`; the reference groups them as receiver and struct
+    initialization. [F-038 GO1, GEN]
 15. **MCP (v3):** each usage of `find_usages` carries `kind` (`import`, `call`, `write`, v4 also
     `read`, `type` and `declaration`, else `other`), `module`, `package`, `class` and `method` when
     known; the target carries `kind`. [ADR-0008, IMP-0301]
@@ -144,7 +158,7 @@ each use in view, without the list closing when you jump.
 17. **Selectors and HTML (v5):** on a class or id selector of a CSS, SCSS or Less file the usages
     the stylesheet's server names are kept, and the `class` words, for an id the `id` values,
     that equal the name in the project's own HTML files are added (SPEC-0042 v17 behaviours 30
-    and 32). These come from IDECraft's own index, not from a language server: the note of the
+    and 32). These come from Ferris IDEA's own index, not from a language server: the note of the
     search says how many they are, and in `find_usages` each carries `source: "own_index"`.
     They are sorted with the others by path, line and character and grouped like them
     (behaviour 14). [GEN, SPEC-0042]
@@ -206,7 +220,7 @@ each use in view, without the list closing when you jump.
     row. Off (the start), the package row is as before. The toggle works whether Group by Package is
     on or off. [OSS: id, title and "one group per directory from the base directory down" from
     `DirectoryStructureGroupingRule.java`, logic template; the open platform can also join the
-    middle folders into one row, IDECraft never does]
+    middle folders into one row, Ferris IDEA never does]
 24. **Flatten Modules (v9):** `UsageGrouping.FlattenModules` (⌃O, Ctrl+Alt+O in the default
     keymap) is on at first: every module is one row. Off, a module whose name has dots sits
     below one group row per leading part of its
@@ -214,10 +228,10 @@ each use in view, without the list closing when you jump.
     The toggle acts only while Group by Module is on; without it the action changes nothing and
     its key is Export to Text File's (behaviour 26). [OSS: id, title,
     "one group per prefix of the module's group path" and "enabled only with Group by Module" from
-    `ModuleGroupingRule.java` and `FlattenModulesAction.java`, logic template. IDECraft knows a
+    `ModuleGroupingRule.java` and `FlattenModulesAction.java`, logic template. Ferris IDEA knows a
     module by its folder name only; the dotted name is the only group path it has]
 25. **Exclude and Include (v9):** `UsageView.Exclude` (Delete and Backspace in the window; the
-    keymap files bind no key, the two are IDECraft's and listed as deviations of the keymap)
+    keymap files bind no key, the two are Ferris IDEA's and listed as deviations of the keymap)
     excludes the selected usage, or every usage below the selected group (all of them on the
     row `Usages in …`, none on the row of the searched symbol); `UsageView.Include`
     (⇧⌫, Insert in the default keymap) takes that back. An excluded usage stays in the
@@ -227,7 +241,7 @@ each use in view, without the list closing when you jump.
     after the other and never a group by accident. The action that would change nothing says
     so in the status bar. A rerun of the same
     search keeps the excluded usages that are found again; another search starts with none.
-    Nothing is removed from the search, and no refactoring reads the exclusions (IDECraft's
+    Nothing is removed from the search, and no refactoring reads the exclusions (Ferris IDEA's
     refactorings have previews of their own). [OSS: ids, titles and "applies to every node
     below the selection that can be excluded and is not yet" from `TreeNodeExclusionAction.java`
     and `ExclusionHandler.java`, logic template; GEN for the selection moving on and the rerun]
@@ -240,7 +254,7 @@ each use in view, without the list closing when you jump.
     usages and what a filter hides are not written. The status bar names the file and the number
     of usages; the file is not opened. Without a result the action says so, as the actions of
     behaviours 22–25 do. The reference
-    exports other views too (hierarchies, the TODO list); IDECraft exports this window only.
+    exports other views too (hierarchies, the TODO list); Ferris IDEA exports this window only.
     [OSS: id and title; GEN for the format]
 27. **Agents (v9):** UI automation runs the actions of behaviours 22–26 by their ids and knows
     what each changes: the filters, groupings, Exclude and Include change the view only, Export
@@ -251,6 +265,31 @@ each use in view, without the list closing when you jump.
     "Project Files" searches as `FindUsages` does (behaviour 1), "This File" as
     `FindUsagesInFile` (v7 behaviour 19). Without a name at the caret nothing opens and the
     status bar says so (v8 behaviour 20). [GEN]
+29. **The declaration is never a usage (v12):** the symbol's declaration is the target row, not a
+    usage, in every language and for every answer. The server is asked without the declaration
+    (`includeDeclaration: false`, behaviour 2); in addition a place on the declaration's line
+    whose range meets the declaration's range is left out, so a server that names its
+    declaration from the line's first column (`struct Rect {`) or names it anyway is covered.
+    When the server names no declaration (no answer to `textDocument/definition` within its wait,
+    an empty answer, a server still loading) the declaration is taken from the syntax tree: the
+    declared name under the caret. In a text answer (behaviours 10 and 10a) the declaration is the
+    declared name under the caret, else the only declaration of that name among the occurrences;
+    with two or more (a trait method and its implementation) none is taken and all stay listed.
+    Declared names come from the grammar's tags query and from the `name` of every node that
+    declares or defines something. Before v12 a text answer on `struct Rect` in Rust listed the
+    declaration first (3 places where the reference shows the `impl` and the literal). [F-038
+    RS1, STD, GEN]
+30. **Usages in comments (v12, Go):** when the target is a function, method or type declared at
+    the top of a Go file of the project, the whole-word, case-sensitive mentions of its name in
+    the comments of the project's Go files (`// Rect is a rectangle.`) are added under their own
+    group `Usages in comments` (kind `comment`), one per place; a language server never names
+    them. They are listed and shown like usages (preview, Next/Previous), the group row counts
+    them, and the group row above all usages counts them with the code usages. MCP
+    `find_usages` lists them in `files` with kind `comment`; its `count` counts the code usages
+    only and `comment_count` the mentions in comments, so an agent that counts usages is not
+    misled. Parameters and local names get no comment mentions (a short name would match words
+    of any comment). Usage counts at the lines (SPEC-0292) do not count them. Other languages:
+    not looked at yet. [F-038 GO1, GEN]
 
 ## Acceptance criteria
 - **AK-1** Tree model: grouping by file, counts, labels, sorting, de-duplication, flat mode, expand and
@@ -264,7 +303,7 @@ each use in view, without the list closing when you jump.
   a scripted server).
 - **AK-4** MCP `find_usages` is listed with its schema and refuses a `timeout_s` outside 1–60
   (protocol test).
-- **AK-5** In a real window (`idecraft ui --selftest`, with clangd): ⌥F7 on `helper` opens the Find
+- **AK-5** In a real window (`ferris-idea ui --selftest`, with clangd): ⌥F7 on `helper` opens the Find
   tool window titled `helper in Project Files` with its usages grouped under the file; ⌥⌘↓ opens the
   next usage; ⇧Esc hides the window; ⌥⌘F7 still opens the usages popup.
 - **AK-6** Side by side with the reference (OBS-0012): ⌥F7 on `Item` and on `String` in
@@ -346,6 +385,23 @@ each use in view, without the list closing when you jump.
   for a search without occurrences name the reason
   (`workbench_find_usages::tests::nothing_found_names_the_reason`).
 
+- **AK-18 (v12, behaviours 14b and 30)** Go kinds from the syntax tree
+  (`go_usages::tests::go_kinds_from_the_syntax_tree`); with gopls, Find Usages on `Rect` asked on
+  the declaration and on the struct initialization lists the doc comment's mention as `comment`,
+  the receiver as `receiver` and the literal as `struct_initialization`, two code usages, the
+  declaration not listed
+  (`crates/languages/tests/it/side_by_side_f038.rs::gopls_usages_by_kind_with_the_comment_mention`,
+  skipped without gopls); the text answer the same without a server
+  (`find_usages::tests::a_text_answer_leaves_out_the_declaration`).
+- **AK-19 (v12, behaviour 29)** A place meeting the declaration on its line is the declaration
+  (`find_usages::tests::the_declaration_is_matched_by_its_range`); a text answer in Rust and Go
+  leaves out the declaration asked on it and on a usage, and keeps two declarations of one name
+  (`find_usages::tests::a_text_answer_leaves_out_the_declaration`); declared names in Rust, Go and
+  PHP (`declared_names::tests::declarations_in_three_languages`); with rust-analyzer, Find Usages
+  on `struct Rect` asked on the declaration and on `impl Rect` lists the `impl` and the literal
+  only (`side_by_side_f038.rs::rust_analyzer_usages_without_the_declaration`, skipped without
+  rust-analyzer), with gopls the same in AK-18. Not checked in a window.
+
 ## Out of scope
 Several result tabs side by side (each new search replaces the content), the settings dialog of Find
 Usages (⌃⌥⇧F7: scope, options, `ShowSettingsAndFindUsages`), removing rows from the result
@@ -357,21 +413,27 @@ call hierarchy below the preview.
 ## Known deviations from the reference
 - The window keeps one search; the reference keeps a tab per search.
 - Results come from the language server, not from an own index; when the server is slower than 20 s
-  IDECraft shows text occurrences marked as such instead of waiting longer.
+  Ferris IDEA shows text occurrences marked as such instead of waiting longer.
 - The toolbar has no settings button yet.
 
-- v5: usages of a selector in HTML files come from IDECraft's own index of `class` and `id`
+- v5: usages of a selector in HTML files come from Ferris IDEA's own index of `class` and `id`
   attributes; classes that scripts or templates build are not found, and a search started on the
   class in the HTML file still asks the HTML server only. Not compared next to the reference.
 - v7: Find Usages in File is not compared with the reference. Open there: how it names the search,
-  whether it marks the usages in the editor as well (IDECraft: `HighlightUsagesInFile`, SPEC-0295)
-  and whether it searches without the project (IDECraft asks the server the project question and
+  whether it marks the usages in the editor as well (Ferris IDEA: `HighlightUsagesInFile`, SPEC-0295)
+  and whether it searches without the project (Ferris IDEA asks the server the project question and
   leaves out the other files, so it is no faster than Find Usages).
 - v9: the filters, Directory Structure, Flatten Modules, Exclude, Include and the export follow
   the open platform's actions as far as their sources state a rule; none was looked at in the
   reference. Known differences: read and write access come from the usage kinds of behaviour 14,
   not from a language analysis; module groups come from dotted folder names; excluded usages
-  are not skipped by a refactoring, because no refactoring of IDECraft runs from this window.
+  are not skipped by a refactoring, because no refactoring of Ferris IDEA runs from this window.
+- **Go usage kinds (v12):** the group labels are plural like the other kinds (`Receivers`,
+  `Struct initializations`, `Usages in comments`); the reference names them in the singular.
+  Comment mentions are searched for Go only and only for functions, methods and types; the
+  reference's rule for other languages and other symbols was not looked at. MCP counts the
+  mentions apart from the code usages (behaviour 30); the reference's tree counts them together,
+  as Ferris IDEA's window does.
 - **Find Usages settings (v10):** the reference's dialog also offers the kinds of usages and
-  further scopes; IDECraft asks only for the two scopes it can search (the filters of v9 work
+  further scopes; Ferris IDEA asks only for the two scopes it can search (the filters of v9 work
   on the result).

@@ -12,9 +12,9 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
 use std::sync::{Arc, Mutex};
 
+use ferris_idea_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
+use ferris_idea_workbench::{MenuPlace, ServicesView, WorkbenchView, semantics};
 use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext, point, px};
-use idecraft_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
-use idecraft_workbench::{MenuPlace, ServicesView, WorkbenchView, semantics};
 
 /// A local server answering every request with JSON naming its method and path; it records the
 /// request lines it saw.
@@ -61,7 +61,7 @@ fn server() -> (u16, Arc<Mutex<Vec<String>>>) {
 }
 
 fn workspace(port: u16) -> std::path::PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-http-window-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-http-window-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     std::fs::write(
@@ -138,7 +138,7 @@ fn requests_go_from_keys_marks_and_run_all(cx: &mut TestAppContext) {
     cx.update(|cx| {
         cx.set_global(IdeSettingsFile(settings.join("settings.toml")));
         cx.set_global(ThemeFile(settings.join("theme")));
-        cx.set_global(CurrentIdeSettings(idecraft_core::IdeSettings::default()));
+        cx.set_global(CurrentIdeSettings(ferris_idea_core::IdeSettings::default()));
     });
     let at = root.clone();
     let window = cx.add_window(move |_, cx| WorkbenchView::new(&at, cx));

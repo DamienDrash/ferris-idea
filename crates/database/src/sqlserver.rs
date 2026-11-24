@@ -54,7 +54,7 @@ impl Failure {
         let version = seen.version();
         if too_old(version) {
             return Self::Tls(format!(
-                "the server chose {}; IDECraft needs TLS 1.2 or newer, enable it on the server \
+                "the server chose {}; Ferris IDEA needs TLS 1.2 or newer, enable it on the server \
                  (`mssql-conf set network.tlsprotocols 1.2` on Linux)",
                 version_name(version)
             ));
@@ -98,7 +98,7 @@ impl SqlServerSession {
         let mut config = Config::new();
         config.host(&host);
         config.port(port);
-        config.application_name("IDECraft");
+        config.application_name("Ferris IDEA");
         if let Some(database) = &profile.database {
             config.database(database);
         }
@@ -371,7 +371,7 @@ fn text_of(data: &ColumnData<'static>) -> Option<String> {
             let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
             format!("0x{hex}")
         }),
-        ColumnData::Numeric(v) => v.map(|v| v.to_string()),
+        ColumnData::Numeric(v) => v.map(|v| decimal_text(v.value(), v.scale())),
         ColumnData::Xml(v) => v.as_ref().map(|v| v.to_string()),
         ColumnData::DateTime(_)
         | ColumnData::SmallDateTime(_)
@@ -379,6 +379,21 @@ fn text_of(data: &ColumnData<'static>) -> Option<String> {
         | ColumnData::Date(_)
         | ColumnData::DateTime2(_)
         | ColumnData::DateTimeOffset(_) => date_time(),
+    }
+}
+
+/// A `DECIMAL`/`NUMERIC` value with exactly its scale's digits after the point, none and no point
+/// for scale 0 (`SPEC-0116` v10 behaviour 16): `4`, `0.05`, `-1.50`.
+pub(crate) fn decimal_text(value: i128, scale: u8) -> String {
+    let digits = value.unsigned_abs().to_string();
+    let scale = usize::from(scale);
+    let digits = format!("{digits:0>width$}", width = scale + 1);
+    let (int, frac) = digits.split_at(digits.len() - scale);
+    let sign = if value < 0 { "-" } else { "" };
+    if frac.is_empty() {
+        format!("{sign}{int}")
+    } else {
+        format!("{sign}{int}.{frac}")
     }
 }
 
@@ -405,6 +420,21 @@ fn to_db_error(error: tiberius::error::Error, sql: &str) -> DbError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// SPEC-0116 v10 AK-14 (OBS-0120 X3): decimals keep their scale; scale 0 has no point.
+    #[test]
+    fn decimals_keep_their_scale() {
+        assert_eq!(decimal_text(4, 0), "4");
+        assert_eq!(decimal_text(5, 2), "0.05");
+        assert_eq!(decimal_text(-150, 2), "-1.50");
+        assert_eq!(decimal_text(-5, 3), "-0.005");
+        assert_eq!(decimal_text(0, 0), "0");
+        assert!(decimal_text(i128::MIN, 38).starts_with("-1.7014"));
+        assert_eq!(
+            decimal_text(99_999_999_999_999_999_999_999_999_999_999_999_999, 0),
+            "99999999999999999999999999999999999999"
+        );
+    }
 
     /// SPEC-0116 v6 AK-10: only `prefer` on the loopback tries again without TLS, and only after a
     /// TLS failure; a login or address failure is never repeated in clear.

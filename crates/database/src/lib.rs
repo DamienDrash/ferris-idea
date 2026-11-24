@@ -24,6 +24,7 @@ mod export;
 pub mod grid;
 mod grid_edit;
 mod history;
+mod idea_sources;
 mod inspect;
 mod introspect;
 mod mysql;
@@ -41,6 +42,7 @@ mod schema_objects;
 mod script;
 mod secret;
 mod session;
+mod sql_colours;
 mod sql_files;
 pub mod sql_format;
 mod sqlite;
@@ -57,9 +59,9 @@ pub use completion::{
     is_system_schema, wanted_schema,
 };
 pub use connection_form::{
-    ConnectionExtras, ConnectionForm, ConnectionTest, KEYCHAIN_SERVICE, driver_label, remove,
-    remove_connection, save_connection, secret_ref, test_connection, test_connection_for_agent,
-    test_form, unique_id, upsert, with_tls_hint,
+    ConnectionExtras, ConnectionForm, ConnectionTest, FileScope, KEYCHAIN_SERVICE,
+    create_database_file, driver_label, remove, remove_connection, save_connection, secret_ref,
+    test_connection, test_connection_for_agent, test_form, unique_id, upsert, with_tls_hint,
 };
 pub use connector::{Catalogue, Connector, catalogue, reload_catalogue};
 pub use copy_table::{
@@ -84,6 +86,7 @@ pub use er::{
 pub use export::{ExportError, ExportFormat, ExportOptions, export};
 pub use grid_edit::{CellState, GridEdits};
 pub use history::{HISTORY_LIMIT, HistoryEntry, QueryHistory, history_file, keeps_secret};
+pub use idea_sources::{idea_source_form, idea_source_note, is_added};
 pub use inspect::{Fix, Problem, Severity, inspect};
 pub use introspect::{
     Column, ConstraintName, ForeignKey, Index, ObjectDdl, Table, TableConstraint, UNKNOWN_SCHEMA,
@@ -130,12 +133,15 @@ pub use secret::SecretServiceStore;
 #[cfg(debug_assertions)]
 pub use secret::test_store;
 pub use secret::{
-    Credentials, KeychainStore, KeyringStore, MemoryStore, Secret, SecretError, SecretStore,
-    SystemStore, UNREACHABLE as KEYCHAIN_UNREACHABLE, keychain_reachable, resolve_credentials,
+    Credentials, FormerKeychainStore, KeychainStore, KeyringStore, MemoryStore, RenamedStore,
+    Secret, SecretError, SecretStore, SystemStore, UNREACHABLE as KEYCHAIN_UNREACHABLE,
+    VAULT_KEY_SERVICE, current_secret_ref, is_vault_key_service, keychain_reachable,
+    renamed_services, resolve_credentials,
 };
 pub use session::{
     CONNECT_TIMEOUT, CancelHandle, Driver, Session, SessionError, TlsPlan, is_loopback, tls_plan,
 };
+pub use sql_colours::{SqlColour, dialect_colours};
 pub use sql_files::{
     CONSOLES_DIR, SQL_FILES, bind_file, bound_connection, create_console, next_console,
 };

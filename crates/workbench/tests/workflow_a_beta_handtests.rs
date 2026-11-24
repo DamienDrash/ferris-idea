@@ -12,7 +12,7 @@
 //!   library class opens read-only.
 //! - 207 (SPEC-0059 v4, SPEC-0117 v2): a file with an error marks its tab and its folders, a
 //!   warning does not, the marks go without saving; the Python interpreter follows the active tab.
-//! - 18 (SPEC-0098): IDECraft's own inspections in Java, JavaScript and Python while typing.
+//! - 18 (SPEC-0098): Ferris IDEA's own inspections in Java, JavaScript and Python while typing.
 //! - 20 (SPEC-0039 v5): a Node.js program stops at a breakpoint with its variables; Step Over and
 //!   Step Into.
 //! - 19 (SPEC-0045 v3, SPEC-0051 v2): ⌃⇧R on a pytest and on a Jest test file shows the tests as
@@ -44,11 +44,11 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
+use ferris_idea_languages::LanguageId;
+use ferris_idea_workbench::DebugState;
+use ferris_idea_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
+use ferris_idea_workbench::{EditorView, WorkbenchView, semantics};
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_languages::LanguageId;
-use idecraft_workbench::DebugState;
-use idecraft_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
-use idecraft_workbench::{EditorView, WorkbenchView, semantics};
 
 type Bench = Entity<WorkbenchView>;
 
@@ -56,8 +56,10 @@ type Bench = Entity<WorkbenchView>;
 const COLD: u64 = 300;
 
 fn workspace(tag: &str, files: &[(&str, &str)]) -> PathBuf {
-    let root =
-        std::env::temp_dir().join(format!("idecraft-workflow-a-{tag}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!(
+        "ferris-idea-workflow-a-{tag}-{}",
+        std::process::id()
+    ));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     for (path, text) in files {
@@ -106,15 +108,15 @@ fn repository(root: &Path) -> bool {
 /// A window on `root` with a settings file and theme file of its own: the user's settings are
 /// never read or written.
 fn window(root: &Path, cx: &mut TestAppContext) -> (Bench, &'static mut VisualTestContext) {
-    idecraft_languages::pool::enable();
-    idecraft_core::trust::enforce();
-    idecraft_workbench::hit_targets::enable();
+    ferris_idea_languages::pool::enable();
+    ferris_idea_core::trust::enforce();
+    ferris_idea_workbench::hit_targets::enable();
     let settings = root.join(".test-settings");
     std::fs::create_dir_all(&settings).unwrap();
     cx.update(|cx| {
         cx.set_global(IdeSettingsFile(settings.join("settings.toml")));
         cx.set_global(ThemeFile(settings.join("theme")));
-        cx.set_global(CurrentIdeSettings(idecraft_core::IdeSettings::default()));
+        cx.set_global(CurrentIdeSettings(ferris_idea_core::IdeSettings::default()));
     });
     let at = root.to_path_buf();
     let window = cx.add_window(move |_, cx| WorkbenchView::new(&at, cx));
@@ -282,7 +284,7 @@ fn spot(text: &str, needle: &str, skip: usize) -> (usize, usize) {
     (line, column)
 }
 
-/// The messages of the language server's and IDECraft's problems in the active editor.
+/// The messages of the language server's and Ferris IDEA's problems in the active editor.
 fn problems(bench: &Bench, cx: &mut VisualTestContext) -> Vec<String> {
     bench.read_with(cx, |b, cx| {
         b.active_editor_entity()
@@ -298,7 +300,7 @@ fn problems(bench: &Bench, cx: &mut VisualTestContext) -> Vec<String> {
 }
 
 fn has_server(language: LanguageId, root: &Path) -> bool {
-    idecraft_languages::servers::resolve_for(language, root).is_ok()
+    ferris_idea_languages::servers::resolve_for(language, root).is_ok()
 }
 
 fn paused(bench: &Bench, cx: &mut VisualTestContext) -> bool {
@@ -344,7 +346,7 @@ fn run_output(bench: &Bench, cx: &mut VisualTestContext, name: Option<&str>) -> 
 }
 
 fn debugpy_installed() -> bool {
-    idecraft_debugger::known_adapters()
+    ferris_idea_debugger::known_adapters()
         .iter()
         .any(|a| a.name == "debugpy" && a.command.is_some())
 }
@@ -409,7 +411,7 @@ fn core_path_python_open_edit_navigate_run_debug_commit(cx: &mut TestAppContext)
         let _ = std::fs::remove_dir_all(&root);
         return;
     }
-    idecraft_core::trust::trust_for_process(&root);
+    ferris_idea_core::trust::trust_for_process(&root);
     let (bench, cx) = window(&root, cx);
     let main = root.join("main.py");
     let editor = open(&bench, cx, &main);
@@ -504,14 +506,14 @@ const SHOP_JAVA: &str = "public class Shop {\n    static int total(int price, in
 fn core_path_java_open_edit_navigate_run_debug_commit(cx: &mut TestAppContext) {
     let root = workspace("core-java", &[("Shop.java", SHOP_JAVA)]);
     if !has_server(LanguageId::Java, &root)
-        || !idecraft_languages::java_debug::java_debug_usable()
+        || !ferris_idea_languages::java_debug::java_debug_usable()
         || !repository(&root)
     {
         eprintln!("skipped: jdtls, java-debug or git is missing");
         let _ = std::fs::remove_dir_all(&root);
         return;
     }
-    idecraft_core::trust::trust_for_process(&root);
+    ferris_idea_core::trust::trust_for_process(&root);
     let (bench, cx) = window(&root, cx);
     let file = root.join("Shop.java");
     let editor = open(&bench, cx, &file);
@@ -662,7 +664,7 @@ const ROUNDS: &[(LanguageId, Round)] = &[
 fn hand_test_12_python_typescript_java_in_the_editor(cx: &mut TestAppContext) {
     let files: Vec<(&str, &str)> = ROUNDS.iter().map(|(_, r)| (r.file, r.text)).collect();
     let root = workspace("12", &files);
-    idecraft_core::trust::trust_for_process(&root);
+    ferris_idea_core::trust::trust_for_process(&root);
     let (bench, cx) = window(&root, cx);
     let mut ran = 0;
     for (language, round) in ROUNDS {
@@ -732,7 +734,7 @@ fn hand_test_12_python_typescript_java_in_the_editor(cx: &mut TestAppContext) {
         until(cx, 120, &what("the error is marked without saving"), |cx| {
             editor.read_with(cx, |e, _| {
                 e.problems().iter().any(|p| {
-                    p.severity == idecraft_workbench::diagnostics_model::Severity::Error
+                    p.severity == ferris_idea_workbench::diagnostics_model::Severity::Error
                         && p.range.start >= at
                         && p.range.start < at + round.error_line.len()
                 })
@@ -776,7 +778,7 @@ fn hand_test_209_java_in_a_single_file(cx: &mut TestAppContext) {
         let _ = std::fs::remove_dir_all(&root);
         return;
     }
-    idecraft_core::trust::trust_for_process(&root);
+    ferris_idea_core::trust::trust_for_process(&root);
     let (bench, cx) = window(&root, cx);
     open(&bench, cx, &root.join("sprachen/test.java"));
 
@@ -829,7 +831,7 @@ fn hand_test_209_java_in_a_single_file(cx: &mut TestAppContext) {
     assert_eq!(caret(&bench, cx), (line, column));
 
     // In `String`: the JDK's source opens read-only (SPEC-0149 v4 behaviour 11; when the hand
-    // test was written IDECraft could only name the library class); ⌘[ comes back.
+    // test was written Ferris IDEA could only name the library class); ⌘[ comes back.
     let (line, column) = spot(MAIN_JAVA, "String[]", 2);
     caret_to(&bench, cx, line, column);
     action(&bench, cx, "GotoDeclaration");
@@ -906,7 +908,7 @@ fn hand_test_207_files_with_errors_and_the_python_widget(cx: &mut TestAppContext
         let _ = std::fs::remove_dir_all(&root);
         return;
     }
-    idecraft_core::trust::trust_for_process(&root);
+    ferris_idea_core::trust::trust_for_process(&root);
     let (bench, cx) = window(&root, cx);
     let dir = root.join("sprachen");
     let java = root.join("sprachen/test.java");
@@ -989,7 +991,7 @@ fn hand_test_207_files_with_errors_and_the_python_widget(cx: &mut TestAppContext
         );
         assert!(
             ts_editor.read_with(cx, |e, _| e.problems().iter().all(
-                |p| p.severity != idecraft_workbench::diagnostics_model::Severity::Error
+                |p| p.severity != ferris_idea_workbench::diagnostics_model::Severity::Error
             )),
             "only a warning or hint"
         );
@@ -1000,8 +1002,8 @@ fn hand_test_207_files_with_errors_and_the_python_widget(cx: &mut TestAppContext
 
 // ---------------------------------------------------------------------------- hand test 18
 
-/// Hand test 18 (`SPEC-0098`): IDECraft's own inspections mark an empty `catch` block in Java,
-/// `==` in JavaScript and a bare `except:` in Python with "IDECraft: …", and Inspect Code over the
+/// Hand test 18 (`SPEC-0098`): Ferris IDEA's own inspections mark an empty `catch` block in Java,
+/// `==` in JavaScript and a bare `except:` in Python with "Ferris IDEA: …", and Inspect Code over the
 /// whole project lists all three. Needs no language server.
 #[gpui::test]
 fn hand_test_18_own_inspections_and_inspect_code(cx: &mut TestAppContext) {
@@ -1019,12 +1021,12 @@ fn hand_test_18_own_inspections_and_inspect_code(cx: &mut TestAppContext) {
             ),
         ],
     );
-    idecraft_core::trust::trust_for_process(&root);
+    ferris_idea_core::trust::trust_for_process(&root);
     let (bench, cx) = window(&root, cx);
     for (file, start) in [
-        ("Insp.java", "IDECraft: Empty 'catch' block"),
-        ("insp.js", "IDECraft: '==' and '!='"),
-        ("insp.py", "IDECraft: Too broad exception clause"),
+        ("Insp.java", "Ferris IDEA: Empty 'catch' block"),
+        ("insp.js", "Ferris IDEA: '==' and '!='"),
+        ("insp.py", "Ferris IDEA: Too broad exception clause"),
     ] {
         open(&bench, cx, &root.join(file));
         until(cx, 30, &format!("{file} is marked"), |cx| {
@@ -1066,7 +1068,7 @@ const NODE_JS: &str = "function add(a, b) {\n  const sum = a + b;\n  return sum;
 /// or Node.js.
 #[gpui::test]
 fn hand_test_20_debug_node(cx: &mut TestAppContext) {
-    let usable = idecraft_debugger::known_adapters()
+    let usable = ferris_idea_debugger::known_adapters()
         .iter()
         .any(|a| a.name == "js-debug" && a.command.is_some())
         && std::process::Command::new("node")
@@ -1078,7 +1080,7 @@ fn hand_test_20_debug_node(cx: &mut TestAppContext) {
         return;
     }
     let root = workspace("20", &[("debug/app.js", NODE_JS)]);
-    idecraft_core::trust::trust_for_process(&root);
+    ferris_idea_core::trust::trust_for_process(&root);
     let (bench, cx) = window(&root, cx);
     let editor = open(&bench, cx, &root.join("debug/app.js"));
     let (line, _) = spot(NODE_JS, "const result", 0);
@@ -1290,7 +1292,7 @@ fn hand_test_19_pytest_tree(cx: &mut TestAppContext) {
         return;
     };
     let root = workspace("19py", &[("test_calc.py", PYTEST_CALC)]);
-    idecraft_core::trust::trust_for_process(&root);
+    ferris_idea_core::trust::trust_for_process(&root);
     let (bench, cx) = window(&root, cx);
     bench.update(cx, |b, cx| b.set_interpreter(Some(python), cx));
     open(&bench, cx, &root.join("test_calc.py"));
@@ -1386,7 +1388,7 @@ fn hand_test_19_jest_tree(cx: &mut TestAppContext) {
     std::fs::create_dir_all(root.join("node_modules/.bin")).unwrap();
     std::os::unix::fs::symlink(&jest, root.join("node_modules/jest")).unwrap();
     std::os::unix::fs::symlink("../jest/bin/jest.js", root.join("node_modules/.bin/jest")).unwrap();
-    idecraft_core::trust::trust_for_process(&root);
+    ferris_idea_core::trust::trust_for_process(&root);
     let (bench, cx) = window(&root, cx);
     open(&bench, cx, &root.join("calc.test.js"));
     keys(cx, "ctrl-shift-r");
@@ -1465,7 +1467,7 @@ fn hand_test_19_jest_tree(cx: &mut TestAppContext) {
 
     // SPEC-0045 v6 behaviour 12 (B5): the ▶ of a Jest test offers Debug too, and Debug stops at a
     // breakpoint in the test. Skipped without js-debug.
-    let js_debug = idecraft_debugger::known_adapters()
+    let js_debug = ferris_idea_debugger::known_adapters()
         .iter()
         .any(|a| a.name == "js-debug" && a.command.is_some());
     let file = root.join("calc.test.js");
@@ -1555,7 +1557,7 @@ fn hand_test_197_safe_mode_until_trusted(cx: &mut TestAppContext) {
     );
 
     // Trusted: it runs, with the edited text (Run saves first).
-    idecraft_core::trust::trust_for_process(&root);
+    ferris_idea_core::trust::trust_for_process(&root);
     bench.update(cx, |b, cx| b.refresh_trust(cx));
     draw(cx);
     assert!(
@@ -1586,7 +1588,7 @@ fn hand_test_6_replace_in_files(cx: &mut TestAppContext) {
         "6",
         &[("shop/prices.py", PRICES), ("shop/report.py", REPORT)],
     );
-    idecraft_core::trust::trust_for_process(&root);
+    ferris_idea_core::trust::trust_for_process(&root);
     let (bench, cx) = window(&root, cx);
     let prices = root.join("shop/prices.py");
     let editor = open(&bench, cx, &prices);
@@ -1631,7 +1633,7 @@ fn hand_test_6_replace_in_files(cx: &mut TestAppContext) {
     assert_eq!(text(&bench, cx), PRICES, "one ⌘Z takes it back");
 
     // The closed file's history keeps the text before the replacement.
-    let history = idecraft_core::LocalHistory::open(&root).unwrap();
+    let history = ferris_idea_core::LocalHistory::open(&root).unwrap();
     let revisions = history.revisions("shop/report.py");
     assert!(
         revisions.iter().any(|r| history
@@ -1662,7 +1664,7 @@ fn hand_test_7_problems_window(cx: &mut TestAppContext) {
         let _ = std::fs::remove_dir_all(&root);
         return;
     }
-    idecraft_core::trust::trust_for_process(&root);
+    ferris_idea_core::trust::trust_for_process(&root);
     let (bench, cx) = window(&root, cx);
     open(&bench, cx, &root.join("b.py"));
     until(cx, COLD, "b.py has its error", |cx| {
@@ -1697,7 +1699,7 @@ fn hand_test_7_problems_window(cx: &mut TestAppContext) {
     );
 
     bench.update(cx, |b, cx| {
-        b.set_problems_scope(idecraft_workbench::problems_model::Scope::Project, cx)
+        b.set_problems_scope(ferris_idea_workbench::problems_model::Scope::Project, cx)
     });
     until(cx, 10, "the Project tab groups both files", |cx| {
         let rows = rows(cx);
@@ -1772,15 +1774,15 @@ fn hand_test_208_popups_close_on_a_click_beside_them(cx: &mut TestAppContext) {
             ),
         ],
     );
-    idecraft_core::trust::trust_for_process(&root);
+    ferris_idea_core::trust::trust_for_process(&root);
     let (bench, cx) = window(&root, cx);
     open(&bench, cx, &root.join("other.py"));
     let editor = open(&bench, cx, &root.join("safe.py"));
-    // ⌥↩ needs a finding at the caret: IDECraft's own one on the bare `except:`.
+    // ⌥↩ needs a finding at the caret: Ferris IDEA's own one on the bare `except:`.
     until(cx, 30, "the bare except is marked", |cx| {
         problems(&bench, cx)
             .iter()
-            .any(|m| m.starts_with("IDECraft: Too broad"))
+            .any(|m| m.starts_with("Ferris IDEA: Too broad"))
     });
     let target = POPUP_PY.find("print(safe").unwrap() + 2;
     // Opened through their actions: the keys are checked by the keymap tests; this is about

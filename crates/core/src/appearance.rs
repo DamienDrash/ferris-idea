@@ -2,8 +2,8 @@
 //!
 //! Since `SPEC-0303` the theme is `appearance.theme` in the IDE settings; the `theme` file of
 //! older versions (its name on one line) is read while the settings name none, and retired to
-//! `theme.bak` when a theme is chosen. The keymap is `keymaps/IDECraft.toml`; older versions kept
-//! `keymaps/IDECraft.xml`.
+//! `theme.bak` when a theme is chosen. The keymap is `keymaps/FerrisIDEA.toml`; older versions kept
+//! `keymaps/FerrisIDEA.xml`.
 
 use std::path::{Path, PathBuf};
 
@@ -14,10 +14,13 @@ pub fn theme_file() -> Option<PathBuf> {
     user_config_dir().map(|d| d.join("theme"))
 }
 
-/// Where the user's keymap is kept: `keymaps/IDECraft.toml` in [`user_config_dir`]
+/// The user's keymap file inside [`user_config_dir`] (`SPEC-0303` behaviour 14).
+pub(crate) const KEYMAP_FILE: &str = "keymaps/FerrisIDEA.toml";
+
+/// Where the user's keymap is kept: `keymaps/FerrisIDEA.toml` in [`user_config_dir`]
 /// (`SPEC-0303` behaviour 14).
 pub fn keymap_file() -> Option<PathBuf> {
-    user_config_dir().map(|d| d.join("keymaps/IDECraft.toml"))
+    user_config_dir().map(|d| d.join(KEYMAP_FILE))
 }
 
 /// The keymap file older versions wrote beside `file`: the same name with `.xml`, in the
@@ -30,7 +33,8 @@ pub fn legacy_keymap_file(file: &Path) -> PathBuf {
 pub fn load_theme(file: &Path) -> Option<String> {
     let text = std::fs::read_to_string(file).ok()?;
     let name = text.trim();
-    (!name.is_empty()).then(|| name.to_owned())
+    // A name saved under the product's former name reads as today's (`SPEC-0356` behaviour 7).
+    (!name.is_empty()).then(|| crate::takeover::current_theme_name(name).into_owned())
 }
 
 /// The chosen theme: `appearance.theme` of the settings file, else the old `legacy` theme file
@@ -66,7 +70,7 @@ mod tests {
     /// SPEC-0303 AK-5: the old theme file is read until a theme is chosen, then kept as `.bak`.
     #[test]
     fn the_theme_moves_into_the_settings() {
-        let dir = std::env::temp_dir().join(format!("idecraft-theme-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-theme-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let settings = dir.join("settings.toml");
         let old = dir.join("theme");
@@ -80,7 +84,7 @@ mod tests {
         std::fs::write(&old, "  \n").unwrap();
         assert_eq!(chosen_theme(&settings, Some(&old)), None);
         std::fs::write(&old, "Light\n").unwrap();
-        save_chosen_theme(&settings, Some(&old), "IDECraft Light").unwrap();
+        save_chosen_theme(&settings, Some(&old), "Ferris IDEA Light").unwrap();
         assert!(!old.exists());
         assert_eq!(
             std::fs::read_to_string(dir.join("theme.bak")).unwrap(),
@@ -88,14 +92,14 @@ mod tests {
         );
         assert_eq!(
             chosen_theme(&settings, Some(&old)).as_deref(),
-            Some("IDECraft Light")
+            Some("Ferris IDEA Light")
         );
         let text = std::fs::read_to_string(&settings).unwrap();
         assert!(
-            text.starts_with("[idecraft]\nkind = \"ide-settings\"\nformat = 1\n"),
+            text.starts_with("[ferris-idea]\nkind = \"ide-settings\"\nformat = 1\n"),
             "{text}"
         );
-        assert!(text.contains("theme = \"IDECraft Light\""));
+        assert!(text.contains("theme = \"Ferris IDEA Light\""));
         let _ = std::fs::remove_dir_all(dir);
     }
 }

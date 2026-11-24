@@ -7,8 +7,8 @@
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
+use ferris_idea_vcs::Repo;
 use gpui::{Context, Window, prelude::*};
-use idecraft_vcs::Repo;
 
 use super::WorkbenchView;
 use super::popups::Popup;
@@ -23,8 +23,8 @@ const ROWS: usize = 16;
 /// The items of the Compare with list: commits the branch has (`+`) and those the current branch
 /// has (`-`), newest first in each part, with their ids (`SPEC-0068` v6 behaviour 23).
 pub fn compare_items(
-    ahead: &[idecraft_vcs::CommitInfo],
-    behind: &[idecraft_vcs::CommitInfo],
+    ahead: &[ferris_idea_vcs::CommitInfo],
+    behind: &[ferris_idea_vcs::CommitInfo],
 ) -> (Vec<String>, Vec<String>) {
     let mut items = Vec::new();
     let mut ids = Vec::new();
@@ -177,7 +177,7 @@ impl WorkbenchView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let rows = idecraft_vcs::side_by_side(old, new);
+        let rows = ferris_idea_vcs::side_by_side(old, new);
         let unified = self.diff_unified;
         let title = format!("{rel} ({label})");
         let label = label.to_owned();
@@ -249,7 +249,7 @@ impl WorkbenchView {
         cx: &mut Context<Self>,
     ) {
         let short = rev[..rev.len().min(7)].to_owned();
-        let rows = idecraft_vcs::side_by_side(text, text);
+        let rows = ferris_idea_vcs::side_by_side(text, text);
         let file = self.root.join(rel);
         let view = cx.new(|cx| {
             crate::DiffView::new(format!("{rel} @ {short}"), rows, cx)
@@ -293,7 +293,7 @@ impl WorkbenchView {
 #[cfg(test)]
 mod tests {
     use super::compare_items;
-    use idecraft_vcs::CommitInfo;
+    use ferris_idea_vcs::CommitInfo;
 
     fn commit(id: &str, summary: &str) -> CommitInfo {
         CommitInfo {

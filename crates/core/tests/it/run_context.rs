@@ -1,13 +1,13 @@
 //! SPEC-0097 AK-1: the configuration `RunClass` runs for the file in the editor.
 
-use idecraft_core::{
+use ferris_idea_core::{
     ProjectModel, RunKind, Workspace, context_config, read_project, test_method_config,
 };
 
 fn model(files: &[(&str, &str)]) -> (std::path::PathBuf, ProjectModel) {
     static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let root = std::env::temp_dir().join(format!("idecraft-context-{n}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-context-{n}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     for (p, text) in files {
         let f = root.join(p);
@@ -67,7 +67,7 @@ fn files_of_each_language() {
     assert_eq!(py.command, ["python3", "tools/run.py"]);
     let pt = context_config(&empty, "test_calc.py", "def test_x(): pass").unwrap();
     assert_eq!(pt.kind, RunKind::Test);
-    assert_eq!(pt.report_file.as_deref(), Some(".idecraft/pytest.xml"));
+    assert_eq!(pt.report_file.as_deref(), Some(".ferris-idea/pytest.xml"));
     assert_eq!(
         context_config(&empty, "a.js", "").unwrap().command,
         ["node", "a.js"]
@@ -127,10 +127,27 @@ fn build_tool_modules() {
     let r = context_config(&cargo, "src/main.rs", "fn main() {}").unwrap();
     assert_eq!(
         (r.name.as_str(), r.command.clone()),
-        ("tool", vec!["cargo".into(), "run".into()])
+        (
+            "tool",
+            vec!["cargo".into(), "run".into(), "--bin".into(), "tool".into()]
+        )
     );
     let b = context_config(&cargo, "src/bin/extra.rs", "fn main() {}").unwrap();
     assert_eq!(b.command, ["cargo", "run", "--bin", "extra"]);
+    // SPEC-0097 v3 AK-5 (behaviour 8): a binary in its own folder and the examples.
+    let d = context_config(&cargo, "src/bin/serve/main.rs", "fn main() {}").unwrap();
+    assert_eq!(
+        (d.name.as_str(), d.command.clone()),
+        (
+            "serve",
+            vec!["cargo".into(), "run".into(), "--bin".into(), "serve".into()]
+        )
+    );
+    let e = context_config(&cargo, "examples/demo.rs", "fn main() {}").unwrap();
+    assert_eq!(e.command, ["cargo", "run", "--example", "demo"]);
+    let f = context_config(&cargo, "examples/big/main.rs", "fn main() {}").unwrap();
+    assert_eq!(f.command, ["cargo", "run", "--example", "big"]);
+    assert!(context_config(&cargo, "src/shapes.rs", "fn main() {}").is_none());
 }
 
 /// SPEC-0045 v3 AK-9: test files of JavaScript/TypeScript and Go run with a result tree.
@@ -145,7 +162,10 @@ fn test_files_of_js_and_go() {
     assert_eq!(v.cwd.as_deref(), Some("web"));
     assert_eq!(v.kind, RunKind::Test);
     assert_eq!(v.report.as_deref(), Some("jest"));
-    assert_eq!(v.report_file.as_deref(), Some("web/.idecraft/vitest.json"));
+    assert_eq!(
+        v.report_file.as_deref(),
+        Some("web/.ferris-idea/vitest.json")
+    );
     assert_eq!(v.command.last().unwrap(), "src/math.test.ts");
     // SPEC-0168 behaviour 3: TypeScript runs on Node's type stripping, JSX does not run.
     let ts = context_config(&web, "web/src/math.ts", "").unwrap();
@@ -164,7 +184,7 @@ fn test_files_of_js_and_go() {
             "npx",
             "jest",
             "--json",
-            "--outputFile=.idecraft/jest.json",
+            "--outputFile=.ferris-idea/jest.json",
             "sum.spec.js"
         ]
     );
@@ -178,7 +198,7 @@ fn test_files_of_js_and_go() {
 /// separates a test's end from a suite.
 #[test]
 fn js_test_name_filters() {
-    use idecraft_core::js_test_pattern;
+    use ferris_idea_core::js_test_pattern;
     assert_eq!(js_test_pattern("math adds", false), "math adds$");
     assert_eq!(js_test_pattern("math", true), "math ");
     assert_eq!(js_test_pattern("a (b) [c]?", false), r"a \(b\) \[c\]\?$");
@@ -193,7 +213,7 @@ fn js_test_name_filters() {
 /// a Rust file's tests as a whole outside a test.
 #[test]
 fn single_tests_of_pytest_go_and_rust() {
-    use idecraft_core::single_test_config;
+    use ferris_idea_core::single_test_config;
     let (_, empty) = model(&[("x.txt", "")]);
     let py = "def test_total():\n    pass\n";
     let one =
@@ -205,7 +225,7 @@ fn single_tests_of_pytest_go_and_rust() {
             "-m",
             "pytest",
             "tests/test_prices.py::test_total",
-            "--junitxml=.idecraft/pytest.xml"
+            "--junitxml=.ferris-idea/pytest.xml"
         ]
     );
     assert_eq!(one.name, "test_prices.py::test_total");
@@ -281,4 +301,160 @@ fn single_tests_of_pytest_go_and_rust() {
     assert_eq!(whole.name, "cargo test it");
     // Without a Cargo module nothing runs.
     assert!(single_test_config(&empty, "src/lib.rs", lib, "tests", Some("adds")).is_none());
+}
+
+const REPORT: &str = "package lab.stock;\n\npublic class Report {\n    public static void main(String[] args) {\n        System.out.println(\"Total: \" + Inventory.totalValue());\n    }\n}\n";
+const INVENTORY: &str = "package lab.stock;\n\nclass Inventory {\n    static int totalValue() {\n        return 4 * 10;\n    }\n}\n";
+const MODULES: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<project version=\"4\">\n  <component name=\"ProjectModuleManager\">\n    <modules>\n      <module fileurl=\"file://$PROJECT_DIR$/lab.iml\" filepath=\"$PROJECT_DIR$/lab.iml\" />\n    </modules>\n  </component>\n</project>\n";
+const LAB_IML: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<module type=\"JAVA_MODULE\" version=\"4\">\n  <component name=\"NewModuleRootManager\" inherit-compiler-output=\"true\">\n    <exclude-output />\n    <content url=\"file://$MODULE_DIR$\">\n      <sourceFolder url=\"file://$MODULE_DIR$/src/main/java\" isTestSource=\"false\" />\n    </content>\n    <orderEntry type=\"inheritedJdk\" />\n    <orderEntry type=\"sourceFolder\" forTests=\"false\" />\n    <orderEntry type=\"module-library\">\n      <library>\n        <CLASSES>\n          <root url=\"jar://$MODULE_DIR$/lib/util.jar!/\" />\n        </CLASSES>\n      </library>\n    </orderEntry>\n  </component>\n</module>\n";
+
+/// The script of a `sh -c` configuration.
+fn script(c: &ferris_idea_core::RunConfig) -> &str {
+    assert_eq!(c.command[..2], ["sh", "-c"], "{:?}", c.command);
+    &c.command[2]
+}
+
+/// SPEC-0097 v4 AK-7 (behaviour 10; window check 2026-11-18 gap RJ1): a class in a source folder
+/// of a module without a build tool runs with the whole module compiled into
+/// `out/production/<module>`; a file outside a source folder still runs alone.
+#[test]
+fn a_module_without_a_build_tool_is_compiled_before_the_run() {
+    // Only an .iml file beside the sources, no .idea folder.
+    let (root, m) = model(&[
+        ("lab.iml", LAB_IML),
+        ("src/main/java/lab/stock/Report.java", REPORT),
+        ("src/main/java/lab/stock/Inventory.java", INVENTORY),
+        (
+            "scripts/Tool.java",
+            "class Tool { public static void main(String[] a) {} }\n",
+        ),
+    ]);
+    let c = ferris_idea_core::context_config_in(
+        &root,
+        &m,
+        "src/main/java/lab/stock/Report.java",
+        REPORT,
+    )
+    .unwrap();
+    let s = script(&c);
+    assert!(s.contains("find 'src/main/java' -name '*.java'"), "{s}");
+    assert!(s.contains("javac -d 'out/production/lab'"), "{s}");
+    assert!(
+        s.ends_with("java -cp 'out/production/lab' 'lab.stock.Report'"),
+        "{s}"
+    );
+    assert_eq!(c.kind, RunKind::Run);
+    assert_eq!(c.cwd, None, "runs in the project folder");
+    assert_eq!(c.name, "Report");
+    // Outside a source folder: the JDK's source launcher, as before.
+    let tool = ferris_idea_core::context_config_in(
+        &root,
+        &m,
+        "scripts/Tool.java",
+        "class Tool { public static void main(String[] a) {} }\n",
+    )
+    .unwrap();
+    assert_eq!(tool.command, ["java", "scripts/Tool.java"]);
+    // Without the project folder the path alone says it: the module is named after its folder,
+    // here the project folder, which is unknown.
+    let alone = context_config(&m, "src/main/java/lab/stock/Report.java", REPORT).unwrap();
+    assert!(script(&alone).contains("javac -d 'out/production/main'"));
+    // With .idea: the module's name, source folders and libraries come from there.
+    std::fs::create_dir_all(root.join(".idea")).unwrap();
+    std::fs::write(root.join(".idea/modules.xml"), MODULES).unwrap();
+    let module =
+        ferris_idea_core::java_module(Some(&root), "src/main/java/lab/stock/Report.java", REPORT)
+            .unwrap();
+    assert_eq!(module.name, "lab");
+    assert_eq!(module.sources, ["src/main/java"]);
+    assert_eq!(module.output, "out/production/lab");
+    assert_eq!(module.classpath, ["lib/util.jar"]);
+    let s = ferris_idea_core::java_module_command(&module, "lab.stock.Report");
+    assert!(
+        s[2].contains("javac -d 'out/production/lab' -cp 'lib/util.jar'"),
+        "{}",
+        s[2]
+    );
+    assert!(s[2].ends_with("java -cp 'out/production/lab:lib/util.jar' 'lab.stock.Report'"));
+    assert!(ferris_idea_core::java_module(Some(&root), "scripts/Tool.java", "").is_none());
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// SPEC-0097 v4 AK-7: the command really compiles and runs the two classes, and a compile error
+/// stops it before the run with javac's message naming the file and line. Needs a JDK; without
+/// `javac` on the path the test says so and passes.
+#[test]
+fn the_compiled_module_runs_and_a_compile_error_stops_it() {
+    let has_javac = std::process::Command::new("javac")
+        .arg("-version")
+        .output()
+        .is_ok_and(|o| o.status.success());
+    if !has_javac {
+        eprintln!("skipped: no javac on the path");
+        return;
+    }
+    let (root, m) = model(&[
+        (
+            "lab.iml",
+            LAB_IML.replace("lib/util.jar", "lib/none.jar").as_str(),
+        ),
+        ("src/main/java/lab/stock/Report.java", REPORT),
+        ("src/main/java/lab/stock/Inventory.java", INVENTORY),
+    ]);
+    let run = |c: &ferris_idea_core::RunConfig| {
+        std::process::Command::new(&c.command[0])
+            .args(&c.command[1..])
+            .current_dir(&root)
+            .output()
+            .unwrap()
+    };
+    let c = ferris_idea_core::context_config_in(
+        &root,
+        &m,
+        "src/main/java/lab/stock/Report.java",
+        REPORT,
+    )
+    .unwrap();
+    let out = run(&c);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "{out:?}");
+    assert_eq!(stdout.trim(), "Total: 40");
+    assert!(
+        root.join("out/production/lab/lab/stock/Inventory.class")
+            .is_file()
+    );
+    // A compile error: no run, exit code not 0, javac names the file and line.
+    std::fs::write(
+        root.join("src/main/java/lab/stock/Inventory.java"),
+        INVENTORY.replace("4 * 10", "4 * missing"),
+    )
+    .unwrap();
+    let out = run(&c);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(!out.status.success());
+    assert!(!String::from_utf8_lossy(&out.stdout).contains("Total"));
+    assert!(
+        stderr.contains("src/main/java/lab/stock/Inventory.java:5: error"),
+        "{stderr}"
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// SPEC-0097 v4 behaviour 10: every word of the module command is quoted, and a source folder
+/// that starts with `-` reaches `find` as a path, never as its expression.
+#[test]
+fn the_module_command_quotes_every_word() {
+    let module = ferris_idea_core::JavaModule {
+        name: "lab".into(),
+        sources: vec!["-delete".into(), "src".into()],
+        output: "out/production/lab".into(),
+        classpath: vec![],
+    };
+    let cmd = ferris_idea_core::java_module_command(&module, "lab.stock.Report");
+    let script = &cmd[2];
+    assert!(script.contains("find './-delete' 'src' -name"), "{script}");
+    assert!(
+        script.ends_with("java -cp 'out/production/lab' 'lab.stock.Report'"),
+        "{script}"
+    );
 }

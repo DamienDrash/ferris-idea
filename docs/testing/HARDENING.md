@@ -2,7 +2,7 @@
 
 **Status:** v1 · 2026-11-03 · roadmap item M8.2
 
-IDECraft reads a lot of input it does not control: language-server and debug-adapter messages,
+Ferris IDEA reads a lot of input it does not control: language-server and debug-adapter messages,
 MCP requests from agents, SQL scripts, terminal output, plugin modules and their answers, and the
 files of a cloned project. This page describes the tests that throw malformed input at those
 readers and the soak test that drives one IDE process for a long time.
@@ -33,7 +33,7 @@ must not panic, hang or allocate without bound. Several also check what their re
 | `profiler_formats` | JFR, sample, perf script, massif, malloc history, tracemalloc, cProfile, heap, `ps` | — |
 | `misc_formats` | query plans, dependency trees, requirement specs, `.properties`, project dictionaries, ESLint JSON, argument lists, AI CLI output | spans inside the text |
 
-Git objects are read by `gix`, not by IDECraft, so the Git target covers only what IDECraft
+Git objects are read by `gix`, not by Ferris IDEA, so the Git target covers only what Ferris IDEA
 parses itself: diffs and the merge.
 
 The MCP target calls only tools that neither write, run programs nor reach the network, inside a
@@ -61,23 +61,23 @@ scripts/fuzz.sh libfuzzer 600 sql_split terminal_vte
 List the targets, or replay one input:
 
 ```bash
-cargo run -p idecraft-hardening --bin idecraft-fuzz -- list
+cargo run -p ferris-idea-hardening --bin ferris-idea-fuzz -- list
 ```
 
 ```bash
-cargo run -p idecraft-hardening --bin idecraft-fuzz -- replay diff_merge crates/hardening/regressions/diff_merge/lone-cr-index
+cargo run -p ferris-idea-hardening --bin ferris-idea-fuzz -- replay diff_merge crates/hardening/regressions/diff_merge/lone-cr-index
 ```
 
 Inputs that crash land in `fuzz-crashes/` (stable driver) or `fuzz/artifacts/<target>/`
 (libFuzzer). The working corpus `fuzz/corpus/` is not in the repository; the seeds in
 `targets.rs` recreate it.
 
-`cargo test -p idecraft-hardening` runs every target on its seeds plus 400 mutated inputs
+`cargo test -p ferris-idea-hardening` runs every target on its seeds plus 400 mutated inputs
 (100 for MCP) and replays every input in `crates/hardening/regressions/`, one per fixed finding.
 
 ## Soak test
 
-`idecraft-soak` starts `idecraft mcp` on a scratch workspace and repeats rounds until the time is
+`ferris-idea-soak` starts `ferris-idea mcp` on a scratch workspace and repeats rounds until the time is
 up. A round:
 
 1. saves a workspace file from outside and reads it back through `read_file`;
@@ -88,7 +88,7 @@ up. A round:
    (`terminal_command`), terminal rendering and SQL splitting, and file search;
 5. every tenth round asks the Python language server for diagnostics (`file_diagnostics`).
 
-Every 40 rounds a second, short-lived `idecraft mcp` process starts, runs a terminal command and
+Every 40 rounds a second, short-lived `ferris-idea mcp` process starts, runs a terminal command and
 a language server, and ends. No process below it may still run 10 s later.
 
 The test fails when:
@@ -110,16 +110,16 @@ scripts/soak.sh 2
 scripts/soak.sh 120 --csv soak.csv
 ```
 
-Other options of `idecraft-soak`: `--secs`, `--seed`, `--workspace`, `--sample-secs`,
+Other options of `ferris-idea-soak`: `--secs`, `--seed`, `--workspace`, `--sample-secs`,
 `--churn-every`, `--timeout-secs`, `--max-rss-growth-mb`, `--max-fd-growth`, `--no-lsp`.
-The run grants the `run` right only in its own settings folder (`IDECRAFT_CONFIG_DIR`), never in
+The run grants the `run` right only in its own settings folder (`FERRIS_IDEA_CONFIG_DIR`), never in
 yours.
 
 ## Where the runs happen
 
 | Run | When | Time |
 |---|---|---|
-| `cargo test -p idecraft-hardening` | every `cargo test --workspace` | about 4 s |
+| `cargo test -p ferris-idea-hardening` | every `cargo test --workspace` | about 4 s |
 | `scripts/fuzz.sh smoke 2` and `scripts/soak.sh 2` | `scripts/ci-local.sh`, so every push on the Mac runner | about 3 min |
 | `scripts/soak.sh 120`, `scripts/fuzz.sh smoke 60`, `scripts/fuzz.sh libfuzzer 240` | nightly job `hardening` in `.github/workflows/ci.yml`, or on request | about 3.5 h |
 
@@ -147,7 +147,7 @@ Recorded, not changed:
 - **An offset between `\r` and `\n` has no line/column round trip.** `offset_to_position` gives
   it a column past the line's content, which `position_to_offset` refuses. Carets do not stop
   there in normal editing; the `text_buffer` target skips this case.
-- **Resident memory of `idecraft mcp` (debug build) drifts upward slowly.** In the 30-minute
+- **Resident memory of `ferris-idea mcp` (debug build) drifts upward slowly.** In the 30-minute
   soak (17,058 rounds, 81,875 requests, 426 short sessions) it rose from 69 MiB after warm-up to
   89 MiB, within the 96 MiB limit. The live heap stayed flat (2.18 MB → 2.23 MB, macOS `heap`)
   and `leaks` found 0 leaked bytes, so the drift is memory the allocator keeps, not data the

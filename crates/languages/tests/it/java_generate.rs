@@ -5,7 +5,7 @@
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use idecraft_languages::java_generate::{
+use ferris_idea_languages::java_generate::{
     add_delegate_methods_in, delegate_fields_in, import_candidates_at, unresolved_name,
 };
 
@@ -17,15 +17,16 @@ fn write(root: &Path, name: &str, text: &str) {
 
 #[tokio::test]
 async fn delegate_methods_import_hint_and_constructor_hints() {
-    if idecraft_languages::servers::resolve(idecraft_languages::LanguageId::Java).is_err() {
+    if ferris_idea_languages::servers::resolve(ferris_idea_languages::LanguageId::Java).is_err() {
         assert!(
-            std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+            ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
             "required tool missing: jdtls"
         );
         eprintln!("skipped: jdtls not installed");
         return;
     }
-    let root = std::env::temp_dir().join(format!("idecraft-java-generate-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-java-generate-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src/main/java/shop")).unwrap();
     let root = root.canonicalize().unwrap();
@@ -78,7 +79,7 @@ async fn delegate_methods_import_hint_and_constructor_hints() {
         .await
         .unwrap();
     let edits: Vec<_> = files.iter().flat_map(|f| f.edits.clone()).collect();
-    let new = idecraft_languages::rename::apply_edits(car_text, &edits).unwrap();
+    let new = ferris_idea_languages::rename::apply_edits(car_text, &edits).unwrap();
     assert!(
         new.contains("public void start(int rpm) {") && new.contains("engine.start(rpm);"),
         "{new}"
@@ -86,14 +87,14 @@ async fn delegate_methods_import_hint_and_constructor_hints() {
     assert!(!new.contains("label()"), "{new}");
 
     // Parameter name hints before the only argument of a constructor, record or class.
-    let hints = idecraft_languages::inlay::parameter_hints_in(&root, &main, None, wait)
+    let hints = ferris_idea_languages::inlay::parameter_hints_in(&root, &main, None, wait)
         .await
         .unwrap();
     let got: Vec<(u64, &str)> = hints.iter().map(|h| (h.line, h.label.as_str())).collect();
     assert_eq!(got, [(4, "name:"), (5, "radius:")], "{hints:?}");
 
     // The import hint: jdtls's message names the class, its actions name the package.
-    let diagnostics = idecraft_languages::lsp::file_diagnostics(&root, &main, wait)
+    let diagnostics = ferris_idea_languages::lsp::file_diagnostics(&root, &main, wait)
         .await
         .unwrap();
     let d = diagnostics

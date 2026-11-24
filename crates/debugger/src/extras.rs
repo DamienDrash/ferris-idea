@@ -154,7 +154,7 @@ pub struct ThreadInfo {
     pub id: i64,
     /// The thread's name (java-debug's `Thread [main]` shown as `main`).
     pub name: String,
-    /// IDECraft's state text: `RUNNING`, `WAIT`, `SLEEPING`, `MONITOR`, `NEW`, `ZOMBIE`, or empty
+    /// Ferris IDEA's state text: `RUNNING`, `WAIT`, `SLEEPING`, `MONITOR`, `NEW`, `ZOMBIE`, or empty
     /// when the adapter cannot tell.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub state: String,

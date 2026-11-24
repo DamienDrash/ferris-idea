@@ -1,0 +1,7 @@
+#!/bin/sh
+# Entry point of the Ferris IDEA AppImage (SPEC-0354 behaviour 11): the AppImage's arguments go to
+# `ferris-idea`; without arguments (a double click) it opens the most recent project, like the
+# desktop entry. Nothing else is done here: no update check, no environment changes.
+here=$(dirname "$(readlink -f "$0")")
+[ $# -gt 0 ] || set -- launch
+exec "$here/usr/bin/ferris-idea" "$@"

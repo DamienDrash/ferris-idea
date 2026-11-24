@@ -157,9 +157,50 @@ impl Repo {
             .collect())
     }
 
-    /// Local branches checked out recently, newest first, without the current branch and without
-    /// branches that are gone; at most `limit` (`SPEC-0068` v5 behaviour 17). Read from HEAD's
-    /// reflog, where Git and IDECraft record every checkout.
+    /// Tags with the full id of the commit each names and its creation time: the tagger date of
+    /// an annotated tag, else the commit time (`SPEC-0351` behaviour 11). Sorted by time, then
+    /// name; tags that name no commit are left out.
+    pub fn tags_with_time(&self) -> Result<Vec<(String, String, i64)>, GitError> {
+        let text = query(
+            self,
+            &[
+                "for-each-ref",
+                "--sort=refname",
+                "--format=%(refname:short)%00%(objecttype)%00%(objectname)%00%(*objecttype)%00%(*objectname)%00%(creatordate:unix)",
+                "refs/tags",
+            ],
+        )?;
+        let mut out: Vec<(String, String, i64)> = text
+            .lines()
+            .filter_map(|l| {
+                let f: Vec<&str> = l.split('\0').collect();
+                let (name, kind, id, peeled_kind, peeled, time) = (
+                    f.first()?,
+                    f.get(1)?,
+                    f.get(2)?,
+                    f.get(3)?,
+                    f.get(4)?,
+                    f.get(5)?,
+                );
+                let commit = if *kind == "commit" {
+                    *id
+                } else if *peeled_kind == "commit" {
+                    *peeled
+                } else {
+                    return None;
+                };
+                Some(((*name).to_owned(), commit.to_owned(), time.parse().ok()?))
+            })
+            .collect();
+        out.sort_by(|a, b| a.2.cmp(&b.2).then_with(|| a.0.cmp(&b.0)));
+        Ok(out)
+    }
+
+    /// Local branches checked out recently, newest first, the current branch included and
+    /// branches that are gone left out; at most `limit` (`SPEC-0068` v10 behaviour 17). Read
+    /// from HEAD's reflog, where Git and Ferris IDEA record every checkout; the current branch is
+    /// the newest checkout and comes first, also when the reflog does not name it (a branch
+    /// renamed since).
     pub fn recent_branches(&self, limit: usize) -> Result<Vec<String>, GitError> {
         let (ok, text, _, _) = run_git(
             self.dir()?,
@@ -187,16 +228,19 @@ impl Repo {
                 continue;
             };
             for name in [to.trim(), from.trim()] {
-                if Some(name) != current.as_deref()
-                    && local.iter().any(|l| l == name)
-                    && !out.iter().any(|o| o == name)
-                {
+                if local.iter().any(|l| l == name) && !out.iter().any(|o| o == name) {
                     out.push(name.to_owned());
                 }
             }
             if out.len() >= limit {
                 break;
             }
+        }
+        if let Some(current) = current.filter(|c| local.contains(c))
+            && !out.is_empty()
+        {
+            out.retain(|o| *o != current);
+            out.insert(0, current);
         }
         out.truncate(limit);
         Ok(out)
@@ -451,7 +495,7 @@ impl Repo {
         let dirty = !self.status()?.is_empty();
         if dirty {
             let stashed = self.stash_push_with(&StashOptions {
-                message: Some(format!("IDECraft reset to {}", out.upstream)),
+                message: Some(format!("Ferris IDEA reset to {}", out.upstream)),
                 include_untracked: true,
                 keep_index: false,
             })?;

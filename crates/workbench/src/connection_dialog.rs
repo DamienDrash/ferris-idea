@@ -3,11 +3,11 @@
 //! in the system keychain. The database system comes from a searchable, grouped list of connectors
 //! with their Supported/Beta status (`SPEC-0300` behaviour 7).
 
+pub use ferris_idea_database::Dialect;
+use ferris_idea_database::connector::{Field, Origin, Status};
+use ferris_idea_database::connector_share;
+use ferris_idea_database::{ConnectionForm, ConnectionProfile, Connector, SslMode};
 use gpui::{Context, Entity, EventEmitter, FocusHandle, KeyDownEvent, Window, div, prelude::*, px};
-pub use idecraft_database::Dialect;
-use idecraft_database::connector::{Field, Origin, Status};
-use idecraft_database::connector_share;
-use idecraft_database::{ConnectionForm, ConnectionProfile, Connector, SslMode};
 
 use crate::editor_view::EditorView;
 use crate::palette::Palette;
@@ -33,6 +33,12 @@ pub enum ConnectionDialogEvent {
         form: ConnectionForm,
         /// A password typed into the dialog.
         password: Option<String>,
+    },
+    /// Create the empty database file the form names (`SPEC-0108` v13 behaviour 23): SQLite and
+    /// DuckDB, only on the user's click.
+    CreateFile {
+        /// The fields.
+        form: ConnectionForm,
     },
     /// Open "Report a problem with this database" (`SPEC-0301`) for the chosen system.
     Report {
@@ -125,7 +131,7 @@ pub struct ConnectionDialog {
     /// Consoles and data editors start in Auto (v4 behaviour 10).
     auto_commit: bool,
     /// The connection's colour (v4 behaviour 9).
-    color: Option<idecraft_database::ConnectionColor>,
+    color: Option<ferris_idea_database::ConnectionColor>,
     /// Whether the loaded startup script may run, and the script as loaded (v4 behaviour 10).
     startup: (bool, Option<String>),
     fields: Vec<Entity<EditorView>>,
@@ -152,14 +158,14 @@ struct Picker {
 
 /// The connector of `dialect` and `system`, or the family's own one.
 fn connector_of(dialect: Dialect, system: Option<&str>) -> Option<Connector> {
-    idecraft_database::catalogue()
+    ferris_idea_database::catalogue()
         .for_profile(dialect, system)
         .cloned()
 }
 
 /// Rows of the list for `query`: category headings (`None`) and connectors, in display order.
 pub fn picker_rows(query: &str) -> Vec<(String, Option<Connector>)> {
-    let catalogue = idecraft_database::catalogue();
+    let catalogue = ferris_idea_database::catalogue();
     let mut rows = Vec::new();
     for (category, items) in catalogue.grouped(query) {
         rows.push((category.label().to_owned(), None));
@@ -307,19 +313,19 @@ impl ConnectionDialog {
             let t = text(i);
             (!t.trim().is_empty()).then(|| t.trim().to_owned())
         };
-        let ssh = opt(9).map(|host| idecraft_database::SshTunnel {
+        let ssh = opt(9).map(|host| ferris_idea_database::SshTunnel {
             host,
             port: text(10).trim().parse().ok(),
             user: opt(11),
         });
-        let extras = idecraft_database::ConnectionExtras {
+        let extras = ferris_idea_database::ConnectionExtras {
             ssh,
-            tls: idecraft_database::TlsFiles {
+            tls: ferris_idea_database::TlsFiles {
                 ca_file: path(12),
                 cert_file: path(13),
                 key_file: path(14),
             },
-            options: idecraft_database::ConnectionOptions {
+            options: ferris_idea_database::ConnectionOptions {
                 auto_commit: self.auto_commit,
                 startup_script: opt(15),
                 connect_timeout_secs: seconds("", &text(16)).ok().flatten(),
@@ -441,7 +447,7 @@ impl ConnectionDialog {
 
     /// The next colour (none after the last, v4 behaviour 9).
     pub fn next_color(&mut self, cx: &mut Context<Self>) {
-        self.color = idecraft_database::ConnectionColor::next(self.color);
+        self.color = ferris_idea_database::ConnectionColor::next(self.color);
         cx.notify();
     }
 
@@ -455,6 +461,27 @@ impl ConnectionDialog {
         if let Some(i) = FIELDS.iter().position(|f| *f == name) {
             self.fields[i].update(cx, |f, cx| f.set_text(text, cx));
         }
+    }
+
+    /// Fills the dialog for a new connection from `form` (a data source of the project's `.idea`,
+    /// `SPEC-0089` v16 behaviour 28) and says where it came from; nothing is saved here.
+    pub fn fill(&mut self, form: &ConnectionForm, note: &str, cx: &mut Context<Self>) {
+        self.dialect = form.dialect;
+        self.system = form.system.clone();
+        self.ssl = form.ssl;
+        self.read_only = form.read_only;
+        for (i, value) in [
+            (0, &form.name),
+            (1, &form.host),
+            (2, &form.port),
+            (3, &form.database),
+            (4, &form.user),
+            (6, &form.path),
+        ] {
+            self.fields[i].update(cx, |f, cx| f.set_text(value, cx));
+        }
+        self.note = Some((note.to_owned(), false));
+        cx.notify();
     }
 
     /// Chooses the family's own database system (behaviour 2).
@@ -472,7 +499,7 @@ impl ConnectionDialog {
     /// Chooses the connector with `id` (`SPEC-0300` behaviour 7): its family, and its defaults for
     /// database, user and SSL mode where the form is still empty. Unknown ids change nothing.
     pub fn set_system(&mut self, id: &str, cx: &mut Context<Self>) {
-        let Some(connector) = idecraft_database::catalogue().get(id).cloned() else {
+        let Some(connector) = ferris_idea_database::catalogue().get(id).cloned() else {
             return;
         };
         let defaults = ConnectionForm::for_connector(&connector);
@@ -581,11 +608,11 @@ impl ConnectionDialog {
         let Some(c) = self.connector().filter(|c| c.origin != Origin::BuiltIn) else {
             return;
         };
-        let Some(dir) = idecraft_database::connector::connectors_dir() else {
+        let Some(dir) = ferris_idea_database::connector::connectors_dir() else {
             return;
         };
-        let result = connector_share::remove(&dir, &c.id, &idecraft_database::catalogue());
-        idecraft_database::reload_catalogue();
+        let result = connector_share::remove(&dir, &c.id, &ferris_idea_database::catalogue());
+        ferris_idea_database::reload_catalogue();
         self.note = Some(match result {
             Ok(name) => {
                 let family = c.family.dialect().unwrap_or(Dialect::PostgreSql);
@@ -735,8 +762,28 @@ impl ConnectionDialog {
         cx.notify();
     }
 
+    /// Whether "Create File" is offered (`SPEC-0108` v13 behaviour 23): for a database in a file
+    /// (SQLite, DuckDB).
+    pub fn offers_create_file(&self) -> bool {
+        self.dialect.file_based() && self.page == DialogPage::General
+    }
+
+    /// Asks the workbench to create the empty database file the File field names (v13 behaviour
+    /// 23). Testing never does.
+    pub fn create_file(&mut self, cx: &mut Context<Self>) {
+        if !self.offers_create_file() {
+            return;
+        }
+        self.details = None;
+        self.note = Some(("Creating the file…".into(), false));
+        cx.emit(ConnectionDialogEvent::CreateFile {
+            form: self.form(cx),
+        });
+        cx.notify();
+    }
+
     /// Whether "Report a problem with this database…" is offered (`SPEC-0301` behaviour 1): after a
-    /// failed test, and for systems IDECraft does not test (Beta, User, Imported).
+    /// failed test, and for systems Ferris IDEA does not test (Beta, User, Imported).
     pub fn offers_report(&self) -> bool {
         self.note.as_ref().is_some_and(|(_, error)| *error)
             || self
@@ -1163,7 +1210,7 @@ impl Render for ConnectionDialog {
                         .child(div().id("conn-url").child(format!("URL: {url}")))
                         .child(div().id("conn-driver").child(format!(
                             "Driver: {}",
-                            idecraft_database::driver_label(dialect)
+                            ferris_idea_database::driver_label(dialect)
                         ))),
                 )
                 .child(
@@ -1176,7 +1223,7 @@ impl Render for ConnectionDialog {
                         false,
                     )
                     .when_some(self.color, |b, color| {
-                        b.border_l_4().border_color(c(idecraft_ui::theme::Rgba {
+                        b.border_l_4().border_color(c(ferris_idea_ui::theme::Rgba {
                             rgb: color.rgb(),
                             alpha: 255,
                         }))
@@ -1335,6 +1382,22 @@ impl Render for ConnectionDialog {
                                 cx.listener(|this, _: &gpui::ClickEvent, _, cx| this.test(cx)),
                             ),
                     )
+                    .when(self.offers_create_file(), |d| {
+                        d.child(
+                            button("conn-create-file", "Create File".into(), false)
+                                .relative()
+                                .semantics(
+                                    Semantics::new(Role::Button)
+                                        .name("Create File")
+                                        .test_id("conn-create-file")
+                                        .action(AxAction::Click)
+                                        .effects(&[Effect::Write]),
+                                )
+                                .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
+                                    this.create_file(cx)
+                                })),
+                        )
+                    })
                     .when(self.offers_report(), |d| {
                         d.child(
                             div()
@@ -1396,11 +1459,11 @@ fn status_badge(text: &'static str, status: Status) -> gpui::Div {
         .text_xs()
         .rounded(px(3.))
         .border_1()
-        .border_color(c(idecraft_ui::theme::Rgba {
+        .border_color(c(ferris_idea_ui::theme::Rgba {
             rgb: colour,
             alpha: 255,
         }))
-        .text_color(c(idecraft_ui::theme::Rgba {
+        .text_color(c(ferris_idea_ui::theme::Rgba {
             rgb: colour,
             alpha: 255,
         }))
@@ -1427,7 +1490,7 @@ impl Render for NoteTip {
     }
 }
 
-/// The line under the system: how far IDECraft vouches for it, then the definition's note
+/// The line under the system: how far Ferris IDEA vouches for it, then the definition's note
 /// (`SPEC-0116` v3 behaviour 10).
 pub fn system_line(connector: &Connector) -> String {
     match connector.shown_note() {
@@ -1468,13 +1531,16 @@ mod tests {
     /// SPEC-0116 v3 AK-6: the line names the tested version and the note.
     #[test]
     fn the_test_level_line() {
-        let c = idecraft_database::Catalogue::built_in();
+        let c = ferris_idea_database::Catalogue::built_in();
         let find = |id: &str| c.connectors.iter().find(|k| k.id == id).unwrap().clone();
         let line = system_line(&find("sqlserver"));
         assert!(line.starts_with("Tested with SQL Server 2022"), "{line}");
         assert!(line.contains("do not run on every build"), "{line}");
         let line = system_line(&find("db2"));
-        assert!(line.starts_with("Beta: IDECraft has not tested"), "{line}");
+        assert!(
+            line.starts_with("Beta: Ferris IDEA has not tested"),
+            "{line}"
+        );
         assert!(line.contains("ODBC"), "{line}");
         assert_eq!(
             system_line(&find("postgresql")),

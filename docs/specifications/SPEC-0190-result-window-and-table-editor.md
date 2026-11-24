@@ -141,7 +141,7 @@ decide when they are committed. Results of several queries stay side by side.
   count follows the `WHERE`; manual mode: a submitted change is visible in the same session, invisible
   to a second session until commit, a conflicting batch rolls back to its savepoint only, rollback
   restores the table (integration tests, `--ignored` style like the other live tests).
-- **AK-4** Window self-test (`idecraft ui --selftest`): F4 on `customers` in the Database tool window
+- **AK-4** Window self-test (`ferris-idea ui --selftest`): F4 on `customers` in the Database tool window
   opens a tab "customers"; `WHERE` `name like 'A%'` keeps one row; a header click orders on the server;
   ⇧↩ shows the record; an edit shows one `UPDATE` in the preview; manual mode keeps the change pending
   until Commit; pinning keeps a console result over the next run.

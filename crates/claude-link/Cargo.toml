@@ -1,0 +1,23 @@
+[package]
+name = "ferris-idea-claude-link"
+description = "The link Claude Code connects to when it runs in a Ferris IDEA terminal: selection, open files, diagnostics and diffs the user accepts or rejects (SPEC-0358)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+# A small set on purpose: WebSocket framing without TLS (the link listens on 127.0.0.1 only), JSON,
+# and the operating system's random source for the token.
+[dependencies]
+getrandom = "0.3"
+serde.workspace = true
+serde_json = "1"
+tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true

@@ -1,4 +1,4 @@
-//! The integration tests of `idecraft-languages` as one test program (ADR-0030 item 7): one
+//! The integration tests of `ferris-idea-languages` as one test program (ADR-0030 item 7): one
 //! program to build and link instead of one per file. Each former file is a module here.
 //!
 //! `java_completion.rs`, `java_navigation.rs`, `java_signature.rs`, `java_smart.rs`,
@@ -27,6 +27,7 @@ mod ruby;
 mod rust_analyzer;
 mod server_case;
 mod servers;
+mod side_by_side_f038;
 mod spring;
 mod ts_extract;
 mod ts_structure;

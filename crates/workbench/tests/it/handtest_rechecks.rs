@@ -18,17 +18,17 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
+use ferris_idea_workbench::DebugState;
+use ferris_idea_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
+use ferris_idea_workbench::settings_model::Page;
+use ferris_idea_workbench::{EditorView, MenuPlace, WorkbenchView};
 use gpui::{Entity, Modifiers, MouseButton, TestAppContext, VisualTestContext, px};
-use idecraft_workbench::DebugState;
-use idecraft_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
-use idecraft_workbench::settings_model::Page;
-use idecraft_workbench::{EditorView, MenuPlace, WorkbenchView};
 
 type Bench = Entity<WorkbenchView>;
 
 fn workspace(tag: &str, files: &[(&str, &str)]) -> PathBuf {
     let root = std::env::temp_dir().join(format!(
-        "idecraft-handtest-rechecks-{tag}-{}",
+        "ferris-idea-handtest-rechecks-{tag}-{}",
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&root);
@@ -44,13 +44,13 @@ fn workspace(tag: &str, files: &[(&str, &str)]) -> PathBuf {
 /// A window on `root` with a settings file and theme file of its own: the user's settings are
 /// never read or written.
 fn window(root: &Path, cx: &mut TestAppContext) -> (Bench, &'static mut VisualTestContext) {
-    idecraft_workbench::hit_targets::enable();
+    ferris_idea_workbench::hit_targets::enable();
     let settings = root.join(".test-settings");
     std::fs::create_dir_all(&settings).unwrap();
     cx.update(|cx| {
         cx.set_global(IdeSettingsFile(settings.join("settings.toml")));
         cx.set_global(ThemeFile(settings.join("theme")));
-        cx.set_global(CurrentIdeSettings(idecraft_core::IdeSettings::default()));
+        cx.set_global(CurrentIdeSettings(ferris_idea_core::IdeSettings::default()));
     });
     let at = root.to_path_buf();
     let window = cx.add_window(move |_, cx| WorkbenchView::new(&at, cx));
@@ -267,7 +267,7 @@ fn hand_test_56_settings_pages_apply_and_are_saved(cx: &mut TestAppContext) {
     });
     cx.run_until_parked();
     keys(cx, "enter down space");
-    let saved = idecraft_core::load_ide_settings(&file);
+    let saved = ferris_idea_core::load_ide_settings(&file);
     assert!(
         saved.editor.strip_trailing_spaces && saved.editor.ensure_line_break_at_end,
         "{:?}",
@@ -285,7 +285,7 @@ fn hand_test_56_settings_pages_apply_and_are_saved(cx: &mut TestAppContext) {
     keys(cx, "enter");
     assert_eq!(view.read_with(cx, |v, cx| v.shell_text(cx)), "/bin/bash");
     assert_eq!(
-        idecraft_core::load_ide_settings(&file)
+        ferris_idea_core::load_ide_settings(&file)
             .terminal
             .shell
             .as_deref(),
@@ -313,7 +313,7 @@ fn hand_test_56_settings_pages_apply_and_are_saved(cx: &mut TestAppContext) {
     );
 
     // After a restart: the settings file holds every value set here.
-    let again = idecraft_core::load_ide_settings(&file);
+    let again = ferris_idea_core::load_ide_settings(&file);
     assert!(again.editor.strip_trailing_spaces && again.editor.ensure_line_break_at_end);
     assert_eq!(again.terminal.shell.as_deref(), Some("/bin/bash"));
     let _ = std::fs::remove_dir_all(&root);
@@ -414,7 +414,7 @@ fn hand_test_53_plugins_are_installed_switched_and_removed(cx: &mut TestAppConte
 const COUNT_PY: &str = "def zaehle(woerter):\n    anzahl = {}\n    for wort in woerter:\n        anzahl[wort] = anzahl.get(wort, 0) + 1\n    return anzahl\n\n\nprint(zaehle([\"a\", \"b\", \"a\"]))\n";
 
 fn debugpy_installed() -> bool {
-    idecraft_debugger::known_adapters()
+    ferris_idea_debugger::known_adapters()
         .iter()
         .any(|a| a.name == "debugpy" && a.command.is_some())
 }
@@ -445,7 +445,7 @@ fn hand_test_21_add_to_watches_from_the_editor(cx: &mut TestAppContext) {
         return;
     }
     let root = workspace("21", &[("debug/zaehlen.py", COUNT_PY)]);
-    idecraft_core::trust::trust_for_process(&root);
+    ferris_idea_core::trust::trust_for_process(&root);
     let (bench, cx) = window(&root, cx);
     let editor = open(&bench, cx, &root.join("debug/zaehlen.py"));
     editor.update(cx, |e, cx| e.toggle_breakpoint(3, cx));
@@ -544,16 +544,16 @@ const CRASH_JAVA: &str = "public class Crash {\n    static int area(int w, int h
 /// java-debug.
 #[test]
 fn hand_test_72_java_method_and_typed_exception_breakpoints() {
-    use idecraft_debugger::{FunctionBreakpoint, SpecialBreakpoints};
-    use idecraft_workbench::debug_model::{Command, Controller, Kind, Launch, Update};
-    if !idecraft_languages::java_debug::java_debug_usable()
-        || idecraft_languages::servers::resolve(idecraft_languages::LanguageId::Java).is_err()
+    use ferris_idea_debugger::{FunctionBreakpoint, SpecialBreakpoints};
+    use ferris_idea_workbench::debug_model::{Command, Controller, Kind, Launch, Update};
+    if !ferris_idea_languages::java_debug::java_debug_usable()
+        || ferris_idea_languages::servers::resolve(ferris_idea_languages::LanguageId::Java).is_err()
     {
         eprintln!("skipped: jdtls or java-debug is missing");
         return;
     }
     let root = workspace("72", &[("Crash.java", CRASH_JAVA)]);
-    idecraft_core::trust::trust_for_process(&root);
+    ferris_idea_core::trust::trust_for_process(&root);
     let launch = |types: &str| Launch {
         kind: Kind::Java,
         adapter: Vec::new(),
@@ -610,7 +610,7 @@ fn hand_test_72_java_method_and_typed_exception_breakpoints() {
     };
     let refused = |seen: &[Update]| {
         seen.iter().any(
-            |u| matches!(u, Update::Output(t) if t.contains("[IDECraft]") && t.contains("cannot")),
+            |u| matches!(u, Update::Output(t) if t.contains("[Ferris IDEA]") && t.contains("cannot")),
         )
     };
 
@@ -655,14 +655,14 @@ const GREETER_RB: &str = "class Greeter\n  # Greets someone.\n  def greet(name)\
 #[gpui::test]
 fn hand_test_110_ruby_declaration_and_documentation(cx: &mut TestAppContext) {
     let root = workspace("110", &[("greeter.rb", GREETER_RB)]);
-    if idecraft_languages::servers::resolve_for(idecraft_languages::LanguageId::Ruby, &root)
+    if ferris_idea_languages::servers::resolve_for(ferris_idea_languages::LanguageId::Ruby, &root)
         .is_err()
     {
         eprintln!("skipped: no Ruby language server");
         let _ = std::fs::remove_dir_all(&root);
         return;
     }
-    idecraft_core::trust::trust_for_process(&root);
+    ferris_idea_core::trust::trust_for_process(&root);
     let (bench, cx) = window(&root, cx);
     let editor = open(&bench, cx, &root.join("greeter.rb"));
     let at = GREETER_RB.find("Greeter.new").unwrap() + 2;

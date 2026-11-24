@@ -115,8 +115,8 @@ fn ak11_ratchet_stand_ins_and_marks_only_fall() {
 }
 
 /// UISEC-9: nothing in the workspace posts input system-wide. `CGEventCreateCopy` in the
-/// self-test's native clicks only copies an event of IDECraft's own queue to set its button
-/// number; the copy is posted to IDECraft only (`SPEC-0319` v2 behaviour 20a).
+/// self-test's native clicks only copies an event of Ferris IDEA's own queue to set its button
+/// number; the copy is posted to Ferris IDEA only (`SPEC-0319` v2 behaviour 20a).
 #[test]
 fn uisec9_no_system_wide_input() {
     let root = workspace();
@@ -167,7 +167,7 @@ fn uisec9_no_system_wide_input() {
         }
     }
     assert!(found.is_empty(), "system-wide input:\n{}", found.join("\n"));
-    // Native events go to IDECraft's own application queue only (macOS), or to the window's own
+    // Native events go to Ferris IDEA's own application queue only (macOS), or to the window's own
     // input handler (Linux, SPEC-0319 v5 behaviour 20c).
     let native = std::fs::read_to_string(root.join("crates/app/src/native_click.rs")).unwrap();
     assert!(native.contains("app.postEvent_atStart"));
@@ -209,10 +209,11 @@ fn uisec9_no_system_wide_input() {
         assert!(body.contains(refused), "the hook refuses {refused}");
     }
     // Every change in gpui's window.rs is one of these functions: the hook above, and the focus
-    // that a drawn prompt keeps (SPEC-0281 v4 behaviour 9), which dispatches no input. A new
+    // that a drawn prompt keeps (SPEC-0281 v4 behaviour 9) and withdrawing a prompt (SPEC-0053 v11
+    // behaviour 8) and capturing the frame (SPEC-0319 v7 behaviour 53), which dispatch no input. A new
     // change needs its place here.
     let changed: Vec<&str> = gpui
-        .match_indices("IDECraft change")
+        .match_indices("Ferris IDEA change")
         .map(|(at, _)| {
             let rest = &gpui[at..];
             let f = rest.find("fn ").expect("a function after each change");
@@ -230,6 +231,8 @@ fn uisec9_no_system_wide_input() {
             "blur",
             "has_drawn_prompt",
             "fallback_prompt",
+            "withdraw_prompt",
+            "capture_frame",
             "dispatch_in_process_pointer_input"
         ],
         "the changes in gpui's window.rs"
@@ -238,6 +241,8 @@ fn uisec9_no_system_wide_input() {
         "focus_ignoring_prompt",
         "has_drawn_prompt",
         "fallback_prompt",
+        "withdraw_prompt",
+        "capture_frame",
     ] {
         let at = gpui.find(&format!("fn {name}(")).expect("the function");
         let end = at + gpui[at..].find("\n    }\n").expect("its end");

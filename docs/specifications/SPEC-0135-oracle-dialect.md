@@ -13,7 +13,7 @@
 - **Feature matrix rows:** F-060
 
 ## Purpose
-Work with Oracle SQL and PL/SQL files in IDECraft — split, complete, inspect, generate DDL — and
+Work with Oracle SQL and PL/SQL files in Ferris IDEA — split, complete, inspect, generate DDL — and
 keep Oracle connections in the workspace, while a driver is not included yet. Oracle's own
 client libraries are proprietary downloads, and no mature pure-Rust driver for its network
 protocol is known; the choice is the project owner's (PO-STATUS open question).
@@ -21,7 +21,7 @@ protocol is known; the choice is the project owner's (PO-STATUS open question).
 ## Behaviour
 1. **Profiles:** dialect `oracle`, URL `oracle://user@host:port/SERVICE` (the database part is the
    service name), default port 1521; the connection dialog offers Oracle. [SPEC-0008]
-2. **Session:** connecting (also Test Connection) fails at once with "IDECraft has no Oracle driver
+2. **Session:** connecting (also Test Connection) fails at once with "Ferris IDEA has no Oracle driver
    yet; scripts, completion, inspections and DDL work without a connection". Nothing is contacted.
 3. **Scripts:** a statement ends at `;`, except inside a PL/SQL block (a statement starting with
    `DECLARE`, `BEGIN` or `CREATE [OR REPLACE] [EDITIONABLE|NONEDITIONABLE] PROCEDURE|FUNCTION|PACKAGE|
@@ -60,4 +60,4 @@ A session, catalog and plans (they need the driver), PL/SQL language intelligenc
 synonyms in completion, `@script` and other SQL*Plus commands, `ROWID` editing.
 
 ## Known deviations from the reference
-The reference connects through its own Oracle driver; IDECraft does not connect yet (behaviour 2).
+The reference connects through its own Oracle driver; Ferris IDEA does not connect yet (behaviour 2).

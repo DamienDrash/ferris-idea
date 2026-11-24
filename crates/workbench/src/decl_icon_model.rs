@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime};
 
-use idecraft_languages::declaration_kind::{primary_declaration, primary_declaration_of};
+use ferris_idea_languages::declaration_kind::{primary_declaration, primary_declaration_of};
 
 /// How long a file on disk keeps its icon before its modification time is looked at again.
 const RECHECK: Duration = Duration::from_secs(1);
@@ -45,7 +45,7 @@ fn name_of(path: &Path) -> String {
 /// The icon of `path` whose content is `text`: its declaration's kind, else the file type's.
 pub fn icon_of_text(path: &Path, text: &str) -> &'static str {
     primary_declaration(path, text).map_or_else(
-        || idecraft_ui::icons::file_icon(&name_of(path)),
+        || ferris_idea_ui::icons::file_icon(&name_of(path)),
         |kind| kind.icon(),
     )
 }
@@ -60,7 +60,7 @@ impl DeclIcons {
         text: impl FnOnce() -> String,
     ) -> &'static str {
         if !has_kinds(path) {
-            return idecraft_ui::icons::file_icon(&name_of(path));
+            return ferris_idea_ui::icons::file_icon(&name_of(path));
         }
         if let Some((seen, icon)) = self.open.get(path)
             && *seen == revision
@@ -75,7 +75,7 @@ impl DeclIcons {
     /// The icon of the file `path` on disk at the time `now`; the file is read again only when
     /// its modification time or length changed, looked at once a second at most.
     pub fn of_file(&mut self, path: &Path, now: Instant) -> &'static str {
-        let plain = idecraft_ui::icons::file_icon(&name_of(path));
+        let plain = ferris_idea_ui::icons::file_icon(&name_of(path));
         if !has_kinds(path) {
             return plain;
         }
@@ -136,7 +136,7 @@ mod tests {
         );
         assert_eq!(
             icons.of_open(pet, 2, || "public record Pet(String name) {}".into()),
-            "idecraft/record"
+            "ferris-idea/record"
         );
         assert_eq!(
             icons.of_open(pet, 3, || "// nothing yet".into()),
@@ -148,11 +148,11 @@ mod tests {
         );
         assert_eq!(
             icons.of_open(Path::new("/p/Registry.kt"), 1, || "object Registry".into()),
-            "idecraft/object"
+            "ferris-idea/object"
         );
         assert_eq!(
             icons.of_open(Path::new("/p/a.rs"), 1, || panic!("not a JVM file")),
-            "idecraft/rust"
+            "ferris-idea/rust"
         );
         icons.closed(pet);
         assert_eq!(
@@ -160,7 +160,7 @@ mod tests {
             "nodes/enum"
         );
 
-        let dir = std::env::temp_dir().join(format!("idecraft-declicon-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-declicon-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("Shape.java");
         std::fs::write(&file, "public class Shape {}\n").unwrap();

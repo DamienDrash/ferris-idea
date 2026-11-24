@@ -1,6 +1,6 @@
 //! Bundled New UI themes and editor colour schemes (`SPEC-0060`, ADR-0009, ADR-0018).
 //!
-//! The JSON and XML files are unchanged upstream assets (`themes/README.md`), except the IDECraft
+//! The JSON and XML files are unchanged upstream assets (`themes/README.md`), except the Ferris IDEA
 //! brand themes, which are own files over the Islands themes; this module is own code that reads
 //! them. Key fallbacks follow the open `DefaultLanguageHighlighterColors`, the lookup order
 //! (scheme chain first, then fallback key) `AbstractColorsScheme`/`EditorColorsSchemeImpl` (logic
@@ -33,29 +33,29 @@ pub const ISLANDS_DARK_THEME_JSON: &str = include_str!("../themes/ManyIslandsDar
 pub const ISLANDS_DARK_SCHEME_XML: &str = include_str!("../themes/IslandSchemeDark.xml");
 /// Islands Light theme (parent `ExperimentalLightWithLightHeader`, editor scheme `Light`).
 pub const ISLANDS_LIGHT_THEME_JSON: &str = include_str!("../themes/ManyIslandsLight.theme.json");
-/// IDECraft's editor scheme of `Islands Light` over the open `Light` (`SPEC-0060` v13 behaviour 19).
+/// Ferris IDEA's editor scheme of `Islands Light` over the open `Light` (`SPEC-0060` v13 behaviour 19).
 pub const ISLANDS_LIGHT_SCHEME_XML: &str = include_str!("../themes/IslandsLightScheme.xml");
 /// New UI `Light with Light Header` (parent `ExperimentalLight`), the parent of Islands Light.
 pub const LIGHT_HEADER_THEME_JSON: &str =
     include_str!("../themes/expUI_light_with_light_header.theme.json");
 
-/// IDECraft Dark (own file, `SPEC-0060` v6): brand colours over `Islands Dark`.
-pub const IDECRAFT_DARK_THEME_JSON: &str = include_str!("../themes/IDECraftDark.theme.json");
-/// Editor scheme `IDECraft Dark` (parent `Islands Dark`).
-pub const IDECRAFT_DARK_SCHEME_XML: &str = include_str!("../themes/IDECraftDarkScheme.xml");
-/// IDECraft Light (own file, `SPEC-0060` v6): brand colours over `Islands Light`.
-pub const IDECRAFT_LIGHT_THEME_JSON: &str = include_str!("../themes/IDECraftLight.theme.json");
-/// Editor scheme `IDECraft Light` (parent `Light`).
-pub const IDECRAFT_LIGHT_SCHEME_XML: &str = include_str!("../themes/IDECraftLightScheme.xml");
+/// Ferris IDEA Dark (own file, `SPEC-0060` v6): brand colours over `Islands Dark`.
+pub const FERRIS_IDEA_DARK_THEME_JSON: &str = include_str!("../themes/FerrisIDEADark.theme.json");
+/// Editor scheme `Ferris IDEA Dark` (parent `Islands Dark`).
+pub const FERRIS_IDEA_DARK_SCHEME_XML: &str = include_str!("../themes/FerrisIDEADarkScheme.xml");
+/// Ferris IDEA Light (own file, `SPEC-0060` v6): brand colours over `Islands Light`.
+pub const FERRIS_IDEA_LIGHT_THEME_JSON: &str = include_str!("../themes/FerrisIDEALight.theme.json");
+/// Editor scheme `Ferris IDEA Light` (parent `Light`).
+pub const FERRIS_IDEA_LIGHT_SCHEME_XML: &str = include_str!("../themes/FerrisIDEALightScheme.xml");
 
 /// The bundled look-and-feel variants.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum ThemeId {
-    /// `IDECraft Dark` with scheme `IDECraft Dark`: the brand palette on the Islands layout, the
+    /// `Ferris IDEA Dark` with scheme `Ferris IDEA Dark`: the brand palette on the Islands layout, the
     /// default for new installs (`SPEC-0060` v6, ADR-0018).
-    IdecraftDark,
-    /// `IDECraft Light` with scheme `IDECraft Light`: the brand's light counterpart.
-    IdecraftLight,
+    FerrisIdeaDark,
+    /// `Ferris IDEA Light` with scheme `Ferris IDEA Light`: the brand's light counterpart.
+    FerrisIdeaLight,
     /// New UI `Dark` with scheme `Dark`.
     Dark,
     /// New UI `Light` with scheme `Light`.
@@ -70,8 +70,8 @@ pub enum ThemeId {
 impl ThemeId {
     /// Every bundled theme, in the order the theme popup lists them; the default comes first.
     pub const ALL: [ThemeId; 6] = [
-        ThemeId::IdecraftDark,
-        ThemeId::IdecraftLight,
+        ThemeId::FerrisIdeaDark,
+        ThemeId::FerrisIdeaLight,
         ThemeId::IslandsDark,
         ThemeId::IslandsLight,
         ThemeId::Dark,
@@ -80,7 +80,7 @@ impl ThemeId {
 
     /// The theme of a new install, and of an install whose saved choice is missing or unknown
     /// (`SPEC-0060` v6).
-    pub const DEFAULT: ThemeId = ThemeId::IdecraftDark;
+    pub const DEFAULT: ThemeId = ThemeId::FerrisIdeaDark;
 
     /// The theme to draw with at start-up: the saved choice when it names a bundled theme, else
     /// [`ThemeId::DEFAULT`]. A choice the user made is never replaced (`SPEC-0060` v6).
@@ -88,16 +88,16 @@ impl ThemeId {
         saved.and_then(Self::from_name).unwrap_or(Self::DEFAULT)
     }
 
-    /// Whether the theme carries the IDECraft brand palette (ADR-0018).
+    /// Whether the theme carries the Ferris IDEA brand palette (ADR-0018).
     pub fn is_brand(self) -> bool {
-        matches!(self, ThemeId::IdecraftDark | ThemeId::IdecraftLight)
+        matches!(self, ThemeId::FerrisIdeaDark | ThemeId::FerrisIdeaLight)
     }
 
     /// The name shown for the theme (the reference's name for the themes taken from it).
     pub fn name(self) -> &'static str {
         match self {
-            ThemeId::IdecraftDark => "IDECraft Dark",
-            ThemeId::IdecraftLight => "IDECraft Light",
+            ThemeId::FerrisIdeaDark => "Ferris IDEA Dark",
+            ThemeId::FerrisIdeaLight => "Ferris IDEA Light",
             ThemeId::Dark => "Dark",
             ThemeId::Light => "Light",
             ThemeId::IslandsDark => "Islands Dark",
@@ -105,8 +105,10 @@ impl ThemeId {
         }
     }
 
-    /// The theme called `name` (as [`ThemeId::name`] gives it, ignoring case).
+    /// The theme called `name` (as [`ThemeId::name`] gives it, ignoring case); a brand theme also
+    /// by the name it had under the product's former name (`SPEC-0356` behaviour 7).
     pub fn from_name(name: &str) -> Option<ThemeId> {
+        let name = ferris_idea_core::takeover::current_theme_name(name);
         Self::ALL
             .into_iter()
             .find(|t| t.name().eq_ignore_ascii_case(name.trim()))
@@ -116,7 +118,7 @@ impl ThemeId {
     pub fn is_dark(self) -> bool {
         !matches!(
             self,
-            ThemeId::Light | ThemeId::IslandsLight | ThemeId::IdecraftLight
+            ThemeId::Light | ThemeId::IslandsLight | ThemeId::FerrisIdeaLight
         )
     }
 }
@@ -382,7 +384,7 @@ fn fallback(key: &str) -> Option<&'static str> {
         "PY.BUILTIN_NAME" | "PY.PREDEFINED_DEFINITION" | "PY.PREDEFINED_USAGE" => {
             "DEFAULT_PREDEFINED_SYMBOL"
         }
-        // JavaScript/TypeScript and SQL: neutral fallbacks of IDECraft's own (SPEC-0027 v6).
+        // JavaScript/TypeScript and SQL: neutral fallbacks of Ferris IDEA's own (SPEC-0027 v6).
         "JS.GLOBAL_VARIABLE" => "DEFAULT_GLOBAL_VARIABLE",
         "JS.REGEXP" => "DEFAULT_STRING",
         "SQL_COLUMN" => "DEFAULT_INSTANCE_FIELD",
@@ -416,7 +418,7 @@ fn base_schemes() -> Vec<SchemeFile> {
     bases
 }
 
-/// IDECraft's own keys that are italic whatever their colour comes from: SQL built-in functions take
+/// Ferris IDEA's own keys that are italic whatever their colour comes from: SQL built-in functions take
 /// the function-declaration colour when a scheme does not define them, but stay italic (`SPEC-0027`
 /// v7).
 const ALWAYS_ITALIC: [&str; 1] = ["SQL_BUILTIN_FUNCTION"];
@@ -472,11 +474,11 @@ impl ColorScheme {
                 Self::bundled_over(ISLANDS_LIGHT_SCHEME_XML, &[LIGHT_SCHEME_XML])
             }
             ThemeId::IslandsDark => Self::bundled_over(ISLANDS_DARK_SCHEME_XML, &[]),
-            ThemeId::IdecraftDark => {
-                Self::bundled_over(IDECRAFT_DARK_SCHEME_XML, &[ISLANDS_DARK_SCHEME_XML])
+            ThemeId::FerrisIdeaDark => {
+                Self::bundled_over(FERRIS_IDEA_DARK_SCHEME_XML, &[ISLANDS_DARK_SCHEME_XML])
             }
-            ThemeId::IdecraftLight => {
-                Self::bundled_over(IDECRAFT_LIGHT_SCHEME_XML, &[LIGHT_SCHEME_XML])
+            ThemeId::FerrisIdeaLight => {
+                Self::bundled_over(FERRIS_IDEA_LIGHT_SCHEME_XML, &[LIGHT_SCHEME_XML])
             }
         }
     }
@@ -867,13 +869,13 @@ impl UiTheme {
                     .expect("bundled theme parses");
                 Self::with_parent(ISLANDS_LIGHT_THEME_JSON, &header).expect("bundled theme parses")
             }
-            ThemeId::IdecraftDark => Self::with_parent(
-                IDECRAFT_DARK_THEME_JSON,
+            ThemeId::FerrisIdeaDark => Self::with_parent(
+                FERRIS_IDEA_DARK_THEME_JSON,
                 &Self::for_theme(ThemeId::IslandsDark),
             )
             .expect("bundled theme parses"),
-            ThemeId::IdecraftLight => Self::with_parent(
-                IDECRAFT_LIGHT_THEME_JSON,
+            ThemeId::FerrisIdeaLight => Self::with_parent(
+                FERRIS_IDEA_LIGHT_THEME_JSON,
                 &Self::for_theme(ThemeId::IslandsLight),
             )
             .expect("bundled theme parses"),
@@ -1033,6 +1035,17 @@ pub fn over(colour: u32, alpha: u8, background: u32) -> u32 {
 mod tests {
     use super::*;
 
+    /// SPEC-0356 AK-6 (behaviour 7): the brand themes are found by the names they had under the
+    /// product's former name, in any case.
+    #[test]
+    fn brand_themes_are_found_by_their_former_names() {
+        let dark = "IDECraft Dark"; // rebrand:keep
+        let light = "idecraft light"; // rebrand:keep
+        assert_eq!(ThemeId::from_name(dark), Some(ThemeId::FerrisIdeaDark));
+        assert_eq!(ThemeId::from_name(light), Some(ThemeId::FerrisIdeaLight));
+        assert_eq!(ThemeId::from_saved(Some(dark)), ThemeId::FerrisIdeaDark);
+    }
+
     /// SPEC-0295/AK-5: every bundled scheme has a background and a stripe colour for the usages
     /// of the symbol at the caret, and write accesses differ from read accesses.
     #[test]
@@ -1057,7 +1070,7 @@ mod tests {
                 id.name()
             );
         }
-        let dark = ColorScheme::for_theme(ThemeId::IdecraftDark);
+        let dark = ColorScheme::for_theme(ThemeId::FerrisIdeaDark);
         assert_eq!(
             dark.attributes("IDENTIFIER_UNDER_CARET_ATTRIBUTES")
                 .background,
@@ -1471,7 +1484,7 @@ mod tests {
 
     #[test]
     fn brand_themes_take_the_brand_tokens() {
-        let dark = UiTheme::for_theme(ThemeId::IdecraftDark);
+        let dark = UiTheme::for_theme(ThemeId::FerrisIdeaDark);
         let rgb = |t: &UiTheme, k: &str| t.color(k).map(|c| c.rgb);
         // DESIGN_SYSTEM.md tokens: background-primary, background-secondary, foreground-secondary,
         // accent-primary.
@@ -1499,10 +1512,10 @@ mod tests {
             dark.insets("EditorTabs.tabInsets"),
             islands.insets("EditorTabs.tabInsets")
         );
-        let scheme = ColorScheme::for_theme(ThemeId::IdecraftDark);
+        let scheme = ColorScheme::for_theme(ThemeId::FerrisIdeaDark);
         assert_eq!(
             scheme.chain(),
-            ["IDECraft Dark", "Islands Dark", "Darcula", "Default"]
+            ["Ferris IDEA Dark", "Islands Dark", "Darcula", "Default"]
         );
         assert_eq!(scheme.attributes("TEXT").background, Some(0x2e3440));
         assert_eq!(scheme.attributes("TEXT").foreground, Some(0xd8dee9));
@@ -1511,7 +1524,7 @@ mod tests {
             Some(0xde8c93)
         );
         // Light: background-light, foreground-primary-light, accent-primary-light.
-        let light = UiTheme::for_theme(ThemeId::IdecraftLight);
+        let light = UiTheme::for_theme(ThemeId::FerrisIdeaLight);
         assert_eq!(rgb(&light, "ToolWindow.background"), Some(0xeceff4));
         assert_eq!(rgb(&light, "*.foreground"), Some(0x2e3440));
         assert_eq!(
@@ -1523,18 +1536,18 @@ mod tests {
             light.number("Island.arc"),
             UiTheme::for_theme(ThemeId::IslandsLight).number("Island.arc")
         );
-        let scheme = ColorScheme::for_theme(ThemeId::IdecraftLight);
-        assert_eq!(scheme.chain(), ["IDECraft Light", "Light", "Default"]);
+        let scheme = ColorScheme::for_theme(ThemeId::FerrisIdeaLight);
+        assert_eq!(scheme.chain(), ["Ferris IDEA Light", "Light", "Default"]);
         assert_eq!(scheme.attributes("TEXT").background, Some(0xeceff4));
-        assert!(ThemeId::IdecraftDark.is_brand() && !ThemeId::IslandsDark.is_brand());
+        assert!(ThemeId::FerrisIdeaDark.is_brand() && !ThemeId::IslandsDark.is_brand());
     }
 
     /// SPEC-0027 AK-11 (v9): fields stand out in the brand schemes, in the colour of constants.
     #[test]
     fn brand_schemes_give_fields_the_constant_colour() {
         for (id, colour) in [
-            (ThemeId::IdecraftDark, 0xc3a2bd),
-            (ThemeId::IdecraftLight, 0x85597e),
+            (ThemeId::FerrisIdeaDark, 0xc3a2bd),
+            (ThemeId::FerrisIdeaLight, 0x85597e),
         ] {
             let s = ColorScheme::for_theme(id);
             let field = s.attributes("DEFAULT_INSTANCE_FIELD").foreground;
@@ -1614,7 +1627,7 @@ mod tests {
             assert!(s.capture_style("property.static").italic, "{id:?}");
         }
         // The brand schemes give static fields their field colour, in italics.
-        for id in [ThemeId::IdecraftDark, ThemeId::IdecraftLight] {
+        for id in [ThemeId::FerrisIdeaDark, ThemeId::FerrisIdeaLight] {
             let s = ColorScheme::for_theme(id);
             assert_eq!(
                 s.capture_style("property.static").foreground,
@@ -1700,7 +1713,7 @@ mod tests {
     fn brand_text_meets_wcag_aa() {
         assert!((contrast(0xffffff, 0x000000) - 21.0).abs() < 0.01);
         assert!((contrast(0xeceff4, 0x2e3440) - 10.84).abs() < 0.01);
-        for id in [ThemeId::IdecraftDark, ThemeId::IdecraftLight] {
+        for id in [ThemeId::FerrisIdeaDark, ThemeId::FerrisIdeaLight] {
             let ui = UiTheme::for_theme(id);
             let scheme = ColorScheme::for_theme(id);
             let u = |k: &str| ui.color(k).expect(k).rgb;
@@ -1770,12 +1783,12 @@ mod tests {
 
     #[test]
     fn new_installs_get_the_brand_theme_and_choices_are_kept() {
-        assert_eq!(ThemeId::DEFAULT, ThemeId::IdecraftDark);
+        assert_eq!(ThemeId::DEFAULT, ThemeId::FerrisIdeaDark);
         assert_eq!(ThemeId::ALL[0], ThemeId::DEFAULT, "the default comes first");
-        assert_eq!(ThemeId::from_saved(None), ThemeId::IdecraftDark);
+        assert_eq!(ThemeId::from_saved(None), ThemeId::FerrisIdeaDark);
         assert_eq!(
             ThemeId::from_saved(Some("Solarized")),
-            ThemeId::IdecraftDark
+            ThemeId::FerrisIdeaDark
         );
         for t in ThemeId::ALL {
             assert_eq!(
@@ -2038,7 +2051,7 @@ mod tests {
         ] {
             assert_eq!(semantic_key(ty, &[], true), None, "{ty}");
         }
-        for id in [ThemeId::IslandsDark, ThemeId::IdecraftDark] {
+        for id in [ThemeId::IslandsDark, ThemeId::FerrisIdeaDark] {
             let s = ColorScheme::for_theme(id);
             assert_eq!(
                 s.attributes("METHOD_DECLARATION_ATTRIBUTES"),
@@ -2052,7 +2065,7 @@ mod tests {
             assert!(s.attributes("STATIC_FIELD_ATTRIBUTES").italic, "{id:?}");
             assert!(s.attributes("STATIC_METHOD_ATTRIBUTES").italic, "{id:?}");
             // Fields take the scheme's own field colour, not the light root's (v9): Islands Dark
-            // colours them, the IDECraft brand scheme draws them like text on purpose.
+            // colours them, the Ferris IDEA brand scheme draws them like text on purpose.
             let field = s.attributes("INSTANCE_FIELD_ATTRIBUTES").foreground;
             assert_eq!(field, s.attributes("DEFAULT_INSTANCE_FIELD").foreground);
             assert!(field.is_some() && field != Some(0x660e7a), "{id:?}");

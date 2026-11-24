@@ -8,15 +8,15 @@
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_core::notifications::Kind;
+use ferris_idea_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
+use ferris_idea_workbench::settings_model::Page;
+use ferris_idea_workbench::{SettingsView, WorkbenchView};
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_core::notifications::Kind;
-use idecraft_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
-use idecraft_workbench::settings_model::Page;
-use idecraft_workbench::{SettingsView, WorkbenchView};
 
 fn folder(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!(
-        "idecraft-settings-pages-{tag}-{}",
+        "ferris-idea-settings-pages-{tag}-{}",
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&dir);
@@ -40,8 +40,8 @@ fn page(bench: &Entity<WorkbenchView>, cx: &mut VisualTestContext) -> Page {
     view.read_with(cx, |v, _| v.page())
 }
 
-fn saved(file: &Path) -> idecraft_core::IdeSettings {
-    idecraft_core::load_ide_settings(file)
+fn saved(file: &Path) -> ferris_idea_core::IdeSettings {
+    ferris_idea_core::load_ide_settings(file)
 }
 
 /// Shows `note` in the status bar and lets the window draw it (the Notifications log records it).
@@ -61,7 +61,7 @@ fn settings_pages_of_appearance_and_behavior(cx: &mut TestAppContext) {
     cx.update(|cx| {
         cx.set_global(IdeSettingsFile(file.clone()));
         cx.set_global(ThemeFile(settings.join("theme")));
-        cx.set_global(CurrentIdeSettings(idecraft_core::IdeSettings::default()));
+        cx.set_global(CurrentIdeSettings(ferris_idea_core::IdeSettings::default()));
     });
     let at = root.clone();
     let window = cx.add_window(move |_, cx| WorkbenchView::new(&at, cx));
@@ -70,7 +70,7 @@ fn settings_pages_of_appearance_and_behavior(cx: &mut TestAppContext) {
     cx.simulate_resize(gpui::size(px(1372.), px(860.)));
     cx.run_until_parked();
     cx.update(|_, cx| {
-        idecraft_workbench::project_windows::register_workbench(bench.downgrade(), cx)
+        ferris_idea_workbench::project_windows::register_workbench(bench.downgrade(), cx)
     });
     bench.update_in(cx, |b, window, cx| b.watch_window(window, cx));
 
@@ -96,6 +96,15 @@ fn settings_pages_of_appearance_and_behavior(cx: &mut TestAppContext) {
             .iter()
             .all(|p| p.group() == Some("Appearance & Behavior"))
     );
+
+    // Appearance › Startup animation, the last row: on by default, Enter switches it and saves
+    // it (SPEC-0355 v2 behaviour 23).
+    let last = ferris_idea_workbench::palette::ThemeId::ALL.len() + 3;
+    dialog(&bench, cx).update(cx, |v, cx| v.select_row(last, cx));
+    keys(cx, "enter");
+    assert!(!saved(&file).appearance.startup_animation);
+    keys(cx, "enter");
+    assert!(saved(&file).appearance.startup_animation);
 
     // System Settings: Tab goes there; Space switches each row and saves it (behaviour 2).
     keys(cx, "tab");
@@ -137,7 +146,7 @@ fn settings_pages_of_appearance_and_behavior(cx: &mut TestAppContext) {
         cx.run_until_parked();
         assert!(bench.read_with(cx, |b, _| b.drawn_question().is_none()));
         if before && after {
-            assert_eq!(question.message, "Quit IDECraft?");
+            assert_eq!(question.message, "Quit Ferris IDEA?");
             assert_eq!(question.buttons, ["Quit", "Cancel"]);
             break;
         }
@@ -241,7 +250,7 @@ fn settings_pages_of_appearance_and_behavior(cx: &mut TestAppContext) {
     cx.run_until_parked();
     assert_eq!(
         view.read_with(cx, |v, _| v.advanced_rows().len()),
-        idecraft_core::advanced_settings::ADVANCED.len()
+        ferris_idea_core::advanced_settings::ADVANCED.len()
     );
     let at = view.read_with(cx, |v, _| {
         v.advanced_rows()

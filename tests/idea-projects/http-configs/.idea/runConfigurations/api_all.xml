@@ -1,0 +1,5 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="api | all" type="HttpClient.HttpRequestRunConfigurationType" factoryName="HTTP Request" folderName="HTTP" environment="staging" path="$PROJECT_DIR$/http/api.http" runType="Run all requests in file">
+    <method v="2" />
+  </configuration>
+</component>

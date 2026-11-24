@@ -3,14 +3,14 @@
 use std::path::PathBuf;
 use std::process::Command;
 
-use idecraft_core::{
+use ferris_idea_core::{
     NodeSearch, RunConfigs, RunKind, find_node_runtimes, node_environment, run_config,
 };
 
-/// Skips a test whose tool is missing; with `IDECRAFT_REQUIRE_TOOLS` set (CI) it fails instead.
+/// Skips a test whose tool is missing; with `FERRIS_IDEA_REQUIRE_TOOLS` set (CI) it fails instead.
 fn skip(reason: &str) {
     assert!(
-        std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+        ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
         "required tool missing: {reason}"
     );
     eprintln!("skipped: {reason}");
@@ -20,7 +20,7 @@ struct Scratch(PathBuf);
 
 impl Scratch {
     fn new(tag: &str) -> Self {
-        let p = std::env::temp_dir().join(format!("idecraft-node-{tag}-{}", std::process::id()));
+        let p = std::env::temp_dir().join(format!("ferris-idea-node-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&p);
         std::fs::create_dir_all(p.join("proj")).unwrap();
         Self(p.canonicalize().unwrap())
@@ -174,7 +174,10 @@ fn package_manager_packages_and_tests() {
     assert_eq!(env.test_framework.as_deref(), Some("vitest"));
     let config = env.test_config.unwrap();
     assert_eq!(config.kind, RunKind::Test);
-    assert_eq!(config.report_file.as_deref(), Some(".idecraft/vitest.json"));
+    assert_eq!(
+        config.report_file.as_deref(),
+        Some(".ferris-idea/vitest.json")
+    );
 
     // Two package managers' lockfiles; no packageManager field.
     s.write(

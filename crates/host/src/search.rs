@@ -7,10 +7,10 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 
-use idecraft_core::{Finder, Query, searchable_text};
-use idecraft_languages::everywhere::{Categories, Sources, TextOptions, search_everywhere};
-use idecraft_languages::syntax::SearchContext;
-use idecraft_session::{Backend, ErrorCode, Right, RpcError};
+use ferris_idea_core::{Finder, Query, searchable_text};
+use ferris_idea_languages::everywhere::{Categories, Sources, TextOptions, search_everywhere};
+use ferris_idea_languages::syntax::SearchContext;
+use ferris_idea_session::{Backend, ErrorCode, Right, RpcError};
 use serde_json::{Value, json};
 
 use crate::{add, backend_of, internal, invalid, text};
@@ -18,11 +18,11 @@ use crate::{add, backend_of, internal, invalid, text};
 /// Matches returned at most unless asked for fewer.
 const MAX_MATCHES: usize = 1000;
 
-fn workspace(backend: &Backend) -> Result<idecraft_core::Workspace, RpcError> {
+fn workspace(backend: &Backend) -> Result<ferris_idea_core::Workspace, RpcError> {
     let root = backend
         .root()
         .ok_or_else(|| RpcError::new(ErrorCode::Unavailable, "no workspace"))?;
-    idecraft_core::Workspace::open(&root).map_err(internal)
+    ferris_idea_core::Workspace::open(&root).map_err(internal)
 }
 
 /// Binds `search.*`.
@@ -49,7 +49,7 @@ pub fn bind(backend: &Backend) {
             let finder = Finder::new(&query).map_err(|e| invalid(e.to_string()))?;
             let max = p["max"].as_u64().map_or(MAX_MATCHES, |m| m as usize).max(1);
             let mask = p["mask"].as_str().filter(|m| !m.is_empty());
-            let scope = idecraft_core::SearchScope {
+            let scope = ferris_idea_core::SearchScope {
                 mask: mask.map(str::to_owned),
                 place: place(&ws, p)?,
                 include_non_project: p["include_non_project"].as_bool() == Some(true),
@@ -67,7 +67,7 @@ pub fn bind(backend: &Backend) {
             };
             // The same listing as the local search (SPEC-0029 v5 behaviour 13): the project's own
             // sources unless a place was named or everything was asked for.
-            let (candidates, left_out) = idecraft_core::search_candidates(&ws, &scope);
+            let (candidates, left_out) = ferris_idea_core::search_candidates(&ws, &scope);
             let mut files = Vec::new();
             let (mut total, mut skipped, mut truncated) = (0usize, 0usize, false);
             for rel in candidates {
@@ -116,7 +116,8 @@ pub fn bind(backend: &Backend) {
                 "files": files, "matches": total, "skipped": skipped, "truncated": truncated,
             });
             let folders = left_out.iter().filter(|o| o.folder).count();
-            if let Some(line) = idecraft_core::not_searched_line(folders, left_out.len() - folders)
+            if let Some(line) =
+                ferris_idea_core::not_searched_line(folders, left_out.len() - folders)
             {
                 v["not_searched"] = json!(line);
             }
@@ -132,7 +133,7 @@ pub fn bind(backend: &Backend) {
         |call| {
             let b = backend_of(call)?;
             let ws = workspace(&b)?;
-            let doc = idecraft_session::paths::check_relative(text(&call.params, "path")?)?;
+            let doc = ferris_idea_session::paths::check_relative(text(&call.params, "path")?)?;
             crate::resolve(&call.root, &doc)?;
             let line = call.params["line"].as_u64().unwrap_or(0) as usize;
             let around = call.params["context"].as_u64().unwrap_or(5).min(20) as usize;
@@ -221,35 +222,38 @@ pub fn bind(backend: &Backend) {
 /// they are (the window's Open Files scope), else below `folder`, else the whole project. Every
 /// path from the window is checked as a relative path inside the project; a named file outside
 /// the project folder or behind a symbolic link is not searched.
-fn place(ws: &idecraft_core::Workspace, p: &Value) -> Result<idecraft_core::SearchPlace, RpcError> {
+fn place(
+    ws: &ferris_idea_core::Workspace,
+    p: &Value,
+) -> Result<ferris_idea_core::SearchPlace, RpcError> {
     if let Some(list) = p["files"].as_array() {
-        let own = idecraft_core::OwnSources::new(ws.root());
+        let own = ferris_idea_core::OwnSources::new(ws.root());
         let mut files = Vec::new();
         for f in list {
             let f = f
                 .as_str()
                 .ok_or_else(|| invalid("`files` holds relative paths"))?;
-            let f = idecraft_session::paths::check_relative(f)?;
+            let f = ferris_idea_session::paths::check_relative(f)?;
             // No symbolic link anywhere on the way, also not inside `.venv` or `node_modules`.
             if let Ok(f) = own.readable(std::path::Path::new(&f)) {
                 files.push(f);
             }
         }
-        return Ok(idecraft_core::SearchPlace::Files(files));
+        return Ok(ferris_idea_core::SearchPlace::Files(files));
     }
     Ok(
         match p["folder"].as_str().filter(|f| !f.is_empty() && *f != ".") {
-            Some(f) => idecraft_core::SearchPlace::Directory(PathBuf::from(
-                idecraft_session::paths::check_relative(f)?,
+            Some(f) => ferris_idea_core::SearchPlace::Directory(PathBuf::from(
+                ferris_idea_session::paths::check_relative(f)?,
             )),
-            None => idecraft_core::SearchPlace::Project,
+            None => ferris_idea_core::SearchPlace::Project,
         },
     )
 }
 
 /// Adds the highlight positions of the hits (v2 protocol detail 8; they are not part of the
 /// result's own serialisation, which agents read).
-fn with_positions(v: &mut Value, found: &idecraft_languages::everywhere::Everywhere) {
+fn with_positions(v: &mut Value, found: &ferris_idea_languages::everywhere::Everywhere) {
     let put = |list: &mut Value, positions: Vec<&Vec<usize>>| {
         if let Some(a) = list.as_array_mut() {
             for (hit, p) in a.iter_mut().zip(positions) {
@@ -280,13 +284,19 @@ struct FileNames {
 }
 
 impl FileNames {
-    fn of(ws: &idecraft_core::Workspace, params: &Value, wanted: bool) -> Result<Self, RpcError> {
+    fn of(
+        ws: &ferris_idea_core::Workspace,
+        params: &Value,
+        wanted: bool,
+    ) -> Result<Self, RpcError> {
         let mut recent = Vec::new();
         for p in params["recent"].as_array().into_iter().flatten() {
             let Some(p) = p.as_str() else {
                 continue;
             };
-            recent.push(PathBuf::from(idecraft_session::paths::check_relative(p)?));
+            recent.push(PathBuf::from(ferris_idea_session::paths::check_relative(
+                p,
+            )?));
         }
         if !wanted {
             return Ok(Self {
@@ -295,7 +305,7 @@ impl FileNames {
                 not_listed: None,
             });
         }
-        let own = idecraft_core::OwnSources::new(ws.root());
+        let own = ferris_idea_core::OwnSources::new(ws.root());
         Ok(if params["include_non_project"].as_bool() == Some(true) {
             Self {
                 list: Some(own.everything(None)),
@@ -314,15 +324,15 @@ impl FileNames {
 }
 
 fn everywhere(
-    ws: &idecraft_core::Workspace,
+    ws: &ferris_idea_core::Workspace,
     files: &[PathBuf],
     names: &FileNames,
     query: &str,
     categories: Categories,
     limit: usize,
     cancel: Option<&AtomicBool>,
-) -> idecraft_languages::everywhere::Everywhere {
-    let keymap = idecraft_ui::keymap::Keymap::bundled_default();
+) -> ferris_idea_languages::everywhere::Everywhere {
+    let keymap = ferris_idea_ui::keymap::Keymap::bundled_default();
     let mut found = search_everywhere(
         Sources {
             root: ws.root(),

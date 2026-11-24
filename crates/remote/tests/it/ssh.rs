@@ -1,9 +1,9 @@
-//! Against a real `sshd` started for the test (`idecraft_remote::testing`).
+//! Against a real `sshd` started for the test (`ferris_idea_remote::testing`).
 
 use std::time::Duration;
 
-use idecraft_remote::testing::TestHost;
-use idecraft_remote::{EntryKind, NewEntry, Remote, RemoteError, cksum};
+use ferris_idea_remote::testing::TestHost;
+use ferris_idea_remote::{EntryKind, NewEntry, Remote, RemoteError, cksum};
 
 fn host(name: &str) -> Option<TestHost> {
     let dir = std::env::temp_dir().join(format!("idc-ssh-{name}-{}", std::process::id()));
@@ -71,19 +71,43 @@ fn files_on_the_host() {
         & 0o777;
     assert_eq!(mode, 0o640);
     std::fs::write(base.join("src/main.rs"), "changed by someone else\n").unwrap();
+    // SPEC-0121 v7 AK-10: the refusal names both stamps; the host's stamp then overwrites.
     assert_eq!(
         r.write(&path, b"mine\n", Some(&stamp)),
-        Err(RemoteError::Changed(path.clone()))
+        Err(RemoteError::Changed {
+            path: path.clone(),
+            expected: stamp.clone(),
+            host: cksum(b"changed by someone else\n"),
+        })
+    );
+    let text = r
+        .write(&path, b"mine\n", Some(&stamp))
+        .unwrap_err()
+        .to_string();
+    assert!(
+        text.starts_with("conflict:") && text.contains(&stamp),
+        "{text}"
     );
     assert_eq!(
         std::fs::read_to_string(base.join("src/main.rs")).unwrap(),
         "changed by someone else\n"
     );
-    r.overwrite(&path, b"mine\n").unwrap();
+    r.write(&path, b"mine\n", Some(&cksum(b"changed by someone else\n")))
+        .unwrap();
     assert_eq!(
         std::fs::read_to_string(base.join("src/main.rs")).unwrap(),
         "mine\n"
     );
+    // A file deleted on the host: the refusal says `absent`, and nothing is written.
+    let gone = format!("{dir}/gone.txt");
+    std::fs::write(base.join("gone.txt"), "x\n").unwrap();
+    let gone_stamp = r.read(&gone).unwrap().stamp;
+    std::fs::remove_file(base.join("gone.txt")).unwrap();
+    assert!(matches!(
+        r.write(&gone, b"y\n", Some(&gone_stamp)),
+        Err(RemoteError::Changed { host, .. }) if host == "absent"
+    ));
+    assert!(!base.join("gone.txt").exists());
     // A new file must not exist yet; no temporary files are left behind.
     r.write(&format!("{dir}/new.txt"), b"n", None).unwrap();
     assert!(r.write(&format!("{dir}/new.txt"), b"n", None).is_err());
@@ -91,7 +115,7 @@ fn files_on_the_host() {
         e.unwrap()
             .file_name()
             .to_string_lossy()
-            .contains("idecraft-")
+            .contains("ferris-idea-")
     }));
 }
 
@@ -152,13 +176,13 @@ fn unknown_and_changed_host_keys_are_refused() {
     let mut nobody = h.target.clone();
     nobody
         .extra
-        .extend(["-o".into(), "User=idecraft-nobody".into()]);
+        .extend(["-o".into(), "User=ferris-idea-nobody".into()]);
     let refused = Remote::new(nobody).home().unwrap_err();
     assert!(
         matches!(refused, RemoteError::AuthRequired(_)),
         "{refused:?}"
     );
-    let mut closed = idecraft_remote::SshTarget::new("127.0.0.1");
+    let mut closed = ferris_idea_remote::SshTarget::new("127.0.0.1");
     closed.port = Some(1);
     assert!(matches!(
         Remote::new(closed).home(),
@@ -217,8 +241,11 @@ fn creates_renames_and_deletes() {
     // The home folder is checked without ever sending a delete for it: the test host's home is
     // the real one.
     let home = r.home().unwrap();
-    assert!(idecraft_remote::protects_home(&home, &home));
-    assert!(idecraft_remote::protects_home(&home, &format!("{home}/..")));
+    assert!(ferris_idea_remote::protects_home(&home, &home));
+    assert!(ferris_idea_remote::protects_home(
+        &home,
+        &format!("{home}/..")
+    ));
     assert!(r.delete("/", true).is_err());
     assert!(r.delete("relative", true).is_err());
 }

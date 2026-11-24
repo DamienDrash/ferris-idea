@@ -5,8 +5,8 @@
 
 #![cfg(target_os = "macos")]
 
+use ferris_idea_workbench::{DatabaseView, SpringView};
 use gpui::{Entity, EntityInputHandler, Modifiers, Render, TestAppContext, VisualTestContext, px};
-use idecraft_workbench::{DatabaseView, SpringView};
 
 /// A key event of the key `a` (key code 0 on macOS), then the text the text input commits.
 fn key_a_then_commit<V: EntityInputHandler + Render>(
@@ -37,7 +37,8 @@ fn keys(cx: &mut VisualTestContext, keystrokes: &str) {
 /// `ä`); real keys with Shift go on; ⌫ and Escape keep their meaning.
 #[gpui::test]
 fn committed_text_opens_and_extends_the_database_search(cx: &mut TestAppContext) {
-    let root = std::env::temp_dir().join(format!("idecraft-db-search-text-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-db-search-text-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     let at = root.clone();

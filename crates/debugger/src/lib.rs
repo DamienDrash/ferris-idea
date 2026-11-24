@@ -1,4 +1,4 @@
-//! Debugging for IDECraft, built on the Debug Adapter Protocol.
+//! Debugging for Ferris IDEA, built on the Debug Adapter Protocol.
 //!
 //! Implements `SPEC-0039`: base protocol, adapter client, session model and
 //! detection of known adapters; Go programs run under Delve (`delve`).
@@ -34,7 +34,8 @@ pub use client::{
     AdapterHost, DapClient, DapConnect, ExceptionTypes, FnHost, HostSettings, HostSources,
 };
 pub use delve::{
-    DelveServer, GoCommand, attach_go, go_command, go_launch, is_loopback, launch_go, link_mapping,
+    DelveServer, GoCommand, SERVER_NOTE as DELVE_SERVER_NOTE, attach_go, go_command, go_launch,
+    is_loopback, launch_go, link_mapping,
 };
 pub use extras::{Lang, ThreadInfo, ViewAs};
 pub use kinds::Kind;

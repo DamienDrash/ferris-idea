@@ -13,7 +13,7 @@ when the first does not fit.
 1. **Mid-line:** after the pause a suggestion is also asked for when only closing brackets, quotes,
    `;`, `,` and spaces follow the caret on its line. It is drawn into the line at the caret and moves
    the rest of the line to the right; clicks map to the text without it. Tab inserts it. [GEN]
-2. **Alternatives:** with a suggestion shown, ⌥] shows the next one; at the last one IDECraft asks for
+2. **Alternatives:** with a suggestion shown, ⌥] shows the next one; at the last one Ferris IDEA asks for
    a completion different from every one shown so far (the same request plus the list) and shows it,
    or says "No other suggestion" and keeps the current one when the answer repeats one. ⌥[ shows the
    previous one. Typing or moving the caret forgets them. This works with an endpoint and with a

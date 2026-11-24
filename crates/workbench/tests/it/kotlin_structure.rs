@@ -6,8 +6,8 @@
 
 #![cfg(target_os = "macos")]
 
+use ferris_idea_workbench::{ChoiceView, WorkbenchView};
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_workbench::{ChoiceView, WorkbenchView};
 
 const ANIMALS: &str = "package zoo
 
@@ -34,7 +34,8 @@ class Person(val name: String, val age: Int)
 ";
 
 fn workspace(tag: &str) -> std::path::PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-kt-win-{tag}-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-kt-win-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src/zoo")).unwrap();
     std::fs::write(root.join("src/zoo/Animals.kt"), ANIMALS).unwrap();
@@ -106,7 +107,7 @@ fn chooser(bench: &Entity<WorkbenchView>, cx: &mut VisualTestContext) -> Entity<
 /// The actions keep the keys of the reference's macOS keymap.
 #[test]
 fn the_actions_have_their_keys() {
-    let keys = idecraft_workbench::keymaps::current();
+    let keys = ferris_idea_workbench::keymaps::current();
     assert_eq!(keys.shortcut_label("TypeHierarchy", true), "⌃H");
     assert_eq!(keys.shortcut_label("ImplementMethods", true), "⌃I");
     assert_eq!(keys.shortcut_label("OverrideMethods", true), "⌃O");

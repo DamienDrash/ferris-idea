@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pairs the debug iOS or Android app with a real `idecraft-serve serve --pair` (SPEC-0326).
+"""Pairs the debug iOS or Android app with a real `ferris-idea-serve serve --pair` (SPEC-0326).
 
 The host runs under a pseudo-terminal, as `serve --pair` confirms digits only at a terminal. On
 macOS `--key-file` is ignored and a release build uses the login keychain, so this needs a debug
@@ -7,9 +7,9 @@ build: only those keep the host's key in a file, here in a scratch folder.
 Prints the app's SELFTEST lines; exits 0 only when the app passed and both sides showed the same
 digits.
 
-usage: mobile-selftest.py <idecraft-serve binary> <simulator UDID> <project folder> <file in it>
+usage: mobile-selftest.py <ferris-idea-serve binary> <simulator UDID> <project folder> <file in it>
        [<screenshot.png>]
-       mobile-selftest.py --android <adb serial> <idecraft-serve binary> <project folder>
+       mobile-selftest.py --android <adb serial> <ferris-idea-serve binary> <project folder>
        <file in it> [<screenshot.png>]
 
 On Android the app reaches the host's loopback listener as 10.0.2.2, the emulator's address for
@@ -29,17 +29,17 @@ import shutil
 import tempfile
 import time
 
-BUNDLE = "dev.idecraft.mobile"
+BUNDLE = "dev.ferrisidea.mobile"
 DEADLINE = 120
 
 
 def launch_ios(udid, address, code, folder, file_name, log):
     env = {
         **os.environ,
-        "SIMCTL_CHILD_IDECRAFT_SELFTEST_ADDRESS": address,
-        "SIMCTL_CHILD_IDECRAFT_SELFTEST_CODE": code,
-        "SIMCTL_CHILD_IDECRAFT_SELFTEST_FOLDER": folder,
-        "SIMCTL_CHILD_IDECRAFT_SELFTEST_FILE": file_name,
+        "SIMCTL_CHILD_FERRIS_IDEA_SELFTEST_ADDRESS": address,
+        "SIMCTL_CHILD_FERRIS_IDEA_SELFTEST_CODE": code,
+        "SIMCTL_CHILD_FERRIS_IDEA_SELFTEST_FOLDER": folder,
+        "SIMCTL_CHILD_FERRIS_IDEA_SELFTEST_FILE": file_name,
     }
     return subprocess.Popen(
         ["xcrun", "simctl", "launch", "--console-pty",
@@ -53,7 +53,7 @@ def launch_android(serial, address, code, folder, file_name, log):
     subprocess.run(adb + ["shell", "am", "force-stop", BUNDLE], check=True)
     subprocess.run(adb + ["logcat", "-c"], check=True)
     logcat = subprocess.Popen(
-        adb + ["logcat", "-v", "raw", "-s", "IDECraftSelfTest:I", "AndroidRuntime:E"],
+        adb + ["logcat", "-v", "raw", "-s", "FerrisIDEASelfTest:I", "AndroidRuntime:E"],
         stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
     )
     extras = []
@@ -85,7 +85,7 @@ def main():
         shot = args[4] if len(args) > 4 else None
     if "/debug/" not in os.path.realpath(serve):
         sys.exit("refused: only a debug build keeps its key out of the login keychain")
-    state = tempfile.mkdtemp(prefix="idecraft-selftest-")
+    state = tempfile.mkdtemp(prefix="ferris-idea-selftest-")
     os.chmod(state, 0o700)
     # The folder holds the test host's key: it goes when the script ends, also on failure.
     atexit.register(shutil.rmtree, state, True)
@@ -98,7 +98,7 @@ def main():
         [serve, "serve", "--pair", "--listen", f"127.0.0.1:{port}", "--key-file",
          "--grant", "view", folder],
         stdin=slave, stdout=slave, stderr=slave, close_fds=True,
-        env={**os.environ, "IDECRAFT_CONFIG_DIR": state},
+        env={**os.environ, "FERRIS_IDEA_CONFIG_DIR": state},
     )
     os.close(slave)
     output = ""

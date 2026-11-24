@@ -3,13 +3,14 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use idecraft_vcs::{ChangeKind, FileStatus, LineChangeKind, MergeKind, Repo};
+use ferris_idea_vcs::{ChangeKind, FileStatus, LineChangeKind, MergeKind, Repo};
 
 struct Scratch(PathBuf);
 
 impl Scratch {
     fn new(tag: &str) -> Option<Self> {
-        let dir = std::env::temp_dir().join(format!("idecraft-git-{tag}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("ferris-idea-git-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let s = Self(dir);
@@ -174,12 +175,12 @@ fn summary_of_a_repository_and_the_repositories_below() {
             })
             .collect()
     };
-    let (all, cut) = idecraft_vcs::nested_repositories(s.path(), 4, 50);
+    let (all, cut) = ferris_idea_vcs::nested_repositories(s.path(), 4, 50);
     assert_eq!(rel(all), ["lib/a", "lib/a/inner", "tools/deep/b/c"]);
     assert!(!cut);
-    let (shallow, _) = idecraft_vcs::nested_repositories(s.path(), 3, 50);
+    let (shallow, _) = ferris_idea_vcs::nested_repositories(s.path(), 3, 50);
     assert_eq!(rel(shallow), ["lib/a", "lib/a/inner"]);
-    let (one, cut) = idecraft_vcs::nested_repositories(s.path(), 4, 1);
+    let (one, cut) = ferris_idea_vcs::nested_repositories(s.path(), 4, 1);
     assert_eq!((rel(one), cut), (vec!["lib/a".to_owned()], true));
 }
 
@@ -365,7 +366,7 @@ fn changes_of_files_against_head() {
     let bin = repo.diff_file("img.bin").unwrap();
     assert!(bin.binary && bin.changes.is_empty() && bin.hunks.is_empty());
 
-    let outside = std::env::temp_dir().join(format!("idecraft-nogit-{}", std::process::id()));
+    let outside = std::env::temp_dir().join(format!("ferris-idea-nogit-{}", std::process::id()));
     std::fs::create_dir_all(&outside).unwrap();
     // The temp directory itself is normally not inside a repository.
     if Repo::discover(&outside).is_err() {
@@ -482,14 +483,14 @@ fn blame_head_with_messages_and_reasons() {
 
     s.write("untracked.txt", b"x\n");
     let e = repo.blame_head("untracked.txt").unwrap_err();
-    assert!(matches!(e, idecraft_vcs::GitError::Untracked(_)), "{e}");
+    assert!(matches!(e, ferris_idea_vcs::GitError::Untracked(_)), "{e}");
     assert_eq!(e.to_string(), "untracked.txt is not tracked by Git");
     s.write("added.txt", b"y\n");
     s.git(&["add", "added.txt"]).unwrap();
     let e = repo.blame_head("added.txt").unwrap_err();
     assert_eq!(e.to_string(), "added.txt has no committed version yet");
 
-    let outside = std::env::temp_dir().join(format!("idecraft-no-repo-{}", std::process::id()));
+    let outside = std::env::temp_dir().join(format!("ferris-idea-no-repo-{}", std::process::id()));
     std::fs::create_dir_all(&outside).unwrap();
     if Repo::discover(&outside).is_err() {
         let e = Repo::discover(&outside).err().unwrap();
@@ -1128,10 +1129,10 @@ fn commit_one_change_keeps_the_others() {
     let repo = Repo::discover(s.path()).unwrap();
     let head = repo.head_text("A.txt").unwrap().unwrap();
     let text = std::fs::read_to_string(s.path().join("A.txt")).unwrap();
-    let changes = idecraft_vcs::line_changes(&head, &text);
+    let changes = ferris_idea_vcs::line_changes(&head, &text);
     assert_eq!(changes.len(), 2);
-    let content = idecraft_vcs::apply_change(&head, &text, &changes[0]);
-    let options = idecraft_vcs::CommitOptions::default();
+    let content = ferris_idea_vcs::apply_change(&head, &text, &changes[0]);
+    let options = ferris_idea_vcs::CommitOptions::default();
     assert!(
         repo.commit_change("", "A.txt", &content, false, &options)
             .is_err(),
@@ -1148,7 +1149,7 @@ fn commit_one_change_keeps_the_others() {
     );
     // The other change is still a change of the working file, nothing is staged.
     let repo = Repo::discover(s.path()).unwrap();
-    let left = idecraft_vcs::line_changes(&repo.head_text("A.txt").unwrap().unwrap(), &text);
+    let left = ferris_idea_vcs::line_changes(&repo.head_text("A.txt").unwrap().unwrap(), &text);
     assert_eq!(left.len(), 1);
     assert_eq!(left[0].new_start, 5);
     assert_eq!(s.out(&["diff", "--cached", "--name-only"]), "");

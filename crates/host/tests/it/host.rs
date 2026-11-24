@@ -7,9 +7,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant};
 
-use idecraft_host::HostOptions;
-use idecraft_session::forward::LocalForward;
-use idecraft_session::{
+use ferris_idea_host::HostOptions;
+use ferris_idea_session::forward::LocalForward;
+use ferris_idea_session::{
     Backend, BackendConfig, ClientSession, Connection, ErrorCode, Right, Transport, in_process,
 };
 use serde_json::{Value, json};
@@ -50,7 +50,7 @@ fn host(dir: &Path, rights: Vec<Right>, options: HostOptions) -> Host {
         rights,
         ..BackendConfig::default()
     });
-    idecraft_host::bind(&backend, options);
+    ferris_idea_host::bind(&backend, options);
     let session = ClientSession::open(
         connect(&backend),
         &dir.join("p").display().to_string(),
@@ -67,7 +67,7 @@ fn host(dir: &Path, rights: Vec<Right>, options: HostOptions) -> Host {
 }
 
 impl Host {
-    fn call(&self, method: &str, params: Value) -> Result<Value, idecraft_session::RpcError> {
+    fn call(&self, method: &str, params: Value) -> Result<Value, ferris_idea_session::RpcError> {
         self.session
             .call_within(method, params, Duration::from_secs(60))
     }
@@ -117,7 +117,7 @@ fn read_until(conn: &Connection, id: u32, needle: &str, limit: Duration) -> Stri
     String::from_utf8_lossy(&all).into_owned()
 }
 
-fn code(r: Result<Value, idecraft_session::RpcError>) -> ErrorCode {
+fn code(r: Result<Value, ferris_idea_session::RpcError>) -> ErrorCode {
     r.expect_err("refused").code
 }
 
@@ -199,7 +199,7 @@ fn search_uses_unsaved_text_and_relative_paths() {
     h.session
         .edit(
             "src/two.rs",
-            &[idecraft_session::Op {
+            &[ferris_idea_session::Op {
                 at: 0,
                 delete: 0,
                 insert: "// needle unsaved\n".into(),
@@ -420,7 +420,7 @@ fn find_in_files_on_the_host_searches_the_projects_own_files() {
     h.session
         .edit(
             "scratch.py",
-            &[idecraft_session::Op {
+            &[ferris_idea_session::Op {
                 at: 0,
                 delete: 0,
                 insert: "# needle unsaved\n".into(),
@@ -658,9 +658,9 @@ fn a_host_terminal_echoes_resizes_survives_a_break_and_ends_with_the_session() {
 #[test]
 fn runs_stream_their_output_report_tests_stop_and_survive_a_break() {
     let dir = scratch("run");
-    std::fs::create_dir_all(dir.join("p/.idecraft")).unwrap();
+    std::fs::create_dir_all(dir.join("p/.ferris-idea")).unwrap();
     std::fs::write(
-        dir.join("p/.idecraft/run.toml"),
+        dir.join("p/.ferris-idea/run.toml"),
         r#"[[run]]
 name = "hello"
 command = ["sh", "-c", "echo to-out; echo to-err >&2"]
@@ -894,6 +894,33 @@ fn ports_are_offered_forwarded_on_loopback_only_and_debug_ports_refused() {
     let _ = h.session.bye();
 }
 
+/// SPEC-0322 v7 behaviour 10: a Delve server is talked to directly, and only on the host's
+/// loopback (its port is not protected); nothing is started for it.
+#[test]
+fn a_delve_server_outside_the_hosts_loopback_is_refused() {
+    let dir = scratch("dlv-remote");
+    let mut h = host(&dir, Right::ALL.to_vec(), options());
+    let attach = |host: &str| {
+        json!({ "adapter": "dlv", "mode": "attach",
+                "attach": { "kind": "address", "host": host, "port": 2345 } })
+    };
+    let refused = h.call("dap.start", attach("10.0.0.7")).unwrap_err();
+    assert_eq!(refused.code, ErrorCode::Denied, "{refused:?}");
+    assert!(refused.message.contains("loopback"), "{refused:?}");
+    // On the loopback the backend connects at once; with nothing listening that fails as such.
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let mut params = attach("127.0.0.1");
+    params["attach"]["port"] = json!(port);
+    let failed = h.call("dap.start", params).unwrap_err();
+    assert_eq!(failed.code, ErrorCode::Unavailable, "{failed:?}");
+    assert!(failed.message.contains("on the host"), "{failed:?}");
+    let _ = h.session.bye();
+}
+
 #[test]
 fn a_debug_adapter_starts_on_the_host_over_a_stream_without_a_port() {
     let dir = scratch("dap");
@@ -986,7 +1013,7 @@ fn a_tcp_adapter_is_relayed_through_the_session() {
         return;
     }
     let dir = scratch("dap-tcp");
-    idecraft_core::trust::trust_for_process(&dir.join("p"));
+    ferris_idea_core::trust::trust_for_process(&dir.join("p"));
     let mut opts = options();
     let fake = fake_program(&dir, "fake-adapter", FAKE_DLV);
     opts.extra_tcp_adapters = vec![("fake-adapter".into(), vec![fake])];
@@ -1139,9 +1166,9 @@ fn container_and_pod_targets_resolve_on_the_host() {
 #[test]
 fn the_debug_plan_and_host_processes() {
     let dir = scratch("dap-plan");
-    std::fs::create_dir_all(dir.join("p/.idecraft")).unwrap();
+    std::fs::create_dir_all(dir.join("p/.ferris-idea")).unwrap();
     std::fs::write(
-        dir.join("p/.idecraft/run.toml"),
+        dir.join("p/.ferris-idea/run.toml"),
         "[[run]]\nname = \"app\"\ncommand = [\"python3\", \"app.py\", \"--x\"]\n\n[[run]]\nname = \"web\"\ncommand = []\nurl = \"http://localhost:1/\"\n",
     )
     .unwrap();
@@ -1243,7 +1270,7 @@ fn reattaching_at_an_offset_search_offsets_and_git_show() {
     );
 }
 
-/// What a window may call changed: raise `idecraft_session::hello::MINOR` so that a backend without
+/// What a window may call changed: raise `ferris_idea_session::hello::MINOR` so that a backend without
 /// it is refused when connecting, then put the new minor and hash here (`ADR-0026` §4). A new `mcp.*`
 /// family is left out: it is bound only with the MCP feature.
 const METHOD_SURFACE: (u32, &str) = (1, "91e7e8ea5344a7e8");
@@ -1254,9 +1281,9 @@ fn a_changed_method_surface_raises_the_minor() {
     let h = host(&dir, Right::ALL.to_vec(), options());
     let names = h.backend.method_names();
     assert!(names.iter().any(|m| m == "dap.plan"), "{names:?}");
-    let hash = idecraft_session::ot::str_hash(&names.join("\n"));
+    let hash = ferris_idea_session::ot::str_hash(&names.join("\n"));
     assert_eq!(
-        (idecraft_session::hello::MINOR, hash.as_str()),
+        (ferris_idea_session::hello::MINOR, hash.as_str()),
         METHOD_SURFACE,
         "the backend's methods or MINOR changed; raise MINOR when a method was added"
     );

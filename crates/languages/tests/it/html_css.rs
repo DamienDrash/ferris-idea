@@ -1,20 +1,20 @@
-//! HTML and stylesheets from IDECraft's own syntax trees through the entry points the editor and
+//! HTML and stylesheets from Ferris IDEA's own syntax trees through the entry points the editor and
 //! the MCP server use (`SPEC-0042` v17 behaviours 28–33, OBS-0039 W1 to W3; v22 behaviours 38–40,
 //! OBS-0069 G1 to G3), on the sample of the observation: `index.html` linking `css/site.css`.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use idecraft_languages::find_usages::find_usages_in;
-use idecraft_languages::insight::{LocationKind, complete_in, found_in, symbols_in};
-use idecraft_languages::rename::{apply_edits, plan_rename_in};
+use ferris_idea_languages::find_usages::find_usages_in;
+use ferris_idea_languages::insight::{LocationKind, complete_in, found_in, hover_in, symbols_in};
+use ferris_idea_languages::rename::{apply_edits, plan_rename_in};
 
 const INDEX: &str = include_str!("../fixtures/web/index.html");
 const SITE: &str = include_str!("../fixtures/web/css/site.css");
 
 fn skip(reason: &str) {
     assert!(
-        std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+        ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
         "required tool missing: {reason}"
     );
     eprintln!("skipped: {reason}");
@@ -23,14 +23,14 @@ fn skip(reason: &str) {
 fn installed(program: &str) -> bool {
     std::env::var_os("PATH").is_some_and(|paths| {
         matches!(
-            idecraft_languages::servers::find_in(&paths, program),
-            idecraft_languages::servers::Availability::Ready(_)
+            ferris_idea_languages::servers::find_in(&paths, program),
+            ferris_idea_languages::servers::Availability::Ready(_)
         )
     })
 }
 
 fn project(name: &str) -> PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-web-{name}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-web-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("css")).unwrap();
     let root = root.canonicalize().unwrap();
@@ -153,7 +153,7 @@ async fn html_answers_without_a_server() {
 }
 
 /// SPEC-0042/AK-32, SPEC-0293/AK-10: Find Usages on `.card` of the stylesheet keeps what the CSS
-/// server names and adds the use in `index.html`, marked as from IDECraft's own index.
+/// server names and adds the use in `index.html`, marked as from Ferris IDEA's own index.
 #[tokio::test]
 async fn css_selector_usages_include_html() {
     if !installed("vscode-css-language-server") {
@@ -277,5 +277,101 @@ async fn rename_and_completion_without_a_server() {
             ("card", "css/site.css:20"),
         ]
     );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// SPEC-0042/AK-49 (v26, behaviour 45; OBS-0087 W1): `display: fl` in a stylesheet lists the
+/// current values with `flow` and none of the server's obsolete aliases.
+#[tokio::test]
+async fn display_values_without_obsolete_aliases() {
+    if !installed("vscode-css-language-server") {
+        skip("vscode-langservers-extracted not installed");
+        return;
+    }
+    let root = project("display");
+    let css = root.join("css/site.css");
+    let text = ".card {\n  display: fl\n}\n";
+    let items = complete_in(&root, &css, Some(text), 1, 13, 200, Duration::from_secs(60))
+        .await
+        .unwrap();
+    let labels: Vec<&str> = items.iter().map(|i| i.label.as_str()).collect();
+    for wanted in ["flex", "flow", "flow-root", "inline-flex"] {
+        assert!(labels.contains(&wanted), "{wanted} missing: {labels:?}");
+    }
+    for gone in ["flexbox", "-ms-flexbox", "-ms-inline-flexbox"] {
+        assert!(!labels.contains(&gone), "{gone} offered: {labels:?}");
+    }
+    let flow = labels.iter().position(|l| *l == "flow").unwrap();
+    assert_eq!(labels.get(flow + 1), Some(&"flow-root"), "{labels:?}");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// SPEC-0042/AK-50 (v26, behaviour 46; OBS-0087 L5): Find Usages on `card` in the page lists the
+/// rule in the stylesheet and the use in the page, without a language server.
+#[tokio::test]
+async fn find_usages_of_a_class_in_html() {
+    let root = project("html-usages");
+    let page = root.join("index.html");
+    let found = find_usages_in(
+        &root,
+        &page,
+        Some(INDEX),
+        12,
+        28,
+        "card",
+        Duration::ZERO,
+        None,
+    )
+    .await
+    .unwrap();
+    assert_eq!(found.target.name, "card");
+    assert!(
+        found
+            .target
+            .declaration
+            .as_ref()
+            .is_some_and(|d| d.path.ends_with("css/site.css")),
+        "{:?}",
+        found.target
+    );
+    let rows: Vec<(PathBuf, u64)> = found
+        .usages
+        .iter()
+        .map(|u| {
+            (
+                u.path.strip_prefix(&root).unwrap().to_path_buf(),
+                u.range.start_line,
+            )
+        })
+        .collect();
+    assert!(
+        rows.contains(&(PathBuf::from("index.html"), 12)),
+        "{rows:?}"
+    );
+    assert!(
+        rows.iter()
+            .any(|r| r.0.as_path() == Path::new("css/site.css")),
+        "{rows:?}"
+    );
+    assert!(found.details.iter().all(|d| d.own_index));
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// SPEC-0042/AK-51 (v26, behaviour 47; OBS-0087 L6): the documentation of `card` in the page is
+/// what the CSS server shows for its rule: the selector's specificity.
+#[tokio::test]
+async fn documentation_of_a_class_in_html() {
+    if !installed("vscode-css-language-server") {
+        skip("vscode-langservers-extracted not installed");
+        return;
+    }
+    let root = project("html-hover");
+    let page = root.join("index.html");
+    let shown = hover_in(&root, &page, Some(INDEX), 12, 28, Duration::from_secs(60))
+        .await
+        .unwrap()
+        .expect("a hover");
+    assert!(shown.text.contains("card"), "{}", shown.text);
+    assert!(shown.text.contains("0, 1, 0"), "{}", shown.text);
     let _ = std::fs::remove_dir_all(&root);
 }

@@ -1,5 +1,5 @@
 [package]
-name = "idecraft-terminal"
+name = "ferris-idea-terminal"
 description = "Integrated terminal: PTY sessions and screen model"
 version.workspace = true
 edition.workspace = true
@@ -18,6 +18,10 @@ vte = "0.15"
 
 [target."cfg(unix)".dependencies]
 nix = { version = "0.28", default-features = false, features = ["signal"] }
+
+# The current folder of a process from the kernel instead of starting `lsof` (`SPEC-0161` v2).
+[target."cfg(target_os = \"macos\")".dependencies]
+sysinfo = { version = "0.31", default-features = false, features = ["system"] }
 
 
 [lints]

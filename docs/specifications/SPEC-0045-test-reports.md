@@ -50,8 +50,8 @@ Turn the output of any common test tool into one result tree the IDE and agents 
    frame is the message; a package that failed without tests (a build error) becomes the error "build"
    with its output; non-JSON lines are ignored. [STD]
 10. **Test configurations (v3):** the detected configurations run tests with a report: Vitest
-    (`npx vitest run --reporter=json --outputFile=.idecraft/vitest.json`), Jest (`npx jest --json
-    --outputFile=.idecraft/jest.json`), pytest (`python3 -m pytest --junitxml=.idecraft/pytest.xml`),
+    (`npx vitest run --reporter=json --outputFile=.ferris-idea/vitest.json`), Jest (`npx jest --json
+    --outputFile=.ferris-idea/jest.json`), pytest (`python3 -m pytest --junitxml=.ferris-idea/pytest.xml`),
     Go (`go test -json ./...`, report from the output). `RunClass` on a `*.test.*`/`*.spec.*` file of a
     module with Vitest or Jest runs that file; on a Go `_test.go` file its package (SPEC-0097
     behaviour 3). The report folder is created before the run. [GEN]
@@ -128,7 +128,7 @@ Turn the output of any common test tool into one result tree the IDE and agents 
   tests; an old report is not shown again (`crates/core/tests/it/test_runners.rs`).
 - **AK-9** (v3) `RunClass` configurations for JS/TS test files and Go test files
   (`crates/core/tests/it/run_context.rs`: `test_files_of_js_and_go`); in a real window ⌃⇧R on a Go test
-  file shows the tree with the failure selected (`idecraft ui --selftest`).
+  file shows the tree with the failure selected (`ferris-idea ui --selftest`).
 - **AK-10** (v3) By hand: a Vitest, a Jest and a pytest project next to the reference.
 
 - **AK-11 (v4)** Markers with their full names, kinds and lines; JavaScript and TSX files; the test

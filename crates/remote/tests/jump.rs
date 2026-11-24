@@ -5,8 +5,8 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-use idecraft_remote::testing::TestHost;
-use idecraft_remote::{Remote, RemoteError, SshCommand, SshPurpose, SshTarget};
+use ferris_idea_remote::testing::TestHost;
+use ferris_idea_remote::{Remote, RemoteError, SshCommand, SshPurpose, SshTarget};
 
 fn scratch(name: &str) -> PathBuf {
     std::env::temp_dir().join(format!("idc-jump-{name}-{}", std::process::id()))
@@ -16,7 +16,7 @@ fn scratch(name: &str) -> PathBuf {
 fn block(h: &TestHost, alias: &str, more: &[&str]) -> String {
     let mut b = std::fs::read_to_string(h.dir.join("ssh_config"))
         .unwrap()
-        .replace("Host idecraft-test", &format!("Host {alias}"));
+        .replace("Host ferris-idea-test", &format!("Host {alias}"));
     for m in more {
         b.push_str(&format!("  {m}\n"));
     }
@@ -41,7 +41,7 @@ fn connect(config: &Path, alias: &str, extra: &[&str]) -> Result<Output, RemoteE
     if out.status.success() {
         Ok(out)
     } else {
-        Err(idecraft_remote::classify(
+        Err(ferris_idea_remote::classify(
             alias,
             &String::from_utf8_lossy(&out.stderr),
         ))
@@ -76,7 +76,7 @@ fn every_hop_needs_the_post_quantum_key_exchange() {
         eprintln!("skipped: the local ssh has no post-quantum key exchange");
         return;
     }
-    idecraft_remote::testing::redirect_logs(&base.join("logs"));
+    ferris_idea_remote::testing::redirect_logs(&base.join("logs"));
     let config = base.join("ssh_config");
     let me = |alias: &str| -> String {
         // The user's own ProxyCommand: plain OpenSSH through the post-quantum hop.
@@ -104,7 +104,7 @@ fn every_hop_needs_the_post_quantum_key_exchange() {
     .concat();
     std::fs::write(&config, text).unwrap();
 
-    // Without IDECraft, OpenSSH opens the classical hop with its defaults and reaches the target:
+    // Without Ferris IDEA, OpenSSH opens the classical hop with its defaults and reaches the target:
     // the gap this closes.
     let plain = Command::new("ssh")
         .args(["-F", &config.display().to_string(), "-o", "BatchMode=yes"])
@@ -131,7 +131,7 @@ fn every_hop_needs_the_post_quantum_key_exchange() {
             "touch \"$1\"",
             &[&marker.display().to_string()],
             None,
-            idecraft_remote::TIMEOUT,
+            ferris_idea_remote::TIMEOUT,
         )
         .unwrap_err();
     assert_eq!(
@@ -167,7 +167,7 @@ fn every_hop_needs_the_post_quantum_key_exchange() {
         .join("ssh")
         .display()
         .to_string();
-    for command in [&git, &idecraft_remote::quote(&compose)] {
+    for command in [&git, &ferris_idea_remote::quote(&compose)] {
         let out = stand_in(command, &config, "idc-t-c");
         let stderr = String::from_utf8_lossy(&out.stderr);
         assert!(!out.status.success(), "{command}: {stderr}");
@@ -180,7 +180,7 @@ fn every_hop_needs_the_post_quantum_key_exchange() {
         assert!(!out.status.success(), "{command}: {stderr}");
         // Named by the host it resolves to.
         assert!(
-            stderr.contains("idecraft-ssh-hop: refused 127.0.0.1: ProxyCommand"),
+            stderr.contains("ferris-idea-ssh-hop: refused 127.0.0.1: ProxyCommand"),
             "{command}: {stderr}"
         );
     }
@@ -190,7 +190,7 @@ fn every_hop_needs_the_post_quantum_key_exchange() {
         connect(&config, alias, &[]).unwrap_or_else(|e| panic!("{alias}: {e}"));
     }
     connect(&config, "idc-t", &["-J", "idc-a"]).unwrap();
-    for command in [&git, &idecraft_remote::quote(&compose)] {
+    for command in [&git, &ferris_idea_remote::quote(&compose)] {
         let out = stand_in(command, &config, "idc-t-aa");
         assert!(
             out.status.success(),
@@ -207,15 +207,15 @@ fn every_hop_needs_the_post_quantum_key_exchange() {
     assert!(remote.home().unwrap().starts_with('/'));
 
     // The setting allows a ProxyCommand of the user's own, with a log line.
-    idecraft_remote::set_own_proxy_command(true);
+    ferris_idea_remote::set_own_proxy_command(true);
     let own = connect(&config, "idc-t2-own", &[]);
     let hop_own = connect(&config, "idc-t-aown", &[]);
-    idecraft_remote::set_own_proxy_command(false);
+    ferris_idea_remote::set_own_proxy_command(false);
     own.unwrap();
     hop_own.unwrap();
     let log = std::fs::read_to_string(
         base.join("logs")
-            .join(idecraft_remote::OWN_PROXY_COMMAND_LOG),
+            .join(ferris_idea_remote::OWN_PROXY_COMMAND_LOG),
     )
     .unwrap();
     assert!(log.contains("host=idc-t2-own"), "{log}");

@@ -8,10 +8,17 @@
 //!
 //! Both rules read [`TOOLS`], so a tool cannot satisfy one and miss the other. A tool missing from
 //! the table, a changing tool without a check and a check the handler's code does not make fail
-//! the tests (`effect_tests` in `lib.rs`, `tests/it/effects.rs`). A new tool gets its row here in
-//! the same change, written from what its code does, not from its description.
+//! the tests (`effect_tests` in `lib.rs`, `tests/it/effects.rs`). A new tool gets its row in the
+//! same change, written from what its code does, not from its description.
+//!
+//! Where the row goes (ADR-0035): a tool of `lib.rs` in [`TOOL_EFFECTS`] here; a
+//! tool of its own module in that module's `pub(crate) const TOOL_EFFECTS: &[ToolEffect]`, written
+//! with [`tool`] and the check constants of this file. `build.rs` finds every such const, and
+//! [`TOOLS`] joins them sorted by name, so two modules adding tools never edit the same table.
 
-use idecraft_core::Grant;
+use std::sync::LazyLock;
+
+use ferris_idea_core::Grant;
 use serde_json::{Map, Value, json};
 
 /// What a tool changes.
@@ -73,6 +80,9 @@ pub enum Reach {
     Process,
     /// A network connection.
     Network,
+    /// A hosted agent or the agents' message store: every call is logged, reading ones too
+    /// (`SPEC-0349` behaviour 2).
+    Agents,
 }
 
 /// A check a tool's code makes before its effect.
@@ -89,8 +99,10 @@ pub enum Check {
     /// No right on purpose: the emergency stop of the UI driver (`SPEC-0319` behaviour 37,
     /// ADR-0027). Only `ui_driver_stop` may carry it.
     EmergencyStop,
-    /// No right on purpose: the tool reads, and what it writes is a record IDECraft keeps by
-    /// itself (`SPEC-0053` behaviour 6). Only `local_history` may carry it; its calls are logged.
+    /// No right on purpose: the tool reads, and what it writes is a record Ferris IDEA keeps by
+    /// itself (`SPEC-0053` behaviour 6). Only `local_history` and the change-set tools that
+    /// propose or reject without writing project files (`SPEC-0340` behaviours 6, 16) may carry
+    /// it; their calls are logged.
     OwnRecords,
 }
 
@@ -114,7 +126,9 @@ impl ToolEffect {
     /// Whether a call of the tool is written to the agent log: it changes something, or it uses
     /// a database connection (`SPEC-0012` v3 behaviour 16).
     pub fn logged(&self) -> bool {
-        !self.changes.is_empty() || self.reaches.contains(&Reach::Database)
+        !self.changes.is_empty()
+            || self.reaches.contains(&Reach::Database)
+            || self.reaches.contains(&Reach::Agents)
     }
 
     /// Whether the tool uses a database connection, changing it or not.
@@ -123,27 +137,53 @@ impl ToolEffect {
     }
 }
 
-const RUN: Check = Check::Right(Grant::Run);
-const HTTP: Check = Check::Right(Grant::Http);
-const DEBUG: Check = Check::Right(Grant::Debug);
-const REMOTE: Check = Check::Right(Grant::Remote);
-const SSH: Check = Check::Right(Grant::Ssh);
-const TRUST: Check = Check::Right(Grant::Trust);
-const WRITE: Check = Check::Right(Grant::Write);
-const VCS_WRITE: Check = Check::Right(Grant::VcsWrite);
-const QUIT: Check = Check::Right(Grant::Quit);
-const TERMINAL_READ: Check = Check::Right(Grant::TerminalRead);
-const PORTS: Check = Check::Right(Grant::Ports);
-const UI: Check = Check::Right(Grant::Ui);
-const SETTINGS: Check = Check::Right(Grant::Settings);
-const RECENT_PROJECTS: Check = Check::Right(Grant::RecentProjects);
-const DATABASE: Check = Check::Database;
-const TRUSTED: Check = Check::Trusted;
-const ASKS: Check = Check::AsksUser;
-const EMERGENCY_STOP: Check = Check::EmergencyStop;
-const OWN_RECORDS: Check = Check::OwnRecords;
+/// The `run` right.
+pub const RUN: Check = Check::Right(Grant::Run);
+/// The `http` right.
+pub const HTTP: Check = Check::Right(Grant::Http);
+/// The `debug` right.
+pub const DEBUG: Check = Check::Right(Grant::Debug);
+/// The `remote` right.
+pub const REMOTE: Check = Check::Right(Grant::Remote);
+/// The `ssh` right.
+pub const SSH: Check = Check::Right(Grant::Ssh);
+/// The `trust` right.
+pub const TRUST: Check = Check::Right(Grant::Trust);
+/// The `write` right.
+pub const WRITE: Check = Check::Right(Grant::Write);
+/// The `vcs-write` right.
+pub const VCS_WRITE: Check = Check::Right(Grant::VcsWrite);
+/// The `quit` right.
+pub const QUIT: Check = Check::Right(Grant::Quit);
+/// The `terminal-read` right.
+pub const TERMINAL_READ: Check = Check::Right(Grant::TerminalRead);
+/// The `ports` right.
+pub const PORTS: Check = Check::Right(Grant::Ports);
+/// The `ui` right.
+pub const UI: Check = Check::Right(Grant::Ui);
+/// The `settings` right.
+pub const SETTINGS: Check = Check::Right(Grant::Settings);
+/// The `recent-projects` right.
+pub const RECENT_PROJECTS: Check = Check::Right(Grant::RecentProjects);
+/// The `agents` right.
+pub const AGENTS: Check = Check::Right(Grant::Agents);
+/// The database permission of the connection.
+pub const DATABASE: Check = Check::Database;
+/// A trusted project.
+pub const TRUSTED: Check = Check::Trusted;
+/// The question in the window.
+pub const ASKS: Check = Check::AsksUser;
+/// The emergency stop (`ui_driver_stop` only).
+pub const EMERGENCY_STOP: Check = Check::EmergencyStop;
+/// Ferris IDEA's own records (`local_history` only).
+pub const OWN_RECORDS: Check = Check::OwnRecords;
+/// The `vault` right.
+pub const VAULT: Check = Check::Right(Grant::Vault);
+/// The `ticket-write` right (SPEC-0352).
+pub const TICKET_WRITE: Check = Check::Right(Grant::TicketWrite);
 
-const fn tool(
+/// One row of an effects table.
+pub const fn tool(
     tool: &'static str,
     changes: &'static [Change],
     dry: Dry,
@@ -160,12 +200,26 @@ const fn tool(
 }
 
 /// Every tool of the server, sorted by name: what it changes, its dry run, what it reaches while
-/// reading, its checks.
+/// reading, its checks. The rows of every module's `TOOL_EFFECTS`, joined once.
+pub static TOOLS: LazyLock<Vec<ToolEffect>> = LazyLock::new(|| {
+    let mut all: Vec<ToolEffect> = crate::registry::EFFECTS
+        .iter()
+        .flat_map(|rows| rows.iter().copied())
+        .collect();
+    all.sort_by(|a, b| a.tool.cmp(b.tool));
+    all
+});
+
+/// The rows of the tools of `lib.rs`, sorted by name: what each changes, its dry run, what it
+/// reaches while reading, its checks. A tool module keeps its rows in its own `TOOL_EFFECTS`.
 #[rustfmt::skip]
-pub const TOOLS: &[ToolEffect] = &[
+pub(crate) const TOOL_EFFECTS: &[ToolEffect] = &[
+    tool("add_idea_data_source", &[Change::Files], Dry::DryRun(true), &[], &[WRITE]),
     tool("agent_permissions", &[], Dry::None, &[], &[]),
     tool("ai_assistant", &[], Dry::None, &[Reach::Process], &[]),
     tool("apply_code_action", &[Change::Files], Dry::DryRun(true), &[Reach::Process], &[WRITE]),
+    tool("apply_context_action", &[Change::Files, Change::Processes, Change::Settings], Dry::DryRun(true), &[Reach::Process], &[WRITE, RUN, SETTINGS, TRUSTED]),
+    tool("apply_patch", &[Change::Files], Dry::DryRun(true), &[], &[WRITE]),
     tool("bookmarks", &[], Dry::None, &[], &[]),
     tool("browse_store", &[], Dry::None, &[Reach::Database, Reach::Network], &[DATABASE, TRUSTED]),
     tool("build_command_suggestions", &[], Dry::None, &[], &[]),
@@ -189,9 +243,11 @@ pub const TOOLS: &[ToolEffect] = &[
     tool("complete_code", &[], Dry::None, &[Reach::Process], &[]),
     tool("complete_sql", &[], Dry::None, &[Reach::Database, Reach::Network], &[SSH, DATABASE, TRUSTED]),
     tool("config_key", &[], Dry::None, &[], &[]),
+    tool("context_actions", &[], Dry::None, &[Reach::Process], &[]),
     tool("copy_file", &[Change::Files], Dry::DryRun(true), &[], &[WRITE]),
     tool("copy_table", &[Change::Database], Dry::Apply, &[Reach::Database, Reach::Network], &[SSH, DATABASE, TRUSTED]),
     tool("create_file", &[Change::Files], Dry::DryRun(true), &[], &[WRITE]),
+    tool("create_test", &[Change::Files], Dry::DryRun(true), &[], &[WRITE]),
     tool("database_problem_report", &[], Dry::None, &[], &[]),
     tool("debug_adapters", &[], Dry::None, &[Reach::Process], &[]),
     tool("debug_attach", &[Change::Ide, Change::Processes], Dry::DryRun(true), &[Reach::Process, Reach::Network], &[DEBUG]),
@@ -232,7 +288,9 @@ pub const TOOLS: &[ToolEffect] = &[
     tool("docker_compose", &[Change::Processes], Dry::DryRun(true), &[Reach::Process, Reach::Network], &[RUN]),
     tool("docker_container", &[Change::Processes], Dry::DryRun(true), &[Reach::Network], &[RUN]),
     tool("docker_exec", &[Change::Processes], Dry::DryRun(true), &[Reach::Process, Reach::Network], &[RUN]),
+    tool("docker_image", &[Change::Processes], Dry::DryRun(true), &[Reach::Network], &[RUN]),
     tool("docker_status", &[], Dry::None, &[Reach::Network], &[]),
+    tool("document_colors", &[], Dry::None, &[], &[]),
     tool("document_highlights", &[], Dry::None, &[Reach::Process], &[]),
     tool("document_symbols", &[], Dry::None, &[Reach::Process], &[]),
     tool("edit_table_data", &[Change::Database], Dry::Apply, &[Reach::Database, Reach::Network], &[SSH, DATABASE, TRUSTED]),
@@ -259,6 +317,7 @@ pub const TOOLS: &[ToolEffect] = &[
     tool("file_properties", &[Change::Files], Dry::DryRun(true), &[], &[WRITE]),
     tool("file_type", &[Change::Files], Dry::DryRun(true), &[], &[WRITE]),
     tool("find_symbol_locations", &[], Dry::None, &[Reach::Process], &[]),
+    tool("find_tools", &[], Dry::None, &[], &[]),
     tool("find_usages", &[], Dry::None, &[Reach::Process], &[]),
     tool("fix_inspection", &[Change::Files], Dry::DryRun(true), &[Reach::Process], &[WRITE, TRUSTED]),
     tool("folding_ranges", &[], Dry::None, &[], &[]),
@@ -384,7 +443,9 @@ pub const TOOLS: &[ToolEffect] = &[
     tool("remote_delete", &[Change::Files, Change::Remote], Dry::DryRun(true), &[Reach::Process, Reach::Network], &[SSH]),
     tool("remote_documents", &[], Dry::None, &[], &[]),
     tool("remote_exec", &[Change::Processes, Change::Remote], Dry::DryRun(true), &[Reach::Process, Reach::Network], &[RUN, SSH]),
+    tool("remote_host_add", &[Change::Settings], Dry::DryRun(true), &[], &[SETTINGS, SSH]),
     tool("remote_host_probe", &[Change::Remote], Dry::None, &[Reach::Process, Reach::Network], &[SSH]),
+    tool("remote_host_remove", &[Change::Settings], Dry::DryRun(true), &[], &[SETTINGS]),
     tool("remote_hosts", &[], Dry::None, &[Reach::Process], &[]),
     tool("remote_hosts_paired", &[], Dry::None, &[], &[]),
     tool("remote_list", &[Change::Remote], Dry::None, &[Reach::Process, Reach::Network], &[SSH]),
@@ -415,9 +476,12 @@ pub const TOOLS: &[ToolEffect] = &[
     tool("revoke_project_trust", &[Change::Settings], Dry::None, &[], &[TRUST]),
     tool("room_apply", &[Change::Files], Dry::None, &[Reach::Network], &[WRITE]),
     tool("room_create", &[Change::Remote], Dry::None, &[Reach::Network], &[SSH]),
+    tool("room_follow", &[Change::Ide], Dry::None, &[], &[UI]),
     tool("room_history", &[], Dry::None, &[Reach::Network], &[]),
     tool("room_join", &[Change::Files], Dry::None, &[Reach::Network], &[WRITE]),
+    tool("room_join_link", &[Change::Ide, Change::Processes, Change::Remote, Change::Files], Dry::DryRun(true), &[Reach::Process, Reach::Network], &[RUN, SSH, WRITE]),
     tool("room_links", &[], Dry::None, &[Reach::Network], &[]),
+    tool("room_presence", &[], Dry::None, &[Reach::Network], &[]),
     tool("room_restore", &[Change::Files], Dry::None, &[Reach::Network], &[WRITE]),
     tool("room_revoke_link", &[Change::Remote], Dry::None, &[Reach::Network], &[SSH]),
     tool("room_set_role", &[Change::Remote], Dry::None, &[Reach::Network], &[SSH]),
@@ -445,6 +509,8 @@ pub const TOOLS: &[ToolEffect] = &[
     tool("search_in_files", &[], Dry::None, &[], &[]),
     tool("semantic_tokens", &[], Dry::None, &[Reach::Process], &[]),
     tool("send_http_request", &[Change::Network], Dry::DryRun(true), &[Reach::Network], &[HTTP]),
+    tool("session_history_list", &[], Dry::None, &[], &[]),
+    tool("session_history_read", &[], Dry::None, &[], &[]),
     tool("set_bookmark", &[Change::Files], Dry::DryRun(true), &[], &[WRITE]),
     tool("set_breakpoint", &[Change::Files], Dry::DryRun(true), &[], &[WRITE]),
     tool("set_ide_settings", &[Change::Settings], Dry::DryRun(true), &[], &[RUN, SETTINGS]),
@@ -475,6 +541,7 @@ pub const TOOLS: &[ToolEffect] = &[
     tool("trust_project", &[Change::Settings], Dry::DryRun(true), &[], &[TRUST]),
     tool("type_hierarchy", &[], Dry::None, &[Reach::Process], &[]),
     tool("ui_act", &[Change::Ide], Dry::None, &[], &[UI]),
+    tool("ui_command", &[Change::Ide], Dry::None, &[], &[UI]),
     tool("ui_driver_status", &[], Dry::None, &[], &[]),
     tool("ui_driver_stop", &[Change::Settings, Change::Ide], Dry::None, &[], &[EMERGENCY_STOP]),
     tool("ui_expect", &[], Dry::None, &[], &[UI]),
@@ -500,6 +567,25 @@ pub fn effect(tool: &str) -> Option<&'static ToolEffect> {
         .map(|i| &TOOLS[i])
 }
 
+/// The MCP annotations of a tool, from its row (`SPEC-0006` v57 behaviour 14): `readOnlyHint` when
+/// it changes nothing, `destructiveHint` for every tool that changes something (the table does not
+/// tell adding from overwriting, so a client is never told a change is harmless), and
+/// `openWorldHint` when it reaches or changes the network or a remote host. A client decides by
+/// these which calls it asks its user about; Ferris IDEA's own rights apply all the same.
+pub fn annotations(tool: &str) -> Option<rmcp::model::ToolAnnotations> {
+    let e = effect(tool)?;
+    let read_only = e.changes.is_empty();
+    let open_world = e
+        .changes
+        .iter()
+        .any(|c| matches!(c, Change::Network | Change::Remote))
+        || e.reaches.contains(&Reach::Network);
+    let a = rmcp::model::ToolAnnotations::new()
+        .read_only(read_only)
+        .open_world(open_world);
+    Some(if read_only { a } else { a.destructive(true) })
+}
+
 /// Whether the call with `args` only shows what it would do.
 pub fn is_dry_run(e: &ToolEffect, args: Option<&Map<String, Value>>) -> bool {
     let get = |k: &str| args.and_then(|a| a.get(k)).and_then(Value::as_bool);
@@ -515,6 +601,7 @@ pub fn is_dry_run(e: &ToolEffect, args: Option<&Map<String, Value>>) -> bool {
 /// reaches the log (`SPEC-0053` v7 behaviour 11).
 const NAMED: &[&str] = &[
     "path",
+    "agent",
     "paths",
     "files",
     "from",
@@ -547,6 +634,7 @@ const NAMED: &[&str] = &[
     "group",
     "key",
     "id",
+    "handle",
     "session",
     "room",
     "role",
@@ -561,6 +649,9 @@ pub enum Outcome {
     Refused,
     /// The tool failed.
     Error,
+    /// The client cancelled the call; a program it started was ended (`SPEC-0006` v57
+    /// behaviour 15).
+    Cancelled,
 }
 
 impl Outcome {
@@ -569,6 +660,7 @@ impl Outcome {
             Outcome::Ok => "ok",
             Outcome::Refused => "refused",
             Outcome::Error => "error",
+            Outcome::Cancelled => "cancelled",
         }
     }
 }
@@ -576,8 +668,8 @@ impl Outcome {
 /// The log line of a call of `tool` with `args`, the rights checked during it (each with whether
 /// it was given), the database permissions decided during it (`database`, one entry per decision:
 /// connection, permissions, allowed or why refused, length and kinds of the statements —
-/// `SPEC-0012` v3 behaviour 16) and its `outcome`, at `time`; `None` for a tool that only reads
-/// and uses no database. A call whose database decisions were all previews is a dry run, whatever
+/// `SPEC-0012` v3 behaviour 16) and its `outcome`, at `time`, by `caller` (`SPEC-0349` behaviour
+/// 2); `None` for a tool that only reads and reaches neither a database nor an agent. A call whose database decisions were all previews is a dry run, whatever
 /// its arguments say.
 pub fn call_line(
     tool: &str,
@@ -586,6 +678,7 @@ pub fn call_line(
     database: &[Value],
     outcome: Outcome,
     time: u64,
+    caller: &str,
 ) -> Option<Value> {
     let e = effect(tool).filter(|e| e.logged())?;
     let dry_run = if database.is_empty() {
@@ -628,6 +721,7 @@ pub fn call_line(
     Some(json!({
         "time": time,
         "tool": tool,
+        "caller": caller,
         "call": true,
         "changes": e.changes.iter().map(|c| c.name()).collect::<Vec<_>>(),
         "dry_run": dry_run,
@@ -655,7 +749,8 @@ fn cut(s: &str) -> String {
 mod tests {
     use super::*;
 
-    /// SPEC-0053 v7 AK-11: the table is sorted (binary search) and names each tool once.
+    /// SPEC-0053 v7 AK-11: the joined table is sorted (binary search) and names each tool once,
+    /// across all modules.
     #[test]
     fn the_table_is_sorted_and_names_each_tool_once() {
         for w in TOOLS.windows(2) {
@@ -670,8 +765,16 @@ mod tests {
         let args = json!({"path": "src/a.txt", "text": "secret content", "dry_run": false,
                           "apply": true, "sql": "drop table t"});
         let args = args.as_object();
-        for e in TOOLS {
-            let line = call_line(e.tool, args, &[("write", true)], &[], Outcome::Ok, 7);
+        for e in TOOLS.iter() {
+            let line = call_line(
+                e.tool,
+                args,
+                &[("write", true)],
+                &[],
+                Outcome::Ok,
+                7,
+                "mcp:t",
+            );
             if !e.logged() {
                 assert!(line.is_none(), "{} only reads", e.tool);
                 continue;
@@ -687,7 +790,15 @@ mod tests {
                 !text.contains("secret content") && !text.contains("drop table"),
                 "{text}"
             );
-            let refused = call_line(e.tool, args, &[("write", false)], &[], Outcome::Refused, 7);
+            let refused = call_line(
+                e.tool,
+                args,
+                &[("write", false)],
+                &[],
+                Outcome::Refused,
+                7,
+                "mcp:t",
+            );
             assert_eq!(refused.unwrap()["result"], "refused");
         }
     }
@@ -716,12 +827,13 @@ mod tests {
             &preview,
             Outcome::Ok,
             1,
+            "mcp:t",
         )
         .unwrap();
         assert_eq!(line["dry_run"], true);
         assert_eq!(line["database"][0]["connection"], "c");
         let read = [json!({"connection": "c", "dry_run": false, "ok": true})];
-        let line = call_line("list_tables", none, &[], &read, Outcome::Ok, 1).unwrap();
+        let line = call_line("list_tables", none, &[], &read, Outcome::Ok, 1, "mcp:t").unwrap();
         assert_eq!(line["dry_run"], false);
         assert!(line["changes"].as_array().unwrap().is_empty());
         assert!(effect("no_such_tool").is_none());

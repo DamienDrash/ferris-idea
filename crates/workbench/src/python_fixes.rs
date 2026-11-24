@@ -1,10 +1,10 @@
 //! Install entries of the ⌥↩ list on a Python import the language server cannot resolve
 //! (`SPEC-0117` v4 behaviour 8): the modules marked by pyright's rules on the caret's line, mapped
-//! to the distributions to install by `idecraft_core::install_fixes`.
+//! to the distributions to install by `ferris_idea_core::install_fixes`.
 
 use std::ops::Range;
 
-use idecraft_core::{InstallFix, MISSING_IMPORT_RULES, Unsatisfied};
+use ferris_idea_core::{InstallFix, MISSING_IMPORT_RULES, Unsatisfied};
 
 use crate::diagnostics_model::Problem;
 
@@ -42,7 +42,7 @@ fn quoted(message: &str) -> Option<&str> {
 /// name of the message when the mark is no module name.
 pub fn missing_imports_on_line(problems: &[Problem], text: &str, caret: usize) -> Vec<String> {
     let line = line_around(text, caret);
-    let is_module = |s: &str| idecraft_core::import_package(s, &[]).is_some();
+    let is_module = |s: &str| ferris_idea_core::import_package(s, &[]).is_some();
     problems
         .iter()
         .filter(|p| {
@@ -73,7 +73,7 @@ pub fn install_entries(
     caret: usize,
     unsatisfied: &[Unsatisfied],
 ) -> Vec<InstallFix> {
-    idecraft_core::install_fixes(&missing_imports_on_line(problems, text, caret), unsatisfied)
+    ferris_idea_core::install_fixes(&missing_imports_on_line(problems, text, caret), unsatisfied)
 }
 
 #[cfg(test)]

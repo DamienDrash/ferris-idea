@@ -2,11 +2,11 @@
 //! the project's `ruff` or `black` on the editor's text, in the background, as one undo step that
 //! keeps carets and selections on their text.
 
-use gpui::Context;
-use idecraft_languages::insight::Range;
-use idecraft_languages::python_tools::{
+use ferris_idea_languages::insight::Range;
+use ferris_idea_languages::python_tools::{
     self, ImportCleanup, ToolKind, ToolSearch, find_formatter, find_ruff,
 };
+use gpui::Context;
 
 use super::WorkbenchView;
 

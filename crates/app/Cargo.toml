@@ -1,6 +1,6 @@
 [package]
-name = "idecraft"
-description = "Command-line entry point of IDECraft"
+name = "ferris-idea"
+description = "Command-line entry point of Ferris IDEA"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,32 +9,38 @@ repository.workspace = true
 publish.workspace = true
 
 [[bin]]
-name = "idecraft"
+name = "ferris-idea"
 path = "src/main.rs"
 
 [dependencies]
-idecraft-core.workspace = true
-idecraft-containers.workspace = true
-idecraft-remote.workspace = true
-idecraft-session.workspace = true
-idecraft-serve.workspace = true
-idecraft-host.workspace = true
-idecraft-debugger.workspace = true
-idecraft-editor.workspace = true
-idecraft-formats.workspace = true
-idecraft-languages.workspace = true
-idecraft-mcp.workspace = true
-idecraft-vcs.workspace = true
-idecraft-terminal.workspace = true
-idecraft-workbench.workspace = true
-idecraft-ai.workspace = true
-idecraft-ui.workspace = true
-# The UI driver (ADR-0027, SPEC-0319): the window's host and `idecraft drive`.
-idecraft-uidriver.workspace = true
+ferris-idea-core.workspace = true
+ferris-idea-containers.workspace = true
+ferris-idea-remote.workspace = true
+ferris-idea-session.workspace = true
+ferris-idea-serve.workspace = true
+ferris-idea-host.workspace = true
+ferris-idea-debugger.workspace = true
+ferris-idea-editor.workspace = true
+ferris-idea-formats.workspace = true
+ferris-idea-languages.workspace = true
+ferris-idea-mcp.workspace = true
+ferris-idea-vcs.workspace = true
+ferris-idea-terminal.workspace = true
+ferris-idea-workbench.workspace = true
+ferris-idea-ai.workspace = true
+# Claude Code connects to the window as its IDE (SPEC-0358).
+ferris-idea-claude-link.workspace = true
+ferris-idea-ui.workspace = true
+# The UI driver (ADR-0027, SPEC-0319): the window's host and `ferris-idea drive`.
+ferris-idea-uidriver.workspace = true
+# Screenshots of the window's own frame as PNG, base64 for MCP image content (SPEC-0319 v7
+# behaviour 53); the version gpui renders into.
+image = { version = "0.25", default-features = false, features = ["png"] }
+base64 = "0.22"
 tokio = { version = "1", features = ["rt-multi-thread", "signal", "macros", "sync"] }
-# `idecraft call` reads the arguments and prints the result (SPEC-0281).
+# `ferris-idea call` reads the arguments and prints the result (SPEC-0281).
 serde_json = "1"
-# `idecraft drive run` reads UI scripts (ADR-0021).
+# `ferris-idea drive run` reads UI scripts (ADR-0021).
 serde.workspace = true
 toml.workspace = true
 
@@ -63,6 +69,10 @@ gpui = { version = "0.2.2", default-features = false, features = ["font-kit", "x
 
 # The window tests of the hand tests (`src/f084_handtests.rs`): the window's MCP server over HTTP
 # with a window of GPUI's test platform, no screen.
+[dev-dependencies]
+# The SSH test host runs inside the test process (`ferris_idea_remote::testing`, feature `test-host`).
+ferris-idea-remote = { workspace = true, features = ["test-host"] }
+
 [target.'cfg(target_os = "macos")'.dev-dependencies]
 gpui = { version = "0.2.2", default-features = false, features = ["font-kit", "runtime_shaders", "test-support"] }
 

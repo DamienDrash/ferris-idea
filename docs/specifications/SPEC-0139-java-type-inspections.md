@@ -53,7 +53,7 @@ SPEC-0125, with safe one-keystroke fixes — while staying quiet wherever a type
 - **AK-3** MCP: an integer division with its fix, applied (`crates/mcp/tests/it/protocol.rs`:
   `inspect_code_tool`).
 - **AK-4** Window self-test (`java_inspection_steps`): the ignored `trim()` and the String
-  comparison appear as "IDECraft: …" problems; ⌥↩ offers "Assign the result to 'a'" first and
+  comparison appear as "Ferris IDEA: …" problems; ⌥↩ offers "Assign the result to 'a'" first and
   Enter applies it.
 - **AK-5** Hand test (round 4): a real Java project next to the reference.
 
@@ -63,6 +63,6 @@ files and libraries, overload resolution, Kotlin type-aware rules, inspection pr
 suppression.
 
 ## Known deviations from the reference
-The reference resolves all types and finds more; IDECraft reports only where the file shows the
+The reference resolves all types and finds more; Ferris IDEA reports only where the file shows the
 types, so it misses cases but does not guess. The identity shortcut `if (a == b) return …;` is not
 reported (not compared with the reference).

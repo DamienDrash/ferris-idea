@@ -16,15 +16,17 @@
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_workbench::{EditorView, WorkbenchView};
 use gpui::{ClipboardItem, Entity, TestAppContext, VisualTestContext, px};
-use idecraft_workbench::{EditorView, WorkbenchView};
 
 type Bench = Entity<WorkbenchView>;
 type Editor = Entity<EditorView>;
 
 fn workspace(tag: &str, files: &[(&str, &str)]) -> PathBuf {
-    let root =
-        std::env::temp_dir().join(format!("idecraft-undo-redo-{tag}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!(
+        "ferris-idea-undo-redo-{tag}-{}",
+        std::process::id()
+    ));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     for (path, text) in files {
@@ -315,7 +317,7 @@ fn steps_of_the_window_are_undone_with_their_carets(cx: &mut TestAppContext) {
     );
     let (bench, cx) = window(&root, cx);
 
-    // Reformat Code with IDECraft's own SQL formatter: several places change, one step.
+    // Reformat Code with Ferris IDEA's own SQL formatter: several places change, one step.
     let sql = open(&bench, cx, &root.join("q.sql"));
     sql.update(cx, |e, cx| e.go_to(0, 12, cx));
     let before = marked(&sql, cx);
@@ -350,7 +352,7 @@ fn steps_of_the_window_are_undone_with_their_carets(cx: &mut TestAppContext) {
     keys(cx, "cmd-z");
     assert!(!modified(&java, cx));
 
-    // The quick fix of an IDECraft inspection.
+    // The quick fix of a Ferris IDEA inspection.
     let findings = |cx: &mut VisualTestContext| {
         java.read_with(cx, |e, _| {
             e.located_problems(&path)
@@ -807,7 +809,7 @@ fn a_rename_across_files_is_one_undo_step(cx: &mut TestAppContext) {
     let root = workspace("rename", &[("width.cpp", code), ("WIDTH.md", notes)]);
     let (bench, cx) = window(&root, cx);
     bench.update(cx, |b, _| {
-        b.set_rename_options(idecraft_languages::rename_text::TextOptions {
+        b.set_rename_options(ferris_idea_languages::rename_text::TextOptions {
             comments_and_strings: true,
             text_files: true,
         })
@@ -880,7 +882,9 @@ fn agent_change(
     files: &[(&Path, &str)],
     on_disk: &[(&Path, &str, &str)],
 ) {
-    use idecraft_editor::documents::{DiskChange, DocumentChange, DocumentEdit, DocumentRegistry};
+    use ferris_idea_editor::documents::{
+        DiskChange, DocumentChange, DocumentEdit, DocumentRegistry,
+    };
     let registry = DocumentRegistry::global();
     let edits = files
         .iter()

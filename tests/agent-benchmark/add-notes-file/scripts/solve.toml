@@ -1,0 +1,17 @@
+# A hand-written run: the folder, then the file; creating it again is refused.
+agent = "recorded"
+model = "none"
+cost_cents = 0
+
+[[call]]
+tool = "create_file"
+args = { dir = "", name = "docs", kind = "directory", dry_run = false }
+
+[[call]]
+tool = "create_file"
+args = { dir = "docs", name = "notes.md", text = "# Notes\n", dry_run = false }
+
+[[call]]
+tool = "create_file"
+args = { dir = "docs", name = "notes.md", text = "# Notes\n", dry_run = false }
+expect = "error"

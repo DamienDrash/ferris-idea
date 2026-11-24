@@ -13,29 +13,29 @@ use crate::palette::Palette;
 use crate::tips::Tipped;
 
 /// Menu actions of a task row (behaviour 10).
-pub const RUN_TASK: &str = "IDECraft.BuildToolsRun";
+pub const RUN_TASK: &str = "FerrisIDEA.BuildToolsRun";
 /// Keeps the task as a run configuration of the project.
-pub const SAVE_TASK: &str = "IDECraft.BuildToolsSaveRunConfiguration";
+pub const SAVE_TASK: &str = "FerrisIDEA.BuildToolsSaveRunConfiguration";
 /// Copies the task's command line with the window's options.
-pub const COPY_TASK: &str = "IDECraft.BuildToolsCopyCommand";
+pub const COPY_TASK: &str = "FerrisIDEA.BuildToolsCopyCommand";
 /// Debugs the task (v3 behaviour 17).
-pub const DEBUG_TASK: &str = "IDECraft.BuildToolsDebug";
+pub const DEBUG_TASK: &str = "FerrisIDEA.BuildToolsDebug";
 /// Switches the task's Before Build trigger (v3 behaviour 18).
-pub const BEFORE_BUILD_TASK: &str = "IDECraft.BuildToolsBeforeBuild";
+pub const BEFORE_BUILD_TASK: &str = "FerrisIDEA.BuildToolsBeforeBuild";
 /// Switches the task's After Build trigger.
-pub const AFTER_BUILD_TASK: &str = "IDECraft.BuildToolsAfterBuild";
+pub const AFTER_BUILD_TASK: &str = "FerrisIDEA.BuildToolsAfterBuild";
 /// Switches the task's Before Run trigger.
-pub const BEFORE_RUN_TASK: &str = "IDECraft.BuildToolsBeforeRun";
+pub const BEFORE_RUN_TASK: &str = "FerrisIDEA.BuildToolsBeforeRun";
 /// Switches the task's Before Sync trigger (v4).
-pub const BEFORE_SYNC_TASK: &str = "IDECraft.BuildToolsBeforeSync";
+pub const BEFORE_SYNC_TASK: &str = "FerrisIDEA.BuildToolsBeforeSync";
 /// Switches the task's After Sync trigger (v4).
-pub const AFTER_SYNC_TASK: &str = "IDECraft.BuildToolsAfterSync";
+pub const AFTER_SYNC_TASK: &str = "FerrisIDEA.BuildToolsAfterSync";
 /// The Run tab of the Before Sync tasks (v4).
 pub const BEFORE_SYNC_RUN: &str = "Before Sync";
 /// The Run tab of the After Sync tasks (v4).
 pub const AFTER_SYNC_RUN: &str = "After Sync";
 /// Records a shortcut for the task (v3 behaviour 19).
-pub const SHORTCUT_TASK: &str = "IDECraft.BuildToolsAssignShortcut";
+pub const SHORTCUT_TASK: &str = "FerrisIDEA.BuildToolsAssignShortcut";
 
 /// How long a debug run may take to start its JVM before the debugger stops waiting.
 /// The Run tab of Build Project (SPEC-0100 v4 behaviour 18).
@@ -118,11 +118,11 @@ impl WorkbenchView {
         if !self.build_sync_ready {
             self.build_sync_ready = true;
             let root = self.root.clone();
-            let files = idecraft_core::Workspace::open(&root)
+            let files = ferris_idea_core::Workspace::open(&root)
                 .and_then(|w| w.files())
                 .unwrap_or_default();
-            let model = idecraft_core::read_project(&root, &files);
-            let watched = idecraft_core::buildtools::sync_files(&root, &model)
+            let model = ferris_idea_core::read_project(&root, &files);
+            let watched = ferris_idea_core::buildtools::sync_files(&root, &model)
                 .into_iter()
                 .map(|f| f.canonicalize().unwrap_or(f))
                 .collect::<Vec<_>>();
@@ -186,12 +186,12 @@ impl WorkbenchView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        use idecraft_core::buildtasks::{When, trigger_chain};
-        let files = idecraft_core::Workspace::open(&self.root)
+        use ferris_idea_core::buildtasks::{When, trigger_chain};
+        let files = ferris_idea_core::Workspace::open(&self.root)
             .and_then(|w| w.files())
             .unwrap_or_default();
-        let model = idecraft_core::read_project(&self.root, &files);
-        let options = idecraft_core::buildtools::BuildOptions::load(&self.root);
+        let model = ferris_idea_core::read_project(&self.root, &files);
+        let options = ferris_idea_core::buildtools::BuildOptions::load(&self.root);
         let before = trigger_chain(
             &self.root,
             &model,
@@ -262,7 +262,7 @@ impl WorkbenchView {
     /// choice; false with the problem in the status line when it cannot start.
     fn start_chain(
         &mut self,
-        chain: Vec<idecraft_core::RunConfig>,
+        chain: Vec<ferris_idea_core::RunConfig>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
@@ -285,7 +285,7 @@ impl WorkbenchView {
     /// Starts the After Sync tasks once the build tools window has read and resolved the model.
     fn after_sync(
         &mut self,
-        chain: Vec<idecraft_core::RunConfig>,
+        chain: Vec<ferris_idea_core::RunConfig>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -394,7 +394,7 @@ impl WorkbenchView {
     }
 
     /// The selected task of the build tools window, if a task row is selected.
-    fn selected_build_task(&self, cx: &gpui::App) -> Option<idecraft_core::buildtools::Task> {
+    fn selected_build_task(&self, cx: &gpui::App) -> Option<ferris_idea_core::buildtools::Task> {
         let v = self.build_tools.as_ref()?.read(cx);
         match v.selected_row()?.kind {
             crate::build_tools_model::RowKind::Task(t) => Some(*t),
@@ -429,14 +429,14 @@ impl WorkbenchView {
         match action {
             RUN_TASK => self.run_temporary_config(config, window, cx),
             SAVE_TASK => {
-                let known = idecraft_core::load_run_configs(&self.root)
+                let known = ferris_idea_core::load_run_configs(&self.root)
                     .configs
                     .iter()
                     .any(|c| c.name == config.name);
                 self.status = Some(if known {
                     format!("A run configuration named '{}' exists already", config.name)
                 } else {
-                    match idecraft_core::append_run_config(&self.root, &config) {
+                    match ferris_idea_core::append_run_config(&self.root, &config) {
                         Ok(()) => {
                             self.reload_run_configs();
                             self.run_selected = Some(config.name.clone());
@@ -455,11 +455,11 @@ impl WorkbenchView {
             BEFORE_SYNC_TASK | AFTER_SYNC_TASK | BEFORE_BUILD_TASK | AFTER_BUILD_TASK
             | BEFORE_RUN_TASK => {
                 let when = match action {
-                    BEFORE_SYNC_TASK => idecraft_core::buildtasks::When::BeforeSync,
-                    AFTER_SYNC_TASK => idecraft_core::buildtasks::When::AfterSync,
-                    BEFORE_BUILD_TASK => idecraft_core::buildtasks::When::BeforeBuild,
-                    AFTER_BUILD_TASK => idecraft_core::buildtasks::When::AfterBuild,
-                    _ => idecraft_core::buildtasks::When::BeforeRun,
+                    BEFORE_SYNC_TASK => ferris_idea_core::buildtasks::When::BeforeSync,
+                    AFTER_SYNC_TASK => ferris_idea_core::buildtasks::When::AfterSync,
+                    BEFORE_BUILD_TASK => ferris_idea_core::buildtasks::When::BeforeBuild,
+                    AFTER_BUILD_TASK => ferris_idea_core::buildtasks::When::AfterBuild,
+                    _ => ferris_idea_core::buildtasks::When::BeforeRun,
                 };
                 view.update(cx, |v, cx| v.toggle_trigger(when, cx));
             }
@@ -476,7 +476,7 @@ impl WorkbenchView {
     /// Java debugger each time the run's output reports an agent listening there.
     pub fn debug_build_task(
         &mut self,
-        config: idecraft_core::RunConfig,
+        config: ferris_idea_core::RunConfig,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -488,7 +488,7 @@ impl WorkbenchView {
                 return;
             }
         };
-        let debug = match idecraft_core::buildtasks::debug_config(&self.root, &config, port) {
+        let debug = match ferris_idea_core::buildtasks::debug_config(&self.root, &config, port) {
             Ok(c) => c,
             Err(e) => {
                 self.status = Some(e);
@@ -522,15 +522,15 @@ impl WorkbenchView {
                             r.running_names().contains(&name),
                         )
                     };
-                    let count = idecraft_core::buildtasks::listening_count(&output, port);
+                    let count = ferris_idea_core::buildtasks::listening_count(&output, port);
                     // Surefire 3 keeps the forked JVM's line to itself: the taken port says it.
-                    let first = attached == 0 && idecraft_core::buildtasks::port_listening(port);
+                    let first = attached == 0 && ferris_idea_core::buildtasks::port_listening(port);
                     if count > attached || first {
                         attached += 1;
                         this.status = None;
                         this.attach(
-                            idecraft_debugger::Runtime::Java,
-                            idecraft_debugger::Target::Address {
+                            ferris_idea_debugger::Runtime::Java,
+                            ferris_idea_debugger::Target::Address {
                                 host: "localhost".into(),
                                 port,
                             },
@@ -562,13 +562,13 @@ impl WorkbenchView {
     /// Build Project (`CompileDirty`, v3 behaviour 18): the Before Build tasks, the build tools'
     /// compile steps and the After Build tasks as one chain in the Run window.
     pub fn build_project(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let files = idecraft_core::Workspace::open(&self.root)
+        let files = ferris_idea_core::Workspace::open(&self.root)
             .and_then(|w| w.files())
             .unwrap_or_default();
-        let model = idecraft_core::read_project(&self.root, &files);
-        let options = idecraft_core::buildtools::BuildOptions::load(&self.root);
+        let model = ferris_idea_core::read_project(&self.root, &files);
+        let options = ferris_idea_core::buildtools::BuildOptions::load(&self.root);
         let mut chain =
-            idecraft_core::buildtasks::build_project_chain(&self.root, &model, &options);
+            ferris_idea_core::buildtasks::build_project_chain(&self.root, &model, &options);
         if chain.is_empty() {
             self.status = Some("Nothing to build: no Maven, Gradle, Cargo or Go module".into());
             cx.notify();
@@ -607,16 +607,16 @@ impl WorkbenchView {
         let view = self.ensure_build_tools(window, cx);
         let config = view.read(cx).task_of_action(id).or_else(|| {
             // The window may not have read the project yet.
-            let (dir, label) = idecraft_core::buildtasks::parse_task_action(id)?;
-            let files = idecraft_core::Workspace::open(&self.root)
+            let (dir, label) = ferris_idea_core::buildtasks::parse_task_action(id)?;
+            let files = ferris_idea_core::Workspace::open(&self.root)
                 .and_then(|w| w.files())
                 .unwrap_or_default();
-            let model = idecraft_core::read_project(&self.root, &files);
+            let model = ferris_idea_core::read_project(&self.root, &files);
             let m = model.modules.iter().find(|m| m.dir == dir)?;
-            let task = idecraft_core::buildtasks::find_task(&self.root, m, &label)?;
-            let options = idecraft_core::buildtools::BuildOptions::load(&self.root);
-            let profiles = idecraft_core::buildtools::project_profiles(&model);
-            Some(idecraft_core::buildtasks::task_config(
+            let task = ferris_idea_core::buildtasks::find_task(&self.root, m, &label)?;
+            let options = ferris_idea_core::buildtools::BuildOptions::load(&self.root);
+            let profiles = ferris_idea_core::buildtools::project_profiles(&model);
+            Some(ferris_idea_core::buildtasks::task_config(
                 &m.dir, &task, &options, &profiles,
             ))
         });
@@ -635,32 +635,32 @@ impl WorkbenchView {
     }
 
     /// The Before Run tasks as before-launch steps of the configurations (v3 behaviour 18).
-    pub(super) fn add_before_run_tasks(&self, configs: &mut Vec<idecraft_core::RunConfig>) {
-        let options = idecraft_core::buildtools::BuildOptions::load(&self.root);
+    pub(super) fn add_before_run_tasks(&self, configs: &mut Vec<ferris_idea_core::RunConfig>) {
+        let options = ferris_idea_core::buildtools::BuildOptions::load(&self.root);
         if !options
             .triggers
             .iter()
-            .any(|t| t.when == idecraft_core::buildtasks::When::BeforeRun)
+            .any(|t| t.when == ferris_idea_core::buildtasks::When::BeforeRun)
         {
             return;
         }
-        let files = idecraft_core::Workspace::open(&self.root)
+        let files = ferris_idea_core::Workspace::open(&self.root)
             .and_then(|w| w.files())
             .unwrap_or_default();
-        let model = idecraft_core::read_project(&self.root, &files);
-        let tasks = idecraft_core::buildtasks::trigger_configs(
+        let model = ferris_idea_core::read_project(&self.root, &files);
+        let tasks = ferris_idea_core::buildtasks::trigger_configs(
             &self.root,
             &model,
             &options,
-            idecraft_core::buildtasks::When::BeforeRun,
+            ferris_idea_core::buildtasks::When::BeforeRun,
         );
-        idecraft_core::buildtasks::add_before_run(configs, &tasks);
+        ferris_idea_core::buildtasks::add_before_run(configs, &tasks);
     }
 
     /// Runs the command line typed for `module` (behaviour 5).
     pub(super) fn run_build_command(
         &mut self,
-        module: &idecraft_core::Module,
+        module: &ferris_idea_core::Module,
         line: &str,
         window: &mut Window,
         cx: &mut Context<Self>,

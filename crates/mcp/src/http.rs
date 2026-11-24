@@ -62,12 +62,12 @@ impl HttpServer {
         });
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
-            .thread_name("idecraft-mcp-http")
+            .thread_name("ferris-idea-mcp-http")
             .enable_all()
             .build()?;
         let serving = shared.clone();
         let thread = std::thread::Builder::new()
-            .name("idecraft-mcp-http".into())
+            .name("ferris-idea-mcp-http".into())
             .spawn(move || {
                 runtime.block_on(accept_loop(listener, serving));
                 // Open event streams end with the runtime.
@@ -179,6 +179,10 @@ impl HttpServer {
         let Some(file) = &self.discovery else {
             return Ok(());
         };
+        // The file holds the bearer token (`SPEC-0321` v6 behaviour 8a).
+        if cfg!(not(unix)) {
+            return Err(not_private());
+        }
         let folder = file.parent().expect("file in a folder");
         create_private_dir(folder)?;
         let projects: Vec<serde_json::Value> = {
@@ -297,7 +301,7 @@ async fn handle(req: Request<Incoming>, shared: Arc<Shared>) -> Result<HttpRespo
         let mut r = plain(StatusCode::UNAUTHORIZED, "missing or wrong bearer token");
         r.headers_mut().insert(
             hyper::header::WWW_AUTHENTICATE,
-            hyper::header::HeaderValue::from_static("Bearer realm=\"idecraft\""),
+            hyper::header::HeaderValue::from_static("Bearer realm=\"ferris-idea\""),
         );
         return Ok(r);
     }
@@ -311,9 +315,155 @@ async fn handle(req: Request<Incoming>, shared: Arc<Shared>) -> Result<HttpRespo
         };
         id.and_then(|id| routes.1.get(&id).map(|r| r.service.clone()))
     };
-    match service {
-        Some(mut service) => service.call(req).await,
-        None => Ok(plain(StatusCode::NOT_FOUND, "no such MCP endpoint")),
+    let Some(mut service) = service else {
+        return Ok(plain(StatusCode::NOT_FOUND, "no such MCP endpoint"));
+    };
+    if req.method() != hyper::Method::POST {
+        return service.call(req).await;
+    }
+    // A request's answer streams back on its own connection. A client that goes away without a
+    // word (its process ended, the connection closed, no `notifications/cancelled`, no `DELETE`)
+    // ends its call at once, so a question for a right is withdrawn at once and nothing it would
+    // have allowed runs (`SPEC-0053` v12 behaviour 8, OBS-0114 Q2).
+    let (parts, body) = req.into_parts();
+    let Ok(body) = http_body_util::Limited::new(body, MAX_BODY_BYTES)
+        .collect()
+        .await
+        .map(|b| b.to_bytes())
+    else {
+        return Ok(plain(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "request body too large",
+        ));
+    };
+    let ids = request_ids(&body);
+    let session = parts.headers.get("mcp-session-id").cloned();
+    let host = parts.headers.get(hyper::header::HOST).cloned();
+    let version = parts.headers.get("mcp-protocol-version").cloned();
+    let uri = parts.uri.clone();
+    let response = service
+        .call(Request::from_parts(parts, Full::new(body)))
+        .await?;
+    let (Some(session), false) = (session, ids.is_empty()) else {
+        return Ok(response);
+    };
+    let call = OpenCall {
+        service,
+        uri,
+        host,
+        version,
+        session,
+        ids,
+    };
+    Ok(response.map(|inner| {
+        GuardedBody {
+            inner,
+            call: Some(call),
+        }
+        .boxed()
+    }))
+}
+
+/// The ids of the requests in a POST body (one message or a batch); notifications and responses
+/// have none.
+fn request_ids(body: &[u8]) -> Vec<serde_json::Value> {
+    let Ok(value) = serde_json::from_slice::<serde_json::Value>(body) else {
+        return Vec::new();
+    };
+    let messages = match value {
+        serde_json::Value::Array(all) => all,
+        one => vec![one],
+    };
+    messages
+        .into_iter()
+        .filter(|m| m.get("method").is_some())
+        .filter_map(|m| m.get("id").cloned())
+        .collect()
+}
+
+/// The requests whose answer a response body carries, to cancel them when the body is dropped
+/// unfinished: the client closed the connection.
+struct OpenCall {
+    service: McpService,
+    uri: hyper::Uri,
+    host: Option<hyper::header::HeaderValue>,
+    version: Option<hyper::header::HeaderValue>,
+    session: hyper::header::HeaderValue,
+    ids: Vec<serde_json::Value>,
+}
+
+impl OpenCall {
+    /// Cancels the requests in their session as the client would (`notifications/cancelled`).
+    fn cancel(self) {
+        let Ok(runtime) = tokio::runtime::Handle::try_current() else {
+            return;
+        };
+        runtime.spawn(async move {
+            let mut service = self.service;
+            for id in self.ids {
+                let note = serde_json::json!({
+                    "jsonrpc": "2.0", "method": "notifications/cancelled",
+                    "params": {"requestId": id, "reason": "the client closed the connection"},
+                });
+                let mut request = Request::builder()
+                    .method(hyper::Method::POST)
+                    .uri(self.uri.clone())
+                    .header(hyper::header::CONTENT_TYPE, "application/json")
+                    .header(hyper::header::ACCEPT, "application/json, text/event-stream")
+                    .header("mcp-session-id", self.session.clone());
+                if let Some(host) = &self.host {
+                    request = request.header(hyper::header::HOST, host.clone());
+                }
+                if let Some(version) = &self.version {
+                    request = request.header("mcp-protocol-version", version.clone());
+                }
+                if let Ok(request) = request.body(Full::new(Bytes::from(note.to_string()))) {
+                    let _ = service.call(request).await;
+                }
+            }
+        });
+    }
+}
+
+/// A response body that cancels its requests when it is dropped before its end.
+struct GuardedBody {
+    inner: BoxBody<Bytes, Infallible>,
+    call: Option<OpenCall>,
+}
+
+impl hyper::body::Body for GuardedBody {
+    type Data = Bytes;
+    type Error = Infallible;
+
+    fn poll_frame(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Result<hyper::body::Frame<Bytes>, Infallible>>> {
+        let this = self.get_mut();
+        let polled = std::pin::Pin::new(&mut this.inner).poll_frame(cx);
+        if let std::task::Poll::Ready(None) = polled {
+            // Answered to the end: nothing to cancel.
+            this.call = None;
+        }
+        polled
+    }
+
+    fn is_end_stream(&self) -> bool {
+        hyper::body::Body::is_end_stream(&self.inner)
+    }
+
+    fn size_hint(&self) -> hyper::body::SizeHint {
+        hyper::body::Body::size_hint(&self.inner)
+    }
+}
+
+impl Drop for GuardedBody {
+    fn drop(&mut self) {
+        if let Some(call) = self.call.take()
+            && !hyper::body::Body::is_end_stream(&self.inner)
+        {
+            call.cancel();
+        }
     }
 }
 
@@ -358,7 +508,19 @@ pub fn workspace_id(root: &Path) -> String {
     format!("{:012x}", h >> 16)
 }
 
+/// Off Unix the discovery folder and file cannot be made private yet, so none is written
+/// (`SPEC-0321` v6 behaviour 8a).
+fn not_private() -> std::io::Error {
+    std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "a private MCP discovery file is not supported on this platform yet",
+    )
+}
+
 fn create_private_dir(dir: &Path) -> std::io::Result<()> {
+    if cfg!(not(unix)) {
+        return Err(not_private());
+    }
     let mut builder = std::fs::DirBuilder::new();
     builder.recursive(true);
     #[cfg(unix)]

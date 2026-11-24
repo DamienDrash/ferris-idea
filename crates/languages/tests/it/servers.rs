@@ -5,8 +5,10 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use idecraft_languages::insight::{LocationKind, complete_in, hover_in, locations_in, symbols_in};
-use idecraft_languages::rename::plan_rename_in;
+use ferris_idea_languages::insight::{
+    LocationKind, complete_in, hover_in, locations_in, symbols_in,
+};
+use ferris_idea_languages::rename::plan_rename_in;
 
 use crate::server_case::{Case, WAIT, check, installed, lines, skip};
 
@@ -200,7 +202,7 @@ async fn vscode_html_css_json() {
         skip("vscode-langservers-extracted not installed");
         return;
     }
-    let root = std::env::temp_dir().join(format!("idecraft-web-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-web-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     let root = root.canonicalize().unwrap();
@@ -269,7 +271,10 @@ macro_rules! after_timeouts {
     ($ask:expr) => {{
         let mut answer = $ask;
         for _ in 0..2 {
-            if !matches!(answer, Err(idecraft_languages::lsp::LspError::Timeout(..))) {
+            if !matches!(
+                answer,
+                Err(ferris_idea_languages::lsp::LspError::Timeout(..))
+            ) {
                 break;
             }
             answer = $ask;
@@ -287,7 +292,8 @@ async fn check_light(case: &Light) {
         }
         return;
     }
-    let root = std::env::temp_dir().join(format!("idecraft-{}-{}", case.name, std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-{}-{}", case.name, std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     for (path, content) in case.files {
@@ -642,10 +648,10 @@ async fn svelte_language_server() {
 
 /// Angular templates go to ngserver in a workspace with `angular.json` (SPEC-0141). Needs the
 /// reference project `angular-basic` with its `node_modules` (`js.sh install` of the reference environment)
-/// or `IDECRAFT_TEST_ANGULAR` pointing at such a project.
+/// or `FERRIS_IDEA_TEST_ANGULAR` pointing at such a project.
 #[tokio::test]
 async fn angular_language_server() {
-    let project = std::env::var_os("IDECRAFT_TEST_ANGULAR")
+    let project = ferris_idea_core::product_var_os("FERRIS_IDEA_TEST_ANGULAR")
         .map(PathBuf::from)
         .or_else(|| {
             std::env::var_os("HOME")
@@ -658,7 +664,7 @@ async fn angular_language_server() {
     };
     let root = root.canonicalize().unwrap();
     let resolved =
-        idecraft_languages::servers::resolve_for(idecraft_languages::LanguageId::Html, &root)
+        ferris_idea_languages::servers::resolve_for(ferris_idea_languages::LanguageId::Html, &root)
             .unwrap();
     assert_eq!(resolved.candidate.program, "ngserver");
     let file = root.join("src/app/app.component.html");
@@ -687,7 +693,7 @@ async fn jdtls_standalone_file_in_subfolder() {
         skip("jdtls not installed");
         return;
     }
-    let root = std::env::temp_dir().join(format!("idecraft-java-single-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-java-single-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("sprachen")).unwrap();
     std::fs::write(root.join("shapes.cpp"), "int main() { return 0; }\n").unwrap();
@@ -749,7 +755,7 @@ async fn typescript_field_and_enum_hints() {
         skip("typescript-language-server not installed");
         return;
     }
-    let dir = std::env::temp_dir().join(format!("idecraft-ts-fields-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-ts-fields-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
         dir.join("tsconfig.json"),
@@ -764,9 +770,9 @@ async fn typescript_field_and_enum_hints() {
     .unwrap();
     let script = dir.join("b.js");
     std::fs::write(&script, "class Box {\n    size = 1;\n}\n").unwrap();
-    idecraft_core::trust::trust_for_process(&dir);
+    ferris_idea_core::trust::trust_for_process(&dir);
     let wait = std::time::Duration::from_secs(90);
-    let hints = idecraft_languages::inlay::parameter_hints_in(&dir, &file, None, wait)
+    let hints = ferris_idea_languages::inlay::parameter_hints_in(&dir, &file, None, wait)
         .await
         .unwrap();
     let seen: Vec<(u64, u64, &str, bool, bool, bool)> = hints
@@ -792,7 +798,7 @@ async fn typescript_field_and_enum_hints() {
             (5, 30, "= 6", false, true, true),
         ]
     );
-    let hints = idecraft_languages::inlay::parameter_hints_in(&dir, &script, None, wait)
+    let hints = ferris_idea_languages::inlay::parameter_hints_in(&dir, &script, None, wait)
         .await
         .unwrap();
     assert!(
@@ -812,7 +818,7 @@ async fn typescript_inlay_hints() {
         skip("typescript-language-server not installed");
         return;
     }
-    let dir = std::env::temp_dir().join(format!("idecraft-ts-inlay-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-ts-inlay-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("tsconfig.json"), "{}").unwrap();
     let file = dir.join("a.ts");
@@ -821,8 +827,8 @@ async fn typescript_inlay_hints() {
         "function one(size: number) { return size * 2; }\nconst twice = one(1) + 1;\nconst text = String(twice);\nconsole.log(text);\n",
     )
     .unwrap();
-    idecraft_core::trust::trust_for_process(&dir);
-    let hints = idecraft_languages::inlay::parameter_hints_in(
+    ferris_idea_core::trust::trust_for_process(&dir);
+    let hints = ferris_idea_languages::inlay::parameter_hints_in(
         &dir,
         &file,
         None,
@@ -847,7 +853,7 @@ async fn typescript_inlay_hints() {
         "export function one(size: number) { return size * 2; }\n",
     )
     .unwrap();
-    let found = idecraft_languages::find_usages::find_usages_in(
+    let found = ferris_idea_languages::find_usages::find_usages_in(
         &dir,
         &file,
         None,
@@ -868,21 +874,22 @@ async fn typescript_inlay_hints() {
 }
 
 /// SPEC-0042 v12 AK-20: with TypeScript 7 installed (its own language server, no `tsserver.js`),
-/// IDECraft starts `tsc --lsp --stdio` from that installation and answers from it.
+/// Ferris IDEA starts `tsc --lsp --stdio` from that installation and answers from it.
 #[tokio::test]
 async fn typescript_7_brings_its_own_server() {
-    let Ok(r) = idecraft_languages::servers::resolve(idecraft_languages::LanguageId::TypeScript)
+    let Ok(r) =
+        ferris_idea_languages::servers::resolve(ferris_idea_languages::LanguageId::TypeScript)
     else {
         skip("no TypeScript language server");
         return;
     };
     if r.candidate.program != "tsc" {
         // Not missing: this machine has a TypeScript for typescript-language-server.
-        eprintln!("skipped: TypeScript 7 is not what IDECraft uses here");
+        eprintln!("skipped: TypeScript 7 is not what Ferris IDEA uses here");
         return;
     }
     assert_eq!(r.args(), ["--lsp", "--stdio"]);
-    let dir = std::env::temp_dir().join(format!("idecraft-ts7-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-ts7-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("tsconfig.json"), "{}").unwrap();
@@ -897,7 +904,7 @@ async fn typescript_7_brings_its_own_server() {
         "import { one } from \"./a\";\nconsole.log(one(2));\n",
     )
     .unwrap();
-    let found = idecraft_languages::find_usages::find_usages_in(
+    let found = ferris_idea_languages::find_usages::find_usages_in(
         &dir,
         &file,
         None,
@@ -917,10 +924,13 @@ async fn typescript_7_brings_its_own_server() {
     // v13: its diagnostics are asked for, so a type error is found.
     let bad = dir.join("bad.ts");
     std::fs::write(&bad, "const n: number = \"x\";\nexport {};\n").unwrap();
-    let found =
-        idecraft_languages::lsp::file_diagnostics(&dir, &bad, std::time::Duration::from_secs(90))
-            .await
-            .unwrap();
+    let found = ferris_idea_languages::lsp::file_diagnostics(
+        &dir,
+        &bad,
+        std::time::Duration::from_secs(90),
+    )
+    .await
+    .unwrap();
     assert!(
         found
             .iter()
@@ -933,14 +943,14 @@ async fn typescript_7_brings_its_own_server() {
 /// The project of the pyright test of `SPEC-0042` v14 behaviour 22: a class with a method and a
 /// function in a package, used from two more files.
 fn python_usages_project(name: &str) -> Option<PathBuf> {
-    let python = idecraft_languages::servers::resolve(idecraft_languages::LanguageId::Python)
+    let python = ferris_idea_languages::servers::resolve(ferris_idea_languages::LanguageId::Python)
         .ok()
-        .filter(|r| idecraft_languages::python_server::is_python_server(r.candidate.program));
+        .filter(|r| ferris_idea_languages::python_server::is_python_server(r.candidate.program));
     if python.is_none() {
         skip("no pyright or basedpyright installed");
         return None;
     }
-    let dir = std::env::temp_dir().join(format!("idecraft-py-{name}-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-py-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("app")).unwrap();
     let dir = dir.canonicalize().unwrap();
@@ -978,7 +988,7 @@ async fn pyright_usages_in_other_files_on_the_first_question() {
         (13, 4, "order_total", [0, 2, 2]),
         (9, 8, "total", [1, 0, 1]),
     ] {
-        let found = idecraft_languages::find_usages::find_usages_in(
+        let found = ferris_idea_languages::find_usages::find_usages_in(
             &dir,
             &file,
             None,
@@ -992,7 +1002,7 @@ async fn pyright_usages_in_other_files_on_the_first_question() {
         .unwrap();
         assert_eq!(
             found.source,
-            idecraft_languages::find_usages::UsageSource::LanguageServer
+            ferris_idea_languages::find_usages::UsageSource::LanguageServer
         );
         let count = |f: &str| {
             found
@@ -1039,7 +1049,7 @@ async fn pyright_structure_without_parameters_and_locals() {
     let file = dir.join("fmt.py");
     std::fs::write(&file, "x = 1\n").unwrap();
     let text = "import os, sys\ndef messy( a,b = 2,*args,**kw ):\n  x=a+b\n  y = [ 1,2 , 3 ]\n  return x\nclass Shape :\n  sides=4\n  def __init__(self, n):\n    self.n = n\n  def area( self ):\n    return 0\nlam = lambda q:q*2\n";
-    let symbols = idecraft_languages::insight::symbols_in(&dir, &file, Some(text), WAIT)
+    let symbols = ferris_idea_languages::insight::symbols_in(&dir, &file, Some(text), WAIT)
         .await
         .unwrap();
     let rows: Vec<String> = symbols
@@ -1079,7 +1089,7 @@ async fn typescript_structure_without_locals() {
         skip("typescript-language-server not installed");
         return;
     }
-    let dir = std::env::temp_dir().join(format!("idecraft-ts-structure-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-ts-structure-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("src")).unwrap();
     let dir = dir.canonicalize().unwrap();
@@ -1087,8 +1097,8 @@ async fn typescript_structure_without_locals() {
     let file = dir.join("src/fmt.ts");
     std::fs::write(&file, "export {}\n").unwrap();
     let text = "import {readFileSync,writeFileSync} from \"fs\"\nexport function  messy( a:number,b = 2 ,...rest:string[] ){\n  const x=a+b*2\n  const y = [ 1,2 ,3 ]\n  function inner(q: string) { const z = q; return z }\n  if(x>3) return x\n  return   y.length\n}\n\nexport class  Shape {\n    sides=0\n    label: string = ''\n    area(): number { return 0.0 }\n    name( ) {\n        return 'shape'\n    }\n}\nexport const lam = (q:number)=>q+1\nexport const limit: number = 3\n";
-    idecraft_core::trust::trust_for_process(&dir);
-    let symbols = idecraft_languages::insight::symbols_in(&dir, &file, Some(text), WAIT)
+    ferris_idea_core::trust::trust_for_process(&dir);
+    let symbols = ferris_idea_languages::insight::symbols_in(&dir, &file, Some(text), WAIT)
         .await
         .unwrap();
     let mut rows: Vec<String> = symbols
@@ -1126,7 +1136,7 @@ async fn typescript_structure_without_locals() {
 /// from unsaved text, a used name of the same statement stays.
 #[tokio::test]
 async fn pyright_unused_imports_are_removed() {
-    use idecraft_languages::python_tools::language_server_imports_in;
+    use ferris_idea_languages::python_tools::language_server_imports_in;
     let Some(dir) = python_usages_project("imports") else {
         return;
     };
@@ -1157,8 +1167,8 @@ async fn pyright_unused_imports_are_removed() {
 /// sources; resolving within a budget fills in the declarations.
 #[tokio::test]
 async fn pyright_completion_names_the_origin() {
-    use idecraft_languages::insight::resolve_details_within;
-    use idecraft_languages::python_origin::{add_origins_in, member_origins_in};
+    use ferris_idea_languages::insight::resolve_details_within;
+    use ferris_idea_languages::python_origin::{add_origins_in, member_origins_in};
     let Some(dir) = python_usages_project("origin") else {
         return;
     };
@@ -1178,7 +1188,7 @@ async fn pyright_completion_names_the_origin() {
     add_origins_in(&dir, &probe, None, 6, 5, &mut items, WAIT)
         .await
         .unwrap();
-    let origin = |items: &[idecraft_languages::insight::CompletionItem], label: &str| {
+    let origin = |items: &[ferris_idea_languages::insight::CompletionItem], label: &str| {
         items
             .iter()
             .find(|i| i.label == label)
@@ -1197,7 +1207,7 @@ async fn pyright_completion_names_the_origin() {
         );
     }
     assert_eq!(origin(&items, "__eq__"), None);
-    // IDECraft's own templates after the dot have no origin.
+    // Ferris IDEA's own templates after the dot have no origin.
     assert!(
         items
             .iter()
@@ -1282,13 +1292,13 @@ async fn pyright_completion_names_the_origin() {
 /// cannot format.
 #[tokio::test]
 async fn vscode_servers_format_files_and_ranges() {
-    use idecraft_languages::format::{FormatOptions, plan_format, plan_format_in};
-    use idecraft_languages::insight::Range;
+    use ferris_idea_languages::format::{FormatOptions, plan_format, plan_format_in};
+    use ferris_idea_languages::insight::Range;
     if !installed("vscode-css-language-server") {
         skip("vscode-langservers-extracted not installed");
         return;
     }
-    let root = std::env::temp_dir().join(format!("idecraft-web-format-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-web-format-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     let root = root.canonicalize().unwrap();
@@ -1359,15 +1369,17 @@ async fn vscode_servers_format_files_and_ranges() {
 /// one the unformatted file happens to have; lemminx closes an empty element without a space.
 #[tokio::test]
 async fn formatting_with_the_defaults_per_language() {
-    use idecraft_languages::format::{FormatOptions, plan_format, plan_format_in};
-    let root =
-        std::env::temp_dir().join(format!("idecraft-format-defaults-{}", std::process::id()));
+    use ferris_idea_languages::format::{FormatOptions, plan_format, plan_format_in};
+    let root = std::env::temp_dir().join(format!(
+        "ferris-idea-format-defaults-{}",
+        std::process::id()
+    ));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     let root = root.canonicalize().unwrap();
     // Nothing above the folder decides.
     std::fs::write(root.join(".editorconfig"), "root = true\n").unwrap();
-    let style = idecraft_core::CodeStyleSettings::default();
+    let style = ferris_idea_core::CodeStyleSettings::default();
     let cases: [(&str, &str, &str, &str); 8] = [
         (
             "vscode-json-language-server",
@@ -1450,10 +1462,10 @@ async fn formatting_with_the_defaults_per_language() {
 /// the answer names shfmt instead of "already formatted". v5: Markdown needs no server.
 #[tokio::test]
 async fn servers_that_cannot_format_say_why() {
-    use idecraft_languages::format::{FormatOptions, FormatPlan, plan_format};
-    use idecraft_languages::insight::Range;
-    use idecraft_languages::lsp::LspError;
-    let root = std::env::temp_dir().join(format!("idecraft-no-format-{}", std::process::id()));
+    use ferris_idea_languages::format::{FormatOptions, FormatPlan, plan_format};
+    use ferris_idea_languages::insight::Range;
+    use ferris_idea_languages::lsp::LspError;
+    let root = std::env::temp_dir().join(format!("ferris-idea-no-format-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     let root = root.canonicalize().unwrap();
@@ -1469,7 +1481,7 @@ async fn servers_that_cannot_format_say_why() {
         // The SQL formatter is not reached through a language server (v5 behaviour 11).
         (
             "query.sql",
-            "SQL files are formatted by IDECraft's own SQL formatter",
+            "SQL files are formatted by Ferris IDEA's own SQL formatter",
         ),
     ] {
         let file = root.join(name);
@@ -1478,7 +1490,7 @@ async fn servers_that_cannot_format_say_why() {
         assert!(why.starts_with(start), "{why}");
     }
 
-    // v5 behaviour 12: Markdown is formatted by IDECraft, with or without marksman.
+    // v5 behaviour 12: Markdown is formatted by Ferris IDEA, with or without marksman.
     let file = root.join("README.md");
     std::fs::write(&file, "# Title\n* one\n").unwrap();
     let plan = plan_format(&root, &file, None, options, WAIT)
@@ -1613,7 +1625,7 @@ async fn servers_that_cannot_format_say_why() {
 
 /// A project folder of its own for a live test.
 fn live_project(name: &str, files: &[(&str, &str)]) -> PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-live-{name}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-live-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     for (path, content) in files {
         let file = root.join(path);
@@ -1650,7 +1662,7 @@ async fn intelephense_is_asked_after_its_indexing() {
         .unwrap()
         .expect("a hover for a method of another file");
     assert!(hover.text.contains("addLine"), "{}", hover.text);
-    let found = idecraft_languages::lsp::file_diagnostics(&root, &file, WAIT)
+    let found = ferris_idea_languages::lsp::file_diagnostics(&root, &file, WAIT)
         .await
         .unwrap();
     assert!(
@@ -1709,7 +1721,7 @@ async fn css_server_reports_problems() {
         ],
     );
     for name in ["site.css", "site.scss"] {
-        let found = idecraft_languages::lsp::file_diagnostics(&root, &root.join(name), WAIT)
+        let found = ferris_idea_languages::lsp::file_diagnostics(&root, &root.join(name), WAIT)
             .await
             .unwrap();
         assert!(
@@ -1738,7 +1750,7 @@ async fn gopls_parameter_hints() {
         ],
     );
     let hints =
-        idecraft_languages::inlay::parameter_hints_in(&root, &root.join("main.go"), None, WAIT)
+        ferris_idea_languages::inlay::parameter_hints_in(&root, &root.join("main.go"), None, WAIT)
             .await
             .unwrap();
     let labels: Vec<&str> = hints.iter().map(|h| h.label.as_str()).collect();

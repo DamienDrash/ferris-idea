@@ -1,15 +1,15 @@
 //! Headless benchmark harness of `SPEC-0260`.
 //!
-//!   idecraft-bench run [--out FILE]       all headless phases, checked against the budgets
-//!   idecraft-bench check <mode> FILE...    checks metric files (`{"name": number, …}` or result
+//!   ferris-idea-bench run [--out FILE]       all headless phases, checked against the budgets
+//!   ferris-idea-bench check <mode> FILE...    checks metric files (`{"name": number, …}` or result
 //!                                          lines with a `metrics` object) against one mode's budgets
-//!   idecraft-bench phase <name> <dir>      one phase in this process (used by `run`)
+//!   ferris-idea-bench phase <name> <dir>      one phase in this process (used by `run`)
 //!
 //! Each phase runs in a child process so that its peak resident memory and CPU time are its own;
 //! the parent samples them with `ps` from outside, and a phase reports the CPU time of its parts
 //! as deltas of its own `ps` CPU time (`SPEC-0260` v6). Fixtures (a 100 000-line source file, two files
 //! over 50 MB, the `java-large` project of `scripts/gen-java-large.sh`) are generated
-//! once into `$IDECRAFT_BENCH_DIR` (default `~/.cache/idecraft-bench`), where the result history
+//! once into `$FERRIS_IDEA_BENCH_DIR` (default `~/.cache/ferris-idea-bench`), where the result history
 //! (`history.jsonl`) is kept as well — outside the repository.
 
 use std::collections::BTreeMap;
@@ -18,13 +18,13 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 use std::time::{Duration, Instant};
 
-use idecraft_bench::{Mode, budgets, check, percentile_ms, report};
-use idecraft_core::{Finder, Query, Workspace};
-use idecraft_editor::{Carets, EditorState, Position, perform, type_text};
-use idecraft_languages::LanguageId;
-use idecraft_languages::everywhere::{Categories, Sources, search_everywhere};
-use idecraft_languages::inspections::{inspect, inspect_text};
-use idecraft_languages::syntax::{MAX_SYNTAX_BYTES, SyntaxDocument};
+use ferris_idea_bench::{Mode, budgets, check, percentile_ms, report};
+use ferris_idea_core::{Finder, Query, Workspace};
+use ferris_idea_editor::{Carets, EditorState, Position, perform, type_text};
+use ferris_idea_languages::LanguageId;
+use ferris_idea_languages::everywhere::{Categories, Sources, search_everywhere};
+use ferris_idea_languages::inspections::{inspect, inspect_text};
+use ferris_idea_languages::syntax::{MAX_SYNTAX_BYTES, SyntaxDocument};
 
 type Metrics = BTreeMap<String, f64>;
 type Error = Box<dyn std::error::Error>;
@@ -61,7 +61,7 @@ fn main() -> ExitCode {
         }),
         _ => {
             eprintln!(
-                "usage: idecraft-bench run [--out FILE] | check <headless|window> FILE... | phase <name> <dir>"
+                "usage: ferris-idea-bench run [--out FILE] | check <headless|window> FILE... | phase <name> <dir>"
             );
             return ExitCode::from(2);
         }
@@ -77,11 +77,11 @@ fn main() -> ExitCode {
 }
 
 fn bench_dir() -> PathBuf {
-    std::env::var_os("IDECRAFT_BENCH_DIR")
+    ferris_idea_core::product_var_os("FERRIS_IDEA_BENCH_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
             PathBuf::from(std::env::var_os("HOME").unwrap_or_else(|| ".".into()))
-                .join(".cache/idecraft-bench")
+                .join(".cache/ferris-idea-bench")
         })
 }
 
@@ -97,7 +97,7 @@ fn run(args: &[&str]) -> Result<bool, Error> {
     let out = match args {
         [] => None,
         ["--out", file] => Some(PathBuf::from(file)),
-        _ => return Err("usage: idecraft-bench run [--out FILE]".into()),
+        _ => return Err("usage: ferris-idea-bench run [--out FILE]".into()),
     };
     let dir = bench_dir().join("fixtures");
     fixtures(&dir)?;
@@ -141,9 +141,9 @@ fn run(args: &[&str]) -> Result<bool, Error> {
     eprint!("{}", report(&results));
     let missing = results
         .iter()
-        .any(|(_, v)| *v == idecraft_bench::Verdict::Missing);
+        .any(|(_, v)| *v == ferris_idea_bench::Verdict::Missing);
     // On a machine loaded far beyond its cores, wall-clock times say more about the other
-    // processes than about IDECraft; memory and CPU time still count.
+    // processes than about Ferris IDEA; memory and CPU time still count.
     let cores = std::thread::available_parallelism().map_or(1, |n| n.get());
     let load = load_average().unwrap_or(0.0);
     let overloaded = load > OVERLOAD * cores as f64;
@@ -315,7 +315,7 @@ fn hundred_k_lines() -> String {
 /// memory only (`SPEC-0260` v4): the editor's text for the step of its unused declarations.
 fn hundred_k_java_lines() -> String {
     // 4 header lines, 8 lines per member, padding, the closing line: 100 000 lines.
-    let mut out = String::from("package org.idecraft.sample;\n\npublic class Big {\n\n");
+    let mut out = String::from("package org.ferrisidea.sample;\n\npublic class Big {\n\n");
     let members = (100_000 - 5) / 8;
     for i in 0..members {
         // Every second member is used by the next one; the others are unused.
@@ -325,7 +325,7 @@ fn hundred_k_java_lines() -> String {
             "0".to_owned()
         };
         out.push_str(&format!(
-            "    public int field{i};\n    public int method{i}(int value) {{\n        int sum = value + field{i} + {call};\n        sum += new org.idecraft.sample.p00.Item{:03}().compute{}(sum);\n        // Grüße: äöüß — a comment line\n        return sum;\n    }}\n\n",
+            "    public int field{i};\n    public int method{i}(int value) {{\n        int sum = value + field{i} + {call};\n        sum += new org.ferrisidea.sample.p00.Item{:03}().compute{}(sum);\n        // Grüße: äöüß — a comment line\n        return sum;\n    }}\n\n",
             i % 100,
             i % 8
         ));
@@ -341,7 +341,7 @@ fn hundred_k_java_lines() -> String {
 /// members use names of `java-large` and each other, held in memory only.
 fn hundred_k_kotlin_lines() -> String {
     // 4 header lines, 8 lines per member, padding, the closing line: 100 000 lines.
-    let mut out = String::from("package org.idecraft.sample\n\nclass BigKt {\n\n");
+    let mut out = String::from("package org.ferrisidea.sample\n\nclass BigKt {\n\n");
     let members = (100_000 - 5) / 8;
     for i in 0..members {
         // Every second member is used by the next one; the others are unused.
@@ -351,7 +351,7 @@ fn hundred_k_kotlin_lines() -> String {
             "0".to_owned()
         };
         out.push_str(&format!(
-            "    var field{i}: Int = 0\n    fun method{i}(value: Int): Int {{\n        var sum = value + field{i} + {call}\n        sum += org.idecraft.sample.p00.Item{:03}().compute{}(sum)\n        // Grüße: äöüß — a comment line\n        return sum\n    }}\n\n",
+            "    var field{i}: Int = 0\n    fun method{i}(value: Int): Int {{\n        var sum = value + field{i} + {call}\n        sum += org.ferrisidea.sample.p00.Item{:03}().compute{}(sum)\n        // Grüße: äöüß — a comment line\n        return sum\n    }}\n\n",
             i % 100,
             i % 8
         ));
@@ -611,7 +611,7 @@ fn index(root: &Path) -> Result<Metrics, Error> {
     let files = workspace.files()?;
     m.insert("index_files_ms".into(), ms(t0.elapsed()));
     m.insert("index_files".into(), files.len() as f64);
-    let keymap = idecraft_ui::keymap::Keymap::bundled_default();
+    let keymap = ferris_idea_ui::keymap::Keymap::bundled_default();
     let sources = Sources {
         root: workspace.root(),
         files: &files,
@@ -653,10 +653,10 @@ fn index(root: &Path) -> Result<Metrics, Error> {
 /// The reference index of the project at `root` over its files, built once and held in memory as
 /// the window's background refresh leaves it (not saved to the user cache).
 fn build_reference_index(root: &Path) {
-    let rels = idecraft_languages::reference_index::project_files(root);
-    let mut index = idecraft_languages::reference_index::ReferenceIndex::new(root);
+    let rels = ferris_idea_languages::reference_index::project_files(root);
+    let mut index = ferris_idea_languages::reference_index::ReferenceIndex::new(root);
     index.refresh(&rels);
-    idecraft_languages::reference_index::hold(index);
+    ferris_idea_languages::reference_index::hold(index);
 }
 
 /// The editor's step for the unused declarations of a 100 000-line Java file after each of 20
@@ -671,13 +671,13 @@ fn editor(root: &Path) -> Result<Metrics, Error> {
     for (prefix, rel, language, text) in [
         (
             "editor_unused",
-            "src/main/java/org/idecraft/sample/Big.java",
+            "src/main/java/org/ferrisidea/sample/Big.java",
             LanguageId::Java,
             hundred_k_java_lines(),
         ),
         (
             "editor_unused_kotlin",
-            "src/main/kotlin/org/idecraft/sample/BigKt.kt",
+            "src/main/kotlin/org/ferrisidea/sample/BigKt.kt",
             LanguageId::Kotlin,
             hundred_k_kotlin_lines(),
         ),
@@ -726,7 +726,7 @@ fn editor_unused_steps(
         let snapshot = doc.snapshot();
         let t = Instant::now();
         let findings =
-            idecraft_languages::reference_index::editor_unused_of(root, rel, &snapshot, &cancel)
+            ferris_idea_languages::reference_index::editor_unused_of(root, rel, &snapshot, &cancel)
                 .ok_or("the reference index is not ready")?;
         steps.push(t.elapsed());
         found = findings.len();

@@ -1,0 +1,7 @@
+# Negative control: the change is only previewed, so the file keeps the typo.
+agent = "recorded"
+model = "none"
+
+[[call]]
+tool = "replace_text_in_file"
+args = { path = "greeting.txt", old_text = "wrold", new_text = "world" }

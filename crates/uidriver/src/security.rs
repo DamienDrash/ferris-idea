@@ -17,7 +17,7 @@ pub const UI_RIGHT: &str = "ui";
 
 /// What the right `ui` allows, in words.
 pub const UI_MEANING: &str =
-    "operate the IDECraft window: read its interface, click, type and press keys in it";
+    "operate the Ferris IDEA window: read its interface, click, type and press keys in it";
 
 /// How long the user's own input pauses external clients (behaviour 37).
 pub const USER_PAUSE: Duration = Duration::from_secs(3);
@@ -34,7 +34,7 @@ pub const HIGHLIGHT: Duration = Duration::from_millis(300);
 pub enum Actor {
     /// The window's own self-test, in process.
     SelfTest,
-    /// An external client: an MCP client of the window's HTTP server or `idecraft drive`.
+    /// An external client: an MCP client of the window's HTTP server or `ferris-idea drive`.
     External {
         /// Its name as it gave it (`claude-code 2.1`).
         client: String,
@@ -116,7 +116,7 @@ pub fn effects_of_action(id: &str) -> Option<Vec<Effect>> {
         | "Switcher"
         | "TabList"
         | "MaximizeEditorInSplit"
-        | "IDECraft.ConfigureEditorTabs"
+        | "FerrisIDEA.ConfigureEditorTabs"
         | "ShowIntentionActions"
         | "QuickJavaDoc"
         | "QuickImplementations"
@@ -293,9 +293,9 @@ pub fn effects_of_action(id: &str) -> Option<Vec<Effect>> {
         "RestoreFactoryDefaultLayout" => vec![None],
         "RestoreDefaultLayout" => vec![Run],
         "StoreDefaultLayout" | "StoreNewLayout" => vec![Write],
-        _ if id.starts_with("IDECraft.Layout.Apply:") => vec![Run],
-        _ if id.starts_with("IDECraft.Layout.Rename:")
-            || id.starts_with("IDECraft.Layout.Delete:") =>
+        _ if id.starts_with("FerrisIDEA.Layout.Apply:") => vec![Run],
+        _ if id.starts_with("FerrisIDEA.Layout.Rename:")
+            || id.starts_with("FerrisIDEA.Layout.Delete:") =>
         {
             vec![Write]
         }
@@ -369,7 +369,7 @@ pub fn effects_of_action(id: &str) -> Option<Vec<Effect>> {
         | "QuickEvaluateExpression" => vec![Debug],
         // File Path starts the system's file manager (SPEC-0275 v13 behaviour 34).
         "ShowFilePath" => vec![Run],
-        "Exit" | "$Quit" | "IDECraft.Quit" => vec![Quit],
+        "Exit" | "$Quit" | "FerrisIDEA.Quit" => vec![Quit],
         // The file properties rewrite a file or its permissions (SPEC-0336 behaviour 22).
         "ChangeFileEncodingAction"
         | "ToggleReadOnlyAttribute"
@@ -378,7 +378,7 @@ pub fn effects_of_action(id: &str) -> Option<Vec<Effect>> {
         | "ConvertToMacLineSeparators"
         | "AddBom"
         | "RemoveBom"
-        // The file type actions write the project's `.idecraft/file-types.toml` (SPEC-0004 v5
+        // The file type actions write the project's `.ferris-idea/file-types.toml` (SPEC-0004 v5
         // behaviour 13).
         | "OverrideFileTypeAction"
         | "ReverteOverrideFileTypeAction"
@@ -639,7 +639,7 @@ pub enum StopSource {
     Menu,
     /// The MCP tool `ui_driver_stop`.
     Mcp,
-    /// `idecraft drive stop`.
+    /// `ferris-idea drive stop`.
     Cli,
 }
 
@@ -777,20 +777,20 @@ mod tests {
             effects_of_action("RestoreFactoryDefaultLayout"),
             Some(vec![Effect::None])
         );
-        for id in ["RestoreDefaultLayout", "IDECraft.Layout.Apply:Review"] {
+        for id in ["RestoreDefaultLayout", "FerrisIDEA.Layout.Apply:Review"] {
             assert_eq!(effects_of_action(id), Some(vec![Effect::Run]), "{id}");
         }
         for id in [
             "StoreDefaultLayout",
             "StoreNewLayout",
-            "IDECraft.Layout.Rename:Review",
-            "IDECraft.Layout.Delete:Review",
+            "FerrisIDEA.Layout.Rename:Review",
+            "FerrisIDEA.Layout.Delete:Review",
         ] {
             assert_eq!(effects_of_action(id), Some(vec![Effect::Write]), "{id}");
         }
         // Only these prefixes: another id under the same name is undeclared.
         assert_eq!(
-            effects_of_action("IDECraft.Layout.Export:Review"),
+            effects_of_action("FerrisIDEA.Layout.Export:Review"),
             Option::None
         );
     }

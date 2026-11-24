@@ -6,8 +6,8 @@
 
 #![cfg(target_os = "macos")]
 
+use ferris_idea_workbench::{EditorView, WorkbenchView};
 use gpui::{Entity, TestAppContext, VisualTestContext};
-use idecraft_workbench::{EditorView, WorkbenchView};
 
 fn sqlite(db: &std::path::Path, sql: &str) -> bool {
     std::process::Command::new("sqlite3")
@@ -19,16 +19,16 @@ fn sqlite(db: &std::path::Path, sql: &str) -> bool {
 
 /// A workspace with the one SQLite connection `shop` and `q.sql`; `None` without `sqlite3`.
 fn workspace() -> Option<(std::path::PathBuf, std::path::PathBuf)> {
-    let root = std::env::temp_dir().join(format!("idecraft-sql-refresh-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-sql-refresh-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir_all(root.join(".idecraft")).unwrap();
+    std::fs::create_dir_all(root.join(".ferris-idea")).unwrap();
     let shop = root.join("shop.db");
     if !sqlite(&shop, "CREATE TABLE item (id INTEGER PRIMARY KEY);") {
         let _ = std::fs::remove_dir_all(&root);
         return None;
     }
     std::fs::write(
-        root.join(".idecraft/connections.toml"),
+        root.join(".ferris-idea/connections.toml"),
         format!(
             "[[connection]]\nid = \"shop\"\nname = \"shop\"\ndialect = \"sqlite\"\npath = \"{}\"\n",
             shop.display()

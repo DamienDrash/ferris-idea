@@ -1,7 +1,8 @@
 # ADR-0030: CI strategy: check the merge result once, on the server
 
-- **Status:** accepted · **Version:** 2 · **Date:** 2026-11-16 (v2: the server checks batches of
-  waiting branches itself, decision 10) · 2026-11-12 (v1) · decided by the coordinating agent
+- **Status:** accepted · **Version:** 4 · **Date:** 2026-11-19 (v4: decision 10, a newer push while a red batch is halved stops one half only; one tip per commit) · 2026-11-18 (v3: test selection, the full run of
+  main as safety net, quarantine, documents lane, second runner assessed; decisions 11 to 14) ·
+  2026-11-16 (v2: the server checks batches of waiting branches itself, decision 10) · 2026-11-12 (v1) · decided by the coordinating agent
   under the Project Owner's order of 2026-11-12 to research a better CI strategy and implement it
 - **Related:** the server CI script, `scripts/check-pr.sh`, `CLAUDE.md` rule 6,
   Project Owner's decision of 2026-11-11: no paid GitHub features, CI on own machines
@@ -67,7 +68,7 @@ Sources: the "not rocket science rule" and merge queues (test the merge result b
 
 10. **The server checks batches itself (v2, 2026-11-16).** With 13 pull requests waiting and 25 to
     30 minutes per full run the queue took hours. When the next commit is a branch, the server takes
-    up to four waiting branch tips of its class (`IDECRAFT_CI_BATCH`, default 4; 1 switches batches
+    up to four waiting branch tips of its class (`FERRIS_IDEA_CI_BATCH`, default 4; 1 switches batches
     off): branches that change documents only and the others are never mixed, the order is the one
     of decision 5 and the script's head (documents first, `queue/*`, newest tip first). The tips are
     merged one after the other onto main's tip, and the merge of all gets one check, as strict as a
@@ -83,7 +84,11 @@ Sources: the "not rocket science rule" and merge queues (test the merge result b
       half gets no result and is checked again on main's next tip, so after the first half is merged
       it is checked on top of it.
     - **Newer push:** a newer push of any member stops the batch (as it stops a single check,
-      `superseded` for that member); the others keep no result and wait for the next round.
+      `superseded` for that member); the others keep no result and wait for the next round. While a
+      red batch is being halved, a newer push stops only the half with that member; the other half
+      is still checked to its result, so a red tip does not go into the next batch again (2026-11-19,
+      after two such repeats cost half an hour each). A commit under two refs (a branch and its
+      `queue/` copy) is one tip.
     - **Cost and limit:** a green batch of four needs one run instead of four; one red tip among
       four needs at most five runs (the whole, two halves, two quarters), so batches pay while most
       branches pass, which is the usual case after the author's check (decision 3). A member is not
@@ -92,6 +97,32 @@ Sources: the "not rocket science rule" and merge queues (test the merge result b
     A self-test of the server CI script checks a green batch, a red tip in the middle and a
     conflict on a throw-away remote. The running service is switched to a new copy of the script by hand after
     the merge, as for every change of it.
+
+11. **The server tests what the change can reach (v3, 2026-11-18).** A check of full scope still
+    runs format and lints for the whole workspace, but builds and tests only the crates the change
+    touches and the crates that depend on them, the same selection as the author's check
+    (`scripts/ci-select.py`, shared with `scripts/check-pr.sh`). A branch or batch is compared with
+    main's tip, main with the last main checked. The whole workspace is tested when the change
+    touches `Cargo.toml`, `Cargo.lock`, `.cargo/`, `.config/`, `vendor/`, the shared `tests/`
+    folder, a build script or a file the selector cannot place; a change no crate reads (`scripts/`,
+    `.github/`, …) gets format, lints and the documents check (scope `lint`). The result line names
+    the scope `selective` and `selected=<n>/<all>`, so a selected pass is never mistaken for a full
+    one; a tree that passed its selection counts as passed (decision 2). The selector that runs is
+    the copy installed on the server from main, never the branch's own.
+12. **A full run of main is the safety net of the selection (v3).** At least once an hour, when main
+    moved since its last full run, the server runs the whole workspace on main's tip, ahead of the
+    waiting branches. A fault the selection missed (a test that reads a file outside its crate
+    without the selector knowing, such as the Markdown files below `docs/` that one formatter test
+    reads) is found there within the hour, instead of blocking every pull request meanwhile.
+13. **Flaky tests go into a quarantine, with a reason (v3).** `scripts/ci-quarantine.txt` lists
+    nextest filters, each with the reason, the date and the issue that owns the fix; an entry
+    without them fails the documents check and the server's check. Listed tests are left out of the
+    run that decides a merge, run after it on their own and reported
+    (`quarantine=<entries>:passed|failed`), never blocking. The list starts empty; a test that fails
+    every time is a fault to fix, not a flaky test.
+14. **Documents do not wait for builds (v3).** A branch whose merge into main changes documents only
+    is checked by a second loop beside the main one, in a worktree of its own; the check needs no
+    build, so it no longer waits behind a full check of up to half an hour.
 
 ## Measurements
 
@@ -116,6 +147,24 @@ Sources: the "not rocket science rule" and merge queues (test the merge result b
 - Security: nothing new is exposed. The check still runs as the unprivileged build user from the
   server's own clone, with the script installed from main by hand, never from the branch under test.
 
+## Second runner (assessed 2026-11-18, not set up)
+
+A second host of the project's own was checked as an additional, constrained runner (4 cores,
+7.7 GB, shared with production services). It cannot take a check that decides a merge:
+
+- It has no C compiler, and installing system packages there is out of bounds. Most workspace
+  crates build C code (vendored OpenSSL, bundled SQLite and DuckDB): measured from `cargo
+  metadata`, 25 of 29 crates need it, and a change of any of the other four reaches crates that do,
+  except one crate without dependents. The workspace lints need every crate.
+- What it could run (format, the documents check) takes seconds and is covered by decision 14.
+- The private network carries no connection between the two servers, and their SSH accepts the
+  administration account only; a pulling runner needs both opened, which is the Project Owner's
+  decision.
+
+A virtual Linux machine on the development Mac was not set up either: an ARM machine without the
+server's live-test tools passes checks with less coverage than the server, so its results could not
+decide a merge on their own, and it would reach the server only through the same SSH restriction.
+
 ## Not decided here
 
-A second runner. Batches of more than four tips, and choosing a batch's size from the load.
+A second runner (above). Batches of more than four tips, and choosing a batch's size from the load.

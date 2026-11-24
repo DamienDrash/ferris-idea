@@ -43,10 +43,10 @@ Kotlin code is generated and debugged as conveniently as Java.
    and the main class; the adapter resolves the class path through Gradle or Maven. Breakpoints
    of `.kt` and `.java` files inside the module are set (others would keep the adapter from
    stopping); stops show the stack, locals and watches as in SPEC-0091. [GEN, OSS]
-3. **Adapter:** `IDECRAFT_KOTLIN_DEBUG`, else the newest `~/.local/opt/kotlin-debug-adapter*`
+3. **Adapter:** `FERRIS_IDEA_KOTLIN_DEBUG`, else the newest `~/.local/opt/kotlin-debug-adapter*`
    (`kotlin-debug.sh install` of the reference environment: release archive with a checked SHA-256), else
    `kotlin-debug-adapter` on the PATH; missing, the status bar says what to install. It does not
-   support conditional breakpoints, hit counts or logpoints itself; IDECraft evaluates them
+   support conditional breakpoints, hit counts or logpoints itself; Ferris IDEA evaluates them
    (SPEC-0178). [OSS]
 4. **Protocol details** that this adapter needs and that are harmless for others: the source of
    `setBreakpoints` carries the file name; `launch` may take up to 120 s (class path resolution);
@@ -71,11 +71,11 @@ Kotlin code is generated and debugged as conveniently as Java.
      It waits for the loading of exactly these two names; classes inside them (`Outer$…`) get the
      breakpoint only when they are loaded at the moment the breakpoints are sent. Whatever it
      finds, it answers `verified: true`. Sending the breakpoints again later changes nothing.
-   - **What IDECraft sends.** For a `.kt` file of a session with this adapter IDECraft reads the
+   - **What Ferris IDEA sends.** For a `.kt` file of a session with this adapter Ferris IDEA reads the
      file from disk and finds the package, the class of the top-level code (`<File>Kt`, or the
      name of `@file:JvmName`) and the top-level classes, interfaces and objects with their lines.
      A line belongs to the top-level declaration it stands in. After the `setBreakpoints` of the
-     file itself, and like it before `configurationDone`, IDECraft sends for every class with
+     file itself, and like it before `configurationDone`, Ferris IDEA sends for every class with
      breakpoint lines two more `setBreakpoints` whose source path only names a class to the
      adapter: `<file>/kotlin/<package folders>/<Class>.kt`, unless the adapter derives this class
      from the file's own path already, and `<file>/kotlin/<package folders>/<Class>$*.kt` for the
@@ -83,7 +83,7 @@ Kotlin code is generated and debugged as conveniently as Java.
      class filter). These paths lie below the file's own path, so they never name a file that
      exists and never collide with the breakpoints of another file. Each carries the entries of
      its lines exactly as the file's own request does: for this adapter plain lines, because
-     conditions, hit counts and log messages stay with IDECraft (SPEC-0178), which recognises a
+     conditions, hit counts and log messages stay with Ferris IDEA (SPEC-0178), which recognises a
      hit by the file and line of the stop's top frame, and the adapter reports the real file
      there.
    - **Changes during the session.** Whenever the breakpoints of the file are set again, the
@@ -108,8 +108,8 @@ Kotlin code is generated and debugged as conveniently as Java.
      loaded already.
    - Other adapters and `.java` files of a Kotlin session are sent as before.
 4e. **Seen in the gutter (v7):** a breakpoint reported as not verified — by the adapter, or by
-   IDECraft for the reasons of 4b — is drawn hollow while the session runs, and its tooltip names
-   the reason (SPEC-0127 v5 behaviour 14); for the lines of 4b that reason is IDECraft's
+   Ferris IDEA for the reasons of 4b — is drawn hollow while the session runs, and its tooltip names
+   the reason (SPEC-0127 v5 behaviour 14); for the lines of 4b that reason is Ferris IDEA's
    explanation, and agents get it as the placed breakpoint's `reason` (SPEC-0127 v5 behaviour 15).
    [STD]
 4c. **What the adapter does not report at the start (v6, found with PR #520 in the window):**
@@ -124,16 +124,16 @@ Kotlin code is generated and debugged as conveniently as Java.
    launches, ran past it in four and never reported its end in two. [OSS: `JDILauncher.kt`,
    `JDIDebuggee.kt`, `VMEventBus.kt`, `KotlinDebugAdapter.kt` of that version; DAP traces of
    2026-11-11; STD: `java.lang.instrument`]
-   - **The program waits for the adapter.** IDECraft launches the program with a Java agent
+   - **The program waits for the adapter.** Ferris IDEA launches the program with a Java agent
      of its own, added to the launch's `vmArguments` (`-javaagent:<jar>=<main class>=<file>`,
      after what the launch already has there). The agent does one thing: where the JVM is about
      to define the main class — the debugger is connected by then, no line of the program has
-     run — it waits until the file is gone, at most 30 seconds. IDECraft creates the file
+     run — it waits until the file is gone, at most 30 seconds. Ferris IDEA creates the file
      before `launch` and removes it when `launch` is answered, also when the launch fails; by
      then the breakpoints are registered and the adapter passes on what the program reports.
      The program does not see the agent: no frame, no output, no changed class.
-   - **Where the agent comes from.** Its source is part of IDECraft
-     (`crates/debugger/src/kotlin_gate/IdecraftGate.java`). It is compiled once per user with
+   - **Where the agent comes from.** Its source is part of Ferris IDEA
+     (`crates/debugger/src/kotlin_gate/FerrisIdeaGate.java`). It is compiled once per user with
      the `javac` and `jar` of `JAVA_HOME`, else of the PATH, for class file version 8 (11 when
      the JDK no longer writes 8), into the user's cache folder: `kotlin-gate/<digest of the
      source>/gate.jar`, built aside and moved into place; the folder and the folder of the
@@ -145,7 +145,7 @@ Kotlin code is generated and debugged as conveniently as Java.
      before those of other files; the adapter registers in this order.
    - **A stop that is not reported.** The breakpoint suspends its thread, and no `stopped`
      event follows; the session would show "running" for ever. When nothing has come from a
-     launched program 300 ms after IDECraft began to wait, IDECraft asks once for the threads
+     launched program 300 ms after Ferris IDEA began to wait, Ferris IDEA asks once for the threads
      and for the stack of each (two seconds per question, four in all). Only a suspended thread
      has a stack: one whose top frame is in the file and on the line of a requested breakpoint
      is the stop, and it is handled like a reported one (conditions of SPEC-0178 included). A
@@ -175,7 +175,7 @@ Kotlin code is generated and debugged as conveniently as Java.
   Kotlin in Gradle and Maven modules (`crates/core/tests/it/run_context.rs`); the plan of such a
   command (`debug_model::tests::kotlin_commands_…`).
 - **AK-2** With the adapter and a Gradle project built offline: a stop in `twice` with `x = 1`,
-  two more stops, the end with `total 12`; a condition evaluated by IDECraft (SPEC-0178 AK-3)
+  two more stops, the end with `total 12`; a condition evaluated by Ferris IDEA (SPEC-0178 AK-3)
   (`crates/debugger/tests/it/kotlin.rs`).
 - **AK-3** MCP: Kotlin `generate_code`, `debug_start` dry run (`crates/mcp/tests/it/protocol.rs`).
 - **AK-4** Window self-test: ⌘N in a Kotlin class lists the Kotlin choices, `toString()` is
@@ -202,7 +202,7 @@ Kotlin code is generated and debugged as conveniently as Java.
   (`crates/debugger/tests/it/kotlin.rs::kotlin_breakpoints_in_class_members_of_another_file_are_hit`).
   In the same file a lambda in a member, an anonymous object, a companion object, a second class
   and a top-level function stop in the order the program reaches them, and a member breakpoint
-  with a condition evaluated by IDECraft stops once
+  with a condition evaluated by Ferris IDEA stops once
   (`…::kotlin_breakpoints_in_lambdas_inner_classes_and_companions_are_hit`).
 - **AK-9 (v5, v6)** Without the adapter: the declarations of a file outside comments, strings,
   templates and bodies; the class paths for a class named unlike and like its file, for
@@ -223,7 +223,7 @@ Kotlin code is generated and debugged as conveniently as Java.
   `main` without a pause stops in `main` and then in the member of the class named unlike its
   file, and resume after the last stop runs the program to its end with its output, four
   launches in a row; with the only breakpoint in a member that is never called the program is
-  reported as ended, four launches in a row; a program that still runs when IDECraft asks for a
+  reported as ended, four launches in a row; a program that still runs when Ferris IDEA asks for a
   lost stop stops later and ends; the program of the window self-test stops in `twice` and
   resume, sent as soon as the stop is shown, runs it to "kotlin result 42", three launches in a
   row (`crates/workbench/tests/it/kotlin_debug_members.rs`). The agent: built once into a cache
@@ -239,10 +239,10 @@ Kotlin inspections with type information, Kotlin tests from the debugger, attach
 Kotlin Multiplatform, Kotlin scripts (`.kts`), coroutine debugging.
 
 ## Known deviations from the reference
-The reference debugs Kotlin with its own JVM debugger and supports conditions; IDECraft uses the open
+The reference debugs Kotlin with its own JVM debugger and supports conditions; Ferris IDEA uses the open
 kotlin-debug-adapter and evaluates conditions itself, which is slower (SPEC-0178). Not compared side by side.
 
-v6: IDECraft runs a small agent of its own inside the debugged Kotlin program's JVM (behaviour
+v6: Ferris IDEA runs a small agent of its own inside the debugged Kotlin program's JVM (behaviour
 4c); the reference needs none, its debugger holds the program itself. Where the agent cannot be
 used (no `javac` and `jar`, a main class of a named module, an adapter on another machine), a
 line that runs in about the first tenth of a second of the program, before the adapter has
@@ -259,6 +259,6 @@ bound, but the adapter may not find its source for the frames of a stop; this wa
 the real adapter. The window has no separate marker for a breakpoint that is not verified; it
 says so in the debug console. The member breakpoint was not compared with the reference.
 
-v3 (OBS-0035): the reference's list also has Test… and Copyright. Neither is in IDECraft's Generate
+v3 (OBS-0035): the reference's list also has Test… and Copyright. Neither is in Ferris IDEA's Generate
 list, for Java either: creating a test for a class is not built yet, and the copyright notice is its
 own action (SPEC-0155).

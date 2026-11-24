@@ -1,11 +1,11 @@
-//! SPEC-0013 against the reference databases (PostgreSQL/MySQL via `IDECRAFT_TEST_PG` /
-//! `IDECRAFT_TEST_MYSQL` / `IDECRAFT_TEST_MARIADB`; SQLite built from the seed files).
+//! SPEC-0013 against the reference databases (PostgreSQL/MySQL via `FERRIS_IDEA_TEST_PG` /
+//! `FERRIS_IDEA_TEST_MYSQL` / `FERRIS_IDEA_TEST_MARIADB`; SQLite built from the seed files).
 
 use crate::common;
 
 use std::path::Path;
 
-use idecraft_database::{ConnectionProfile, Dialect, Session, Table, introspect};
+use ferris_idea_database::{ConnectionProfile, Dialect, Session, Table, introspect};
 
 async fn tables_of(url: &str) -> Vec<Table> {
     let profile = ConnectionProfile::from_url("reference", url).unwrap();
@@ -16,7 +16,7 @@ async fn tables_of(url: &str) -> Vec<Table> {
 }
 
 fn sqlite_reference() -> (std::path::PathBuf, String) {
-    let dir = std::env::temp_dir().join(format!("idecraft-introspect-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-introspect-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let sql =
@@ -124,7 +124,7 @@ async fn sqlite_reference_schema() {
 
 #[tokio::test]
 async fn postgres_reference_schema() {
-    let Ok(url) = std::env::var("IDECRAFT_TEST_PG") else {
+    let Ok(url) = ferris_idea_core::product_var("FERRIS_IDEA_TEST_PG") else {
         return;
     };
     let tables = tables_of(&url).await;
@@ -137,7 +137,7 @@ async fn postgres_reference_schema() {
 
 #[tokio::test]
 async fn mysql_reference_schema() {
-    let Ok(url) = std::env::var("IDECRAFT_TEST_MYSQL") else {
+    let Ok(url) = ferris_idea_core::product_var("FERRIS_IDEA_TEST_MYSQL") else {
         return;
     };
     let tables = tables_of(&url).await;
@@ -153,7 +153,7 @@ async fn mysql_reference_schema() {
 
 #[tokio::test]
 async fn mariadb_reference_schema() {
-    let Ok(url) = std::env::var("IDECRAFT_TEST_MARIADB") else {
+    let Ok(url) = ferris_idea_core::product_var("FERRIS_IDEA_TEST_MARIADB") else {
         return;
     };
     let tables = tables_of(&url).await;
@@ -172,15 +172,15 @@ async fn mariadb_reference_schema() {
 /// (bundled engine); the scratch sequence is dropped afterwards.
 #[tokio::test]
 async fn sequences_are_listed() {
-    use idecraft_database::{OnError, Outcome, sequences};
+    use ferris_idea_database::{OnError, Outcome, sequences};
     let name = format!("rf_seq{}", std::process::id());
-    let dir = std::env::temp_dir().join(format!("idecraft-seq-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-seq-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("seq.duckdb");
     duckdb::Connection::open(&file).unwrap();
     let mut urls = vec![format!("duckdb:{}", file.display())];
-    urls.extend(std::env::var("IDECRAFT_TEST_MARIADB").ok());
+    urls.extend(ferris_idea_core::product_var("FERRIS_IDEA_TEST_MARIADB").ok());
     for url in urls {
         let profile = ConnectionProfile::from_url("reference", &url).unwrap();
         let session = Session::connect(&profile, &common::credentials(&profile))

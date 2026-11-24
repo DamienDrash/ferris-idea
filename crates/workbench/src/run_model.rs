@@ -2,7 +2,7 @@
 
 use std::collections::VecDeque;
 
-use idecraft_core::{RunEvent, RunOutcome};
+use ferris_idea_core::{RunEvent, RunOutcome};
 
 /// The status text when documents could not be saved before a start (behaviour 3a), naming the
 /// first; `None` when none is left.
@@ -42,7 +42,7 @@ pub struct Console {
 /// shell gives a meaning are quoted, so copying it into a terminal runs the same program with the
 /// same arguments (`SPEC-0087` v6 behaviour 13, IMP-0395).
 pub fn command_line(command: &[String]) -> String {
-    idecraft_core::join_command_line(command)
+    ferris_idea_core::join_command_line(command)
 }
 
 /// The line the Run window shows for a start that cannot happen (`SPEC-0087` v6 behaviour 14,
@@ -159,7 +159,7 @@ impl Console {
 /// The status after Run of a page configuration without a command: it only opened the page, so the
 /// status says how to debug it (hand test 60: "Debug in Browser" chosen with Enter opened the
 /// user's own browser and no debugger, which looked like a broken debug start).
-pub fn page_run_status(c: &idecraft_core::RunConfig, debug_key: &str) -> Option<String> {
+pub fn page_run_status(c: &ferris_idea_core::RunConfig, debug_key: &str) -> Option<String> {
     let url = c.url.as_ref().filter(|_| c.command.is_empty())?;
     Some(format!(
         "Opened {url} in the default browser · Debug{} debugs it in Chrome with its own profile",
@@ -171,12 +171,12 @@ pub fn page_run_status(c: &idecraft_core::RunConfig, debug_key: &str) -> Option<
 mod tests {
     #[test]
     fn running_a_page_says_how_to_debug_it() {
-        let config = |command: Vec<String>| idecraft_core::RunConfig {
+        let config = |command: Vec<String>| ferris_idea_core::RunConfig {
             name: "Debug in Browser".into(),
             command,
             cwd: None,
             env: Default::default(),
-            kind: idecraft_core::RunKind::Run,
+            kind: ferris_idea_core::RunKind::Run,
             report: None,
             report_file: None,
             before: Vec::new(),
@@ -186,6 +186,7 @@ mod tests {
             allow_multiple: false,
             before_launch: Vec::new(),
             verbatim: false,
+            http: None,
         };
         let page = config(Vec::new());
         assert_eq!(
@@ -294,7 +295,7 @@ mod tests {
         ]);
         assert_eq!(shown, "node src/main.js 'two words' 'it'\\''s'");
         assert_eq!(
-            idecraft_core::split_command_line(&shown).unwrap(),
+            ferris_idea_core::split_command_line(&shown).unwrap(),
             ["node", "src/main.js", "two words", "it's"]
         );
         assert_eq!(

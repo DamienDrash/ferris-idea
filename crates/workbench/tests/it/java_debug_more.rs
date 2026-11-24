@@ -8,10 +8,10 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use idecraft_debugger::{
+use ferris_idea_debugger::{
     BreakpointRules, FieldWatchpoint, SourceBreakpoint, SpecialBreakpoints, Suspend,
 };
-use idecraft_workbench::debug_model::{Command, Controller, Kind, Launch, Update};
+use ferris_idea_workbench::debug_model::{Command, Controller, Kind, Launch, Update};
 
 // `main` reaches the breakpoint only once the worker sleeps: otherwise a worker still starting at
 // the stop is listed as RUNNING instead of SLEEPING, which the thread checks below expect (the wait
@@ -66,7 +66,7 @@ fn wait_for<T>(
     }
 }
 
-fn stopped_line(u: &Update) -> Option<(i64, i64, Vec<idecraft_debugger::Variable>)> {
+fn stopped_line(u: &Update) -> Option<(i64, i64, Vec<ferris_idea_debugger::Variable>)> {
     match u {
         Update::Stopped { frames, locals, .. } => {
             frames.first().map(|f| (f.id, f.line, locals.clone()))
@@ -77,17 +77,17 @@ fn stopped_line(u: &Update) -> Option<(i64, i64, Vec<idecraft_debugger::Variable
 
 #[test]
 fn further_actions_with_java_debug() {
-    if !idecraft_languages::java_debug::java_debug_usable()
-        || idecraft_languages::servers::resolve(idecraft_languages::LanguageId::Java).is_err()
+    if !ferris_idea_languages::java_debug::java_debug_usable()
+        || ferris_idea_languages::servers::resolve(ferris_idea_languages::LanguageId::Java).is_err()
     {
         eprintln!("skipped: jdtls or java-debug is missing");
         return;
     }
-    let dir = std::env::temp_dir().join(format!("idecraft-javamore-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-javamore-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let root: PathBuf = dir.canonicalize().unwrap();
-    idecraft_core::trust::trust_for_process(&root);
+    ferris_idea_core::trust::trust_for_process(&root);
     let file = root.join("Hot.java");
     std::fs::write(&file, PROGRAM).unwrap();
     // Line 15 `sum += i;`, stopping every thread (SPEC-0127 v3 behaviour 6).
@@ -118,7 +118,7 @@ fn further_actions_with_java_debug() {
     let (frame, line, locals) = wait_for(&c, &mut seen, 240, "the first stop", stopped_line);
     assert_eq!(line, 15);
 
-    // SPEC-0091 v16 behaviour 42: the list reads type, id and size in IDECraft's form; a static
+    // SPEC-0091 v16 behaviour 42: the list reads type, id and size in Ferris IDEA's form; a static
     // `main` has no `this`.
     let items = locals.iter().find(|v| v.name == "items").expect("items");
     let (object, summary) = items.value.split_once(' ').unwrap_or((&items.value, ""));
@@ -127,7 +127,7 @@ fn further_actions_with_java_debug() {
         "{locals:#?}"
     );
     assert_eq!(
-        idecraft_workbench::debug_model::row_value(&items.value)
+        ferris_idea_workbench::debug_model::row_value(&items.value)
             .1
             .map(|id| &items.value[id]),
         object.strip_prefix("ArrayList")

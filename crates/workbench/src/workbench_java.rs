@@ -8,15 +8,15 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use gpui::{Context, Entity, Window, prelude::*};
-use idecraft_languages::java_generate::{
+use ferris_idea_languages::java_generate::{
     DelegateField, DelegateMethod, add_delegate_methods_in, delegate_fields_in,
     import_action_title, import_candidates_at, import_hint_text, unresolved_name,
 };
-use idecraft_languages::java_structure::{
+use ferris_idea_languages::java_structure::{
     OverridableMethod, SurroundKind, TypeDirection, add_overridable_methods_in,
     method_hierarchy_in, overridable_methods_in, super_target_in, type_hierarchy_in,
 };
+use gpui::{Context, Entity, Window, prelude::*};
 
 use super::{WorkbenchView, apply_byte_edits, byte_of};
 use crate::hierarchy_view::{HierarchyEvent, HierarchyMode, HierarchyView};
@@ -95,7 +95,7 @@ pub fn override_rows(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KotlinGenerate {
     /// Generates code from the syntax tree.
-    Kind(idecraft_languages::jvm::GenerateKind),
+    Kind(ferris_idea_languages::jvm::GenerateKind),
     /// Opens the Override Members chooser.
     Override,
     /// Opens the Implement Members chooser.
@@ -105,8 +105,8 @@ pub enum KotlinGenerate {
 /// The rows of Generate in a Kotlin class (`SPEC-0132` v3 behaviour 1a): what is generated from
 /// the syntax tree, then the two choosers of `SPEC-0122` v6 behaviour 15.
 pub fn kotlin_generate_rows() -> Vec<(String, KotlinGenerate)> {
-    use idecraft_languages::jvm::GenerateKind;
-    let mut rows: Vec<(String, KotlinGenerate)> = idecraft_languages::jvm::KOTLIN_KINDS
+    use ferris_idea_languages::jvm::GenerateKind;
+    let mut rows: Vec<(String, KotlinGenerate)> = ferris_idea_languages::jvm::KOTLIN_KINDS
         .iter()
         .map(|k| {
             let label = match k {
@@ -119,6 +119,88 @@ pub fn kotlin_generate_rows() -> Vec<(String, KotlinGenerate)> {
     rows.push(("Override Methods…".into(), KotlinGenerate::Override));
     rows.push(("Implement Methods…".into(), KotlinGenerate::Implement));
     rows
+}
+
+/// What a row of Java's Generate list does (`SPEC-0122` v10 behaviour 3d).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JavaGenerate {
+    /// Generates code from the syntax tree (behaviours 3–3b).
+    Kind(ferris_idea_languages::jvm::GenerateKind),
+    /// Opens the Override Methods chooser (behaviour 6).
+    Override,
+    /// Opens the Implement Methods chooser (behaviour 6).
+    Implement,
+    /// Delegate Methods (behaviour 10).
+    Delegate,
+    /// Opens the class's test, or creates it in the test root (behaviour 3e).
+    Test,
+    /// Writes or updates the copyright notice of the file (`SPEC-0155` v5 behaviour 11).
+    Copyright,
+}
+
+/// What the class at the caret offers beyond the generated kinds (`SPEC-0122` v10 behaviour 3d).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct GenerateFacts {
+    /// The class extends or implements a type, or is abstract: it may have methods to implement.
+    pub supertypes: bool,
+    /// The class has instance fields to delegate to.
+    pub fields: bool,
+    /// The file is named like a test: it gets no Test… row.
+    pub is_test: bool,
+    /// The project has a copyright profile.
+    pub copyright: bool,
+}
+
+/// The rows of Generate in a Java class (`SPEC-0122` v10 behaviour 3d): the kinds that apply, then
+/// Override Methods…, Implement Methods… (with supertypes), Delegate Methods… (with fields),
+/// Test… (not in a test) and Copyright (with a profile), in the reference's order.
+pub fn java_generate_rows(
+    kinds: &[ferris_idea_languages::jvm::GenerateKind],
+    facts: GenerateFacts,
+) -> Vec<(String, JavaGenerate)> {
+    let mut rows: Vec<(String, JavaGenerate)> = kinds
+        .iter()
+        .map(|k| (k.label().to_owned(), JavaGenerate::Kind(*k)))
+        .collect();
+    rows.push(("Override Methods…".into(), JavaGenerate::Override));
+    if facts.supertypes {
+        rows.push(("Implement Methods…".into(), JavaGenerate::Implement));
+    }
+    if facts.fields {
+        rows.push(("Delegate Methods…".into(), JavaGenerate::Delegate));
+    }
+    if !facts.is_test {
+        rows.push(("Test…".into(), JavaGenerate::Test));
+    }
+    if facts.copyright {
+        rows.push(("Copyright".into(), JavaGenerate::Copyright));
+    }
+    rows
+}
+
+/// Whether the declaration of class `class` in `text` extends or implements a type or is
+/// abstract (its header up to the opening brace says so).
+pub fn class_has_supertypes(text: &str, class: &str) -> bool {
+    let mut from = 0;
+    while let Some(i) = text[from..].find(class) {
+        let start = from + i;
+        let end = start + class.len();
+        from = end;
+        let before = &text[..start];
+        let word_end = text[end..]
+            .chars()
+            .next()
+            .is_none_or(|c| !(c.is_alphanumeric() || c == '_'));
+        if !word_end || before.split_whitespace().last() != Some("class") {
+            continue;
+        }
+        let line_start = text[..start].rfind('\n').map_or(0, |n| n + 1);
+        let header_end = text[end..].find('{').map_or(text.len(), |b| end + b);
+        let header = &text[line_start..header_end];
+        let has = |w: &str| header.split_whitespace().any(|t| t == w);
+        return has("extends") || has("implements") || has("abstract");
+    }
+    false
 }
 
 /// The hint at the caret for a class that lacks its import (`SPEC-0122` v4 behaviour 11).
@@ -143,7 +225,7 @@ pub struct ImportHint {
 /// the field per row; the constructor has a first row for no field at all.
 pub fn field_rows(
     constructor: bool,
-    fields: &[(idecraft_languages::jvm::Field, bool)],
+    fields: &[(ferris_idea_languages::jvm::Field, bool)],
 ) -> (Vec<String>, Vec<bool>, Vec<Option<String>>) {
     let mut items = Vec::new();
     let mut checked = Vec::new();
@@ -163,9 +245,9 @@ pub fn field_rows(
 
 /// The rows of Generate's template list: label, template and whether `toString` has `@Override`.
 pub fn template_rows(
-    kind: idecraft_languages::jvm::GenerateKind,
-) -> Vec<(String, idecraft_languages::jvm::GenerateTemplate, bool)> {
-    use idecraft_languages::jvm::{GenerateKind, GenerateTemplate};
+    kind: ferris_idea_languages::jvm::GenerateKind,
+) -> Vec<(String, ferris_idea_languages::jvm::GenerateTemplate, bool)> {
+    use ferris_idea_languages::jvm::{GenerateKind, GenerateTemplate};
     let mut rows: Vec<(String, GenerateTemplate, bool)> = GenerateTemplate::of(kind)
         .iter()
         .map(|t| (t.label(kind).to_owned(), *t, true))
@@ -184,11 +266,11 @@ impl WorkbenchView {
     /// Asks which fields Generate uses, then which template (`SPEC-0122` v4 behaviour 3b).
     pub fn generate_choose(
         &mut self,
-        kind: idecraft_languages::jvm::GenerateKind,
+        kind: ferris_idea_languages::jvm::GenerateKind,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        use idecraft_languages::jvm::{GenerateKind, chooser_fields};
+        use ferris_idea_languages::jvm::{GenerateKind, chooser_fields};
         let Some(editor) = self.active_editor() else {
             return;
         };
@@ -233,12 +315,12 @@ impl WorkbenchView {
     /// Asks for the template when there are several, then generates.
     fn generate_template(
         &mut self,
-        kind: idecraft_languages::jvm::GenerateKind,
+        kind: ferris_idea_languages::jvm::GenerateKind,
         fields: Option<Vec<String>>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        use idecraft_languages::jvm::GenerateOptions;
+        use ferris_idea_languages::jvm::GenerateOptions;
         let rows = template_rows(kind);
         if rows.len() == 1 {
             self.generate_with(
@@ -275,8 +357,8 @@ impl WorkbenchView {
     /// Generates in the Java class at the caret as one undo step.
     fn generate_with(
         &mut self,
-        kind: idecraft_languages::jvm::GenerateKind,
-        options: idecraft_languages::jvm::GenerateOptions,
+        kind: ferris_idea_languages::jvm::GenerateKind,
+        options: ferris_idea_languages::jvm::GenerateOptions,
         cx: &mut Context<Self>,
     ) {
         let Some(editor) = self.active_editor() else {
@@ -284,7 +366,12 @@ impl WorkbenchView {
         };
         let text = editor.read(cx).state.buffer.text();
         let caret = editor.read(cx).state.carets.primary().head;
-        match idecraft_languages::jvm::generate_with(&text, byte_of(&text, caret), kind, &options) {
+        match ferris_idea_languages::jvm::generate_with(
+            &text,
+            byte_of(&text, caret),
+            kind,
+            &options,
+        ) {
             Ok(edits) => {
                 apply_byte_edits(&editor, &text, &edits, false, cx);
                 self.status = Some(format!("Generated {}", kind.label()));
@@ -292,6 +379,87 @@ impl WorkbenchView {
             Err(e) => self.status = Some(e),
         }
         cx.notify();
+    }
+
+    /// Test… of Generate (`SPEC-0122` v10 behaviour 3e): opens the class's test when the project
+    /// has one, else creates it in the test root, opens it and puts the caret into its body.
+    pub fn generate_test(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some((path, relative, _)) = self.local_project_file("Test…", cx) else {
+            return;
+        };
+        let text = self
+            .editors
+            .get(&path)
+            .map(|e| e.read(cx).state.buffer.text())
+            .unwrap_or_default();
+        let root = self.root.clone();
+        cx.spawn_in(window, async move |this, cx| {
+            let planned = cx
+                .background_spawn(async move {
+                    let files = ferris_idea_core::OwnSources::new(&root).files();
+                    ferris_idea_languages::test_class::plan(&root, &relative, &text, &files)
+                })
+                .await;
+            let _ = this.update_in(cx, |this, window, cx| {
+                let said = match planned {
+                    Ok(plan) => this.open_test_class(&plan, window, cx),
+                    Err(why) => why,
+                };
+                this.status = Some(said);
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Opens the test class of `plan`, writing it first when it is new (never over a file that
+    /// exists meanwhile); returns what the status bar says.
+    pub fn open_test_class(
+        &mut self,
+        plan: &ferris_idea_languages::test_class::TestClassPlan,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> String {
+        use std::io::Write as _;
+        let file = self.root.join(&plan.path);
+        if !plan.exists {
+            // The folders of the new file may run through a link out of the project.
+            if let Err(e) = ferris_idea_core::file_ops::stays_inside(&self.root, &file) {
+                return format!("Test… could not create {}: {e}", plan.path);
+            }
+            let written = file
+                .parent()
+                .map_or(Ok(()), std::fs::create_dir_all)
+                .and_then(|()| {
+                    std::fs::OpenOptions::new()
+                        .write(true)
+                        .create_new(true)
+                        .open(&file)
+                })
+                .and_then(|mut f| f.write_all(plan.text.as_bytes()));
+            if let Err(e) = written {
+                return format!("Test… could not create {}: {e}", plan.path);
+            }
+            ferris_idea_languages::undo_group::record_history(
+                &self.root,
+                &[file.as_path()],
+                Some("Create Test"),
+            );
+        }
+        self.open(&file, window, cx);
+        if !plan.exists {
+            let at = ferris_idea_languages::test_class::caret_in(&plan.text);
+            let line = plan.text[..at].matches('\n').count();
+            if let Some(editor) = self.active_editor() {
+                editor.update(cx, |e, cx| e.go_to(line, 0, cx));
+            }
+        }
+        self.focus_active(window, cx);
+        if plan.exists {
+            format!("Opened the test class {}", plan.path)
+        } else {
+            format!("Created the test class {}", plan.path)
+        }
     }
 
     /// Delegate Methods at the caret (`SPEC-0122` v4 behaviour 10): which field, then which methods.
@@ -452,8 +620,8 @@ impl WorkbenchView {
                 return None;
             }
             let path = self.active_path()?;
-            if idecraft_languages::jvm::Jvm::of(&path.to_string_lossy())
-                != Some(idecraft_languages::jvm::Jvm::Java)
+            if ferris_idea_languages::jvm::Jvm::of(&path.to_string_lossy())
+                != Some(ferris_idea_languages::jvm::Jvm::Java)
             {
                 return None;
             }
@@ -462,10 +630,10 @@ impl WorkbenchView {
             let buffer = &e.state.buffer;
             let line = buffer.offset_to_position(e.caret()).ok()?.line;
             let start = buffer
-                .position_to_offset(idecraft_editor::Position::new(line, 0))
+                .position_to_offset(ferris_idea_editor::Position::new(line, 0))
                 .ok()?;
             let end = buffer
-                .position_to_offset(idecraft_editor::Position::new(line + 1, 0))
+                .position_to_offset(ferris_idea_editor::Position::new(line + 1, 0))
                 .unwrap_or_else(|_| buffer.len_chars());
             e.server_problems_in(start..end)
                 .into_iter()
@@ -570,7 +738,7 @@ impl WorkbenchView {
         };
         let at = super::IntentionsAt {
             path: h.path.clone(),
-            range: idecraft_languages::insight::Range {
+            range: ferris_idea_languages::insight::Range {
                 start_line: h.line as u64,
                 start_character: h.column as u64,
                 end_line: h.line as u64,
@@ -642,8 +810,8 @@ impl WorkbenchView {
     /// Whether the active file is Java; otherwise says what the action needs.
     fn java_here(&mut self, what: &str, cx: &mut Context<Self>) -> Option<(Place, String)> {
         let place = self.here(cx)?;
-        let java = idecraft_languages::jvm::Jvm::of(&place.path.to_string_lossy())
-            == Some(idecraft_languages::jvm::Jvm::Java);
+        let java = ferris_idea_languages::jvm::Jvm::of(&place.path.to_string_lossy())
+            == Some(ferris_idea_languages::jvm::Jvm::Java);
         if !java {
             self.status = Some(format!("{what} works in Java files"));
             cx.notify();
@@ -660,7 +828,7 @@ impl WorkbenchView {
     /// what the action needs.
     fn jvm_here(&mut self, what: &str, cx: &mut Context<Self>) -> Option<(Place, String)> {
         let place = self.here(cx)?;
-        if idecraft_languages::jvm::Jvm::of(&place.path.to_string_lossy()).is_none() {
+        if ferris_idea_languages::jvm::Jvm::of(&place.path.to_string_lossy()).is_none() {
             self.status = Some(format!("{what} works in Java and Kotlin files"));
             cx.notify();
             return None;
@@ -726,7 +894,7 @@ impl WorkbenchView {
     pub fn type_hierarchy(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let script = self
             .here(cx)
-            .is_some_and(|p| idecraft_languages::ts_structure::is_script(&p.path));
+            .is_some_and(|p| ferris_idea_languages::ts_structure::is_script(&p.path));
         let place = if script {
             self.here(cx)
         } else {
@@ -755,8 +923,8 @@ impl WorkbenchView {
         let from = origin.clone();
         let job = blocking(async move {
             // JavaScript and TypeScript have no server hierarchy (SPEC-0320 behaviour 1).
-            if idecraft_languages::ts_structure::is_script(&from.path) {
-                idecraft_languages::ts_structure::type_hierarchy_in(
+            if ferris_idea_languages::ts_structure::is_script(&from.path) {
+                ferris_idea_languages::ts_structure::type_hierarchy_in(
                     &root,
                     &from.path,
                     text.as_deref(),
@@ -788,7 +956,7 @@ impl WorkbenchView {
                     let view = cx.new(|cx| {
                         HierarchyView::new(
                             tree,
-                            idecraft_languages::insight::CallDirection::Callers,
+                            ferris_idea_languages::insight::CallDirection::Callers,
                             origin,
                             cx,
                         )
@@ -856,7 +1024,7 @@ impl WorkbenchView {
                     let view = cx.new(|cx| {
                         HierarchyView::new(
                             tree,
-                            idecraft_languages::insight::CallDirection::Callers,
+                            ferris_idea_languages::insight::CallDirection::Callers,
                             origin,
                             cx,
                         )
@@ -922,7 +1090,7 @@ impl WorkbenchView {
                         }
                         None => {
                             this.status = Some(format!(
-                                "{} is a library type; IDECraft cannot open library sources yet.",
+                                "{} is a library type; Ferris IDEA cannot open library sources yet.",
                                 target.name
                             ))
                         }
@@ -956,7 +1124,7 @@ impl WorkbenchView {
             return;
         };
         // Kotlin overrides properties too, so its choosers speak of members (behaviour 15).
-        let kotlin = idecraft_languages::kotlin_structure::is_kotlin(&place.path);
+        let kotlin = ferris_idea_languages::kotlin_structure::is_kotlin(&place.path);
         self.status = Some(format!("{what}…"));
         cx.notify();
         let root = self.root.clone();
@@ -1117,9 +1285,9 @@ impl WorkbenchView {
         let caret = editor.read(cx).state.carets.primary();
         let (a, b) = (caret.anchor.min(caret.head), caret.anchor.max(caret.head));
         let selection = byte_of(&text, a)..byte_of(&text, b);
-        match idecraft_languages::java_structure::surround(&text, selection, kind) {
+        match ferris_idea_languages::java_structure::surround(&text, selection, kind) {
             Ok(s) => {
-                let edit = idecraft_languages::jvm::TextEdit {
+                let edit = ferris_idea_languages::jvm::TextEdit {
                     range: s.range.clone(),
                     text: s.text.clone(),
                 };
@@ -1142,7 +1310,7 @@ mod tests {
 
     #[test]
     fn field_and_template_rows() {
-        use idecraft_languages::jvm::{Field, GenerateKind, GenerateTemplate};
+        use ferris_idea_languages::jvm::{Field, GenerateKind, GenerateTemplate};
         let f = |n: &str| Field {
             name: n.into(),
             ty: "int".into(),

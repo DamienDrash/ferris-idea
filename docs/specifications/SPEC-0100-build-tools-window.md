@@ -82,7 +82,7 @@ in one place.
    of the project's POMs with a checkbox, checked when active (active by default unless switched off);
    a click or Space switches it. Profiles that differ from their default become `-P a,!b`. The
    options apply to every task, every typed command and every resolution (SPEC-0149 v2), are shown in
-   the run's command line and kept per project in `.idecraft/build-tools.toml`; switching a profile
+   the run's command line and kept per project in `.ferris-idea/build-tools.toml`; switching a profile
    resolves the modules again. [STD, OBS-0024, IMP-0337]
 7. **Expand All / Collapse All:** toolbar buttons open every module and group (not the dependency
    trees, which can be large) or close all. [GEN]
@@ -142,7 +142,7 @@ in one place.
     dashed edges, artifacts in conflict with a dashed border and "conflict"; Gradle's classpaths are
     merged. Zoom, 1:1, Fit, Layout, dragging boxes and Escape work as in the ER diagram (SPEC-0111).
     The same graph is written as a Mermaid flowchart to
-    `.idecraft/diagrams/<module>-dependencies.mmd` (conflicts in class `conflict`, left-out edges
+    `.ferris-idea/diagrams/<module>-dependencies.mmd` (conflicts in class `conflict`, left-out edges
     labelled with the reason, Gradle's classpaths as subgraphs); Export copies and writes it, or an
     SVG or PNG of the drawing. The text can be diffed, kept in the repository, rendered by any
     Mermaid viewer and read by agents (`dependency_analysis` `diagram`). [STD, OBS-0024, IMP-0339]
@@ -152,7 +152,7 @@ in one place.
     folder out (an ignored or excluded folder), and an earlier unlink of its folder is undone. A "−"
     button unlinks the selected row's module: it and the modules inside its folder leave the model
     — window, project tree roles, External Libraries, resolution — until linked again; the status
-    line says how to undo it. Both are kept in `.idecraft/build-tools.toml` (SPEC-0048 v4 behaviour
+    line says how to undo it. Both are kept in `.ferris-idea/build-tools.toml` (SPEC-0048 v4 behaviour
     12). [GEN, OBS-0024]
 17. **(v3) Debug a task:** Debug in the task menu runs the task as in behaviour 2 with a JDWP agent on a
     free local port (suspended until the debugger is there) and attaches the Java debugger
@@ -163,14 +163,14 @@ in one place.
     tests (`test`, `package`, `verify`, `install`, `deploy`, `surefire:test`) passes the agent to the
     forked test JVM (`-Dmaven.surefire.debug=…`, `-Dmaven.failsafe.debug=…`), any other goal debugs
     the Maven JVM itself (`MAVEN_OPTS`, e.g. `exec:java` and plugin code). Gradle: an init script
-    (`.idecraft/gradle/idecraft-debug.gradle`, given with `--init-script`) adds the agent to the
-    `Test` and `JavaExec` tasks of the run (`-PidecraftDebugPort=<port>`, one test JVM at a time). A
+    (`.ferris-idea/gradle/ferris-idea-debug.gradle`, given with `--init-script`) adds the agent to the
+    `Test` and `JavaExec` tasks of the run (`-PferrisIdeaDebugPort=<port>`, one test JVM at a time). A
     run that ends without the agent listening reports that the task started no JVM to debug.
     [STD, GEN, OBS-0024]
 18. **(v3, v4) Before and after a sync and Build Project, before every run:** Execute Before Sync,
     Execute After Sync, Execute Before Build, Execute After Build and Execute Before Run in the task
     menu switch a task's trigger (kept in
-    `.idecraft/build-tools.toml` by module folder and task); the task row shows its triggers dimmed
+    `.ferris-idea/build-tools.toml` by module folder and task); the task row shows its triggers dimmed
     (`clean · Before Build`). Build Project (`CompileDirty`, ⌘F9 on macOS, ⌃F9 otherwise, also from
     Search Everywhere) runs as one chain in the Run window: the Before Build tasks, then the
     project's build — `mvn test-compile` for each top Maven module, `gradle classes testClasses` for
@@ -231,7 +231,7 @@ in one place.
   marked, Expand All without dependency trees (unit tests `build_tools_model::tests`).
 - **AK-2** MCP: `dependency_tree` of an npm module with a transitive package and its tasks; an unknown
   module is an error (`crates/mcp/tests/it/protocol.rs`).
-- **AK-3** In a real window (`idecraft ui --selftest`): the window lists a Go module, its tasks, and
+- **AK-3** In a real window (`ferris-idea ui --selftest`): the window lists a Go module, its tasks, and
   running "test" shows the failing test in the Run window under `gomod [test]`.
 - **AK-4** By hand: a Maven, a Gradle and an npm project next to the reference (OBS-0024).
 - **AK-5** Maven lifecycle with nine phases, default and declared plugins with goals, repositories of
@@ -301,32 +301,32 @@ choosing per run configuration which Before Run tasks apply (they apply to every
 decompiling library classes without sources.
 
 ## Known deviations from the reference
-- The reference has one window per build tool, npm's only after a command on `package.json`; IDECraft
+- The reference has one window per build tool, npm's only after a command on `package.json`; Ferris IDEA
   shows all modules of all build tools in one window, so a mixed project (e.g. a Rust backend with an
   npm frontend) is seen at once.
-- The reference syncs a Maven project by itself when its POM changes outside the editor; IDECraft
+- The reference syncs a Maven project by itself when its POM changes outside the editor; Ferris IDEA
   shows the badge and runs the build tool only on request (IMP-0338).
-- The reference's Gradle window closed every expanded node after a sync; IDECraft keeps them
+- The reference's Gradle window closed every expanded node after a sync; Ferris IDEA keeps them
   (IMP-0336).
 - Offline mode: the reference's Maven run still downloaded from Maven Central with the switch on
-  (OBS-0024); IDECraft puts `-o` into every command and shows it (IMP-0337).
+  (OBS-0024); Ferris IDEA puts `-o` into every command and shows it (IMP-0337).
 - Problems show the state of the last reading only; the reference kept an old error beside the new
   one (IMP-0335).
-- Dependency diagram: like the reference (OBS-0024, re-check 2) IDECraft draws the graph; it also
+- Dependency diagram: like the reference (OBS-0024, re-check 2) Ferris IDEA draws the graph; it also
   keeps it as Mermaid text and exports SVG or PNG, so it can be diffed, versioned and read by agents
   (IMP-0339).
 - Debugging a Maven test task: the reference debugs the Maven JVM, so a breakpoint in the test is not
-  reached (OBS-0024, re-check 2); IDECraft attaches to Surefire's forked test JVM and stops there
+  reached (OBS-0024, re-check 2); Ferris IDEA attaches to Surefire's forked test JVM and stops there
   (IMP-0350).
 - Download Sources and Documentation: the reference offers three choices and says nothing afterwards;
-  IDECraft downloads both and names how many libraries have them and which have none (IMP-0351).
-- Assign Shortcut: the reference opens the Keymap settings at the task; IDECraft takes the next key
+  Ferris IDEA downloads both and names how many libraries have them and which have none (IMP-0351).
+- Assign Shortcut: the reference opens the Keymap settings at the task; Ferris IDEA takes the next key
   combination directly and names other actions on the same keys (IMP-0352).
-- The reference also offers tasks before and after Rebuild; IDECraft has no compiler of its own and
+- The reference also offers tasks before and after Rebuild; Ferris IDEA has no compiler of its own and
   no Rebuild (behaviour 18).
 - Dependency analyzer: each place of a conflict opens the build file at the direct dependency that
   brings the version in, and agents get the same analysis (IMP-0341).
-- IDECraft has no compiler of its own; Build Project, to which the Before/After Build triggers
+- Ferris IDEA has no compiler of its own; Build Project, to which the Before/After Build triggers
   belong, runs the build tools' compile steps (behaviour 18).
-- v5: the reference recompiles a single file with its own compiler; IDECraft has no compiler of
+- v5: the reference recompiles a single file with its own compiler; Ferris IDEA has no compiler of
   its own and builds the whole module of the file with its build tool.

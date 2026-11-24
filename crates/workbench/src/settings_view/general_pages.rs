@@ -1,10 +1,11 @@
 //! The pages of Settings › Appearance & Behavior › System Settings and Notifications, the editor
 //! scheme row of Appearance and the Advanced Settings page (`SPEC-0337`).
 
+use ferris_idea_core::advanced_settings::{AdvancedSetting, Kind, Value};
 use gpui::{Context, Window, div, prelude::*, px};
-use idecraft_core::advanced_settings::{AdvancedSetting, Kind, Value};
 
 use super::SettingsView;
+use super::options::Mark;
 use crate::palette::{EDITOR_SCHEMES, Palette};
 use crate::semantics::{Annotated, AxAction, Effect, Role, Semantics};
 use crate::settings_model::Page;
@@ -51,7 +52,7 @@ impl SettingsView {
             (
                 "Reopen the last project at start-up",
                 s.reopen_last_project,
-                "off: IDECraft asks for a folder when it starts without one",
+                "off: Ferris IDEA asks for a folder when it starts without one",
             ),
             (
                 "Save files when the window loses the focus",
@@ -241,7 +242,7 @@ impl SettingsView {
     pub(super) fn apply_advanced_field(&mut self, cx: &mut Context<Self>) -> bool {
         let Some(a) = self
             .advanced_editing
-            .and_then(idecraft_core::advanced_settings::find)
+            .and_then(ferris_idea_core::advanced_settings::find)
         else {
             return false;
         };
@@ -269,7 +270,6 @@ impl SettingsView {
     /// System Settings (`SPEC-0337` behaviour 2).
     pub(super) fn system_page(&self, cx: &mut Context<Self>) -> gpui::AnyElement {
         let p = Palette::current();
-        let selected = self.selected;
         div()
             .flex()
             .flex_col()
@@ -279,14 +279,16 @@ impl SettingsView {
                     .into_iter()
                     .enumerate()
                     .map(|(i, (label, on, hint))| {
-                        row(("settings-system", i), i == selected, p)
-                            .child(check(on))
-                            .child(super::hit_label(label, &self.query, p))
-                            .child(div().text_xs().text_color(c(p.ui_dim)).child(hint))
-                            .on_click(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
-                                this.selected = i;
-                                this.toggle_general(i, cx);
-                            }))
+                        self.option_row(
+                            ("settings-system", i),
+                            format!("settings-system-{i}"),
+                            Mark::Check(on),
+                            label,
+                            cx,
+                        )
+                        .h_auto()
+                        .min_h(px(28.))
+                        .child(div().text_xs().text_color(c(p.ui_dim)).child(hint))
                     }),
             )
             .child(div().pt_2().text_xs().text_color(c(p.ui_dim)).child(
@@ -309,17 +311,15 @@ impl SettingsView {
             .flex_col()
             .gap_1()
             .child(
-                row(("settings-notifications", 0), self.selected == 0, p)
-                    .child(check(self.ide.notifications.log_info))
-                    .child(super::hit_label(
-                        "Keep informational notes in the Notifications tool window",
-                        &self.query,
-                        p,
-                    ))
-                    .on_click(cx.listener(|this, _: &gpui::ClickEvent, _, cx| {
-                        this.selected = 0;
-                        this.toggle_general(0, cx);
-                    })),
+                self.option_row(
+                    ("settings-notifications", 0),
+                    "settings-notifications-0".into(),
+                    Mark::Check(self.ide.notifications.log_info),
+                    "Keep informational notes in the Notifications tool window",
+                    cx,
+                )
+                .h_auto()
+                .min_h(px(28.)),
             )
             .child(div().pt_2().text_xs().text_color(c(p.ui_dim)).child(
                 "Failures are always kept, whatever this says. The status bar shows every note.",
@@ -343,9 +343,8 @@ impl SettingsView {
                     .child(div().text_xs().text_color(c(p.ui_dim)).child(
                         "←/→ or Enter chooses; editors, consoles and diffs follow, the window keeps the theme",
                     ))
-                    .on_click(cx.listener(move |this, _: &gpui::ClickEvent, _, cx| {
-                        this.selected = i;
-                        this.cycle_scheme(1, cx);
+                    .on_click(cx.listener(move |this, _: &gpui::ClickEvent, window, cx| {
+                        this.click_option(i, window, cx);
                     })),
             )
             .into_any_element()
@@ -484,11 +483,13 @@ impl SettingsView {
                     )))
                     .child(div().text_xs().text_color(c(p.ui_muted)).child(a.description))
                     .on_click(cx.listener(move |this, _: &gpui::ClickEvent, window, cx| {
-                        this.selected = i;
                         if a.kind == Kind::Text {
+                            this.selected = i;
                             this.edit_advanced(window, cx);
                         } else {
-                            this.step_advanced(0, cx);
+                            // A switch or a number: the page takes the keys (`SPEC-0105` v11
+                            // behaviour 17).
+                            this.click_option(i, window, cx);
                         }
                     }))
             }))
@@ -501,7 +502,7 @@ impl SettingsView {
                     .child(
                         div()
                             .text_color(c(p.ui_muted))
-                            .child(match editing.and_then(idecraft_core::advanced_settings::find) {
+                            .child(match editing.and_then(ferris_idea_core::advanced_settings::find) {
                                 Some(a) => a.label,
                                 None => "Text value",
                             }),

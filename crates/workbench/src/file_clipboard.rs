@@ -1,12 +1,12 @@
 //! Cut, Copy and Paste of files and folders in the project tree (`SPEC-0275` v2 behaviours 17–21),
 //! without toolkit: what the file clipboard holds, when it is stale, where Paste goes and where open
-//! tabs of moved files go. The copying and moving itself is [`idecraft_core::file_ops::transfer`],
+//! tabs of moved files go. The copying and moving itself is [`ferris_idea_core::file_ops::transfer`],
 //! the same code as the MCP tools `copy_file` and `move_file`. Several selected items go on the
 //! clipboard together (v3 behaviour 25).
 
 use std::path::{Path, PathBuf};
 
-use idecraft_core::file_ops::Transfer;
+use ferris_idea_core::file_ops::Transfer;
 
 /// What Cut or Copy put on the file clipboard.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -21,7 +21,7 @@ impl FileClipboard {
     /// The clipboard of the selection `paths` (nested items once).
     pub fn new(paths: &[PathBuf], mode: Transfer) -> Self {
         Self {
-            paths: idecraft_core::file_ops::outermost(paths),
+            paths: ferris_idea_core::file_ops::outermost(paths),
             mode,
         }
     }

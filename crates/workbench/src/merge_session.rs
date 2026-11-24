@@ -6,8 +6,8 @@
 
 use std::ops::Range;
 
-use idecraft_editor::{Caret, Carets, Edit, Motion, Position, TextBuffer};
-use idecraft_vcs::{
+use ferris_idea_editor::{Caret, Carets, Edit, Motion, Position, TextBuffer};
+use ferris_idea_vcs::{
     Chunk, ChunkKind, Conflict, Merge3, Outcome, Resolution, changed_words, has_conflict_markers,
     merge_model, merge_outcome,
 };
@@ -1322,18 +1322,27 @@ mod tests {
         assert!(!s.is_dirty());
         assert_eq!(s.outcome(), None);
         assert!(s.accept(0, false));
-        assert_eq!(s.outcome(), Some(Outcome::Side(idecraft_vcs::Side::Theirs)));
+        assert_eq!(
+            s.outcome(),
+            Some(Outcome::Side(ferris_idea_vcs::Side::Theirs))
+        );
         assert_eq!(s.open_conflicts(), 0);
         assert!(s.can_accept(0, true) && !s.can_accept(0, false));
         assert!(s.undo());
         assert_eq!(s.open_conflicts(), 1);
         assert!(s.redo());
         assert!(s.accept_all(true));
-        assert_eq!(s.outcome(), Some(Outcome::Side(idecraft_vcs::Side::Ours)));
+        assert_eq!(
+            s.outcome(),
+            Some(Outcome::Side(ferris_idea_vcs::Side::Ours))
+        );
         // In a rebase the left column is stage 3.
         let mut s = MergeSession::new(&binary, true);
         s.accept(0, true);
-        assert_eq!(s.outcome(), Some(Outcome::Side(idecraft_vcs::Side::Theirs)));
+        assert_eq!(
+            s.outcome(),
+            Some(Outcome::Side(ferris_idea_vcs::Side::Theirs))
+        );
     }
 
     // SPEC-0101 AK-18 (v7).

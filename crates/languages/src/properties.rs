@@ -131,6 +131,9 @@ pub struct PropertyIssue {
     pub message: String,
     /// Title, range and replacement of the fix, if safe.
     pub fix: Option<(&'static str, Range<usize>, String)>,
+    /// For `properties.missing-in-bundle`: the key and the locales that lack it, as
+    /// [`locale_label`] names them (`SPEC-0163` v3 behaviour 3).
+    pub missing: Option<(String, Vec<String>)>,
 }
 
 /// The bytes of property `p` in `text`: from the start of its first line to the end of its last
@@ -169,6 +172,7 @@ pub fn check(text: &str) -> Vec<PropertyIssue> {
                 id: "properties.duplicate-key",
                 message: format!("Duplicate property key `{}` (also on {lines})", p.key),
                 fix: Some(("Remove property", property_lines(text, p), String::new())),
+                missing: None,
             });
         }
         let written = &text[p.value_range.clone()];
@@ -185,6 +189,7 @@ pub fn check(text: &str) -> Vec<PropertyIssue> {
                     at..p.value_range.end,
                     String::new(),
                 )),
+                missing: None,
             });
         }
     }
@@ -266,13 +271,7 @@ pub fn missing_in_bundle(path: &std::path::Path, text: &str) -> Vec<PropertyIssu
             let missing: Vec<String> = others
                 .iter()
                 .filter(|(_, keys)| !keys.contains(&p.key))
-                .map(|(l, _)| {
-                    if l.is_empty() {
-                        "default".to_owned()
-                    } else {
-                        l.clone()
-                    }
-                })
+                .map(|(l, _)| locale_label(l).to_owned())
                 .collect();
             (!missing.is_empty()).then(|| PropertyIssue {
                 range: p.key_range.clone(),
@@ -283,9 +282,72 @@ pub fn missing_in_bundle(path: &std::path::Path, text: &str) -> Vec<PropertyIssu
                     missing.join(", ")
                 ),
                 fix: None,
+                missing: Some((p.key.clone(), missing)),
             })
         })
         .collect()
+}
+
+/// How a locale is named to the user: `default` for the base file, else its code (`SPEC-0163` v3
+/// behaviour 3, IMP-0534: never an empty name).
+pub fn locale_label(locale: &str) -> &str {
+    if locale.is_empty() { "default" } else { locale }
+}
+
+/// Whether the values of the bundle file `path` are spell-checked with the English word lists
+/// (`SPEC-0159` v6 behaviour 9, IMP-0535): only the files of a resource bundle with at least two
+/// files hold translations; of those the base file and the English locales (`en`, `en_GB`) are
+/// English. Another language's values would need that language's dictionary, which the catalog
+/// does not have, so they are not checked. A properties file outside a bundle holds settings, not
+/// prose.
+pub fn values_in_english(path: &std::path::Path) -> bool {
+    let Some((_, locale)) = bundle_name(path) else {
+        return false;
+    };
+    let language = locale.split('_').next().unwrap_or_default();
+    (language.is_empty() || language == "en") && bundle_files(path).len() >= 2
+}
+
+/// The new texts that add the property `key` with an empty value to every other file of the
+/// bundle of `path` that lacks it (`SPEC-0163` v3 behaviour 3, the fix "Add missing translation to …"):
+/// file, text before, text after; `text_of` gives a file's text (an open editor's, else the file
+/// on disk). An empty value, so no placeholder text reaches a user and the bundle editor shows the
+/// gap as empty. Refused with the reason when nothing can be added (IMP-0536): no other file in the
+/// bundle, the key already in every file, or a file that cannot be read.
+pub fn add_missing_key(
+    path: &std::path::Path,
+    key: &str,
+    text_of: impl Fn(&std::path::Path) -> Option<String>,
+) -> Result<Vec<(std::path::PathBuf, String, String)>, String> {
+    let files = bundle_files(path);
+    let others: Vec<std::path::PathBuf> = files
+        .into_iter()
+        .map(|(_, p)| p)
+        .filter(|p| p.file_name() != path.file_name())
+        .collect();
+    if others.is_empty() {
+        return Err(format!(
+            "{} has no other file in its resource bundle",
+            path.file_name()
+                .map_or_else(String::new, |n| n.to_string_lossy().into_owned())
+        ));
+    }
+    let mut out = Vec::new();
+    for file in others {
+        let name = file
+            .file_name()
+            .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+        let before = text_of(&file).ok_or_else(|| format!("{name} cannot be read"))?;
+        if parse(&before).iter().any(|p| p.key == key) {
+            continue;
+        }
+        let after = set_property(&before, key, "");
+        out.push((file, before, after));
+    }
+    if out.is_empty() {
+        return Err(format!("`{key}` is in every file of the bundle already"));
+    }
+    Ok(out)
 }
 
 /// One key of a resource bundle with its value in each locale (`SPEC-0212` behaviour 2–3).
@@ -434,9 +496,161 @@ pub fn remove_property(text: &str, key: &str) -> String {
     out
 }
 
+/// The colours of a properties file (`SPEC-0155` v5 behaviour 12), from Ferris IDEA's own lexer of
+/// the format [`parse`] reads: comment lines as `comment`, keys as `keyword`, the `=` or `:`
+/// separator as `operator`, values as `string`, and escapes in keys and values (also the backslash
+/// that continues a value) as `string.escape`. Spans are char offsets in file order.
+pub fn highlight(text: &str) -> Vec<crate::syntax::Span> {
+    let mut found: Vec<(Range<usize>, &'static str)> = Vec::new();
+    let mut continued = false;
+    let mut at = 0;
+    for raw in text.split_inclusive('\n') {
+        let start = at;
+        at += raw.len();
+        let line = raw.trim_end_matches(['\n', '\r']);
+        let indent = line.len() - line.trim_start().len();
+        let body_start = start + indent;
+        let body = &line[indent..];
+        if continued {
+            continued = continues(body);
+            escaped_runs(body, body_start, "string", &mut found);
+            continue;
+        }
+        if body.is_empty() {
+            continue;
+        }
+        if body.starts_with('#') || body.starts_with('!') {
+            found.push((body_start..body_start + body.len(), "comment"));
+            continue;
+        }
+        let bytes = body.as_bytes();
+        let mut k = 0;
+        while k < bytes.len() {
+            match bytes[k] {
+                b'\\' => k += 2,
+                b'=' | b':' | b' ' | b'\t' | b'\x0c' => break,
+                _ => k += 1,
+            }
+        }
+        let k = k.min(body.len());
+        escaped_runs(&body[..k], body_start, "keyword", &mut found);
+        let mut v = k;
+        while v < bytes.len() && matches!(bytes[v], b' ' | b'\t' | b'\x0c') {
+            v += 1;
+        }
+        if v < bytes.len() && matches!(bytes[v], b'=' | b':') {
+            found.push((body_start + v..body_start + v + 1, "operator"));
+            v += 1;
+            while v < bytes.len() && matches!(bytes[v], b' ' | b'\t' | b'\x0c') {
+                v += 1;
+            }
+        }
+        escaped_runs(&body[v..], body_start + v, "string", &mut found);
+        continued = continues(body);
+    }
+    // Byte ranges to char offsets, in one pass (the ranges are ascending).
+    let mut chars = 0;
+    let mut byte = 0;
+    let mut char_at = |b: usize| {
+        chars += text[byte..b].chars().count();
+        byte = b;
+        chars
+    };
+    found
+        .into_iter()
+        .map(|(r, kind)| {
+            let start = char_at(r.start);
+            let end = char_at(r.end);
+            crate::syntax::Span {
+                start,
+                end,
+                kind: kind.to_owned(),
+            }
+        })
+        .collect()
+}
+
+/// Runs of `part` (starting at byte `from` of the file) as `kind`, with its escapes split off as
+/// `string.escape`: `\uXXXX`, a backslash and the character after it, a backslash at the end.
+fn escaped_runs(
+    part: &str,
+    from: usize,
+    kind: &'static str,
+    out: &mut Vec<(Range<usize>, &'static str)>,
+) {
+    let bytes = part.as_bytes();
+    let mut plain = 0;
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] != b'\\' {
+            i += 1;
+            continue;
+        }
+        let len = match bytes.get(i + 1) {
+            None => 1,
+            Some(b'u') => {
+                2 + bytes[i + 2..]
+                    .iter()
+                    .take(4)
+                    .take_while(|b| b.is_ascii_hexdigit())
+                    .count()
+            }
+            // The escaped character may be any (non-ASCII too).
+            Some(_) => 1 + part[i + 1..].chars().next().map_or(0, char::len_utf8),
+        };
+        if i > plain {
+            out.push((from + plain..from + i, kind));
+        }
+        out.push((from + i..from + i + len, "string.escape"));
+        i += len;
+        plain = i;
+    }
+    if bytes.len() > plain {
+        out.push((from + plain..from + bytes.len(), kind));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// SPEC-0155/AK-12 (v5): key, separator, value, comment and escapes; a continued value; a key
+    /// ended by white space; char offsets after non-ASCII text.
+    #[test]
+    fn highlights_keys_separators_values_comments_escapes() {
+        let text = "# Grüße\nkey = a\\tb\nmulti: one \\\n  two\nname value\nü\\u00FC=x\n";
+        let spans = highlight(text);
+        let spans: Vec<(String, &str)> = spans
+            .iter()
+            .map(|s| {
+                let t: String = text.chars().skip(s.start).take(s.end - s.start).collect();
+                (t, s.kind.as_str())
+            })
+            .collect();
+        let want: Vec<(String, &str)> = [
+            ("# Grüße", "comment"),
+            ("key", "keyword"),
+            ("=", "operator"),
+            ("a", "string"),
+            ("\\t", "string.escape"),
+            ("b", "string"),
+            ("multi", "keyword"),
+            (":", "operator"),
+            ("one ", "string"),
+            ("\\", "string.escape"),
+            ("two", "string"),
+            ("name", "keyword"),
+            ("value", "string"),
+            ("ü", "keyword"),
+            ("\\u00FC", "string.escape"),
+            ("=", "operator"),
+            ("x", "string"),
+        ]
+        .into_iter()
+        .map(|(t, k)| (t.to_owned(), k))
+        .collect();
+        assert_eq!(spans, want);
+    }
 
     #[test]
     fn parses_keys_values_continuations_and_escapes() {
@@ -450,7 +664,7 @@ mod tests {
         assert_eq!(
             kv,
             [
-                ("app.name", "IDECraft", 2),
+                ("app.name", "IDECraft", 2), // the escaped text above spells it; rebrand:keep
                 ("key with:colon", "value", 3),
                 ("multi", "one, two", 4),
                 ("empty", "", 6),
@@ -477,7 +691,7 @@ mod tests {
             Some(("Messages".into(), String::new()))
         );
         assert_eq!(bundle_name(Path::new("Messages.txt")), None);
-        let dir = std::env::temp_dir().join(format!("idecraft-bundle-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-bundle-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let base = dir.join("Messages.properties");
@@ -502,6 +716,74 @@ mod tests {
                 .contains("default, fr")
         );
         assert!(missing_in_bundle(&dir.join("Other.properties"), "x=1\n").is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// SPEC-0163 v3 behaviour 3 (OBS-0117 G3, IMP-0534, IMP-0536): a key only one locale has
+    /// names the base file `default`; the fix adds the key with an empty value to each file that
+    /// lacks it, or says why it cannot.
+    #[test]
+    fn missing_key_names_default_and_is_added_or_refused() {
+        use std::path::Path;
+        let dir =
+            std::env::temp_dir().join(format!("ferris-idea-bundle-add-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let base = dir.join("messages.properties");
+        let de = dir.join("messages_de.properties");
+        let fr = dir.join("messages_fr.properties");
+        std::fs::write(&base, "hello=Hello\n").unwrap();
+        std::fs::write(&de, "hello=Hallo").unwrap();
+        std::fs::write(&fr, "hello=Salut\nextra.only.fr=Seulement\n").unwrap();
+        let text = std::fs::read_to_string(&fr).unwrap();
+        let issues = missing_in_bundle(&fr, &text);
+        assert_eq!(issues.len(), 1);
+        assert_eq!(
+            issues[0].message,
+            "`extra.only.fr` is missing in the bundle's default, de"
+        );
+        assert_eq!(
+            issues[0].missing,
+            Some((
+                "extra.only.fr".to_owned(),
+                vec!["default".to_owned(), "de".to_owned()]
+            ))
+        );
+        let read = |p: &Path| std::fs::read_to_string(p).ok();
+        let changes = add_missing_key(&fr, "extra.only.fr", read).unwrap();
+        let names: Vec<String> = changes
+            .iter()
+            .map(|(p, _, _)| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, ["messages.properties", "messages_de.properties"]);
+        assert_eq!(changes[0].2, "hello=Hello\nextra.only.fr=\n");
+        // A file without a final line break gets one before the new key.
+        assert_eq!(changes[1].2, "hello=Hallo\nextra.only.fr=\n");
+        for (p, _, after) in &changes {
+            std::fs::write(p, after).unwrap();
+        }
+        assert_eq!(
+            add_missing_key(&fr, "extra.only.fr", read).unwrap_err(),
+            "`extra.only.fr` is in every file of the bundle already"
+        );
+        assert_eq!(
+            add_missing_key(&fr, "hello", |p: &Path| (p != de).then(String::new)).unwrap_err(),
+            "messages_de.properties cannot be read"
+        );
+        let lone = dir.join("settings.properties");
+        assert!(
+            add_missing_key(&lone, "x", read)
+                .unwrap_err()
+                .contains("no other file")
+        );
+        // IMP-0535: only translations in English are spell-checked.
+        assert!(values_in_english(&base));
+        assert!(!values_in_english(&de) && !values_in_english(&fr));
+        assert!(!values_in_english(&lone), "a lone file holds settings");
+        std::fs::write(dir.join("messages_en_GB.properties"), "hello=Hello\n").unwrap();
+        assert!(values_in_english(&dir.join("messages_en_GB.properties")));
+        assert_eq!(locale_label(""), "default");
+        assert_eq!(locale_label("de_AT"), "de_AT");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -561,7 +843,8 @@ mod tests {
     #[test]
     fn bundle_editor_model() {
         use std::path::Path;
-        let dir = std::env::temp_dir().join(format!("idecraft-bundle-edit-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("ferris-idea-bundle-edit-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let base = dir.join("messages.properties");

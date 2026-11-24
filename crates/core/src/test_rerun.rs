@@ -238,6 +238,7 @@ mod tests {
             timeout: None,
             url: None,
             verbatim: false,
+            http: None,
             folder: None,
             allow_multiple: false,
             before_launch: Vec::new(),
@@ -298,7 +299,7 @@ mod tests {
             "-m",
             "pytest",
             "tests/test_prices.py",
-            "--junitxml=.idecraft/pytest.xml",
+            "--junitxml=.ferris-idea/pytest.xml",
         ]);
         let again = rerun_failed(&c, &r).unwrap();
         assert_eq!(
@@ -307,7 +308,7 @@ mod tests {
                 "python3",
                 "-m",
                 "pytest",
-                "--junitxml=.idecraft/pytest.xml",
+                "--junitxml=.ferris-idea/pytest.xml",
                 "tests/test_prices.py::test_fails_on_purpose",
                 "tests/test_prices.py::TestCart::test_empty",
             ]

@@ -1,13 +1,14 @@
 # SPEC-0060: Themes and editor colour schemes
 
-- **Version:** 13 · **Date:** 2026-11-17 (v13: `Islands Light` next to the reference, OBS-0079 L1
+- **Version:** 14 · **Date:** 2026-11-18 (v14: a system without any font draws the window in the
+  bundled JetBrains Mono instead of stopping, behaviour 7, AK-20); 2026-11-17 (v13: `Islands Light` next to the reference, OBS-0079 L1
   and L2: an own editor scheme `Islands Light` over `Light` draws function and method
   declarations like plain text, static calls stay italic and are pinned by a window test; the
   parameter name hints' pill in SPEC-0291 v9 and the selected tab's focus colours in SPEC-0061 v19;
   behaviour 19, AK-19; v12: `themes` follows Sync with OS — names it with the
   preferred themes, switches it, a theme chosen while it is on becomes the preferred theme of its
   kind; behaviour 18, AK-18 — headless check of F-085, OBS-0077); 2026-11-14 (v2: editor font; v3: icons and hover; v4: Islands Dark default;
-  v5: switching themes at run time; v6: IDECraft brand themes as default, app icon at run time;
+  v5: switching themes at run time; v6: Ferris IDEA brand themes as default, app icon at run time;
   v7: ⌃` on layouts without a plain backquote, icon of a selected tool window button; hand tests 28, 35;
   v8: coloured icons keep their colours, OBS-0019 item 5; v9: the light root scheme counts last,
   OBS-0023 L24; v10: a colour a theme lacks or spells wrongly falls back for its key alone with a
@@ -19,7 +20,7 @@
   `expUI_light.theme.json`, editor schemes `expUI_darkScheme.xml` and `expUI_lightScheme.xml`, base schemes in
   `DefaultColorSchemesManager.xml`, bundled unchanged as assets; fallback keys of
   `DefaultLanguageHighlighterColors` and the lookup order of `AbstractColorsScheme`/`EditorColorsSchemeImpl`
-  as logic templates), ADR-0009; v6: GEN (IDECraft brand identity v1.1.5, `docs/design/DESIGN_SYSTEM.md`
+  as logic templates), ADR-0009; v6: GEN (Ferris IDEA brand identity v1.1.5, `docs/design/DESIGN_SYSTEM.md`
   tokens on the Nord palette, MIT; WCAG 2.2 contrast formula), STD (Apple ICNS, freedesktop
   `StartupWMClass`), ADR-0018; v11: OBS-0047, OSS (`JetBrains/intellij-community` master of
   2026-11-14: `ManyIslandsDark.theme.json`, unchanged since the bundled `750ce16` in the keys below and
@@ -27,7 +28,7 @@
   `IslandsGradientPainter.kt` (which keys paint the frame and the gaps between islands),
   `RenderingUtil.java` and `JBUI.java` (`CurrentTheme.Tree.Selection`: when a selection counts as
   focused); no code taken); v13: OBS-0079 (L1: the reference draws method declarations in
-  `Islands Light` black like plain text, IDECraft teal; L2: static calls italic in the reference),
+  `Islands Light` black like plain text, Ferris IDEA teal; L2: static calls italic in the reference),
   OSS (`JetBrains/intellij-community` release tag `idea/262.11879.100`, the reference's build:
   `ManyIslandsLight.theme.json` names the editor scheme `Light`, and `expUI_lightScheme.xml` gives
   `DEFAULT_FUNCTION_DECLARATION` `00627A`, `STATIC_METHOD_ATTRIBUTES` italic without a colour; both
@@ -72,6 +73,11 @@ from the reference's own open theme files instead of hand-picked values.
 7. **Editor font:** JetBrains Mono 2.304 (SIL OFL 1.1, unchanged, licence shipped) is bundled and
    registered at start-up; the editor draws it at 13 px with line spacing 1.2 (16 px lines), the
    reference's defaults. If registration fails, a system monospace font is used. [OSS, GEN]
+   **(v14)** The bundled font is also the last resort for all text: when neither the font a view
+   asks for (the system UI font) nor any of the toolkit's fallback fonts can be found — a Linux
+   system without a fontconfig configuration offers none — the text is drawn in JetBrains Mono
+   instead of the window stopping with "failed to resolve font" (found by the Linux package smoke
+   test, 2026-11-18). Where a system font is found, nothing changes. [GEN]
 8. **Icons:** New UI icons of open areas are bundled unchanged in light and dark variants (folder,
    chevrons, close, file types). The tree shows chevrons, folder and file-type icons in rows of
    `Tree.rowHeight` (24 px); tabs show the file-type icon and a small close icon. File types whose icons
@@ -79,7 +85,7 @@ from the reference's own open theme files instead of hand-picked values.
    SVGs are rasterised at twice their size so they stay sharp on 2× displays. [OSS]
    (v8) Coloured icons keep the colours of their files: the toolkit's SVG images come out with red and
    blue swapped (its raster images are converted to the screen's byte order, SVG images are not), so
-   IDECraft swaps red and blue in the icon's colours before rasterising; the amber warning, red
+   Ferris IDEA swaps red and blue in the icon's colours before rasterising; the amber warning, red
    error and blue information icons look as in the reference (OBS-0019 item 5). [OBS, GEN]
 9. **Hover:** tree rows under the pointer get `Tree.hoverBackground` (else `*.hoverBackground`); tabs
    that are not selected are drawn with `EditorTabs.unselectedAlpha` and fully opaque under the pointer;
@@ -90,7 +96,7 @@ from the reference's own open theme files instead of hand-picked values.
     chosen one marked; Up/Down/Enter, a click or the row's digit chooses, Escape closes. Choosing
     redraws every window with the theme and its editor scheme, icons in the theme's variant, and
     saves the name to `theme` in the user's settings folder; the next start uses it, an unknown name
-    gives the default (v5: `Islands Dark`; v6: `IDECraft Dark`, behaviour 12). The MCP tool `themes` lists the themes and the choice and with `set` saves a
+    gives the default (v5: `Islands Dark`; v6: `Ferris IDEA Dark`, behaviour 12). The MCP tool `themes` lists the themes and the choice and with `set` saves a
     choice (ADR-0008); a running window picks it up when it is chosen there or at its next start.
     [GEN, ADR-0008]
     (v7) On keyboard layouts that cannot type `` ` `` without a dead key or ⌥ (German, Austrian,
@@ -100,15 +106,15 @@ from the reference's own open theme files instead of hand-picked values.
     (v7) The icon of a selected tool window button uses the icon variant that contrasts with the
     button's selected background (light strokes on the blue of the light themes). [GEN]
 
-11. **Brand themes (v6, ADR-0018):** two own themes are bundled, `IDECraft Dark` (parent theme
-    `Islands Dark`, editor scheme `IDECraft Dark` with parent scheme `Islands Dark`) and
-    `IDECraft Light` (parent theme `Islands Light`, editor scheme `IDECraft Light` with parent
+11. **Brand themes (v6, ADR-0018):** two own themes are bundled, `Ferris IDEA Dark` (parent theme
+    `Islands Dark`, editor scheme `Ferris IDEA Dark` with parent scheme `Islands Dark`) and
+    `Ferris IDEA Light` (parent theme `Islands Light`, editor scheme `Ferris IDEA Light` with parent
     scheme `Light`). They override colours only — the semantic palette names of their parents
     (`layer-*`, `text-*`, `accent-*`, `selection-*`, `tab-*`, `toolbar-*`, …) and a few editor keys
     (`TEXT`, caret row, selection, line numbers, syntax keys, error and warning effects) — so every
     size, inset, arc and metric is the parent's. Colours come from the brand tokens:
 
-    | Use | `IDECraft Dark` | `IDECraft Light` |
+    | Use | `Ferris IDEA Dark` | `Ferris IDEA Light` |
     |---|---|---|
     | Islands, editor, tool windows, dialogs | `background-primary` `#2E3440` | `background-light` `#ECEFF4` |
     | Window behind the islands | `background-secondary` `#3B4252` | `border-default-light` `#D8DEE9` |
@@ -126,11 +132,11 @@ from the reference's own open theme files instead of hand-picked values.
     functions Frost `#88C0D0`/`#3B6E7E`, types `#8FBCBB`/`#2F6B69`, numbers and constants purple,
     comments grey), each lightened or darkened until it reaches 4.5 : 1 on the editor background.
     [GEN, ADR-0018]
-12. **Default and kept choices (v6):** the popup and Settings › Appearance list `IDECraft Dark`,
-    `IDECraft Light`, `Islands Dark`, `Islands Light`, `Dark`, `Light` in this order. Without a
-    saved `theme` file, or with a name that is not bundled, the views draw with `IDECraft Dark`; a
+12. **Default and kept choices (v6):** the popup and Settings › Appearance list `Ferris IDEA Dark`,
+    `Ferris IDEA Light`, `Islands Dark`, `Islands Light`, `Dark`, `Light` in this order. Without a
+    saved `theme` file, or with a name that is not bundled, the views draw with `Ferris IDEA Dark`; a
     saved name is always used, so a user who chose `Islands Dark` keeps it. With Sync with OS
-    (SPEC-0131) the defaults are `IDECraft Dark` and `IDECraft Light`; saved names are kept. The
+    (SPEC-0131) the defaults are `Ferris IDEA Dark` and `Ferris IDEA Light`; saved names are kept. The
     MCP tool `themes` lists every theme with `dark` and `brand`, the `chosen` one and the
     `default`, and `set` accepts any of the six names in any case. [GEN, ADR-0008]
 13. **Accent in the views (v6):** the project avatar (initials square in the toolbar and in the
@@ -139,11 +145,11 @@ from the reference's own open theme files instead of hand-picked values.
     and `Button.default.foreground`; a focused or switched-on field border uses `*.focusColor`;
     error and success text use `Label.errorForeground` and `Label.successForeground`. No view
     draws a fixed IntelliJ blue, red or green any more. [GEN]
-14. **App icon at run time (v6):** the binary embeds `packaging/icons/macos/IDECraft.icns` (brand
+14. **App icon at run time (v6):** the binary embeds `packaging/icons/macos/FerrisIDEA.icns` (brand
     package v1.1.5) and, on macOS, sets it as the application icon right after start-up, so a
-    bare `idecraft ui` shows the brand icon in the Dock and the app switcher. The embedded
-    `Info.plist` names `IDECraft` as `CFBundleIconFile` for an app bundle. On Linux every window
-    has the application id `idecraft`, the `StartupWMClass` of `idecraft.desktop`, so a desktop
+    bare `ferris-idea ui` shows the brand icon in the Dock and the app switcher. The embedded
+    `Info.plist` names `Ferris IDEA` as `CFBundleIconFile` for an app bundle. On Linux every window
+    has the application id `ferris-idea`, the `StartupWMClass` of `ferris-idea.desktop`, so a desktop
     with the installed icon shows it; GPUI 0.2 offers no window icon call. Windows has no desktop
     UI yet. [STD, ADR-0018]
 
@@ -163,7 +169,7 @@ from the reference's own open theme files instead of hand-picked values.
     - Each such case is a note naming the theme or scheme, the key, the bad value and what is
       used instead. The first time a theme is shown in a run of the application its notes go to
       the error output and, one line each with the time in front, to `theme.log` in the log folder
-      (`~/Library/Logs/IDECraft` on macOS). Malformed JSON or XML and an unknown parent scheme stay
+      (`~/Library/Logs/FerrisIDEA` on macOS). Malformed JSON or XML and an unknown parent scheme stay
       errors (AK-4); they can only occur in a bundled file and are caught by the unit tests.
     - The bundled files have no malformed value. The reference's classic `Dark` and `Light` do not
       set `Label.successForeground`; that is their one note each. [GEN]
@@ -206,14 +212,14 @@ from the reference's own open theme files instead of hand-picked values.
       toolbar, the stripes, the status bar and the gaps between islands with `MainWindow.background`;
       the variant with lighter tool windows (`alt.*` keys, `alt.ToolWindow.background` = `gray-20` on
       a `gray-40` frame) applies only with the reference's option for a different tool window
-      background, which is off in OBS-0047 and which IDECraft does not offer. IDECraft drew exactly
+      background, which is off in OBS-0047 and which Ferris IDEA does not offer. Ferris IDEA drew exactly
       these values before v11 and keeps them; the coordinator's re-check of OBS-0047 at full
       resolution (2026-11-14, 14:22) found frame, stripes and islands dark in both windows. The one
-      difference was the main toolbar: IDECraft tinted it with the bright accent, the reference with
+      difference was the main toolbar: Ferris IDEA tinted it with the bright accent, the reference with
       the theme's muted project colour; that is SPEC-0061 v14 behaviour 28a.
     - **Selected rows (T6):** as in the reference, a selection counts as focused only while its own
       tree or list has the keyboard focus. The Project tree draws `#2A4371` then and `#33353B`
-      otherwise (OBS-0007 item 6). The grey row OBS-0047 saw in IDECraft is what this rule gives
+      otherwise (OBS-0007 item 6). The grey row OBS-0047 saw in Ferris IDEA is what this rule gives
       while the tree has no focus; where the focus was in either window is not recorded, so the
       comparison is repeated with the focus in the tree in both (PO-STATUS question 39). Most other
       trees and lists draw the focused colour whatever has the focus (unchanged in v11; the
@@ -222,16 +228,16 @@ from the reference's own open theme files instead of hand-picked values.
       italic), `DEFAULT_INSTANCE_FIELD` (`#C77DBB`) and `DEFAULT_STATIC_FIELD` (`#C77DBB`, italic)
       reach the editor through the syntax roles of SPEC-0027 v10 and the server's tokens of SPEC-0290.
       The brand schemes define `DEFAULT_STATIC_FIELD` themselves (their field colour, italic) instead
-      of inheriting the purple of `Islands Dark`, so `IDECraft Dark` and `IDECraft Light` show static
+      of inheriting the purple of `Islands Dark`, so `Ferris IDEA Dark` and `Ferris IDEA Light` show static
       fields in their own field colour. [GEN]
-    - The other themes are not changed: `IDECraft Dark` (`#3B4252` around `#2E3440`, selection
-      `#3E5871`), `IDECraft Light`, `Islands Light`, `Dark` and `Light` keep their frame, island and
+    - The other themes are not changed: `Ferris IDEA Dark` (`#3B4252` around `#2E3440`, selection
+      `#3E5871`), `Ferris IDEA Light`, `Islands Light`, `Dark` and `Light` keep their frame, island and
       selection colours; the same test pins them.
 
 18. **`themes` and Sync with OS (v12):** the MCP tool answers like the window does with Sync
     with OS (SPEC-0131 behaviours 2, 3 and 3a). It returns `sync_with_os`, the preferred
     `dark_theme` and `light_theme` (a name that is no bundled theme gives the default of its kind,
-    `IDECraft Dark` or `IDECraft Light`) and `shown`, the theme the windows draw, which it names only
+    `Ferris IDEA Dark` or `Ferris IDEA Light`) and `shown`, the theme the windows draw, which it names only
     while Sync with OS is off (the system's appearance decides otherwise). `sync_with_os: true|false`
     switches it, before a `set` of the same call. While it is on, `set` makes the theme the
     preferred theme of its kind, as the theme popup does, and leaves `chosen` (the theme chosen
@@ -243,7 +249,7 @@ from the reference's own open theme files instead of hand-picked values.
 
 19. **`Islands Light` next to the reference (v13, OBS-0079 L1, L2):**
     - **Method declarations (L1):** the theme draws its editors with an own scheme `Islands Light`
-      (`crates/ui/themes/IslandsLightScheme.xml`, IDECraft's file) whose parent is the open `Light`.
+      (`crates/ui/themes/IslandsLightScheme.xml`, Ferris IDEA's file) whose parent is the open `Light`.
       It sets one key: `DEFAULT_FUNCTION_DECLARATION` without colour or font style, so the name of
       a method where it is declared (`totalCents`, `totalValue`, `main`) has the text colour
       `#080808`, upright, as in the reference. The Java and Kotlin key of the server's tokens
@@ -251,7 +257,7 @@ from the reference's own open theme files instead of hand-picked values.
       `function.method`, Kotlin's `function`, Python's `PY.FUNC_DEFINITION`) fall back to it, so a
       name keeps its colour when the tokens arrive (SPEC-0290 v3). Every other key, colour and
       attribute is `Light`'s; calls were already drawn in the text colour there. The open files give
-      `00627A` (teal) through `DEFAULT_FUNCTION_DECLARATION`, which IDECraft drew until v13; the
+      `00627A` (teal) through `DEFAULT_FUNCTION_DECLARATION`, which Ferris IDEA drew until v13; the
       reference draws the declarations black although its build names the same scheme file, for a
       reason the open sources do not show. Declarations in languages other than Java were not
       compared; they follow the same key.
@@ -262,7 +268,7 @@ from the reference's own open theme files instead of hand-picked values.
       `Inventory.java` with the server's tokens and hints, so a gap between key and painted font
       shows. `Islands Dark` makes the same key italic through `Darcula` (unchanged; OBS-0047 and
       OBS-0049 compared no static calls). Static fields stay italic in both.
-    - **Other themes:** `Light`, `IDECraft Light` (over `Light`) and the dark themes keep their
+    - **Other themes:** `Light`, `Ferris IDEA Light` (over `Light`) and the dark themes keep their
       declaration colours. The Appearance page still offers the five schemes of SPEC-0337
       behaviour 4; `Light` chosen over `Islands Light` is now a scheme apart from the theme's own
       (teal declarations), no longer the same one. [OBS, OSS, GEN]
@@ -277,23 +283,23 @@ text; the 16 terminal colours; the four problem marks on the editor and on islan
 
 | Theme | Pairs below the limit |
 |---|---|
-| `IDECraft Dark` | none (v10: the tooltip's shortcut text was 4.17 and is `#B8C1D0` now) |
-| `IDECraft Light` | none |
+| `Ferris IDEA Dark` | none (v10: the tooltip's shortcut text was 4.17 and is `#B8C1D0` now) |
+| `Ferris IDEA Light` | none |
 | `Islands Dark` | editor text on a changed diff row 4.18; comments 4.27; doc comments 4.06 |
 | `Islands Light` | comments and doc comments 3.36; annotations 3.51 |
 | `Dark` | text on the accent 4.28; tooltip shortcut 4.28; editor text on a changed diff row 4.18; comments 4.04; doc comments 3.84 |
 | `Light` | text on the accent 4.28; comments and doc comments 3.36; annotations 3.51 |
 
-The limit binds the brand themes, which are IDECraft's own. The four themes of the reference are
+The limit binds the brand themes, which are Ferris IDEA's own. The four themes of the reference are
 bundled unchanged (behaviour 1), so the pairs their files leave below the limit stay and are
 listed; the test fails when one gets worse or a new one appears. Before v10 the terminal colours
 were below the limit in every theme (black on the dark backgrounds 1.2 to 1.7, bright black 1.8 to
-2.5, bright yellow and bright white on the light ones 1.4 to 1.7; in `IDECraft Dark` ten of
+2.5, bright yellow and bright white on the light ones 1.4 to 1.7; in `Ferris IDEA Dark` ten of
 sixteen).
 
 **Contrast of the brand themes' own colours (WCAG 2.2, checked 2026-11-04 by `theme::tests::brand_text_meets_wcag_aa`, AA = 4.5 : 1):**
 
-| Pair | `IDECraft Dark` | `IDECraft Light` |
+| Pair | `Ferris IDEA Dark` | `Ferris IDEA Light` |
 |---|---|---|
 | UI text on islands / window / popups | 9.25 / 7.45 / 7.45 | 10.84 / 9.25 / 10.84 |
 | Muted text on islands / window / popups | 6.04 / 4.87 / 4.87 | 6.40 / 5.46 / 6.40 |
@@ -332,22 +338,22 @@ error text on the dark window background (3.97, used on islands only).
   theme is a hand test (round 4).
 - **AK-10 (v6)** Every bundled theme defines the editor colours and text attributes the views read,
   the brand themes every UI colour too; the brand themes take the brand tokens and inherit the
-  Islands sizes and insets; their scheme chains are `IDECraft Dark` → `Islands Dark` → `Darcula`
-  → `Default` and `IDECraft Light` → `Light` → `Default` (unit tests). The text pairs of behaviour
+  Islands sizes and insets; their scheme chains are `Ferris IDEA Dark` → `Islands Dark` → `Darcula`
+  → `Default` and `Ferris IDEA Light` → `Light` → `Default` (unit tests). The text pairs of behaviour
   11 reach 4.5 : 1 (unit test).
-- **AK-11 (v6)** Without a saved choice the default is `IDECraft Dark`, a saved name of any bundled
-  theme is kept, an unknown one gives the default (unit tests in `idecraft-ui`, `idecraft-core`
-  and `idecraft-workbench`); `themes` reports `IDECraft Dark` as chosen and default for a new
+- **AK-11 (v6)** Without a saved choice the default is `Ferris IDEA Dark`, a saved name of any bundled
+  theme is kept, an unknown one gives the default (unit tests in `ferris-idea-ui`, `ferris-idea-core`
+  and `ferris-idea-workbench`); `themes` reports `Ferris IDEA Dark` as chosen and default for a new
   install, lists six themes and keeps `Islands Dark` once set (protocol and functional test); the
-  window self-test opens the popup with `IDECraft Dark` marked, switches to `Light`, to `Islands
+  window self-test opens the popup with `Ferris IDEA Dark` marked, switches to `Light`, to `Islands
   Dark` and back.
 - **AK-12 (v6)** The palette's accent, accent text, link, focus, error and success colours come from
   the theme (unit test); the views listed in behaviour 13 use them.
 - **AK-13 (v6)** The ICNS bytes are embedded and well-formed, the scalable icon is embedded, and the
-  application id matches `idecraft.desktop` (unit test); the Dock icon of a bare binary and the
+  application id matches `ferris-idea.desktop` (unit test); the Dock icon of a bare binary and the
   theme switch are checked by hand (hand test 192).
 - **AK-5** The views' palette comes from the bundled files (unit test), and typing latency stays below
-  16 ms p95 with styled runs (`idecraft spike-editor`).
+  16 ms p95 with styled runs (`ferris-idea spike-editor`).
 - **AK-14 (v10)** A theme and a scheme with malformed colours keep the parent's value for each such
   key, use everything else and note each case; an empty scheme value still means none; the bundled
   files give no note (`theme::tests::a_malformed_colour_falls_back_per_key`). A light theme that
@@ -380,7 +386,7 @@ error text on the dark window background (3.97, used on islands only).
   tree selection with the focus in the tree is open (PO-STATUS question 39).
 
 - **AK-18 (v12, behaviour 18)** MCP protocol test `themes_follow_sync_with_os`: a new install lists
-  Sync with OS off, the brand themes as preferred and `shown` `IDECraft Dark`; `set` without
+  Sync with OS off, the brand themes as preferred and `shown` `Ferris IDEA Dark`; `set` without
   syncing is `saved_as` `theme`; switched on with `set` `islands dark` in one call it is
   `dark_theme`, `chosen` stays `Light` and `shown` is null; `islands light` goes to `light_theme`;
   both are in the settings file; a preferred name that is no theme reads as the default of its
@@ -397,6 +403,9 @@ error text on the dark window background (3.97, used on islands only).
   `crates/workbench/tests/islands_light_editor.rs`: with jdtls's tokens of `Inventory.java` the line
   of `main`'s call paints exactly `out`, `totalValue` and `of` in italics and the declaration line
   none. Side by side with the reference: open (coordinator's window check of OBS-0079).
+- **AK-20 (v14, behaviour 7)** Linux test `font_last_resort` (workbench, its own test binary): with
+  `FONTCONFIG_FILE` pointing to an empty configuration the toolkit finds no system font; after the
+  bundled fonts are registered the system UI font resolves to JetBrains Mono, without a panic.
 
 ## Out of scope
 Brand typography (Inter) in the application, a brand splash or about screen, a window icon on
@@ -409,16 +418,16 @@ reference on macOS), Jewel metrics.
 ## Known deviations from the reference
 `baseAttributes` names are followed directly; the reference follows the key's code fallback, which for
 the bundled keys names the same attribute. Not compared side by side in screenshots yet.
-The default theme is IDECraft's own (`IDECraft Dark`), not the reference's `Islands Dark`
+The default theme is Ferris IDEA's own (`Ferris IDEA Dark`), not the reference's `Islands Dark`
 (ADR-0018): colours differ by design, layout and sizes do not; side-by-side colour comparisons use
-`Islands Dark`. The reference's primary buttons are filled with its accent; IDECraft's were drawn
+`Islands Dark`. The reference's primary buttons are filled with its accent; Ferris IDEA's were drawn
 with the selection colour until v6 and now use the accent too.
-In the reference ⌃` does nothing on a German keyboard (project owner, 2026-11-05); IDECraft reaches it
+In the reference ⌃` does nothing on a German keyboard (project owner, 2026-11-05); Ferris IDEA reaches it
 there (IMP-0283).
 (v10, IMP-0402) The open schemes' terminal colours are drawn unchanged only where they read on the
 terminal's background; the others are moved towards the text colour (behaviour 16). Status text
 and problem marks are adjusted the same way. How the reference draws these colours was not
 compared; the contrast figures are computed from the open scheme files.
 Quick Switch Scheme opens the theme list directly instead of the reference's first-level menu of
-scheme kinds, since themes are the only scheme IDECraft switches; the change applies without the
+scheme kinds, since themes are the only scheme Ferris IDEA switches; the change applies without the
 reference's restart prompts for some theme changes.

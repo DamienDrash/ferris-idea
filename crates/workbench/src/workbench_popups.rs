@@ -119,7 +119,7 @@ impl WorkbenchView {
                 // The name popup after an extraction closed without a new name (SPEC-0095 v5
                 // behaviour 8a): the prompt in the status line no longer holds.
                 if let Some(name) = self.extract_name_prompt.take() {
-                    self.status = Some(idecraft_languages::actions::kept_name_message(&name));
+                    self.status = Some(ferris_idea_languages::actions::kept_name_message(&name));
                 }
             }
             Popup::Everywhere => self.show_everywhere = false,

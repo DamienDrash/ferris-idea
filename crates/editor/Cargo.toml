@@ -1,5 +1,5 @@
 [package]
-name = "idecraft-editor"
+name = "ferris-idea-editor"
 description = "Text buffer, edit history and cursor model"
 version.workspace = true
 edition.workspace = true

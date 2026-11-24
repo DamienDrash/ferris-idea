@@ -62,6 +62,13 @@ impl NavHistory {
     }
 }
 
+/// Whether opening `target` from the Project tree or Recent Files is a jump that records the
+/// caret's place (`SPEC-0071` v13 behaviour 4a): only when an editor is active and shows another
+/// file.
+pub fn opening_is_a_jump(active: Option<&Path>, target: &Path) -> bool {
+    active.is_some_and(|a| a != target)
+}
+
 /// Whether `c` belongs to a name in the languages the servers serve.
 fn name_char(c: char) -> bool {
     c.is_alphanumeric() || c == '_' || c == '$'
@@ -319,5 +326,34 @@ mod tests {
         assert_eq!(h.forward(at("x.rs", 0)), None, "a new jump clears Forward");
         h.forget(Path::new("b.rs"));
         assert_eq!(h.back(at("x.rs", 0)), Some(at("a.rs", 1)));
+    }
+
+    /// SPEC-0071 AK-15 (v13, behaviour 4a): opening another file records the place left; Back
+    /// returns there and Forward to the opened file at its caret.
+    #[test]
+    fn opening_another_file_is_a_jump() {
+        let main = Path::new("/p/Main.java");
+        let inventory = Path::new("/p/Inventory.java");
+        assert!(opening_is_a_jump(Some(main), inventory));
+        assert!(
+            !opening_is_a_jump(Some(main), main),
+            "the active file again"
+        );
+        assert!(!opening_is_a_jump(None, inventory), "no active editor");
+
+        let mut h = NavHistory::default();
+        let left = Place {
+            path: main.to_path_buf(),
+            line: 0,
+            column: 0,
+        };
+        h.jumped(left.clone());
+        let opened = Place {
+            path: inventory.to_path_buf(),
+            line: 3,
+            column: 4,
+        };
+        assert_eq!(h.back(opened.clone()), Some(left.clone()));
+        assert_eq!(h.forward(left), Some(opened));
     }
 }

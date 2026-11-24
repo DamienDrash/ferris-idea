@@ -15,12 +15,12 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use gpui::{AnyWindowHandle, App, AppContext, Context, Global, Window, div, prelude::*, px};
-use idecraft_core::file_ops::DeletePlan;
-use idecraft_remote::{
+use ferris_idea_core::file_ops::DeletePlan;
+use ferris_idea_remote::{
     ConnState, DocState, DocSync, Follow, LiveProject, Restored, Synced, Timing,
 };
-use idecraft_session::{ErrorCode, RecoveryCopy, RpcError};
+use ferris_idea_session::{ErrorCode, RecoveryCopy, RpcError};
+use gpui::{AnyWindowHandle, App, AppContext, Context, Global, Window, div, prelude::*, px};
 use serde_json::{Value, json};
 
 use super::{WorkbenchView, c, status_widget};
@@ -38,7 +38,7 @@ impl Global for RemoteStateDir {}
 pub fn state_dir(cx: &App) -> Option<PathBuf> {
     match cx.try_global::<RemoteStateDir>() {
         Some(d) => Some(d.0.clone()),
-        None => idecraft_core::user_config_dir().map(|d| d.join("remote")),
+        None => ferris_idea_core::user_config_dir().map(|d| d.join("remote")),
     }
 }
 
@@ -49,12 +49,12 @@ pub fn recovery_dir(base: &Path) -> PathBuf {
 
 /// The recent remote projects (behaviour 1, SEC-10: host and folder only, 0600).
 pub fn recent_file(base: &Path) -> PathBuf {
-    idecraft_remote::recent_remote_file(base)
+    ferris_idea_remote::recent_remote_file(base)
 }
 
 /// The folder of this machine that stands for `folder` on `host` in the window.
 pub fn stand_in(base: &Path, host: &str, folder: &str) -> PathBuf {
-    let key = idecraft_session::ot::str_hash(&format!("{host}\n{folder}"));
+    let key = ferris_idea_session::ot::str_hash(&format!("{host}\n{folder}"));
     base.join("projects").join(key).join(folder_name(folder))
 }
 
@@ -139,17 +139,19 @@ pub(super) struct RemoteWindow {
     /// than the change that made the tree ask, so they are listed once more.
     listing_again: HashSet<PathBuf>,
     shown_generation: u64,
+    /// The project room as the window shows it (`SPEC-0323` v5).
+    pub(super) room: super::room::RoomState,
 }
 
 impl Drop for RemoteWindow {
     fn drop(&mut self) {
         // A window that goes without closing its project still ends the session; recovery copies
         // of unsaved text stay (behaviour 11, 13).
-        idecraft_remote::ports::close_all(&self.live.host(), &self.live.folder());
+        ferris_idea_remote::ports::close_all(&self.live.host(), &self.live.folder());
         if self.live.state() != ConnState::Closed {
             let live = self.live.clone();
             std::thread::spawn(move || {
-                let _ = live.close(idecraft_remote::Unsaved::Discard);
+                let _ = live.close(ferris_idea_remote::Unsaved::Discard);
             });
         }
     }
@@ -170,12 +172,10 @@ pub fn open_live_window(live: LiveProject, cx: &mut App) -> Result<AnyWindowHand
     }
     let base = state_dir(cx).ok_or("no settings folder for remote projects")?;
     let root = stand_in(&base, &host, &folder);
-    #[cfg(unix)]
+    // Off Unix `private_dir` refuses (`SPEC-0321` v6 behaviour 8a).
     for dir in [base.clone(), root.clone()] {
-        idecraft_session::reattach::private_dir(&dir).map_err(|e| e.to_string())?;
+        ferris_idea_session::reattach::private_dir(&dir).map_err(|e| e.to_string())?;
     }
-    #[cfg(not(unix))]
-    std::fs::create_dir_all(&root).map_err(|e| e.to_string())?;
     let title = format!("{} — {host}", folder_name(&folder));
     let options = crate::project_windows::window_options(&title, cx);
     let shown = live.clone();
@@ -186,6 +186,8 @@ pub fn open_live_window(live: LiveProject, cx: &mut App) -> Result<AnyWindowHand
             window.set_window_title(&window_title);
             let bench =
                 cx.new(|cx| WorkbenchView::new_remote(shown.clone(), &root, window_title, cx));
+            let handle = window.window_handle();
+            bench.update(cx, |b, _| b.set_room_window(handle));
             window.focus(&bench.read(cx).start_focus(cx));
             crate::appearance::watch_os_appearance(window);
             let weak = bench.downgrade();
@@ -236,6 +238,7 @@ impl WorkbenchView {
             listing_again: HashSet::new(),
             shown_generation: u64::MAX,
             host: super::remote_host::HostState::default(),
+            room: super::room::RoomState::default(),
         });
         // Host terminals live with their session (`SPEC-0318` v2 detail 2): no saved tabs.
         b.terminals_restored = true;
@@ -315,7 +318,10 @@ impl WorkbenchView {
     }
 
     /// The role the project tree shows for the folder at `path` (tests; `SPEC-0049` v2).
-    pub fn tree_folder_info(&self, path: &Path) -> Option<idecraft_core::buildtools::FolderInfo> {
+    pub fn tree_folder_info(
+        &self,
+        path: &Path,
+    ) -> Option<ferris_idea_core::buildtools::FolderInfo> {
         self.tree.role_of(path).cloned()
     }
 
@@ -393,7 +399,7 @@ impl WorkbenchView {
     /// the Remote Host window chooses a host and a folder and lists the recent remote projects.
     pub fn open_remote_development(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let recent = state_dir(cx)
-            .map(|b| idecraft_remote::load_recent_remote(&recent_file(&b)))
+            .map(|b| ferris_idea_remote::load_recent_remote(&recent_file(&b)))
             .unwrap_or_default();
         let view = self.ensure_remote(window, cx);
         view.update(cx, |v, cx| v.set_project_mode(true, recent, cx));
@@ -416,14 +422,14 @@ impl WorkbenchView {
         done: impl FnOnce(Result<Value, String>, &mut App) + 'static,
         cx: &mut Context<Self>,
     ) {
-        if !idecraft_remote::bootstrap::absolute_folder(&folder) {
+        if !ferris_idea_remote::bootstrap::absolute_folder(&folder) {
             done(
                 Err("the folder must be an absolute path on the host".into()),
                 cx,
             );
             return;
         }
-        let spec = match idecraft_remote::HostSpec::parse(&host) {
+        let spec = match ferris_idea_remote::HostSpec::parse(&host) {
             Ok(s) => s,
             Err(e) => {
                 done(Err(e.to_string()), cx);
@@ -431,8 +437,8 @@ impl WorkbenchView {
             }
         };
         // A first pairing runs before anything opens; the code goes no further than this.
-        let code = idecraft_remote::HostSpec::pairing_code(&host);
-        if let (idecraft_remote::HostSpec::Paired { address }, Some(code)) = (&spec, code) {
+        let code = ferris_idea_remote::HostSpec::pairing_code(&host);
+        if let (ferris_idea_remote::HostSpec::Paired { address }, Some(code)) = (&spec, code) {
             let (address, label) = (address.clone(), spec.label());
             self.remote_pair_then(
                 address,
@@ -446,12 +452,7 @@ impl WorkbenchView {
             return;
         }
         let host = spec.label();
-        let found_as = match &spec {
-            idecraft_remote::HostSpec::Ssh(_) => self.remote_target(&host).host,
-            _ => host.clone(),
-        };
-        if let Some(open) = idecraft_remote::live::find(&found_as, &folder) {
-            let shown = open_live_window(open.clone(), cx).map(|_| open.describe());
+        if let Some(shown) = open_already(&spec, &folder, &self.remote_extra, cx) {
             done(shown, cx);
             return;
         }
@@ -467,58 +468,43 @@ impl WorkbenchView {
             );
             v.update(cx, |v, cx| v.show_busy(text, cx));
         }
-        let opts = idecraft_remote::ServeOptions {
-            backend_dir: self.remote_backend_dir.clone(),
-            ..idecraft_remote::ServeOptions::default()
-        };
-        let recovery = recovery_dir(&base);
-        let wanted = folder.clone();
-        let extra = self.remote_extra.clone();
-        let task = cx
-            .background_executor()
-            .spawn(async move { open_link(spec, &wanted, opts, recovery, &extra) });
-        cx.spawn(async move |this, cx| {
-            let opened = task.await;
-            let _ = this.update(cx, |this, cx| {
-                this.remote_opening = None;
-                let view = this.remote_view.clone();
-                let stopped = stop.load(Ordering::SeqCst);
-                match opened {
-                    Ok(p) if stopped => {
-                        // Whatever was started on the host ends (behaviour 3).
-                        std::thread::spawn(move || {
-                            let mut p = p;
-                            let _ = p.close(idecraft_remote::Unsaved::Discard);
-                        });
-                        done(Err("stopped".into()), cx);
-                    }
-                    Ok(p) => {
-                        let _ =
-                            idecraft_remote::remember_remote(&recent_file(&base), &host, &folder);
-                        let live = LiveProject::start(p, Timing::default());
-                        let shown = open_live_window(live.clone(), cx);
-                        if let Some(v) = &view {
-                            v.update(cx, |v, cx| v.clear_busy(cx));
+        let weak = cx.entity().downgrade();
+        let shown_folder = folder.clone();
+        start_remote_open(
+            spec,
+            folder,
+            base,
+            self.remote_extra.clone(),
+            self.remote_backend_dir.clone(),
+            stop,
+            move |result, cx| {
+                let _ = weak.update(cx, |this, cx| {
+                    this.remote_opening = None;
+                    let view = this.remote_view.clone();
+                    match &result {
+                        Ok(_) => {
+                            if let Some(v) = &view {
+                                v.update(cx, |v, cx| v.clear_busy(cx));
+                            }
+                            this.status = Some(format!(
+                                "Opened {shown_folder} on {host} as a remote project"
+                            ));
                         }
-                        this.status = Some(match &shown {
-                            Ok(_) => format!("Opened {folder} on {host} as a remote project"),
-                            Err(e) => format!("Cannot open the window: {e}"),
-                        });
-                        done(shown.map(|_| live.describe()), cx);
-                    }
-                    Err(e) => {
-                        let text = e.to_string();
-                        if let Some(v) = &view {
-                            let shown = text.clone();
-                            v.update(cx, |v, cx| v.show_error(shown, cx));
+                        // Escape already said so (behaviour 3).
+                        Err(e) if e == STOPPED => {}
+                        Err(e) => {
+                            if let Some(v) = &view {
+                                let shown = e.clone();
+                                v.update(cx, |v, cx| v.show_error(shown, cx));
+                            }
                         }
-                        done(Err(text), cx);
                     }
-                }
-                cx.notify();
-            });
-        })
-        .detach();
+                    cx.notify();
+                });
+                done(result, cx);
+            },
+            cx,
+        );
     }
 
     /// Pairs with the listener at `address` (`SPEC-0321` behaviour 17): the handshake in the
@@ -538,7 +524,7 @@ impl WorkbenchView {
         let target = address.clone();
         let task = cx
             .background_executor()
-            .spawn(async move { idecraft_remote::paired::begin_pairing(&target, &code) });
+            .spawn(async move { ferris_idea_remote::paired::begin_pairing(&target, &code) });
         cx.spawn(async move |this, cx| {
             let pending = match task.await {
                 Ok(p) => p,
@@ -579,7 +565,7 @@ impl WorkbenchView {
             let outcome = if confirmed {
                 cx.background_executor()
                     .spawn(async move {
-                        idecraft_remote::paired::finish_pairing(pending).map_err(|e| e.to_string())
+                        ferris_idea_remote::paired::finish_pairing(pending).map_err(|e| e.to_string())
                     })
                     .await
             } else {
@@ -961,6 +947,7 @@ impl WorkbenchView {
             self.remote_sync(&p, cx);
         }
         self.remote_host_tick(cx);
+        self.room_tick(cx);
         let Some(r) = self.remote_project.as_mut() else {
             return;
         };
@@ -1133,7 +1120,7 @@ impl WorkbenchView {
         let live = r.live.clone();
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
-            let _ = tx.send(live.close(idecraft_remote::Unsaved::Discard));
+            let _ = tx.send(live.close(ferris_idea_remote::Unsaved::Discard));
         });
         let _ = rx.recv_timeout(Duration::from_secs(2));
     }
@@ -1153,7 +1140,7 @@ impl WorkbenchView {
                 .id("remote-connection-widget")
                 .tip_text(
                     "remote-connection-widget",
-                    idecraft_ui::tooltip::Tip::plain(tip),
+                    ferris_idea_ui::tooltip::Tip::plain(tip),
                 )
                 .map(status_widget)
                 .on_click(cx.listener(|this, _, window, cx| this.remote_widget_menu(window, cx)))
@@ -1265,7 +1252,7 @@ impl WorkbenchView {
             .collect::<Vec<_>>()
             .join(", ");
         let title = format!(
-            "{n} file{} had unsaved changes when IDECraft last closed: {files}",
+            "{n} file{} had unsaved changes when Ferris IDEA last closed: {files}",
             if n == 1 { "" } else { "s" }
         );
         let items = vec![
@@ -1522,25 +1509,102 @@ impl WorkbenchView {
     }
 }
 
-/// Connects a project over the route of `spec` (`SPEC-0321`); runs in the background.
-fn open_link(
-    spec: idecraft_remote::HostSpec,
+/// What [`start_remote_open`] answers when Escape stopped the opening (behaviour 3).
+pub const STOPPED: &str = "stopped";
+
+/// The window of `folder` on `spec` when that remote project is open already: it comes to the
+/// front, and the answer is the project's state (behaviour 1). `None` when it is not open.
+pub fn open_already(
+    spec: &ferris_idea_remote::HostSpec,
     folder: &str,
-    opts: idecraft_remote::ServeOptions,
+    extra: &[String],
+    cx: &mut App,
+) -> Option<Result<Value, String>> {
+    let host = spec.label();
+    let found_as = match spec {
+        ferris_idea_remote::HostSpec::Ssh(_) => {
+            ferris_idea_remote::SshTarget::parse(&host, extra).host
+        }
+        _ => host,
+    };
+    let open = ferris_idea_remote::live::find(&found_as, folder)?;
+    Some(open_live_window(open.clone(), cx).map(|_| open.describe()))
+}
+
+/// Opens `folder` of `spec` as a remote project (behaviours 3–5) in the background — connect,
+/// find or bring the backend, start it, open the session — then in a project window of its own,
+/// and remembers it among the recent remote projects in `base`. The one path of Remote
+/// Development… in a project window and of the Welcome window's SSH section (`SPEC-0355` v3
+/// behaviour 12c). Set `stop` meanwhile and whatever was started on the host ends; `done` then
+/// gets [`STOPPED`]. `done` gets the project's state, or the reason it did not open.
+#[allow(clippy::too_many_arguments)]
+pub fn start_remote_open(
+    spec: ferris_idea_remote::HostSpec,
+    folder: String,
+    base: PathBuf,
+    extra: Vec<String>,
+    backend_dir: String,
+    stop: Arc<AtomicBool>,
+    done: impl FnOnce(Result<Value, String>, &mut App) + 'static,
+    cx: &mut App,
+) {
+    let host = spec.label();
+    let opts = ferris_idea_remote::ServeOptions {
+        backend_dir,
+        ..ferris_idea_remote::ServeOptions::default()
+    };
+    let recovery = recovery_dir(&base);
+    let wanted = folder.clone();
+    let task = cx
+        .background_executor()
+        .spawn(async move { open_link(spec, &wanted, opts, recovery, &extra) });
+    cx.spawn(async move |cx| {
+        let opened = task.await;
+        let _ = cx.update(|cx| {
+            let result = match opened {
+                Ok(p) if stop.load(Ordering::SeqCst) => {
+                    // Whatever was started on the host ends (behaviour 3).
+                    std::thread::spawn(move || {
+                        let mut p = p;
+                        let _ = p.close(ferris_idea_remote::Unsaved::Discard);
+                    });
+                    Err(STOPPED.to_owned())
+                }
+                Ok(p) => {
+                    let _ =
+                        ferris_idea_remote::remember_remote(&recent_file(&base), &host, &folder);
+                    let live = LiveProject::start(p, Timing::default());
+                    open_live_window(live.clone(), cx)
+                        .map(|_| live.describe())
+                        .map_err(|e| format!("Cannot open the window: {e}"))
+                }
+                Err(e) => Err(e.to_string()),
+            };
+            done(result, cx);
+        });
+    })
+    .detach();
+}
+
+/// Connects a project over the route of `spec` (`SPEC-0321`); runs in the background.
+pub(super) fn open_link(
+    spec: ferris_idea_remote::HostSpec,
+    folder: &str,
+    opts: ferris_idea_remote::ServeOptions,
     recovery: PathBuf,
     extra: &[String],
-) -> Result<Box<dyn idecraft_remote::ProjectLink>, idecraft_remote::RemoteError> {
-    if let idecraft_remote::HostSpec::Paired { address } = &spec {
-        return Ok(Box::new(idecraft_remote::PairedProject::open(
+) -> Result<Box<dyn ferris_idea_remote::ProjectLink>, ferris_idea_remote::RemoteError> {
+    if let ferris_idea_remote::HostSpec::Paired { address } = &spec {
+        return Ok(Box::new(ferris_idea_remote::PairedProject::open(
             address,
             folder,
             Some(recovery),
         )?));
     }
-    let binary =
-        std::env::current_exe().map_err(|e| idecraft_remote::RemoteError::Failed(e.to_string()))?;
-    let route = idecraft_remote::HostRoute::for_spec(&spec, extra)?;
-    Ok(Box::new(idecraft_remote::RemoteProject::open_route(
+    let binary = std::env::current_exe()
+        .map_err(|e| ferris_idea_remote::RemoteError::Failed(e.to_string()))?;
+    let route = ferris_idea_remote::HostRoute::for_spec(&spec, extra)?;
+    Ok(Box::new(ferris_idea_remote::RemoteProject::open_route(
         route,
         folder,
         &binary,
@@ -1590,7 +1654,7 @@ impl RemoteAsk {
         &self,
         line: usize,
         character: usize,
-    ) -> Result<Option<idecraft_languages::insight::SignatureHelp>, String> {
+    ) -> Result<Option<ferris_idea_languages::insight::SignatureHelp>, String> {
         let v = self.ask(
             "lsp.signature",
             json!({ "line": line, "character": character }),
@@ -1602,9 +1666,9 @@ impl RemoteAsk {
     /// keys are computed here from the token types (v2 detail 9).
     pub(crate) fn semantic(
         &self,
-    ) -> Result<Vec<idecraft_languages::semantic::SemanticToken>, String> {
+    ) -> Result<Vec<ferris_idea_languages::semantic::SemanticToken>, String> {
         let v = self.ask("lsp.semantic", json!({}))?;
-        let family = idecraft_ui::theme::KeyFamily::of_path(&self.doc);
+        let family = ferris_idea_ui::theme::KeyFamily::of_path(&self.doc);
         Ok(v["tokens"]
             .as_array()
             .into_iter()
@@ -1620,8 +1684,8 @@ impl RemoteAsk {
                     })
                     .unwrap_or_default();
                 let refs: Vec<&str> = modifiers.iter().map(String::as_str).collect();
-                let key = idecraft_ui::theme::semantic_key_in(&token_type, &refs, family);
-                Some(idecraft_languages::semantic::SemanticToken {
+                let key = ferris_idea_ui::theme::semantic_key_in(&token_type, &refs, family);
+                Some(ferris_idea_languages::semantic::SemanticToken {
                     line: t["line"].as_u64()?,
                     start: t["start"].as_u64()?,
                     end: t["end"].as_u64()?,
@@ -1633,7 +1697,7 @@ impl RemoteAsk {
             .collect())
     }
 
-    /// IDECraft's inspections of the document on the host (`lsp.inspect`, behaviour 9): id, level,
+    /// Ferris IDEA's inspections of the document on the host (`lsp.inspect`, behaviour 9): id, level,
     /// message, start and end.
     pub(crate) fn inspect(&self) -> Result<Vec<crate::editor_view::HostFinding>, String> {
         let v = self.ask("lsp.inspect", json!({}))?;
@@ -1657,8 +1721,8 @@ impl RemoteAsk {
     /// The host server's code actions for `range` (`lsp.code_actions`, SPEC-0076).
     pub(crate) fn code_actions(
         &self,
-        range: &idecraft_languages::insight::Range,
-    ) -> Result<Vec<idecraft_languages::actions::CodeAction>, String> {
+        range: &ferris_idea_languages::insight::Range,
+    ) -> Result<Vec<ferris_idea_languages::actions::CodeAction>, String> {
         let v = self.ask("lsp.code_actions", json!({ "range": range }))?;
         Ok(serde_json::from_value(v["actions"].clone()).unwrap_or_default())
     }
@@ -1667,7 +1731,7 @@ impl RemoteAsk {
     /// (`lsp.apply_action`, behaviour 12): the files it changes, and with `apply` the changed ones.
     pub(crate) fn apply_action(
         &self,
-        range: &idecraft_languages::insight::Range,
+        range: &ferris_idea_languages::insight::Range,
         title: &str,
         apply: bool,
     ) -> Result<Value, String> {
@@ -1694,7 +1758,7 @@ impl RemoteAsk {
     /// The window's path of a relative path from the host; paths that leave the project are
     /// refused (SEC-14).
     fn local(&self, doc: &str) -> Option<PathBuf> {
-        idecraft_session::paths::check_relative(doc)
+        ferris_idea_session::paths::check_relative(doc)
             .ok()
             .filter(|d| d != ".")
             .map(|d| self.stand_in.join(d))
@@ -1706,7 +1770,7 @@ impl RemoteAsk {
         line: usize,
         character: usize,
         limit: usize,
-    ) -> Option<Vec<idecraft_languages::insight::CompletionItem>> {
+    ) -> Option<Vec<ferris_idea_languages::insight::CompletionItem>> {
         let v = self
             .ask(
                 "lsp.complete",
@@ -1721,7 +1785,7 @@ impl RemoteAsk {
         &self,
         line: usize,
         character: usize,
-    ) -> Result<Option<idecraft_languages::insight::Hover>, String> {
+    ) -> Result<Option<ferris_idea_languages::insight::Hover>, String> {
         let v = self.ask("lsp.hover", json!({ "line": line, "character": character }))?;
         Ok(serde_json::from_value(v["hover"].clone()).unwrap_or(None))
     }
@@ -1732,9 +1796,9 @@ impl RemoteAsk {
         &self,
         line: usize,
         character: usize,
-        kind: idecraft_languages::insight::LocationKind,
-    ) -> Result<idecraft_languages::insight::Found, String> {
-        use idecraft_languages::insight::{Found, Location, LocationKind};
+        kind: ferris_idea_languages::insight::LocationKind,
+    ) -> Result<ferris_idea_languages::insight::Found, String> {
+        use ferris_idea_languages::insight::{Found, Location, LocationKind};
         let kind = match kind {
             LocationKind::Definition => "definition",
             LocationKind::References => "references",
@@ -1797,12 +1861,12 @@ impl WorkbenchView {
                 "lsp.diagnostics" => {
                     let Some(doc) = p["doc"]
                         .as_str()
-                        .and_then(|d| idecraft_session::paths::check_relative(d).ok())
+                        .and_then(|d| ferris_idea_session::paths::check_relative(d).ok())
                     else {
                         continue;
                     };
                     let path = stand_in.join(&doc);
-                    let found: Vec<idecraft_languages::lsp::Diagnostic> =
+                    let found: Vec<ferris_idea_languages::lsp::Diagnostic> =
                         serde_json::from_value(p["items"].clone()).unwrap_or_default();
                     if let Some(editor) = self.editors.get(&path) {
                         editor.update(cx, |e, cx| e.set_diagnostics(&found, cx));
@@ -1821,6 +1885,13 @@ impl WorkbenchView {
                     self.remote_port_event(&method, &p);
                     self.remote_refresh_services_ports(cx);
                 }
+                // Other people in the room (`SPEC-0323` v5 behaviour 30).
+                "room.joined" | "room.presence" | "room.left" => self.room_event(&method, &p, cx),
+                // Someone changed the comments of a document (`SPEC-0323` v8 behaviour 58).
+                "room.comments_changed" => self.room_comments_event(&p, cx),
+                // A change of the room: an open Room History loads again (`SPEC-0323` v9
+                // behaviour 62).
+                "room.changed" => self.room_history_changed(),
                 _ => {}
             }
         }

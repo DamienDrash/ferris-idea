@@ -1,11 +1,36 @@
 //! Completion list without toolkit (`SPEC-0072` behaviours 2–5).
 
-use idecraft_core::{fuzzy_match, rank};
-use idecraft_languages::insight::CompletionItem;
+use ferris_idea_core::fuzzy_match;
+pub use ferris_idea_languages::completion_filter::{filter, is_ident, word_start};
+use ferris_idea_languages::insight::CompletionItem;
 
-/// Whether `c` belongs to an identifier.
-fn is_ident(c: char) -> bool {
-    c.is_alphanumeric() || c == '_'
+/// The key of a completion item for its documentation (`SPEC-0072` behaviour 13): with the
+/// server's own item, its label and that item, which stay the same when resolving it later adds
+/// signature, type and documentation (behaviour 28, v20: the first item's documentation was asked
+/// for under one key and looked up under another); without it, label, signature and detail, so
+/// overloads keep one entry each.
+pub fn doc_key(item: &CompletionItem) -> String {
+    match &item.raw {
+        Some(raw) => format!("{}\u{1f}{raw}", item.label),
+        None => format!(
+            "{}\u{1f}{}\u{1f}{}",
+            item.label,
+            item.label_detail.as_deref().unwrap_or_default(),
+            item.detail.as_deref().unwrap_or_default()
+        ),
+    }
+}
+
+/// The documentation shown beside the list for `item` (`SPEC-0072` behaviour 13, v20): the
+/// answer asked for, or else the one the item brought or its details added.
+pub fn shown_doc(
+    item: &CompletionItem,
+    docs: &std::collections::HashMap<String, Option<String>>,
+) -> Option<String> {
+    docs.get(&doc_key(item))
+        .cloned()
+        .flatten()
+        .or_else(|| item.documentation.clone())
 }
 
 /// Whether `typed` is still a name the open list narrows by (behaviours 2–3): letters, digits and
@@ -14,16 +39,6 @@ pub fn is_typed_name(typed: &str, css_names: bool) -> bool {
     typed
         .chars()
         .all(|c| is_ident(c) || (css_names && c == '-'))
-}
-
-/// Column (chars) where the identifier ending at `column` starts in `line` (behaviour 2).
-pub fn word_start(line: &str, column: usize) -> usize {
-    let chars: Vec<char> = line.chars().collect();
-    let mut at = column.min(chars.len());
-    while at > 0 && is_ident(chars[at - 1]) {
-        at -= 1;
-    }
-    at
 }
 
 /// Text of an LSP snippet without its tab stops: `${1:x}` → `x`, `$1`/`$0` → nothing, `\$` → `$`
@@ -133,7 +148,7 @@ pub fn expand_snippet(snippet: &str, line_indent: &str, indent_unit: &str) -> Ex
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NameStop {
     /// The value itself (`int length = s.length()`) or one element (`for (String name : names)`).
-    pub kind: idecraft_languages::names::NameKind,
+    pub kind: ferris_idea_languages::names::NameKind,
     /// The expression the variable gets (after `=`, `:`, `of` or `in`), if any.
     pub expression: Option<String>,
     /// The declared type before the name, if any (`int`, `String`).
@@ -148,7 +163,7 @@ fn is_name_char(c: char) -> bool {
 /// expression and type: an identifier placeholder followed by `=`, `:`, `of` or `in`, after a
 /// type, `const`, `let` or `var` (behaviour 32).
 pub fn name_stop(text: &str, stop: &std::ops::Range<usize>) -> Option<NameStop> {
-    use idecraft_languages::names::NameKind;
+    use ferris_idea_languages::names::NameKind;
     let chars: Vec<char> = text.chars().collect();
     let name: String = chars.get(stop.clone())?.iter().collect();
     if name.is_empty()
@@ -223,7 +238,7 @@ pub fn name_stop(text: &str, stop: &std::ops::Range<usize>) -> Option<NameStop> 
 /// collection's name with a digit (jdtls `names2`), which the best suggestion replaces (v8
 /// behaviour 32).
 pub fn stop_names(stop: &NameStop, current: &str) -> Vec<String> {
-    let mut names = idecraft_languages::names::suggest(
+    let mut names = ferris_idea_languages::names::suggest(
         stop.kind,
         stop.expression.as_deref(),
         stop.type_name.as_deref(),
@@ -429,25 +444,6 @@ pub fn own_arguments_start(text: &str) -> Option<usize> {
     None
 }
 
-/// The order of overloads the server ranks alike: the one taking a variable number of arguments
-/// first, then fewer parameters first (`SPEC-0072` v7 behaviour 17).
-fn overload_key(item: &CompletionItem) -> (bool, usize) {
-    let params = item
-        .label_detail
-        .as_deref()
-        .unwrap_or_default()
-        .trim()
-        .trim_start_matches('(')
-        .trim_end_matches(')')
-        .trim();
-    let count = if params.is_empty() {
-        0
-    } else {
-        params.matches(',').count() + 1
-    };
-    (!params.contains("..."), count)
-}
-
 /// A call inserted as `name($0)` whose resolved signature takes no arguments (`()`, `(self)`)
 /// puts the caret after the parentheses instead (`SPEC-0072` v9 behaviour 37: `os.getcwd()|`,
 /// `item.total_cents()|`).
@@ -457,77 +453,11 @@ pub fn caret_after_empty_call(item: &mut CompletionItem) {
     };
     if item.snippet
         && signature.trim_start().starts_with('(')
-        && idecraft_languages::python_completion::passed_parameters(signature) == 0
+        && ferris_idea_languages::python_completion::passed_parameters(signature) == 0
         && let Some(name) = item.insert.strip_suffix("($0)")
     {
         item.insert = format!("{name}()$0");
     }
-}
-
-/// The server's ranking of `item`: preselected first, then items with sort text by it, ignoring
-/// case first (pyright's `09.9999.abort` before `09.9999.CLD_CONTINUED`, `SPEC-0072` v9
-/// behaviour 35), then the rest (`SPEC-0072` v5 behaviour 12).
-fn server_rank(item: &CompletionItem) -> (bool, bool, String, &str) {
-    let sort = item.sort_text.as_deref().unwrap_or_default();
-    (
-        !item.preselect,
-        item.sort_text.is_none(),
-        sort.to_lowercase(),
-        sort,
-    )
-}
-
-/// Items matching the typed `prefix`: case-insensitive prefix matches first in the server's
-/// ranking (shorter first where it does not decide), then fuzzy matches; all items in the server's
-/// ranking when the prefix is empty (behaviours 3 and 12).
-pub fn filter(items: &[CompletionItem], prefix: &str) -> Vec<CompletionItem> {
-    if prefix.is_empty() {
-        let mut all: Vec<&CompletionItem> = items.iter().collect();
-        all.sort_by(|a, b| {
-            server_rank(a).cmp(&server_rank(b)).then_with(|| {
-                if a.label.trim() == b.label.trim() {
-                    overload_key(a).cmp(&overload_key(b))
-                } else {
-                    std::cmp::Ordering::Equal
-                }
-            })
-        });
-        return all.into_iter().cloned().collect();
-    }
-    let lower = prefix.to_lowercase();
-    let mut starts: Vec<&CompletionItem> = Vec::new();
-    let mut fuzzy: Vec<(i64, &CompletionItem)> = Vec::new();
-    for item in items {
-        let label = item.label.trim();
-        if label.to_lowercase().starts_with(&lower) {
-            starts.push(item);
-        } else if let Some(m) = fuzzy_match(prefix, label) {
-            fuzzy.push((m.score, item));
-        }
-    }
-    // A suggestion named exactly as typed comes first (`SPEC-0072` v7 behaviour 23: `.for` before
-    // `forEach`).
-    // The same case before other case (`Path` before `path` for `Path`, v9 behaviour 35).
-    let exact = |i: &CompletionItem| {
-        (
-            i.label.trim().to_lowercase() != lower,
-            i.label.trim() != prefix,
-        )
-    };
-    starts.sort_by(|a, b| {
-        exact(a)
-            .cmp(&exact(b))
-            .then_with(|| server_rank(a).cmp(&server_rank(b)))
-            .then_with(|| a.label.trim().len().cmp(&b.label.trim().len()))
-            .then_with(|| a.label.trim().cmp(b.label.trim()))
-            .then_with(|| overload_key(a).cmp(&overload_key(b)))
-    });
-    fuzzy.sort_by(|a, b| rank((a.0, a.1.label.trim()), (b.0, b.1.label.trim())));
-    starts
-        .into_iter()
-        .chain(fuzzy.into_iter().map(|(_, i)| i))
-        .cloned()
-        .collect()
 }
 
 /// Whether the text before the caret asks for the list to open by itself: an identifier that does
@@ -594,7 +524,7 @@ pub fn kind_icon(kind: Option<&str>) -> Option<&'static str> {
         "value" => Some("nodes/constant"),
         "reference" => Some("nodes/variable"),
         "struct" => Some("nodes/class"),
-        other => Some(idecraft_ui::icons::symbol_icon(other)),
+        other => Some(ferris_idea_ui::icons::symbol_icon(other)),
     }
 }
 
@@ -921,6 +851,58 @@ mod tests {
 
     use super::*;
 
+    /// SPEC-0072 AK-41 (v20, behaviour 13): the documentation of the item selected when the list
+    /// opens is found again after the server added signature and type to it.
+    #[test]
+    fn the_first_items_documentation_survives_its_details() {
+        use std::collections::HashMap;
+        // typescript-language-server's `at` after `xs.`: no detail and no documentation in the
+        // list, both come with `completionItem/resolve`.
+        let listed = CompletionItem {
+            label: "at".into(),
+            insert: "at".into(),
+            kind: Some("method".into()),
+            raw: Some(serde_json::json!({"label": "at", "data": {"entryNames": ["at"]}})),
+            ..Default::default()
+        };
+        let resolved = CompletionItem {
+            detail: Some("(method) Array<number>.at(index: number): number | undefined".into()),
+            label_detail: Some("(index: number)".into()),
+            description: Some("number | undefined".into()),
+            ..listed.clone()
+        };
+        let doc = "Returns the item located at the specified index.".to_owned();
+        assert_eq!(doc_key(&listed), doc_key(&resolved));
+
+        // Asked for when the list opened, answered after the details came.
+        let mut docs = HashMap::new();
+        docs.insert(doc_key(&listed), None);
+        assert_eq!(shown_doc(&resolved, &docs), None);
+        docs.insert(doc_key(&listed), Some(doc.clone()));
+        assert_eq!(shown_doc(&resolved, &docs), Some(doc.clone()));
+
+        // Asked for, still unanswered, while the details already brought the documentation.
+        let mut docs = HashMap::new();
+        docs.insert(doc_key(&listed), None);
+        let with_doc = CompletionItem {
+            documentation: Some(doc.clone()),
+            ..resolved.clone()
+        };
+        assert_eq!(shown_doc(&with_doc, &docs), Some(doc.clone()));
+
+        // Without the server's item, overloads keep one entry each; none shows no panel.
+        let overload = |sig: &str| CompletionItem {
+            label: "of".into(),
+            label_detail: Some(sig.into()),
+            ..Default::default()
+        };
+        assert_ne!(
+            doc_key(&overload("(E e1)")),
+            doc_key(&overload("(E... es)"))
+        );
+        assert_eq!(shown_doc(&overload("(E e1)"), &HashMap::new()), None);
+    }
+
     /// SPEC-0072 AK-33 (v14): only the server's templates stay, in their order.
     #[test]
     fn live_templates_keep_snippets_only() {
@@ -1087,7 +1069,7 @@ mod tests {
     /// SPEC-0072 v11 AK-30: inserting follows the keymap; Up, Down and Escape are fixed keys.
     #[test]
     fn list_keys_follow_the_keymap() {
-        use idecraft_ui::keymap::{Keymap, Keystroke};
+        use ferris_idea_ui::keymap::{Keymap, Keystroke};
         let stroke = |text: &str| Keystroke::parse(text).expect("a keystroke");
         for keymap in [Keymap::bundled_macos(), Keymap::bundled_default()] {
             let enter = keymap.actions_for(&stroke("ENTER"), None);
@@ -1196,7 +1178,7 @@ mod tests {
     /// SPEC-0072 v8 AK-20: placeholders that name a new variable, with expression and type.
     #[test]
     fn name_placeholders() {
-        use idecraft_languages::names::NameKind;
+        use ferris_idea_languages::names::NameKind;
         let var = expand_snippet("int ${1:length} = s.length();${0}", "", "    ");
         let stop = name_stop(&var.text, &var.stops[0][0]).unwrap();
         assert_eq!(stop.kind, NameKind::Value);

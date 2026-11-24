@@ -7,14 +7,14 @@ use std::ops::Range;
 use std::path::PathBuf;
 use std::time::Duration;
 
+use ferris_idea_terminal::{
+    Color, Link, LinkTarget, Match, MouseAction, MouseButton, MouseEncoding, MouseInput, MouseMode,
+    Selection, SelectionUnit, Session, SpawnOptions, key_bytes, line_links, mouse_bytes,
+};
 use gpui::{
     App, Bounds, Context, ElementInputHandler, Entity, EntityInputHandler, FocusHandle, Focusable,
     Font, KeyDownEvent, Pixels, ShapedLine, TextRun, UTF16Selection, Window, canvas, div, fill,
     font, point, prelude::*, px, rgb, size,
-};
-use idecraft_terminal::{
-    Color, Link, LinkTarget, Match, MouseAction, MouseButton, MouseEncoding, MouseInput, MouseMode,
-    Selection, SelectionUnit, Session, SpawnOptions, key_bytes, line_links, mouse_bytes,
 };
 
 use crate::EditorView;
@@ -89,7 +89,7 @@ pub struct TerminalView {
     /// behaviour 9); set by the workbench, kept in a cell so that saving the tabs can rename it.
     label: std::cell::RefCell<Option<(PathBuf, String)>>,
     /// The shell's registration, from its start until the view goes.
-    registration: std::cell::RefCell<Option<idecraft_terminal::Registration>>,
+    registration: std::cell::RefCell<Option<ferris_idea_terminal::Registration>>,
     /// Shared with the AI chat (`SPEC-0313` behaviour 5).
     shared: bool,
     /// Opens the program behind a link instead of a local pseudo terminal when the view first
@@ -100,7 +100,7 @@ pub struct TerminalView {
     /// Close the tab when the linked program exits, as a local shell's tab closes.
     close_on_exit: bool,
     /// Input typed before the program started (it starts when the view is first drawn): a
-    /// command IDECraft types into a new tab, such as a sign-in (`SPEC-0160` behaviour 1) or
+    /// command Ferris IDEA types into a new tab, such as a sign-in (`SPEC-0160` behaviour 1) or
     /// Insert into Terminal (`SPEC-0313` behaviour 8), goes to the program once it runs.
     pending: Vec<u8>,
 }
@@ -108,8 +108,9 @@ pub struct TerminalView {
 /// Input kept for a program that has not started yet, at most.
 const PENDING_INPUT: usize = 64 * 1024;
 
-/// Opens a [`idecraft_terminal::PtyLink`] for `rows` × `cols`.
-pub type LinkOpener = Box<dyn FnOnce(u16, u16) -> std::sync::Arc<dyn idecraft_terminal::PtyLink>>;
+/// Opens a [`ferris_idea_terminal::PtyLink`] for `rows` × `cols`.
+pub type LinkOpener =
+    Box<dyn FnOnce(u16, u16) -> std::sync::Arc<dyn ferris_idea_terminal::PtyLink>>;
 
 /// The terminal's find field and its matches (`SPEC-0206` behaviour 1).
 struct TerminalSearch {
@@ -330,7 +331,7 @@ impl TerminalView {
         else {
             return;
         };
-        let r = idecraft_terminal::TerminalRegistry::global().register(
+        let r = ferris_idea_terminal::TerminalRegistry::global().register(
             &root,
             &name,
             session.terminal_handle(),
@@ -362,12 +363,12 @@ impl TerminalView {
 
     /// The last command the shell marked, with its output and exit status (`SPEC-0313`
     /// behaviour 2).
-    pub fn last_command(&self) -> Option<idecraft_ai::context::CommandText> {
+    pub fn last_command(&self) -> Option<ferris_idea_ai::context::CommandText> {
         let c = self
             .session
             .as_ref()?
             .with_terminal(|t| t.screen.last_command())?;
-        Some(idecraft_ai::context::CommandText {
+        Some(ferris_idea_ai::context::CommandText {
             command: c.command,
             output: c.output.join("\n"),
             exit: c.exit,
@@ -379,11 +380,11 @@ impl TerminalView {
     /// behaviours 2, 6, 7); `None` for an empty selection or an empty terminal.
     pub fn ai_attachment(
         &self,
-        kind: idecraft_ai::context::Source,
+        kind: ferris_idea_ai::context::Source,
         lines: usize,
         budget: usize,
-    ) -> Option<idecraft_ai::Attachment> {
-        use idecraft_ai::context::{Source, attachment, terminal_attachment};
+    ) -> Option<ferris_idea_ai::Attachment> {
+        use ferris_idea_ai::context::{Source, attachment, terminal_attachment};
         let name = self.label().unwrap_or_else(|| "Local".to_owned());
         match kind {
             Source::TerminalSelection => {
@@ -410,7 +411,7 @@ impl TerminalView {
     }
 
     /// The prompts the shell marked: stable line, command and exit status (`SPEC-0206`).
-    pub fn prompts(&self) -> Vec<idecraft_terminal::Prompt> {
+    pub fn prompts(&self) -> Vec<ferris_idea_terminal::Prompt> {
         self.session
             .as_ref()
             .map(|s| s.with_terminal(|t| t.screen.prompts().to_vec()))
@@ -499,7 +500,7 @@ impl TerminalView {
         let (base, matches) = session.with_terminal(|t| {
             (
                 t.screen.history_base(),
-                idecraft_terminal::search(&t.screen, &key.0, key.1),
+                ferris_idea_terminal::search(&t.screen, &key.0, key.1),
             )
         });
         // Lines that left the history move the others up.
@@ -958,7 +959,7 @@ impl TerminalView {
             .session
             .as_ref()
             .is_some_and(|s| s.with_terminal(|t| t.screen.bracketed_paste()));
-        self.type_bytes(&idecraft_terminal::paste_bytes(text, bracketed));
+        self.type_bytes(&ferris_idea_terminal::paste_bytes(text, bracketed));
     }
 
     /// Sends typed input: the view returns to the live screen and the selection goes.
@@ -1106,19 +1107,23 @@ impl TerminalView {
                 }
             }
             None => {
+                let mut env = if self.integration {
+                    LOCAL_SHELL
+                        .get()
+                        .map(|(_, e)| e.clone())
+                        .unwrap_or_default()
+                } else {
+                    Vec::new()
+                };
+                // Claude Code started here connects to this project's window (SPEC-0358
+                // behaviour 2).
+                env.extend(ferris_idea_claude_link::terminal_env(&self.cwd));
                 let options = SpawnOptions {
-                    env: if self.integration {
-                        LOCAL_SHELL
-                            .get()
-                            .map(|(_, e)| e.clone())
-                            .unwrap_or_default()
-                    } else {
-                        Vec::new()
-                    },
+                    env,
                     history: std::mem::take(&mut self.history),
                     integration: self
                         .integration
-                        .then(idecraft_terminal::integration::default_dir),
+                        .then(ferris_idea_terminal::integration::default_dir),
                 };
                 match Session::spawn_with(&self.command, &self.cwd, rows, cols, &options) {
                     Ok(s) => {
@@ -1704,7 +1709,7 @@ impl TerminalView {
         let search = self.search.as_ref()?;
         let p = Palette::current();
         let label = self.search_label().unwrap_or_default();
-        let nav = |control: &'static idecraft_ui::tooltip::Control,
+        let nav = |control: &'static ferris_idea_ui::tooltip::Control,
                    text: &'static str,
                    forward: bool,
                    cx: &mut Context<Self>| {

@@ -28,7 +28,7 @@ fn sqlite_plan_tree_with_a_full_scan_hint() {
 #[test]
 fn postgresql_measured_plan_rolls_back_changes() {
     let p = Project::empty();
-    if !live_connection(&p, "pg", "IDECRAFT_TEST_PG") {
+    if !live_connection(&p, "pg", "FERRIS_IDEA_TEST_PG") {
         return;
     }
     let mut ide = Ide::stdio(&p);
@@ -48,7 +48,7 @@ fn postgresql_measured_plan_rolls_back_changes() {
 #[test]
 fn mysql_plan_is_read() {
     let p = Project::empty();
-    if !live_connection(&p, "my", "IDECRAFT_TEST_MYSQL") {
+    if !live_connection(&p, "my", "FERRIS_IDEA_TEST_MYSQL") {
         return;
     }
     let mut ide = Ide::stdio(&p);

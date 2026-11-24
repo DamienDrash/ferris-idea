@@ -42,7 +42,7 @@ undoable as one step.
    indentation), that whitespace stays on the upper line instead of being dropped, so the caret column
    is the same on both lines and moving up lands where Enter was pressed; the lower line still starts
    with the line's full indentation followed by the rest without its leading whitespace. On a line that
-   holds only whitespace the same applies. [GEN; OBS-0012: IDECraft left the upper line empty]
+   holds only whitespace the same applies. [GEN; OBS-0012: Ferris IDEA left the upper line empty]
 9. **Matching bracket:** the bracket at (or just before) the caret is matched forward or backward,
    skipping brackets inside string literals. [GEN]
 10. Every action applies to all carets, merges carets that end up on the same place, and is one undo
@@ -235,14 +235,14 @@ offered there (IMP-0304). Moving statements follows braces and control keywords,
 blocks of other kinds (lambdas, anonymous classes) are moved as a whole.
 
 v4: not compared with the reference. Open there: which lists its Move Element actions know per
-language (IDECraft: every comma-separated list of the syntax tree) and where they leave the caret.
+language (Ferris IDEA: every comma-separated list of the syntax tree) and where they leave the caret.
 - v5: Complete Current Statement and Unwrap/Remove read the lines, brackets and keywords, not a
   syntax tree, so they follow the code's layout: a statement over several lines is completed on
   the caret's line only, and Unwrap offers only blocks laid out one brace per line end. The
   reference also offers "Remove" entries (the block with its body) and more constructs
-  (`else` branches, `catch`, lambdas, conditional expressions); IDECraft does not yet. Not
+  (`else` branches, `catch`, lambdas, conditional expressions); Ferris IDEA does not yet. Not
   compared next to the reference.
 - **Tab out of a pair (v6):** the reference steps out only of a pair it closed itself while
-  the person typed. IDECraft keeps no record of auto-closed pairs and steps out of any pair
+  the person typed. Ferris IDEA keeps no record of auto-closed pairs and steps out of any pair
   whose opening character is on the caret's line, so Tab before a `)` typed by hand also steps
   over it; a Tab meant as indentation inside a pair on one line is rare.

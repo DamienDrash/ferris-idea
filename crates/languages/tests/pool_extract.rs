@@ -4,14 +4,14 @@
 
 use std::time::Duration;
 
-use idecraft_languages::actions::{Refactoring, introduced_name, plan_code_action_in};
-use idecraft_languages::rename::{apply_edits, plan_rename_in};
-use idecraft_languages::{insight, pool};
+use ferris_idea_languages::actions::{Refactoring, introduced_name, plan_code_action_in};
+use ferris_idea_languages::rename::{apply_edits, plan_rename_in};
+use ferris_idea_languages::{insight, pool};
 
-/// Skips a test whose tool is missing; with `IDECRAFT_REQUIRE_TOOLS` set (CI) it fails instead.
+/// Skips a test whose tool is missing; with `FERRIS_IDEA_REQUIRE_TOOLS` set (CI) it fails instead.
 fn skip(reason: &str) {
     assert!(
-        std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+        ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
         "required tool missing: {reason}"
     );
     eprintln!("skipped: {reason}");
@@ -39,7 +39,7 @@ async fn the_extracted_variable_is_renamed_everywhere() {
         skip("clangd not installed");
         return;
     }
-    const SHAPES: &str = "// Handtest IDECraft: Navigation und Code-Einsicht
+    const SHAPES: &str = "// Handtest Ferris IDEA: Navigation und Code-Einsicht
 #include <cstdio>
 
 /// Eine Form mit Fläche.
@@ -63,7 +63,8 @@ int main() {
     return 0;
 }
 ";
-    let root = std::env::temp_dir().join(format!("idecraft-pool-extract-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-pool-extract-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     let root = root.canonicalize().unwrap();
@@ -75,7 +76,7 @@ int main() {
     pool::sync_text(&root, &file, SHAPES).await.unwrap();
 
     let selected = range_of(SHAPES, "s.area()");
-    let found = idecraft_languages::actions::refactoring_targets(
+    let found = ferris_idea_languages::actions::refactoring_targets(
         &root,
         &file,
         Some(SHAPES),
@@ -107,8 +108,10 @@ int main() {
     // clangd alone renames only the declaration here: `= 1` is no pure-specifier, so `s.area()`
     // and with it the type of the new variable do not compile, and its use is no reference.
     let mut rename = rename;
-    assert!(!idecraft_languages::actions::has_word(SHAPES, &name.name));
-    idecraft_languages::actions::complete_introduced_rename(&mut rename, &file, &extracted);
+    assert!(!ferris_idea_languages::actions::has_word(
+        SHAPES, &name.name
+    ));
+    ferris_idea_languages::actions::complete_introduced_rename(&mut rename, &file, &extracted);
     assert_eq!(rename.files.len(), 1, "{rename:?}");
     let renamed = apply_edits(&extracted, &rename.files[0].edits).unwrap();
     assert!(renamed.contains("auto flaeche = s.area();"), "{renamed}");

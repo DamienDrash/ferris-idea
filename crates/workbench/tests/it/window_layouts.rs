@@ -8,13 +8,14 @@
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_ui::tool_windows::{Layout, Side, ToolWindow};
+use ferris_idea_ui::window_layouts::{Layouts, Problem};
+use ferris_idea_workbench::WorkbenchView;
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_ui::tool_windows::{Layout, Side, ToolWindow};
-use idecraft_ui::window_layouts::{Layouts, Problem};
-use idecraft_workbench::WorkbenchView;
 
 fn workspace(tag: &str) -> (PathBuf, PathBuf) {
-    let root = std::env::temp_dir().join(format!("idecraft-layouts-{tag}-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-layouts-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("project")).unwrap();
     std::fs::create_dir_all(root.join("settings")).unwrap();
@@ -221,7 +222,7 @@ fn layouts_are_applied_renamed_and_deleted(cx: &mut TestAppContext) {
     assert_eq!(saved.selected(), Some("Two"));
     assert!(saved.get("Two").unwrap().1.shown.is_empty());
 
-    act(&bench, "IDECraft.Layout.Apply:One", cx);
+    act(&bench, "FerrisIDEA.Layout.Apply:One", cx);
     assert_eq!(note(&bench, cx), "Layout \"One\" applied");
     assert_eq!(Layouts::load(&file).selected(), Some("One"));
     assert_eq!(side(&bench, ToolWindow::Problems, cx), Side::Right);
@@ -237,16 +238,16 @@ fn layouts_are_applied_renamed_and_deleted(cx: &mut TestAppContext) {
         saved.get("One").unwrap().1.layout
     );
 
-    act(&bench, "IDECraft.Layout.Apply:Two", cx);
+    act(&bench, "FerrisIDEA.Layout.Apply:Two", cx);
     assert!(!shown(&bench, ToolWindow::Problems, cx));
     assert!(!shown(&bench, ToolWindow::Project, cx));
     assert!(!bench.read_with(cx, |b, _| b.tool_layout().stripes));
-    act(&bench, "IDECraft.Layout.Apply:Gone", cx);
+    act(&bench, "FerrisIDEA.Layout.Apply:Gone", cx);
     assert_eq!(note(&bench, cx), "There is no layout named \"Gone\"");
     assert_eq!(Layouts::load(&file).selected(), Some("Two"));
 
     // Rename…: the field starts with the old name; a taken name is refused.
-    act(&bench, "IDECraft.Layout.Rename:Two", cx);
+    act(&bench, "FerrisIDEA.Layout.Rename:Two", cx);
     let (title, _) = prompt(&bench, cx).expect("the name field is open");
     assert_eq!(title, "Rename Layout Two");
     assert_eq!(
@@ -267,13 +268,13 @@ fn layouts_are_applied_renamed_and_deleted(cx: &mut TestAppContext) {
     assert_eq!(renamed.selected(), Some("Zwei"));
 
     // Delete…: not the selected layout; another one after its question.
-    act(&bench, "IDECraft.Layout.Delete:Zwei", cx);
+    act(&bench, "FerrisIDEA.Layout.Delete:Zwei", cx);
     assert!(bench.read_with(cx, |b, _| b.drawn_question().is_none()));
     assert_eq!(
         note(&bench, cx),
         "Layout \"Zwei\" is selected; select another layout before deleting it"
     );
-    act(&bench, "IDECraft.Layout.Delete:One", cx);
+    act(&bench, "FerrisIDEA.Layout.Delete:One", cx);
     let question = bench
         .read_with(cx, |b, _| b.drawn_question().cloned())
         .expect("the question is asked");
@@ -283,7 +284,7 @@ fn layouts_are_applied_renamed_and_deleted(cx: &mut TestAppContext) {
     assert_eq!(question.answer_for_key("escape"), Some(1));
     bench.update_in(cx, |b, window, cx| b.answer_drawn_question(1, window, cx));
     assert_eq!(Layouts::load(&file).names(), ["One", "Zwei"]);
-    act(&bench, "IDECraft.Layout.Delete:One", cx);
+    act(&bench, "FerrisIDEA.Layout.Delete:One", cx);
     bench.update_in(cx, |b, window, cx| b.answer_drawn_question(0, window, cx));
     cx.run_until_parked();
     assert_eq!(note(&bench, cx), "Layout \"One\" deleted");
@@ -329,14 +330,14 @@ fn a_broken_layouts_file_leaves_the_default_layout(cx: &mut TestAppContext) {
     assert!(
         error
             .as_deref()
-            .is_some_and(|e| e.contains("newer IDECraft")),
+            .is_some_and(|e| e.contains("newer Ferris IDEA")),
         "{error:?}"
     );
     assert_eq!(std::fs::read_to_string(&file).unwrap(), newer);
     bench.update_in(cx, |b, window, cx| b.finish_name_prompt(false, window, cx));
     act(&bench, "RestoreFactoryDefaultLayout", cx);
     assert!(
-        note(&bench, cx).contains("newer IDECraft"),
+        note(&bench, cx).contains("newer Ferris IDEA"),
         "{}",
         note(&bench, cx)
     );

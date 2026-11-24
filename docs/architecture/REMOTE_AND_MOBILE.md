@@ -17,14 +17,14 @@ No dates are given. Effort is given in relative sizes (S < M < L < XL).
 | Remote project | Remote Host window edits single files through a local copy; backend searches, lists problems and runs configurations on the host | A folder on a host opens as a normal project: tree, editor, code insight, Git, terminal, run and search all run on the host, the window stays local | M6.12 (L) | classical, after the current comparison queue |
 | Remote debugging | Run configurations on the host run in an SSH terminal; no debugger | Debug sessions on the host (adapter runs there), attach to a remote JVM, debugpy or lldb through a forwarded port | M6.13 (M) | classical |
 | Every host | POSIX hosts over SSH; the backend is uploaded only to a host of the same platform | Linux, macOS and Windows hosts (x86_64 and arm64), containers, WSL and hosts without SSH | M6.14 (L) | classical |
-| Remote control of the local app | MCP over HTTP on `127.0.0.1` with a token | A running IDECraft on a PC can be used from a paired device (another PC, phone, tablet) without exposing it to the network | M16 (L) | after M6.12, before QG-1 (PO decision 2026-11-07) |
+| Remote control of the local app | MCP over HTTP on `127.0.0.1` with a token | A running Ferris IDEA on a PC can be used from a paired device (another PC, phone, tablet) without exposing it to the network | M16 (L) | after M6.12, before QG-1 (PO decision 2026-11-07) |
 | Working together | none | Several people (and agents) work live in one project as smoothly as in a shared spreadsheet: a project room owned by the server, link sharing with roles, presence, follow mode, no conflicts, shared history; a short peer session from a desktop window as a special case | M6.15 (L) | classical (reference: Code With Me), room after M6.12, peer case after M16 |
-| Mobile apps | none | iOS and Android apps: client for a desktop app or a server backend, and a reduced local editor ("IDECraft Lite") | M17 (XL) | future, after QG-1 |
-| Web IDE | none | IDECraft in the browser without a desktop app, against `idecraft serve`: self-hosted as one binary, later offered by a service provider | M18 (XL) | transport and spike before QG-1, product after QG-1 |
+| Mobile apps | none | iOS and Android apps: client for a desktop app or a server backend, and a reduced local editor ("Ferris IDEA Lite") | M17 (XL) | future, after QG-1 |
+| Web IDE | none | Ferris IDEA in the browser without a desktop app, against `ferris-idea serve`: self-hosted as one binary, later offered by a service provider | M18 (XL) | transport and spike before QG-1, product after QG-1 |
 
 M6.12–M6.14 belong to the classical phase because the reference IDE offers remote development
 (feature matrix row F-083); they are compared side by side like other rows. The Project Owner
-decided on 2026-11-07 (PO-STATUS, question 27) that the headless service `idecraft serve` (M10.3)
+decided on 2026-11-07 (PO-STATUS, question 27) that the headless service `ferris-idea serve` (M10.3)
 is built as the backend of M6.12 and so starts before quality gate QG-1
 ([ADR-0015](../adr/0015-quality-gate-ai-native.md)); M16 follows M6.12, also before QG-1. M17 and
 the rest of M10–M15 stay after QG-1.
@@ -37,7 +37,7 @@ These rules apply to M6.12–M6.15, M16, M17 and M18 and to every later remote f
 threat model, mandatory security tests SEC-1–SEC-16), and each spec names how it meets them.
 Since ADR-0025 v2 (Project Owner, 2026-11-07, PO-STATUS question 28) paired channels are
 post-quantum hybrid from their first version (Noise with X25519 plus ML-KEM-1024), and a host
-without a keychain keeps the key of `idecraft serve --pair` in a 0600 file that refuses the start
+without a keychain keeps the key of `ferris-idea serve --pair` in a 0600 file that refuses the start
 when others can read it.
 
 1. **Encrypted and authenticated, always:** every connection between window, backend, paired
@@ -58,7 +58,7 @@ when others can read it.
 5. **Relays see nothing:** traffic through a relay is end-to-end encrypted between the two
    endpoints; the relay only forwards bytes and holds no keys.
 6. **Secrets stay in the keychains:** keys and tokens live in the operating system's keychain (or
-   the SSH agent; on a host without a keychain, `idecraft serve --pair` keeps its key in a 0600 file
+   the SSH agent; on a host without a keychain, `ferris-idea serve --pair` keeps its key in a 0600 file
    in a 0700 folder, ADR-0025 section 3a); they are never written to project files, logs or the
    session protocol.
 7. **Robust by default:** replay protection, time limits, rate limits on pairing and login, and
@@ -111,7 +111,7 @@ when others can read it.
    picks the build.
 3. **Transports:** SSH (OpenSSH on all three systems, including Windows' built-in server); Docker
    `exec` and Kubernetes `exec` for containers; WSL from a Windows window; and for hosts without
-   SSH a backend started by hand with `idecraft serve --pair` that connects to the window over an
+   SSH a backend started by hand with `ferris-idea serve --pair` that connects to the window over an
    encrypted, paired channel (shared with M16).
 4. **Refusals stay explicit:** an unknown host key, a missing build for an exotic platform or a
    blocked port is named with what to do, never worked around.
@@ -126,7 +126,7 @@ services is done by the project owner only.
 critically in the community. Its weaknesses are recorded as improvements (IMP entries when the spec
 is written, rule 9) instead of being reproduced:
 
-| Weakness of the reference (documented or reported) | IDECraft instead |
+| Weakness of the reference (documented or reported) | Ferris IDEA instead |
 |---|---|
 | End-to-end protection holds only if host and guest compare a security code, which is optional | rooms authenticate every person (OIDC, passkeys) over PQ TLS; on a peer channel the SAS comparison is mandatory before anything is shared (ADR-0025) |
 | Local IP addresses, project name and user name travel unencrypted to set up the session | no metadata in plain text; the invitation carries only what the handshake needs |
@@ -134,7 +134,7 @@ is written, rule 9) instead of being reproduced:
 | Calls with more than two participants were not end-to-end encrypted | no calls in the first version; any later call is end-to-end encrypted |
 | Trouble in high-latency environments and with refactorings for guests (Thoughtworks Technology Radar) | optimistic local editing with server ordering (ADR-0026), latency acceptance criteria with 50 and 300 ms delay, refactorings run in the backend and arrive as one change |
 | A session exists only while the host is online and approves each guest | the project room lives on the server; anyone with the right joins from a link, nobody has to host |
-| Guests get a reduced client and limited features | a guest uses the normal IDECraft window with the host's language services; only rights limit it |
+| Guests get a reduced client and limited features | a guest uses the normal Ferris IDEA window with the host's language services; only rights limit it |
 
 The side-by-side comparison observes the reference to find further gaps and weaknesses; it does not
 set the target.
@@ -146,7 +146,7 @@ built around a **project room owned by the server**, not around a host's window.
 research round on web IDEs and cloud development environments on 2026-11-07 (PO-STATUS).
 
 1. **Project room on the server:** a room is a project in a running (or woken on demand)
-   `idecraft serve` on the user's own server or at a service provider (M18). It has a stable URL
+   `ferris-idea serve` on the user's own server or at a service provider (M18). It has a stable URL
    and lives without any participant; when someone leaves, the work goes on. Desktop windows, the
    web client (M18) and later the mobile apps (M17) join the same room as clients of the session
    protocol (ADR-0026).
@@ -163,7 +163,7 @@ research round on web IDEs and cloud development environments on 2026-11-07 (PO-
    A link without sign-in exists only when chosen explicitly, is read-only and expires; it never
    grants running code. No present person has to approve a joiner who has the right.
 4. **Peer session (special case):** to show a local project briefly, a desktop window can open a
-   room in its own `idecraft serve` and invite guests over the paired channel of M16 (link, code or
+   room in its own `ferris-idea serve` and invite guests over the paired channel of M16 (link, code or
    QR code with the pairing secret of ADR-0025, hybrid post-quantum Noise handshake, mandatory SAS
    check, approval in the window, one use, 15 minutes by default, withdrawable). It ends when the
    window closes; the room model above is the normal case.
@@ -221,7 +221,7 @@ research round on web IDEs and cloud development environments on 2026-11-07 (PO-
    and debug, read terminals, test results and problems, commit and push, start and watch agent
    tasks, receive notifications. Screen mirroring is not planned; the operating system's own tools
    cover it.
-5. **Base:** the headless service `idecraft serve` (M10.3, built with M6.12); the HTTP transport of
+5. **Base:** the headless service `ferris-idea serve` (M10.3, built with M6.12); the HTTP transport of
    SPEC-0221 stays for local agents.
 
 ## M17 Mobile apps (iOS, Android)
@@ -233,7 +233,7 @@ research round on web IDEs and cloud development environments on 2026-11-07 (PO-
 2. **Remote mode:** connect to a paired desktop app (M16) or a server backend (M6.12/M6.14);
    project tree, editor with highlighting and completion from the host, search, run and debug
    controls, terminal, test results, problems, Git, agent tasks and notifications.
-3. **Local mode "IDECraft Lite"** with the essentials: projects in the app's storage and the
+3. **Local mode "Ferris IDEA Lite"** with the essentials: projects in the app's storage and the
    system's file providers; editor with highlighting, search and replace, undo, local history;
    Git clone, commit, pull and push over HTTPS (tokens in the system keychain, entered by the user);
    Markdown preview; SQLite browser and SQL console for remote databases; offline use.
@@ -250,13 +250,13 @@ research round on web IDEs and cloud development environments on 2026-11-07 (PO-
 
 ## M18 Web IDE (browser, self-hosted or by a service provider)
 
-Requested by the Project Owner on 2026-11-07 together with the apps: IDECraft in the browser without
+Requested by the Project Owner on 2026-11-07 together with the apps: Ferris IDEA in the browser without
 a desktop app, like the cloud development environments on the market, first self-hosted, later
 offered by a service provider. The market lesson (2024–2026: Cloud9, Glitch, Gitpod Classic, Fleet,
 Ona Cloud and Firebase Studio closed, some with weeks of notice) is built in: the same protocol and
 binary self-hosted and at a provider, a full export at any time, and a fixed notice period.
 
-1. **Transport first (before QG-1, with M6.12/M16):** `idecraft serve` gets a WebSocket endpoint
+1. **Transport first (before QG-1, with M6.12/M16):** `ferris-idea serve` gets a WebSocket endpoint
    (wss only, TLS 1.3 with X25519MLKEM768, ADR-0025) and serves the web client's assets itself, so
    client and server versions always match; COOP/COEP/CORP and a strict CSP on the IDE origin;
    bound to `127.0.0.1` unless switched on, always authenticated (no token-less mode).
@@ -304,8 +304,8 @@ binary self-hosted and at a provider, a full export at any time, and a fixed not
 1. Current comparison queue (F-070 window check, database rows F-051–F-055, further rows by weight).
 2. M6.14 step 1 (backend builds for every platform) and M6.12 step 1 (observation) can start in
    parallel; then M6.12 (session protocol, window), M6.13, the rest of M6.14.
-3. M6.12 builds the backend as the headless service `idecraft serve` (M10.3); M16 follows M6.12.
-4. M6.15 working together: the project room follows M6.12 (it needs only `idecraft serve` and the
+3. M6.12 builds the backend as the headless service `ferris-idea serve` (M10.3); M16 follows M6.12.
+4. M6.15 working together: the project room follows M6.12 (it needs only `ferris-idea serve` and the
    session protocol); desktop windows join first, the web client with M18; the peer case follows
    M16 (it reuses pairing, rights per device and the relay).
 5. M18 step 1 (wss transport, served assets) and step 2 (rendering spike) before QG-1; the web

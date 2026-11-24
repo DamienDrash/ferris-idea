@@ -1,4 +1,4 @@
-; IDECraft's colour roles for JavaScript and TypeScript (SPEC-0027 v6). Placed before the
+; Ferris IDEA's colour roles for JavaScript and TypeScript (SPEC-0027 v6). Placed before the
 ; grammar's own query: for the same node the earlier pattern wins.
 
 ; `constructor` is a keyword, other method and function names are declarations.

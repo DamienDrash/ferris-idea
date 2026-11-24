@@ -1,13 +1,14 @@
 //! SPEC-0304 behaviour 4 against the bundled DuckDB engine: a database file of its own per test, no
 //! server needed, so these run everywhere.
 
-use idecraft_database::{
+use ferris_idea_database::{
     ConnectionProfile, Credentials, Dialect, OnError, Outcome, Session, current_schema, explain,
     introspect, list_schemas, test_connection, view_definitions,
 };
 
 fn temp_file(name: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("idecraft-duckdb-{name}-{}", std::process::id()));
+    let dir =
+        std::env::temp_dir().join(format!("ferris-idea-duckdb-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     dir.join("shop.duckdb")

@@ -81,10 +81,10 @@ Write HTTP requests in a text file next to the code and send them from the IDE.
    `http://`; a URL with any scheme keeps it, so `https` is never dropped and `ftp://…` is still
    refused, and one with unresolved names stays as written. Until v4 such a URL was refused as bad.
    [OSS] `Host`, `Content-Length` (when there is a body, and `0` for a POST,
-   PUT or PATCH without one), `Connection: close` and `User-Agent: IDECraft` are added unless given. A request sent from a
+   PUT or PATCH without one), `Connection: close` and `User-Agent: FerrisIDEA` are added unless given. A request sent from a
    request file also gets `Accept-Encoding: gzip, deflate`, unless the request sets `Accept-Encoding`
    itself (then exactly what it says is sent) or carries a `Range` header (a part of a coded body
-   cannot be decoded). The body of a request is never compressed by IDECraft. A
+   cannot be decoded). The body of a request is never compressed by Ferris IDEA. A
    fragment (`#…`) of the URL is not sent. Responses with `Content-Length`, chunked transfer coding or
    close-delimited bodies are read; HEAD, 204 and 304 have no body; 1xx responses are skipped. A timeout
    (default 30 s) applies to connecting and reading; a request that runs into it fails with a message
@@ -95,7 +95,7 @@ Write HTTP requests in a text file next to the code and send them from the IDE.
    was undone, the final URL, the redirects followed, the time taken in milliseconds and notes: one
    sentence for each thing the client did that the request file does not show (credentials kept back
    on a redirect, a redirect not followed and why, a body that was decoded, cut or damaged). A body
-   whose coding IDECraft does not decode has no text. [GEN, STD]
+   whose coding Ferris IDEA does not decode has no text. [GEN, STD]
 6. MCP tool `http_requests` (path, optional environment) listing the file's requests with resolved method,
    URL, headers and body, their settings and notes and any unresolved names; MCP tool `send_http_request`
    sending one (dry run by default, with bodies from files read in, a refused file reported as
@@ -124,7 +124,7 @@ Write HTTP requests in a text file next to the code and send them from the IDE.
 9. **Parts that are never sent, run or written.** At the end of a request, after its body: a response
    handler (`> {% … %}` over one or several lines, or `> path` naming a script file), a response target
    (`>> path`, `>>! path`) and a stored-response reference (`<> path`). They are taken out of the body
-   and listed in the request's notes as not supported. IDECraft never runs code from a request file or
+   and listed in the request's notes as not supported. Ferris IDEA never runs code from a request file or
    from a response, never writes a response to a file and never hands a response to another program.
    [DOC, GEN, security first]
 10. **Request settings.** Comment lines between the separator and the request line: `# @no-redirect`
@@ -137,7 +137,7 @@ Write HTTP requests in a text file next to the code and send them from the IDE.
     the path is relative to the folder of the request file (variables are resolved first); absolute
     paths and `~` are refused; after resolving links the file must lie inside the project folder; it
     must be a regular file of at most 16 MiB of UTF-8 text; the private environment file
-    (`http-client.private.env.json`) and files under `.git/` and `.idecraft/` are refused. Variables
+    (`http-client.private.env.json`) and files under `.git/` and `.ferris-idea/` are refused. Variables
     inside the file are not replaced. A refused or missing file means the request is not sent; the
     message names the path and the rule. A body of type `multipart/…` is sent with CRLF line ends
     (RFC 2046) for the lines written in the request file and ends with CRLF; file content is not

@@ -7,8 +7,8 @@
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_workbench::{EditorView, WorkbenchView};
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_workbench::{EditorView, WorkbenchView};
 
 const FOLD: &str = "import java.util.ArrayList;
 import java.util.List;
@@ -45,7 +45,7 @@ public class Fold {
 ";
 
 fn workspace() -> PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-lambdas-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-lambdas-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src")).unwrap();
     std::fs::write(root.join("src/Fold.java"), FOLD).unwrap();

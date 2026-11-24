@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
-use idecraft_vcs::{RECENT_BRANCHES, Repo, StashOptions};
+use ferris_idea_vcs::{RECENT_BRANCHES, Repo, StashOptions};
 
 const WAIT: Duration = Duration::from_secs(60);
 
@@ -31,8 +31,10 @@ struct Setup {
 impl Setup {
     /// `remote.git` (bare), `a` and `b` cloned from it with one commit on `main`.
     fn new(tag: &str) -> Self {
-        let dir =
-            std::env::temp_dir().join(format!("idecraft-branch-ops-{tag}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "ferris-idea-branch-ops-{tag}-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let dir = dir.canonicalize().unwrap();
@@ -107,10 +109,17 @@ fn tags_recent_branches_and_detached_checkout() {
     git(&dir, &["branch", "-q", "-D", "gone"]);
     assert_eq!(
         a.recent_branches(RECENT_BRANCHES).unwrap(),
-        ["fix", "feature/one"],
-        "newest first, without the current branch and deleted ones"
+        ["main", "fix", "feature/one"],
+        "newest first, the current branch included, deleted ones left out (v10)"
     );
-    assert_eq!(a.recent_branches(1).unwrap(), ["fix"]);
+    assert_eq!(a.recent_branches(1).unwrap(), ["main"]);
+    // The current branch stays first after a rename the reflog does not name as a checkout.
+    git(&dir, &["branch", "-q", "-m", "main", "trunk"]);
+    assert_eq!(
+        a.recent_branches(RECENT_BRANCHES).unwrap(),
+        ["trunk", "fix", "feature/one"]
+    );
+    git(&dir, &["branch", "-q", "-m", "trunk", "main"]);
     // A tag checks out as a detached HEAD; an option-like revision is refused.
     let done = a.checkout_revision("v1.0").unwrap();
     assert!(done.ok, "{done:?}");

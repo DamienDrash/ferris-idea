@@ -580,7 +580,7 @@ mod tests {
     /// SPEC-0275 AK-30 (v13): expanding and collapsing are the keymap's actions.
     #[test]
     fn expand_and_collapse_follow_the_keymap() {
-        use idecraft_ui::keymap::{Keymap, KeymapFile, Keystroke, Shortcut, platform_parent};
+        use ferris_idea_ui::keymap::{Keymap, KeymapFile, Keystroke, Shortcut, platform_parent};
         let key = |keymap: &Keymap, key: &str, platform: bool| {
             let bound = crate::keymaps::tree_actions_in(keymap, key, false, false, false, platform);
             let bound: Vec<&str> = bound.iter().map(String::as_str).collect();

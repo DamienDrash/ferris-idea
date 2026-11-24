@@ -211,6 +211,25 @@ pub struct CompletionItem {
     /// behaviour 44).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub origin: Option<String>,
+    /// Where the name is declared when the project declares it: in the file itself or in another
+    /// file of the project (`SPEC-0072` v21 behaviour 56); `None` for the server's other names
+    /// (built-ins, libraries).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub declared_in: Option<DeclaredIn>,
+    /// The list is asked in a call position (`(` follows the name) and this is no function,
+    /// method, constructor or class (`SPEC-0072` v21 behaviour 57).
+    #[serde(skip)]
+    pub not_callable_here: bool,
+}
+
+/// Where a completion item's name is declared (`SPEC-0072` v21 behaviour 56).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DeclaredIn {
+    /// In the file being edited.
+    File,
+    /// In another file of the project.
+    Project,
 }
 
 /// An edit that comes with a completion item (`SPEC-0072` v7 behaviour 20).
@@ -773,16 +792,23 @@ impl Files {
     }
 }
 
-impl Converter for Files {
-    fn character(&mut self, uri: &str, line: u64, units: u64) -> u64 {
+impl Files {
+    /// The text of the file at `uri` as positions of it are read (empty when it cannot be read).
+    pub(crate) fn text(&mut self, uri: &str) -> &str {
         if !self.texts.contains_key(uri) {
             let text = uri_to_path(uri)
                 .and_then(|p| self.read(&p).ok())
                 .unwrap_or_default();
             self.texts.insert(uri.to_owned(), text);
         }
-        let text = &self.texts[uri];
-        from_server(line_of(text, line), units, self.encoding)
+        &self.texts[uri]
+    }
+}
+
+impl Converter for Files {
+    fn character(&mut self, uri: &str, line: u64, units: u64) -> u64 {
+        let encoding = self.encoding;
+        from_server(line_of(self.text(uri), line), units, encoding)
     }
 }
 
@@ -1191,8 +1217,16 @@ impl Opened {
     }
 
     /// The raw diagnostics the server publishes for the opened text, waiting at most `wait`; a
-    /// pooled server that already had this text answers with what it published before.
+    /// pooled server that already had this text answers with what it published before. Nothing
+    /// published in time is an empty list here; [`Self::published_diagnostics`] tells it apart.
     pub(crate) async fn diagnostics(&mut self, wait: Duration) -> Vec<Value> {
+        self.published_diagnostics(wait).await.unwrap_or_default()
+    }
+
+    /// [`Self::diagnostics`], `None` when the server neither answered the pull nor published a
+    /// list for the text within `wait`: the file was not analysed, which an empty list (a clean
+    /// file) must not stand for (`SPEC-0006` v59 behaviour 23).
+    pub(crate) async fn published_diagnostics(&mut self, wait: Duration) -> Option<Vec<Value>> {
         // A server that publishes in steps answers a pull with the complete list; without an
         // answer the publications are read as for any server (`SPEC-0141` v4 behaviour 9).
         if self.pulls_diagnostics {
@@ -1207,7 +1241,7 @@ impl Opened {
             if let Ok(report) = pulled
                 && let Some(items) = report["items"].as_array()
             {
-                return items.clone();
+                return Some(items.clone());
             }
         }
         match &mut self.client {
@@ -1224,7 +1258,7 @@ impl Opened {
                 loop {
                     let left = until.saturating_duration_since(tokio::time::Instant::now());
                     let Some(n) = c.next_notification(left).await else {
-                        return first.unwrap_or_default();
+                        return first;
                     };
                     if n.method == crate::lsp::INDEXING_STARTED {
                         indexing = true;
@@ -1239,7 +1273,7 @@ impl Opened {
                         if (self.refines_diagnostics || self.publishes_twice)
                             && let Some(later) = c.latest_held_diagnostics(&self.uri)
                         {
-                            return later;
+                            return Some(later);
                         }
                         let list = n.params["diagnostics"]
                             .as_array()
@@ -1259,7 +1293,7 @@ impl Opened {
                             until = deadline.min(tokio::time::Instant::now() + REFINE_WAIT);
                             continue;
                         }
-                        return list;
+                        return Some(list);
                     }
                 }
             }
@@ -1275,7 +1309,6 @@ impl Opened {
                 .await
                 .ok()
                 .flatten()
-                .unwrap_or_default()
             }
         }
     }
@@ -1332,7 +1365,54 @@ pub async fn hover_in(
     character: u64,
     wait: Duration,
 ) -> Result<Option<Hover>, LspError> {
+    // A class or id name in an HTML attribute shows what its rule shows in the stylesheet
+    // (`SPEC-0042` v26 behaviour 47).
+    if crate::html_css::is_html(file) {
+        let disk;
+        let content = match text {
+            Some(t) => Some(t),
+            None => {
+                disk = std::fs::read_to_string(file).ok();
+                disk.as_deref()
+            }
+        };
+        if let Some(rule) = content
+            .and_then(|t| crate::html_css::declarations(root, file, t, line, character))
+            .and_then(|rules| rules.into_iter().next())
+        {
+            return hover_at(
+                root,
+                &rule.path,
+                None,
+                rule.range.start_line,
+                rule.range.start_character,
+                wait,
+            )
+            .await;
+        }
+    }
+    hover_at(root, file, text, line, character, wait).await
+}
+
+/// [`hover_in`] as the file's language server answers it.
+async fn hover_at(
+    root: &Path,
+    file: &Path,
+    text: Option<&str>,
+    line: u64,
+    character: u64,
+    wait: Duration,
+) -> Result<Option<Hover>, LspError> {
     let mut o = Opened::open_text(root, file, text, wait).await?;
+    // On a method reference's `::` or the first character of its name jdtls describes the
+    // functional interface; one character into the name it describes the referenced method
+    // (`SPEC-0024` v2 behaviour 8).
+    let character = if LanguageId::detect(file) == Some(LanguageId::Java) {
+        crate::java_calls::method_reference_character(line_of(&o.text, line), character)
+            .unwrap_or(character)
+    } else {
+        character
+    };
     let answer = o
         .ask("textDocument/hover", o.position(line, character))
         .await;
@@ -1492,11 +1572,8 @@ fn expand_calls<'a>(
             CallDirection::Callees => ("callHierarchy/outgoingCalls", "to"),
         };
         let calls = o.ask(method, json!({"item": item})).await?;
-        ancestors.push(key);
+        let mut targets: Vec<(Value, Vec<Range>)> = Vec::new();
         for call in calls.as_array().into_iter().flatten() {
-            if *budget == 0 {
-                break;
-            }
             let next = call[other].clone();
             // Call sites are written in the caller: the child for callers, this node for callees.
             let site_uri = match direction {
@@ -1509,6 +1586,19 @@ fn expand_calls<'a>(
                 .flatten()
                 .filter_map(|r| parse_range(r, &site_uri, &mut o.files))
                 .collect();
+            targets.push((next, sites));
+        }
+        if direction == CallDirection::Callees
+            && uri.ends_with(".java")
+            && matches!(item["kind"].as_u64(), Some(6 | 9))
+        {
+            java_creations(o, &uri, &node.location.range, &mut targets).await;
+        }
+        ancestors.push(key);
+        for (next, sites) in targets {
+            if *budget == 0 {
+                break;
+            }
             let child =
                 expand_calls(o, next, sites, direction, depth - 1, ancestors, budget).await?;
             node.children.push(child);
@@ -1516,6 +1606,69 @@ fn expand_calls<'a>(
         ancestors.pop();
         Ok(node)
     })
+}
+
+/// Adds to the callees of the Java method or constructor named at `name` in `uri` the `new`
+/// expressions of its body that jdtls left out (a record's canonical constructor, which the source
+/// does not write): each one is what the server's call hierarchy finds at the created type's name,
+/// with its call sites, placed in source order among the server's callees (`SPEC-0082` v8
+/// behaviour 19).
+async fn java_creations(
+    o: &mut Opened,
+    uri: &str,
+    name: &Range,
+    targets: &mut Vec<(Value, Vec<Range>)>,
+) {
+    let text = if uri == o.uri {
+        o.text.clone()
+    } else {
+        o.files.text(uri).to_owned()
+    };
+    // A creation the server reported has a call site of exactly its range; a call on the created
+    // object (`new Rec(…).toString()`) starts there too but ends later.
+    let covered: Vec<Range> = targets
+        .iter()
+        .flat_map(|(_, sites)| sites.iter().cloned())
+        .collect();
+    let mut added: Vec<(Value, Vec<Range>)> = Vec::new();
+    for creation in crate::java_calls::creations(&text, name.start_line, name.start_character) {
+        if covered.contains(&creation.range) {
+            continue;
+        }
+        let units = to_server(
+            line_of(&text, creation.name_line),
+            creation.name_character,
+            o.files.encoding,
+        );
+        let params = json!({
+            "textDocument": {"uri": uri},
+            "position": {"line": creation.name_line, "character": units},
+        });
+        let Ok(items) = o.ask("textDocument/prepareCallHierarchy", params).await else {
+            continue;
+        };
+        let Some(target) = items.as_array().and_then(|a| a.first()).cloned() else {
+            continue;
+        };
+        let key = item_key(&target);
+        match added.iter_mut().find(|(t, _)| item_key(t) == key) {
+            Some((_, sites)) => sites.push(creation.range),
+            None => added.push((target, vec![creation.range])),
+        }
+    }
+    let first = |sites: &[Range]| {
+        sites
+            .first()
+            .map_or((u64::MAX, u64::MAX), |r| (r.start_line, r.start_character))
+    };
+    for (target, sites) in added {
+        let at = first(&sites);
+        let index = targets
+            .iter()
+            .position(|(_, s)| first(s) > at)
+            .unwrap_or(targets.len());
+        targets.insert(index, (target, sites));
+    }
 }
 
 /// Definition or references of the symbol at a position of `file`.
@@ -1555,7 +1708,7 @@ pub async fn found_in(
     kind: LocationKind,
     wait: Duration,
 ) -> Result<Found, LspError> {
-    // A class, an id and a jump link of an HTML file are answered from IDECraft's own syntax
+    // A class, an id and a jump link of an HTML file are answered from Ferris IDEA's own syntax
     // trees, without a server (`SPEC-0042` v17 behaviours 28, 29 and 33).
     if kind == LocationKind::Definition && crate::html_css::is_html(file) {
         let own = match text {
@@ -1692,7 +1845,11 @@ pub async fn complete_in(
                     completion_ranges(raw, &uri, &mut o.files);
             }
         }
-        // TypeScript and JavaScript: call parentheses and IDECraft's postfix templates
+        // Stylesheets: no obsolete values, `flow` for `display` (`SPEC-0042` v26 behaviour 45).
+        if crate::html_css::is_stylesheet(file) {
+            crate::html_css::clean_css_values(&mut items);
+        }
+        // TypeScript and JavaScript: call parentheses and Ferris IDEA's postfix templates
         // (`SPEC-0072` v8 behaviours 29–30).
         if matches!(
             LanguageId::detect(file),
@@ -1711,7 +1868,7 @@ pub async fn complete_in(
             ));
             items.truncate(limit);
         }
-        // Python: call parentheses, IDECraft's postfix and live templates and the standard
+        // Python: call parentheses, Ferris IDEA's postfix and live templates and the standard
         // library names the server does not offer (`SPEC-0072` v9 behaviours 37–41).
         if language == Some(LanguageId::Python) {
             let line_text = line_of(&o.text, line).to_owned();
@@ -1724,6 +1881,16 @@ pub async fn complete_in(
             items.extend(py::live_items(&line_text, at));
             items.truncate(limit);
         }
+        // Names the project declares, and callables in a call position, first among the items
+        // the server ranks alike (`SPEC-0072` v21 behaviours 56 and 57).
+        crate::completion_filter::mark_declared(
+            &mut items,
+            root,
+            file,
+            &o.text,
+            line as usize,
+            character as usize,
+        );
         items
     });
     o.close().await;
@@ -1908,7 +2075,7 @@ pub async fn symbols_in(
     text: Option<&str>,
     wait: Duration,
 ) -> Result<Vec<Symbol>, LspError> {
-    // The elements of an HTML file, nested, from IDECraft's own syntax tree and without a server
+    // The elements of an HTML file, nested, from Ferris IDEA's own syntax tree and without a server
     // (`SPEC-0042` v17 behaviours 31 and 33).
     if crate::html_css::is_html(file) {
         return match text {
@@ -2036,6 +2203,35 @@ mod tests {
             tokio::time::sleep(Duration::from_secs(3600)).await;
         });
         o.diagnostics(Duration::from_secs(120)).await
+    }
+
+    /// SPEC-0006 v59 AK-23: a server that says nothing about the opened text gives no answer, one
+    /// that publishes an empty list a clean file.
+    #[tokio::test(start_paused = true)]
+    async fn silence_is_no_answer_and_an_empty_list_is_clean() {
+        use tokio::io::{AsyncWriteExt, duplex};
+        async fn answer(script: Vec<Value>) -> Option<Vec<Value>> {
+            let (client_out, _server_in) = duplex(1 << 16);
+            let (mut server_out, client_in) = duplex(1 << 16);
+            let client = LspClient::new(client_in, client_out, None::<tokio::io::DuplexStream>);
+            let mut o = Opened::over(client, Path::new("/p/src/Report.php"), "<?php\n");
+            tokio::spawn(async move {
+                for n in script {
+                    let body =
+                        json!({"jsonrpc": "2.0", "method": n["method"], "params": n["params"]})
+                            .to_string();
+                    let framed = format!("Content-Length: {}\r\n\r\n{body}", body.len());
+                    server_out.write_all(framed.as_bytes()).await.unwrap();
+                }
+                tokio::time::sleep(Duration::from_secs(3600)).await;
+            });
+            o.published_diagnostics(Duration::from_secs(30)).await
+        }
+        assert_eq!(answer(vec![]).await, None);
+        assert_eq!(answer(vec![said("window/logMessage").unwrap()]).await, None);
+        assert_eq!(answer(vec![published(&[]).unwrap()]).await, Some(vec![]));
+        let found = answer(vec![published(&["unused"]).unwrap()]).await.unwrap();
+        assert_eq!(messages(&found), ["unused"]);
     }
 
     fn published(problems: &[&str]) -> Option<Value> {

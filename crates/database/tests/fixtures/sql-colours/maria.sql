@@ -1,0 +1,5 @@
+# MariaDB comment
+SELECT `id`, 'a\'b' FROM f060_note WHERE id = 1 RETURNING id;
+DELIMITER //
+CREATE PROCEDURE p() BEGIN SELECT 1; END //
+DELIMITER ;

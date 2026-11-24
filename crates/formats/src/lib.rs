@@ -1,19 +1,19 @@
-//! Exchange files of IDECraft (`SPEC-0303`): reading `.idcrun`, `.idckeymap`, `.idctheme`,
+//! Exchange files of Ferris IDEA (`SPEC-0303`): reading `.idcrun`, `.idckeymap`, `.idctheme`,
 //! `.idcsources` and `.idcsettings` files into a preview of what they contain and change, applying
 //! a preview after the user confirmed it, exporting the current state, and the Share link.
 //!
-//! The envelope, problems, shapes and migrations are [`idecraft_core::format`]; this crate knows
+//! The envelope, problems, shapes and migrations are [`ferris_idea_core::format`]; this crate knows
 //! the targets of each kind (run configurations, the user keymap, the IDE settings, connection
 //! profiles), which is why it sits above `core`, `ui` and `database`.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use idecraft_core::format::{self, Envelope, Problem, Use};
-use idecraft_core::{IdeSettings, RunConfig};
-use idecraft_database::ConnectionProfile;
-use idecraft_ui::keymap::{Keymap, KeymapFile, Shortcut};
-use idecraft_ui::theme::ThemeId;
+use ferris_idea_core::format::{self, Envelope, Problem, Use};
+use ferris_idea_core::{IdeSettings, RunConfig};
+use ferris_idea_database::ConnectionProfile;
+use ferris_idea_ui::keymap::{Keymap, KeymapFile, Shortcut};
+use ferris_idea_ui::theme::ThemeId;
 use serde::Serialize;
 
 /// Where an import writes and an export reads.
@@ -21,7 +21,7 @@ use serde::Serialize;
 pub struct Targets {
     /// The workspace (run configurations, connections).
     pub root: PathBuf,
-    /// The user keymap (`keymaps/IDECraft.toml`).
+    /// The user keymap (`keymaps/FerrisIDEA.toml`).
     pub keymap_file: Option<PathBuf>,
     /// The IDE settings (`settings.toml`).
     pub settings_file: Option<PathBuf>,
@@ -34,16 +34,16 @@ impl Targets {
     pub fn user(root: &Path) -> Self {
         Self {
             root: root.to_path_buf(),
-            keymap_file: idecraft_core::keymap_file(),
-            settings_file: idecraft_core::ide_settings_file(),
-            legacy_theme_file: idecraft_core::theme_file(),
+            keymap_file: ferris_idea_core::keymap_file(),
+            settings_file: ferris_idea_core::ide_settings_file(),
+            legacy_theme_file: ferris_idea_core::theme_file(),
         }
     }
 
     fn settings(&self) -> IdeSettings {
         self.settings_file
             .as_deref()
-            .map(idecraft_core::load_ide_settings)
+            .map(ferris_idea_core::load_ide_settings)
             .unwrap_or_default()
     }
 
@@ -55,7 +55,7 @@ impl Targets {
         let chosen = self
             .settings_file
             .as_deref()
-            .and_then(|f| idecraft_core::chosen_theme(f, self.legacy_theme_file.as_deref()));
+            .and_then(|f| ferris_idea_core::chosen_theme(f, self.legacy_theme_file.as_deref()));
         ThemeId::from_saved(chosen.as_deref()).name().to_owned()
     }
 }
@@ -75,7 +75,7 @@ pub enum Action {
 /// One change an import makes (behaviour 11).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Change {
-    /// The file changed, as shown (`.idecraft/run.toml`, `IDE settings`, `user keymap`).
+    /// The file changed, as shown (`.ferris-idea/run.toml`, `IDE settings`, `user keymap`).
     pub target: String,
     /// Add, replace or unchanged.
     pub action: Action,
@@ -109,7 +109,7 @@ impl Change {
 
 #[derive(Debug, Clone)]
 enum Plan {
-    Run(RunConfig),
+    Run(Box<RunConfig>),
     Keymap(BTreeMap<String, Vec<Shortcut>>),
     Theme {
         name: String,
@@ -117,7 +117,7 @@ enum Plan {
     },
     Sources(Vec<ConnectionProfile>),
     Settings {
-        settings: IdeSettings,
+        settings: Box<IdeSettings>,
         keymap: Option<BTreeMap<String, Vec<Shortcut>>>,
     },
 }
@@ -186,7 +186,7 @@ impl Preview {
         }
     }
 
-    /// The preview as text lines (`idecraft open --print`, the window).
+    /// The preview as text lines (`ferris-idea open --print`, the window).
     pub fn lines(&self) -> Vec<String> {
         let mut out = vec![self.heading()];
         if let Some(k) = &self.kind {
@@ -281,7 +281,7 @@ pub fn preview_text(text: &str, file: &str, targets: &Targets) -> Preview {
     };
     if kind.extension.is_none() {
         preview.problems.push(Problem::new(
-            "idecraft.kind",
+            "ferris-idea.kind",
             format!("`{}` is a project file, not an exchange file", kind.id),
         ));
         return preview;
@@ -298,7 +298,7 @@ pub fn preview_text(text: &str, file: &str, targets: &Targets) -> Preview {
         };
         preview
             .problems
-            .push(Problem::new("idecraft.kind", message));
+            .push(Problem::new("ferris-idea.kind", message));
         return preview;
     }
     let result = match kind.id {
@@ -377,7 +377,7 @@ fn body_part<T: serde::de::DeserializeOwned>(
         .map_err(|e: toml::de::Error| vec![Problem::new(key, e.message().to_owned())])
 }
 
-const RUN_TARGET: &str = idecraft_core::RUN_FILE;
+const RUN_TARGET: &str = ferris_idea_core::RUN_FILE;
 
 /// Checks of a run configuration besides its shape (behaviour 10).
 fn check_run(c: &RunConfig, problems: &mut Vec<Problem>) {
@@ -441,7 +441,7 @@ fn plan_run(body: &toml::Table, targets: &Targets, p: &mut Preview) -> Result<Pl
         p.contents
             .push(format!("runs first: {}", c.before.join(", ")));
     }
-    let existing = idecraft_core::load_run_configs(&targets.root);
+    let existing = ferris_idea_core::load_run_configs(&targets.root);
     let taken = |n: &str| existing.configs.iter().any(|e| e.name == n);
     let wanted = c.name.clone();
     if taken(&wanted) {
@@ -462,7 +462,7 @@ fn plan_run(body: &toml::Table, targets: &Targets, p: &mut Preview) -> Result<Pl
         change.new = Some(format!("`{wanted}` exists, imported as `{}`", c.name));
     }
     p.changes.push(change);
-    Ok(Plan::Run(c))
+    Ok(Plan::Run(Box::new(c)))
 }
 
 /// The shortcuts of a keymap table, with problems at `prefix.actions.<id>[i]`.
@@ -597,7 +597,7 @@ fn plan_sources(
     p: &mut Preview,
 ) -> Result<Plan, Vec<Problem>> {
     let list: Vec<ConnectionProfile> = body_part(body, "connection")?;
-    if let Err(e) = idecraft_database::validate_all(&list) {
+    if let Err(e) = ferris_idea_database::validate_all(&list) {
         p.problems.push(Problem::new("connection", e.to_string()));
     }
     for (i, c) in list.iter().enumerate() {
@@ -610,8 +610,12 @@ fn plan_sources(
             ));
         }
     }
-    let existing = idecraft_database::load_profiles(&targets.root)
-        .map_err(|e| vec![Problem::new(idecraft_database::PROFILE_FILE, e.to_string())])?;
+    let existing = ferris_idea_database::load_profiles(&targets.root).map_err(|e| {
+        vec![Problem::new(
+            ferris_idea_database::PROFILE_FILE,
+            e.to_string(),
+        )]
+    })?;
     let mut out = Vec::new();
     for c in list {
         let url = c.to_url();
@@ -634,7 +638,7 @@ fn plan_sources(
             .find(|e| e.id == c.id && action == Action::Replace)
             .map(ConnectionProfile::to_url);
         p.changes.push(Change {
-            target: idecraft_database::PROFILE_FILE.into(),
+            target: ferris_idea_database::PROFILE_FILE.into(),
             action,
             item: format!("connection `{}`", c.id),
             old,
@@ -735,7 +739,10 @@ fn plan_settings(
         keymap_changes(&actions, targets, p);
         actions
     });
-    Ok(Plan::Settings { settings, keymap })
+    Ok(Plan::Settings {
+        settings: Box::new(settings),
+        keymap,
+    })
 }
 
 /// Applies a preview without problems (behaviour 12); returns the files written.
@@ -754,7 +761,7 @@ pub fn apply(preview: &Preview, targets: &Targets) -> Result<Vec<String>, String
     let io = |e: std::io::Error| e.to_string();
     match plan {
         Plan::Run(c) => {
-            idecraft_core::append_run_config(&targets.root, c).map_err(io)?;
+            ferris_idea_core::append_run_config(&targets.root, c).map_err(io)?;
             Ok(vec![RUN_TARGET.into()])
         }
         Plan::Keymap(actions) => {
@@ -768,7 +775,7 @@ pub fn apply(preview: &Preview, targets: &Targets) -> Result<Vec<String>, String
             if let Some(c) = compact {
                 s.appearance.compact_mode = *c;
             }
-            idecraft_core::save_ide_settings(file, &s).map_err(io)?;
+            ferris_idea_core::save_ide_settings(file, &s).map_err(io)?;
             if let Some(old) = &targets.legacy_theme_file {
                 format::retire(old).map_err(io)?;
             }
@@ -776,24 +783,24 @@ pub fn apply(preview: &Preview, targets: &Targets) -> Result<Vec<String>, String
         }
         Plan::Sources(list) => {
             let mut profiles =
-                idecraft_database::load_profiles(&targets.root).map_err(|e| e.to_string())?;
+                ferris_idea_database::load_profiles(&targets.root).map_err(|e| e.to_string())?;
             for c in list {
                 match profiles.iter_mut().find(|p| p.id == c.id) {
                     Some(p) => *p = c.clone(),
                     None => profiles.push(c.clone()),
                 }
             }
-            idecraft_database::save_profiles(&targets.root, &profiles)
+            ferris_idea_database::save_profiles(&targets.root, &profiles)
                 .map_err(|e| e.to_string())?;
-            Ok(vec![idecraft_database::PROFILE_FILE.into()])
+            Ok(vec![ferris_idea_database::PROFILE_FILE.into()])
         }
         Plan::Settings { settings, keymap } => {
             let file = targets.settings_file.as_ref().ok_or("no settings folder")?;
             // Whether agents may operate the window is never taken from a file: only the user
             // switches it on in Settings (SPEC-0319 behaviour 32).
-            let mut settings = settings.clone();
+            let mut settings = (**settings).clone();
             settings.ui = targets.settings().ui;
-            idecraft_core::save_ide_settings(file, &settings).map_err(io)?;
+            ferris_idea_core::save_ide_settings(file, &settings).map_err(io)?;
             if let Some(old) = &targets.legacy_theme_file
                 && settings.appearance.theme.is_some()
             {
@@ -858,7 +865,7 @@ pub fn export(kind: &str, selection: &Selection, targets: &Targets) -> Result<Ex
                 .name
                 .as_deref()
                 .ok_or("give the run configuration's `name`")?;
-            let configs = idecraft_core::load_run_configs(&targets.root);
+            let configs = ferris_idea_core::load_run_configs(&targets.root);
             let mut c = configs
                 .configs
                 .into_iter()
@@ -913,7 +920,7 @@ pub fn export(kind: &str, selection: &Selection, targets: &Targets) -> Result<Ex
         }
         "sources" => {
             let profiles =
-                idecraft_database::load_profiles(&targets.root).map_err(|e| e.to_string())?;
+                ferris_idea_database::load_profiles(&targets.root).map_err(|e| e.to_string())?;
             let chosen: Vec<ConnectionProfile> = match &selection.ids {
                 Some(ids) => ids
                     .iter()
@@ -999,8 +1006,8 @@ fn to_value(v: &impl Serialize) -> Result<toml::Value, String> {
     toml::Value::try_from(v).map_err(|e| e.to_string())
 }
 
-/// Issue page of the IDECraft repository (behaviour 18).
-pub const ISSUES_URL: &str = "https://github.com/DamienDrash/idecraft/issues/new";
+/// Issue page of the Ferris IDEA repository (behaviour 18).
+pub const ISSUES_URL: &str = "https://github.com/DamienDrash/ferris-idea/issues/new";
 /// Issue form for shared files.
 pub const SHARE_TEMPLATE: &str = "shared-file.yml";
 /// Longest Share URL; longer contents are left for the user to attach.

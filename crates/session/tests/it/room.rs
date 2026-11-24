@@ -6,14 +6,14 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
-use idecraft_session::room::{self, RoomConfig, Rooms};
-use idecraft_session::{
+use ferris_idea_session::room::{self, RoomConfig, Rooms};
+use ferris_idea_session::{
     Backend, BackendConfig, ClientSession, ErrorCode, Op, Peer, Recovery, Right, in_process,
 };
 use serde_json::{Value, json};
 
 fn scratch(tag: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("idecraft-room-{tag}-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-room-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("project")).unwrap();
     std::fs::canonicalize(dir).unwrap()
@@ -415,8 +415,8 @@ fn a_lost_connection_merges_silently_and_is_shown_as_away() {
         .unwrap();
     bob.drop_connection();
     bob.edit("a.txt", &[op(0, 0, "offline ")]).unwrap();
-    // Offline time: real for AK-6 when asked for (IDECRAFT_ROOM_OFFLINE_SECONDS=61), short here.
-    let secs = std::env::var("IDECRAFT_ROOM_OFFLINE_SECONDS")
+    // Offline time: real for AK-6 when asked for (FERRIS_IDEA_ROOM_OFFLINE_SECONDS=61), short here.
+    let secs = ferris_idea_core::product_var("FERRIS_IDEA_ROOM_OFFLINE_SECONDS")
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(1u64);
@@ -502,7 +502,7 @@ fn roles_limit_what_a_session_can_do() {
     let viewer = device(&b, &dir, "vera", &Right::ALL);
     let j = join(&viewer, &viewer_link);
     assert_eq!(j["role"], "viewer");
-    let code = |r: Result<Value, idecraft_session::RpcError>| r.unwrap_err().code;
+    let code = |r: Result<Value, ferris_idea_session::RpcError>| r.unwrap_err().code;
     assert_eq!(
         code(
             viewer
@@ -698,7 +698,7 @@ fn links_stay_secret_and_guests_stay_guests() {
     let wrong = device(&b, &dir, "mallory", &Right::ALL);
     assert_eq!(
         wrong
-            .call("room.join", json!({"link": "idecraft://room/x#nope"}))
+            .call("room.join", json!({"link": "ferris-idea://room/x#nope"}))
             .unwrap_err()
             .code,
         ErrorCode::NotGranted
@@ -866,6 +866,141 @@ fn the_history_restores_and_survives_a_restart() {
     assert_eq!(e.code, ErrorCode::Conflict);
 }
 
+/// SPEC-0323 v9 AK-36: `room.diff` shows an entry's text before and after it, also across a later
+/// rename; a viewer reads diffs but cannot restore; `room.restore` with `docs` restores several
+/// files as one group that one undo takes back, and changes nothing when one path fails.
+#[test]
+fn diffs_and_restoring_several_files_as_one_change() {
+    let dir = scratch("history-diff");
+    write(&dir, "a.txt", "alpha\n");
+    write(&dir, "b.txt", "beta\n");
+    write(&dir, "c.txt", "gamma\n");
+    let (clk, _) = clock();
+    let (b, _rooms) = make_backend(&dir, clk);
+    let (own, viewer_link) = room_with_link(&b, &dir, "viewer");
+    let apply = |changes: Value| {
+        own.call("room.apply", json!({ "changes": changes }))
+            .unwrap();
+    };
+    apply(json!([
+        {"kind": "edit", "path": "a.txt", "ops": [{"at": 0, "insert": "one "}]},
+        {"kind": "edit", "path": "b.txt", "ops": [{"at": 0, "insert": "two "}]},
+    ]));
+    let set_seq = own.call("room.status", json!({})).unwrap()["seq"]
+        .as_u64()
+        .unwrap();
+    let hist = own.call("room.history", json!({})).unwrap()["entries"]
+        .as_array()
+        .unwrap()
+        .clone();
+    let first_of_set = hist.iter().find(|e| e["doc"] == "a.txt").unwrap()["seq"]
+        .as_u64()
+        .unwrap();
+    apply(json!([{"kind": "edit", "path": "a.txt", "ops": [{"at": 0, "insert": "later "}]}]));
+    apply(json!([{"kind": "rename", "from": "a.txt", "to": "a2.txt"}]));
+    apply(json!([{"kind": "delete", "path": "c.txt"}]));
+
+    // The diff of the change set's a.txt entry, asked with the name the file has now.
+    let d = own
+        .call(
+            "room.diff",
+            json!({"doc": "a2.txt", "from": first_of_set - 1, "to": first_of_set}),
+        )
+        .unwrap();
+    assert_eq!(d["before"], "alpha\n", "{d}");
+    assert_eq!(d["after"], "one alpha\n", "{d}");
+    let code = |r: Result<Value, ferris_idea_session::RpcError>| r.unwrap_err().code;
+    assert_eq!(
+        code(own.call(
+            "room.diff",
+            json!({"doc": "nothing.txt", "from": 0, "to": 1})
+        )),
+        ErrorCode::NotFound
+    );
+    assert_eq!(
+        code(own.call("room.diff", json!({"doc": "b.txt", "from": 3, "to": 2}))),
+        ErrorCode::Invalid
+    );
+    assert_eq!(
+        code(own.call(
+            "room.diff",
+            json!({"doc": "b.txt", "from": 0, "to": set_seq + 100})
+        )),
+        ErrorCode::Invalid
+    );
+
+    // A viewer reads the history and diffs, and cannot restore.
+    let viewer = device(&b, &dir, "vera", &Right::ALL);
+    assert_eq!(join(&viewer, &viewer_link)["role"], "viewer");
+    assert!(
+        !viewer.call("room.history", json!({})).unwrap()["entries"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    let seen = viewer
+        .call(
+            "room.diff",
+            json!({"doc": "b.txt", "from": 0, "to": set_seq}),
+        )
+        .unwrap();
+    assert_eq!(seen["after"], "two beta\n");
+    assert_eq!(
+        code(viewer.call(
+            "room.restore",
+            json!({"docs": ["a2.txt", "b.txt"], "seq": 0})
+        )),
+        ErrorCode::NotGranted
+    );
+
+    // One path that is not in the history: nothing changes.
+    assert_eq!(
+        code(own.call(
+            "room.restore",
+            json!({"docs": ["b.txt", "never.txt"], "seq": 0})
+        )),
+        ErrorCode::NotFound
+    );
+    assert_eq!(b.document("b.txt").unwrap().text, "two beta\n");
+    assert_eq!(
+        code(own.call("room.restore", json!({"docs": [], "seq": 0}))),
+        ErrorCode::Invalid
+    );
+
+    // Three files back to before the change set, one of them deleted since: one group.
+    let before = own.call("room.status", json!({})).unwrap()["seq"]
+        .as_u64()
+        .unwrap();
+    let done = own
+        .call(
+            "room.restore",
+            json!({"docs": ["a2.txt", "b.txt", "c.txt", "b.txt"], "seq": first_of_set - 1}),
+        )
+        .unwrap();
+    assert_eq!(done["changes"], 3, "{done}");
+    assert_eq!(b.document("a2.txt").unwrap().text, "alpha\n");
+    assert_eq!(b.document("b.txt").unwrap().text, "beta\n");
+    assert_eq!(read(&dir, "c.txt"), "gamma\n");
+    let new = entries(&own, before);
+    assert!(
+        new.iter().all(|e| e["group"] == done["group"]),
+        "one group: {new:?}"
+    );
+    // Restoring again changes nothing.
+    let again = own
+        .call(
+            "room.restore",
+            json!({"docs": ["a2.txt", "b.txt"], "seq": first_of_set - 1}),
+        )
+        .unwrap();
+    assert_eq!(again["changes"], 0);
+    // One undo takes the whole restore back.
+    own.call("room.undo", json!({})).unwrap();
+    assert_eq!(b.document("a2.txt").unwrap().text, "later one alpha\n");
+    assert_eq!(b.document("b.txt").unwrap().text, "two beta\n");
+    assert!(!dir.join("project/c.txt").exists());
+}
+
 #[test]
 fn retention_drops_old_entries() {
     let dir = scratch("retain");
@@ -928,6 +1063,126 @@ fn presence_is_volatile_and_limited() {
     // The next second passes again.
     now.fetch_add(1000, Ordering::SeqCst);
     assert!(!presence(3));
+    // Presence has a fixed shape (v4): nothing large or nested reaches the others.
+    now.fetch_add(1000, Ordering::SeqCst);
+    let long = "x".repeat(4097);
+    for bad in [
+        json!({"doc": long}),
+        json!({"doc": {"nested": [1, 2, 3]}}),
+        json!({"caret": -1}),
+        json!({"caret": "1"}),
+        json!({"selection": [1, 2, 3]}),
+        json!({"selection": [1, "2"]}),
+        json!({"follows": "y".repeat(257)}),
+        json!({"follows": ["c1"]}),
+    ] {
+        let e = bob.call("room.presence", bad.clone()).unwrap_err();
+        assert_eq!(e.code, ErrorCode::Invalid, "{bad}");
+    }
+    bob.call(
+        "room.presence",
+        json!({"doc": "a.txt", "caret": 4, "selection": [1, 4], "follows": "c1", "extra": [1]}),
+    )
+    .unwrap();
+    let mut got = None;
+    assert!(wait(Duration::from_secs(3), || {
+        own.pump(Duration::from_millis(10));
+        // Earlier updates may still be on their way; the refused ones never come.
+        while let Ok((_, v)) = rx.try_recv() {
+            assert_ne!(v["presence"]["caret"], -1, "{v}");
+            if v["presence"]["caret"] == 4 {
+                got = Some(v);
+            }
+        }
+        got.is_some()
+    }));
+    let got = got.unwrap();
+    assert_eq!(
+        got["presence"],
+        json!({"doc": "a.txt", "caret": 4, "selection": [1, 4], "follows": "c1"})
+    );
+}
+
+/// Going away, coming back, being shown as gone and returning after that reach the others as
+/// they happen, not only in `room.status` (`SPEC-0323` v4 behaviours 10 and 21, AK-6).
+#[test]
+fn others_see_a_participant_go_away_and_come_back() {
+    let dir = scratch("away-news");
+    write(&dir, "a.txt", "x\n");
+    let (clk, skew) = clock();
+    let (b, _rooms) = make_backend(&dir, clk);
+    let (mut own, link) = room_with_link(&b, &dir, "editor");
+    let rec_dir = dir.join("rec");
+    std::fs::create_dir_all(&rec_dir).unwrap();
+    let connect = |b: &Backend| {
+        let (window, server) = in_process();
+        let (bb, peer) = (
+            b.clone(),
+            Peer {
+                name: "device:bob:bob".into(),
+                rights: editor_rights(),
+            },
+        );
+        std::thread::spawn(move || bb.serve_as(server, peer));
+        window
+    };
+    let recovery = Recovery {
+        dir: rec_dir,
+        host: "h".into(),
+        folder: folder(&dir),
+    };
+    let mut bob =
+        ClientSession::open(connect(&b), &folder(&dir), "t", "h", Some(recovery)).unwrap();
+    join(&bob, &link);
+    let rx = own.listen_host("room.");
+    let mut seen: Vec<(String, Value)> = Vec::new();
+    // Waits until the owner got `method` about bob with `away` as given (any when `None`).
+    let mut expect = |own: &mut ClientSession, method: &str, away: Option<bool>| {
+        let found = wait(Duration::from_secs(5), || {
+            let _ = own.ping();
+            own.pump(Duration::from_millis(10));
+            while let Ok(m) = rx.try_recv() {
+                seen.push(m);
+            }
+            let hit = seen.iter().position(|(m, v)| {
+                m == method && v["id"] == "device:bob" && away.is_none_or(|a| v["away"] == a)
+            });
+            if let Some(i) = hit {
+                seen.drain(..=i);
+                return true;
+            }
+            false
+        });
+        assert!(found, "no {method} away={away:?} for bob; seen {seen:?}");
+    };
+    expect(&mut own, "room.joined", None);
+    bob.drop_connection();
+    expect(&mut own, "room.presence", Some(true));
+    bob.resume(connect(&b)).unwrap();
+    expect(&mut own, "room.presence", Some(false));
+    // Past the away limit bob is shown as gone; coming back is a join the others see.
+    bob.drop_connection();
+    expect(&mut own, "room.presence", Some(true));
+    skew.fetch_add(61_000, Ordering::SeqCst);
+    expect(&mut own, "room.left", None);
+    bob.resume(connect(&b)).unwrap();
+    expect(&mut own, "room.joined", Some(false));
+    let s = own.call("room.status", json!({})).unwrap();
+    assert!(
+        s["participants"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|p| p["id"] == "device:bob" && p["away"] == false),
+        "{s}"
+    );
+    // Bob's work still merges after the return.
+    bob.open_doc("a.txt").unwrap();
+    bob.edit("a.txt", &[op(0, 0, "back ")]).unwrap();
+    assert!(wait(Duration::from_secs(5), || {
+        settle(&mut [&mut bob]);
+        b.document("a.txt").unwrap().text == "back x\n"
+    }));
 }
 
 /// Guests see no participant ids and nothing else that names a login or a device: not in the

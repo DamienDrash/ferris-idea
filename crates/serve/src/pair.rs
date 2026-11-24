@@ -1,4 +1,4 @@
-//! `idecraft serve --pair`, `--devices` and `--revoke` (`SPEC-0321` behaviours 13, 17–20).
+//! `ferris-idea serve --pair`, `--devices` and `--revoke` (`SPEC-0321` behaviours 13, 17–20).
 
 use std::io::{BufRead, IsTerminal, Write};
 use std::net::SocketAddr;
@@ -6,14 +6,14 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::Arc;
 
-use idecraft_pairing::{
+use ferris_idea_pairing::{
     Console, EXIT_REFUSED, Limits, ListenError, ListenOptions, Side, Store, Timing, listen,
 };
-use idecraft_session::{Backend, Right};
+use ferris_idea_session::{Backend, Right};
 
 /// The address `--pair` binds without `--listen`.
 pub fn default_address() -> SocketAddr {
-    SocketAddr::from(([127, 0, 0, 1], idecraft_pairing::DEFAULT_PORT))
+    SocketAddr::from(([127, 0, 0, 1], ferris_idea_pairing::DEFAULT_PORT))
 }
 
 /// Rights named on the command line; `view` is always among them.
@@ -192,7 +192,7 @@ pub fn set_rights(state: &Path, fingerprint: &str, rights: &[Right], allow_file:
 
 /// `--device-log`: the newest lines of the log, one JSON object per line.
 pub fn show_log(state: &Path, fingerprint: Option<&str>) -> ExitCode {
-    for line in idecraft_pairing::audit::read_log(state, fingerprint, 200) {
+    for line in ferris_idea_pairing::audit::read_log(state, fingerprint, 200) {
         println!("{line}");
     }
     ExitCode::SUCCESS
@@ -227,7 +227,7 @@ pub fn run(backend: Backend, state: &Path, o: PairOptions) -> ExitCode {
     if !o.has_folder {
         eprintln!(
             "error: --pair needs a folder: a paired device is bound to one project \
-             (idecraft serve --pair <folder>)"
+             (ferris-idea serve --pair <folder>)"
         );
         return ExitCode::from(2);
     }

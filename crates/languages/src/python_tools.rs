@@ -19,7 +19,7 @@ use crate::lsp::LspError;
 use crate::rename::{Edit, FileEdits};
 use crate::syntax::SyntaxDocument;
 
-/// A tool IDECraft can run on Python text.
+/// A tool Ferris IDEA can run on Python text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ToolKind {
@@ -72,11 +72,11 @@ impl ToolSearch {
     pub fn for_workspace(root: &Path) -> Self {
         Self {
             root: root.to_path_buf(),
-            environment: idecraft_core::workspace_python(root, None)
+            environment: ferris_idea_core::workspace_python(root, None)
                 .ok()
                 .and_then(|p| p.parent().map(Path::to_path_buf)),
             path_var: std::env::var_os("PATH"),
-            trusted: idecraft_core::trust::allows_project_code(root),
+            trusted: ferris_idea_core::trust::allows_project_code(root),
         }
     }
 }
@@ -143,7 +143,7 @@ pub fn ruff_waits_for_trust(search: &ToolSearch) -> bool {
 }
 
 /// What to say when none of `kinds` was found (behaviour 3): what is looked for, that nothing is
-/// installed by IDECraft, and where to install it; in safe mode, that the environment's tool
+/// installed by Ferris IDEA, and where to install it; in safe mode, that the environment's tool
 /// waits for trust.
 pub fn missing(search: &ToolSearch, kinds: &[ToolKind]) -> String {
     let names: Vec<&str> = kinds.iter().map(|k| k.program()).collect();
@@ -159,7 +159,7 @@ pub fn missing(search: &ToolSearch, kinds: &[ToolKind]) -> String {
         None => "the selected environment".to_owned(),
     };
     format!(
-        "No {names} found in {place} or on PATH. IDECraft runs a tool that is already installed and installs nothing itself: install {} into the project's virtual environment (Python Packages tool window; MCP: python_install_packages) or on PATH, then try again.",
+        "No {names} found in {place} or on PATH. Ferris IDEA runs a tool that is already installed and installs nothing itself: install {} into the project's virtual environment (Python Packages tool window; MCP: python_install_packages) or on PATH, then try again.",
         kinds.first().map_or("ruff", |k| k.program())
     )
 }
@@ -564,7 +564,7 @@ mod tests {
 
     fn tree(name: &str) -> PathBuf {
         let dir =
-            std::env::temp_dir().join(format!("idecraft-pytools-{name}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("ferris-idea-pytools-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir.canonicalize().unwrap()

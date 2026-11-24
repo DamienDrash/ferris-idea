@@ -64,12 +64,12 @@ See the language server's errors and warnings where they are, while editing.
      takes the note away before it runs. Problems under the caret (behaviour 4) are not notes and
      stay while they hold. Until v13 a note stood until the next one. [GEN]
 5. The MCP counterpart is `file_diagnostics` (SPEC-0023). [ADR-0008]
-6. **Unused code (v5):** a problem that marks something unused — IDECraft's rules `java.unused-import`,
+6. **Unused code (v5):** a problem that marks something unused — Ferris IDEA's rules `java.unused-import`,
    `java.unused-local`, `java.unused-private` and `java.unused-parameter` (SPEC-0125 v2), and every
    language-server diagnostic tagged *unnecessary* — is drawn as text in the foreground colour of
    `NOT_USED_ELEMENT_ATTRIBUTES` (grey) instead of a wavy underline. Its severity, count, message and
    fixes stay. [OBS-0019, OSS, STD]
-7. **One problem per place (v5):** when one of IDECraft's findings covers exactly the same text as a
+7. **One problem per place (v5):** when one of Ferris IDEA's findings covers exactly the same text as a
    language-server diagnostic (same start and end), only the server's diagnostic is shown and counted;
    the own quick fix stays available in ⌥↩. [OBS-0019]
 8. **Error stripe (v5):** along the right edge of the editor's text area runs a stripe 12 px wide. Each
@@ -103,7 +103,7 @@ See the language server's errors and warnings where they are, while editing.
     indicator or on the popup. With a level other than All the indicator starts with the level's
     name ("Syntax", "Essential") or, for None, a crossed-out eye "⊘" instead of the counts, and the
     popup says how many problems the level hides, e.g. "4 problems hidden by the level" (IMP-0310).
-    The levels are kept per project in `.idecraft/highlighting.json` (`{"files": {"<path relative
+    The levels are kept per project in `.ferris-idea/highlighting.json` (`{"files": {"<path relative
     to the project>": "syntax"}}`; files at All are not written) and read when a file opens and
     when its problems are recomputed. The MCP tool `highlighting_level` (path; optional `level`
     `none`, `syntax`, `essential`, `all`) reads or sets the level of a file and returns it with
@@ -126,12 +126,12 @@ See the language server's errors and warnings where they are, while editing.
 ## Acceptance criteria
 - **AK-1** Mapping with UTF-16 columns, empty ranges, sorting, counts and the problem at an offset (unit
   test); effect colours read from the bundled scheme (unit test).
-- **AK-2** In a real window (`idecraft ui --selftest`, with `clangd` installed): opening a C file with an
+- **AK-2** In a real window (`ferris-idea ui --selftest`, with `clangd` installed): opening a C file with an
   undeclared identifier shows one error.
 - **AK-3** Look by hand: wave, colours, message.
 - **AK-4 (v4)** The indicator is a check mark without errors and warnings, and shows only the non-zero
   counts otherwise (unit test `diagnostics_model::tests::indicator_is_a_check_mark_or_counts`); the window
-  self-test sees the indicator on an open file (`idecraft ui --selftest`).
+  self-test sees the indicator on an open file (`ferris-idea ui --selftest`).
 
 - **AK-5 (v5)** Unused problems are marked as such (own rules and the server's unnecessary tag), an own
   finding on the same range as a server diagnostic is dropped, stripe marks are placed and coloured
@@ -140,9 +140,9 @@ See the language server's errors and warnings where they are, while editing.
   the Java file of `java_inspection_steps`; by hand next to the reference (OBS-0019 re-check).
 
 - **AK-6 (v6)** The four levels filter the problems as stated, the indicator's label per level and the
-  hidden count, reading and writing `.idecraft/highlighting.json` (unit tests
+  hidden count, reading and writing `.ferris-idea/highlighting.json` (unit tests
   `diagnostics_model::tests::highlighting_levels_filter_problems` and
-  `idecraft_languages::highlighting::tests`); MCP `highlighting_level` reads, sets, resets and refuses
+  `ferris_idea_languages::highlighting::tests`); MCP `highlighting_level` reads, sets, resets and refuses
   an unknown level (`crates/mcp/tests/it/protocol.rs`: `highlighting_level_tool`); window self-test
   (`java_inspection_steps`, written): setting Syntax on the Java file leaves only errors, All brings
   the warnings back; by hand next to the reference.
@@ -176,10 +176,10 @@ file with injected languages).
 v3: with the language server pool (SPEC-0090) diagnostics also follow typing; open and save still ask
 for them. v4: the corner indicator does not show an "analysing" state while diagnostics are still on the
 way; until they arrive it shows the check mark. v5: compared side by side in OBS-0019. v6: the
-reference decides "syntax" and "essential" by kinds of analysis; IDECraft decides by severity,
+reference decides "syntax" and "essential" by kinds of analysis; Ferris IDEA decides by severity,
 because the language servers do not mark which of their errors are syntax errors. The reference
-keeps the levels in its workspace settings; IDECraft keeps them in `.idecraft/highlighting.json`,
+keeps the levels in its workspace settings; Ferris IDEA keeps them in `.ferris-idea/highlighting.json`,
 which agents read and change through MCP, and the popup names the number of hidden problems
 (IMP-0310). The reference also greys unused public methods and classes in the editor (OBS-0019
-item 1); IDECraft's editor marks unused code within the file only and reports the project-wide
+item 1); Ferris IDEA's editor marks unused code within the file only and reports the project-wide
 case as the global inspection of SPEC-0316 in Inspect Code.

@@ -7,8 +7,8 @@
 
 use std::path::{Path, PathBuf};
 
-use idecraft_languages::inspections::Level;
-use idecraft_languages::spring::SpringModel;
+use ferris_idea_languages::inspections::Level;
+use ferris_idea_languages::spring::SpringModel;
 
 /// The endpoint rows as `METHODS path handler file:line` (1-based line; several methods joined
 /// with `|`, none for a mapping without a method, a client row marked ` (client)`) and the bean
@@ -17,11 +17,11 @@ fn sample(name: &str) -> (Vec<String>, SpringModel) {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/frameworks")
         .join(name);
-    let files: Vec<PathBuf> = idecraft_core::Workspace::open(&root)
+    let files: Vec<PathBuf> = ferris_idea_core::Workspace::open(&root)
         .unwrap()
         .files()
         .unwrap();
-    let endpoints = idecraft_languages::endpoints::endpoints(&root, &files)
+    let endpoints = ferris_idea_languages::endpoints::endpoints(&root, &files)
         .into_iter()
         .map(|e| {
             format!(
@@ -32,7 +32,10 @@ fn sample(name: &str) -> (Vec<String>, SpringModel) {
             )
         })
         .collect();
-    (endpoints, idecraft_languages::spring::model(&root, &files))
+    (
+        endpoints,
+        ferris_idea_languages::spring::model(&root, &files),
+    )
 }
 
 /// The problems of severity `level` as `file:line message` (1-based line), sorted.
@@ -62,7 +65,7 @@ fn problems(m: &SpringModel) -> Vec<String> {
 /// The weak warnings (SPEC-0115 v4 behaviour 11): the 1-based lines of the annotations of
 /// injected fields, as `file:line`, after checking that each carries the recommendation.
 fn field_injections(m: &SpringModel) -> Vec<String> {
-    let suffix = format!(" {}", idecraft_languages::spring::FIELD_INJECTION);
+    let suffix = format!(" {}", ferris_idea_languages::spring::FIELD_INJECTION);
     problems_of(m, Level::Weak)
         .into_iter()
         .map(|p| {

@@ -5,8 +5,8 @@
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use idecraft_languages::insight::CallNode;
-use idecraft_languages::java_structure::{
+use ferris_idea_languages::insight::CallNode;
+use ferris_idea_languages::java_structure::{
     TypeDirection, add_overridable_methods_in, method_hierarchy_in, overridable_methods_in,
     super_target_in, type_hierarchy_in,
 };
@@ -35,15 +35,16 @@ fn write(root: &Path, name: &str, text: &str) {
 #[tokio::test]
 async fn hierarchies_super_method_and_overridable_methods() {
     crate::pooled();
-    if idecraft_languages::servers::resolve(idecraft_languages::LanguageId::Java).is_err() {
+    if ferris_idea_languages::servers::resolve(ferris_idea_languages::LanguageId::Java).is_err() {
         assert!(
-            std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+            ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
             "required tool missing: jdtls"
         );
         eprintln!("skipped: jdtls not installed");
         return;
     }
-    let root = std::env::temp_dir().join(format!("idecraft-java-structure-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-java-structure-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src/main/java/shop")).unwrap();
     let root = root.canonicalize().unwrap();
@@ -161,7 +162,7 @@ async fn hierarchies_super_method_and_overridable_methods() {
         .find(|f| f.path.ends_with("Cat.java"))
         .unwrap()
         .edits;
-    let after = idecraft_languages::rename::apply_edits(&text, edits).unwrap();
+    let after = ferris_idea_languages::rename::apply_edits(&text, edits).unwrap();
     assert!(after.contains("@Override"), "{after}");
     assert!(after.contains("public String describe()"), "{after}");
     assert!(after.contains("super.describe()"), "{after}");
@@ -173,18 +174,18 @@ async fn hierarchies_super_method_and_overridable_methods() {
 #[tokio::test]
 async fn gutter_marks_and_member_counts() {
     crate::pooled();
-    use idecraft_languages::java_marks::declaration_marks_in;
-    use idecraft_languages::ts_structure::MarkKind;
-    use idecraft_languages::usages::usage_counts_in;
-    if idecraft_languages::servers::resolve(idecraft_languages::LanguageId::Java).is_err() {
+    use ferris_idea_languages::java_marks::declaration_marks_in;
+    use ferris_idea_languages::ts_structure::MarkKind;
+    use ferris_idea_languages::usages::usage_counts_in;
+    if ferris_idea_languages::servers::resolve(ferris_idea_languages::LanguageId::Java).is_err() {
         assert!(
-            std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+            ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
             "required tool missing: jdtls"
         );
         eprintln!("skipped: jdtls not installed");
         return;
     }
-    let root = std::env::temp_dir().join(format!("idecraft-java-marks-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-java-marks-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src/main/java/shop")).unwrap();
     let root = root.canonicalize().unwrap();

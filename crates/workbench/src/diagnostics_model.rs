@@ -3,7 +3,7 @@
 
 use std::ops::Range;
 
-use idecraft_languages::lsp::Diagnostic;
+use ferris_idea_languages::lsp::Diagnostic;
 
 /// How serious a problem is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -25,7 +25,7 @@ pub struct Problem {
     pub severity: Severity,
     /// Message with the source in front, e.g. `clang: use of undeclared identifier 'x'`.
     pub message: String,
-    /// Id of the IDECraft inspection that found it; `None` for language servers and plugins.
+    /// Id of the Ferris IDEA inspection that found it; `None` for language servers and plugins.
     pub inspection: Option<&'static str>,
     /// Marks unused code: drawn grey instead of wavy (`SPEC-0070` v5 behaviour 6).
     pub unused: bool,
@@ -109,12 +109,36 @@ pub fn without_duplicates(server: &[Problem], own: Vec<Problem>) -> Vec<Problem>
         .collect()
 }
 
-pub use idecraft_languages::highlighting::HighlightLevel;
+pub use ferris_idea_languages::highlighting::HighlightLevel;
+
+/// How a problem is underlined in the editor, with the colour key of its mark.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Underline {
+    /// A wavy line (`SPEC-0070` behaviour 2).
+    Wavy(&'static str),
+    /// A dotted line, calmer than a problem: a spelling of the other English variant or mixed
+    /// spelling (`SPEC-0155` v7 behaviour 7, ADR-0009).
+    Dotted(&'static str),
+}
+
+/// The underline of problem `q` (unused code has none: it is drawn grey).
+pub fn underline(q: &Problem) -> Underline {
+    if q.inspection
+        .is_some_and(|id| ferris_idea_languages::spelling_variants::RULES.contains(&id))
+    {
+        return Underline::Dotted("INFO_ATTRIBUTES");
+    }
+    Underline::Wavy(match q.severity {
+        Severity::Error => "ERRORS_ATTRIBUTES",
+        Severity::Warning => "WARNING_ATTRIBUTES",
+        Severity::Weak => "WEAK_WARNING_ATTRIBUTES",
+    })
+}
 
 /// Whether the highlighting level `level` shows problem `p` (`SPEC-0070` v6 behaviour 11):
 /// unused code counts as weak.
 pub fn level_shows(level: HighlightLevel, p: &Problem) -> bool {
-    use idecraft_languages::highlighting::Seriousness;
+    use ferris_idea_languages::highlighting::Seriousness;
     let s = match p.severity {
         _ if p.unused => Seriousness::Weak,
         Severity::Error => Seriousness::Error,

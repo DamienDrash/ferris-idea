@@ -3,12 +3,12 @@
 
 use std::time::{Duration, Instant};
 
-use idecraft_languages::{insight, lsp, pool};
+use ferris_idea_languages::{insight, lsp, pool};
 
-/// Skips a test whose tool is missing; with `IDECRAFT_REQUIRE_TOOLS` set (CI) it fails instead.
+/// Skips a test whose tool is missing; with `FERRIS_IDEA_REQUIRE_TOOLS` set (CI) it fails instead.
 fn skip(reason: &str) {
     assert!(
-        std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+        ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
         "required tool missing: {reason}"
     );
     eprintln!("skipped: {reason}");
@@ -42,7 +42,7 @@ async fn one_server_follows_the_text_and_publishes_while_typing() {
         skip("clangd not installed");
         return;
     }
-    let root = std::env::temp_dir().join(format!("idecraft-pool-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-pool-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     let root = root.canonicalize().unwrap();

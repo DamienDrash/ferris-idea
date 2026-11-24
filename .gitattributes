@@ -5,3 +5,4 @@
 # (scripts/check-batch.sh prints where the added changelog lines ended up).
 CHANGELOG.md merge=union
 docs/specifications/TRACEABILITY.md merge=union
+docs/specifications/RESERVED.md merge=union

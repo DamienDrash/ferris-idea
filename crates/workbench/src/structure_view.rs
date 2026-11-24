@@ -6,11 +6,11 @@ use std::collections::HashSet;
 use std::ops::Range;
 use std::path::PathBuf;
 
+use ferris_idea_languages::insight::Symbol;
+use ferris_idea_languages::structure::{filtered, ordered};
 use gpui::{
     Context, EventEmitter, FocusHandle, KeyDownEvent, Window, div, prelude::*, px, uniform_list,
 };
-use idecraft_languages::insight::Symbol;
-use idecraft_languages::structure::{filtered, ordered};
 
 use crate::icon_images::icon;
 use crate::palette::Palette;
@@ -314,7 +314,7 @@ impl StructureView {
     /// A filter toggle above the tree (behaviour 9).
     fn filter_button(
         &self,
-        control: &'static idecraft_ui::tooltip::Control,
+        control: &'static ferris_idea_ui::tooltip::Control,
         f: StructureFilter,
         glyph: &'static str,
         cx: &mut Context<Self>,
@@ -433,7 +433,7 @@ impl Render for StructureView {
                                     .into_any_element(),
                                 None => div().w(px(16.)).flex_none().into_any_element(),
                             })
-                            .child(icon(idecraft_ui::icons::symbol_icon(&s.kind)))
+                            .child(icon(ferris_idea_ui::icons::symbol_icon(&s.kind)))
                             .child(div().flex_none().child(name))
                             .when_some(detail, |d, detail| {
                                 d.child(

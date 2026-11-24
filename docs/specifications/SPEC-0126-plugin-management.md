@@ -46,5 +46,5 @@ A marketplace, updates, signatures, plugin settings, restart prompts (none are n
 on use), dependencies between plugins.
 
 ## Known deviations from the reference
-The reference installs JVM plugins that usually need a restart; IDECraft's plugins are sandboxed
+The reference installs JVM plugins that usually need a restart; Ferris IDEA's plugins are sandboxed
 modules that take effect at once. Not compared side by side.

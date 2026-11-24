@@ -8,11 +8,11 @@ use std::path::{Path, PathBuf};
 fn reference_project_has_beans_and_no_problems() {
     let root =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/reference-projects/spring-basic");
-    let files: Vec<PathBuf> = idecraft_core::Workspace::open(&root)
+    let files: Vec<PathBuf> = ferris_idea_core::Workspace::open(&root)
         .unwrap()
         .files()
         .unwrap();
-    let m = idecraft_languages::spring::model(&root, &files);
+    let m = ferris_idea_languages::spring::model(&root, &files);
     let mut beans: Vec<(&str, &str)> = m
         .beans
         .iter()
@@ -46,7 +46,7 @@ fn reference_project_has_beans_and_no_problems() {
 /// the BOM through properties in `pom.xml` — is Quarkus, read through the workspace's file list.
 #[test]
 fn quarkus_project_without_quarkus_imports() {
-    let root = std::env::temp_dir().join(format!("idecraft-quarkus-pom-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-quarkus-pom-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     let java = root.join("src/main/java/dev/ht");
     std::fs::create_dir_all(&java).unwrap();
@@ -76,11 +76,11 @@ fn quarkus_project_without_quarkus_imports() {
     )
     .unwrap();
     std::fs::write(root.join("src/main/resources/application.properties"), "\n").unwrap();
-    let files: Vec<PathBuf> = idecraft_core::Workspace::open(&root)
+    let files: Vec<PathBuf> = ferris_idea_core::Workspace::open(&root)
         .unwrap()
         .files()
         .unwrap();
-    let m = idecraft_languages::spring::model(&root, &files);
+    let m = ferris_idea_languages::spring::model(&root, &files);
     assert_eq!(m.frameworks, ["Quarkus", "Jakarta EE"]);
     assert_eq!(m.label(), "Quarkus");
     assert_eq!(m.problems().len(), 2, "{:?}", m.problems());

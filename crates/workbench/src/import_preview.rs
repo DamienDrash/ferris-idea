@@ -2,8 +2,8 @@
 //! change, with its problems; Enter or "Import" confirms, "Share…" opens a prefilled issue,
 //! Escape or "Cancel" closes without change.
 
+use ferris_idea_formats::Preview;
 use gpui::{Context, EventEmitter, FocusHandle, KeyDownEvent, Window, div, prelude::*, px};
-use idecraft_formats::Preview;
 
 use crate::palette::Palette;
 use crate::workbench_view::c;

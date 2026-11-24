@@ -83,24 +83,27 @@ fn rights_come_only_from_the_users_settings_folder() {
 /// it was asked to quit.
 #[derive(Default)]
 struct StandInWindow {
-    pending: std::sync::Mutex<idecraft_mcp::window::PendingWork>,
-    quits: std::sync::Mutex<Vec<idecraft_mcp::window::QuitMode>>,
+    pending: std::sync::Mutex<ferris_idea_mcp::window::PendingWork>,
+    quits: std::sync::Mutex<Vec<ferris_idea_mcp::window::QuitMode>>,
 }
 
-impl idecraft_mcp::window::Window for StandInWindow {
+impl ferris_idea_mcp::window::Window for StandInWindow {
     fn ask(
         &self,
-        _request: idecraft_mcp::window::PermissionRequest,
-        reply: tokio::sync::oneshot::Sender<idecraft_mcp::window::PermissionAnswer>,
+        _request: ferris_idea_mcp::window::PermissionRequest,
+        reply: tokio::sync::oneshot::Sender<ferris_idea_mcp::window::PermissionAnswer>,
     ) {
-        let _ = reply.send(idecraft_mcp::window::PermissionAnswer::AllowOnce);
+        let _ = reply.send(ferris_idea_mcp::window::PermissionAnswer::AllowOnce);
     }
-    fn pending_work(&self, reply: tokio::sync::oneshot::Sender<idecraft_mcp::window::PendingWork>) {
+    fn pending_work(
+        &self,
+        reply: tokio::sync::oneshot::Sender<ferris_idea_mcp::window::PendingWork>,
+    ) {
         let _ = reply.send(self.pending.lock().unwrap().clone());
     }
     fn quit(
         &self,
-        mode: idecraft_mcp::window::QuitMode,
+        mode: ferris_idea_mcp::window::QuitMode,
         reply: tokio::sync::oneshot::Sender<Result<(), String>>,
     ) {
         self.quits.lock().unwrap().push(mode);
@@ -108,26 +111,26 @@ impl idecraft_mcp::window::Window for StandInWindow {
     }
 }
 
-/// SPEC-0261 v2 AK-4: `idecraft quit` finds the running window through the discovery file, quits
+/// SPEC-0261 v2 AK-4: `ferris-idea quit` finds the running window through the discovery file, quits
 /// it when nothing is pending, lists pending work without a terminal (status 2) and quits
 /// discarding with `--discard`; without a running window it says so (status 1).
 #[test]
-fn idecraft_quit_ends_the_running_window() {
-    use idecraft_mcp::window::{PendingWork, QuitMode};
+fn ferris_idea_quit_ends_the_running_window() {
+    use ferris_idea_mcp::window::{PendingWork, QuitMode};
     let p = Project::empty();
     let none = p.cli(&["quit"]);
     assert_eq!(none.status.code(), Some(1));
     assert!(
-        String::from_utf8_lossy(&none.stderr).contains("no running IDECraft window"),
+        String::from_utf8_lossy(&none.stderr).contains("no running Ferris IDEA window"),
         "{none:?}"
     );
 
     let window = std::sync::Arc::new(StandInWindow::default());
-    let server = idecraft_mcp::http::HttpServer::start(Some(&p.config)).unwrap();
-    let w: std::sync::Arc<dyn idecraft_mcp::window::Window> = window.clone();
+    let server = ferris_idea_mcp::http::HttpServer::start(Some(&p.config)).unwrap();
+    let w: std::sync::Arc<dyn ferris_idea_mcp::window::Window> = window.clone();
     server
         .add_workspace(
-            idecraft_mcp::IdeServer::new(idecraft_core::Workspace::open(&p.root).unwrap())
+            ferris_idea_mcp::IdeServer::new(ferris_idea_core::Workspace::open(&p.root).unwrap())
                 .with_window(w),
         )
         .unwrap();
@@ -164,8 +167,8 @@ fn idecraft_quit_ends_the_running_window() {
 fn the_cli_prints_its_version_and_usage() {
     let p = Project::empty();
     let v = p.cli(&["--version"]);
-    assert!(String::from_utf8_lossy(&v.stdout).starts_with("idecraft "));
+    assert!(String::from_utf8_lossy(&v.stdout).starts_with("ferris-idea "));
     let u = p.cli(&["no-such-command"]);
     assert_eq!(u.status.code(), Some(2));
-    assert!(String::from_utf8_lossy(&u.stderr).contains("idecraft mcp <directory>"));
+    assert!(String::from_utf8_lossy(&u.stderr).contains("ferris-idea mcp <directory>"));
 }

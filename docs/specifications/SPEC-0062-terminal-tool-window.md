@@ -63,10 +63,10 @@ screen model.
   output (integration test).
 - **AK-3** xterm palette mapping and console colours from the scheme (unit test).
 - **AK-4** In a real window: ⌥F12 opens the terminal, typed keys reach the shell and its output appears
-  (`idecraft ui --selftest`).
+  (`ferris-idea ui --selftest`).
 - **AK-5** Use by hand: colours, cursor, an interactive program (e.g. `top`), resizing.
 
-- **AK-6 (v2)** In a real window (`idecraft ui --selftest`): ⌘T opens a second tab that is shown, ⌘W
+- **AK-6 (v2)** In a real window (`ferris-idea ui --selftest`): ⌘T opens a second tab that is shown, ⌘W
   closes it and the first shell's output is shown again.
 - **AK-7 (v2)** By hand: several tabs, closing the shown and another tab, next to the reference.
 - **AK-8 (v3)** Every key capability of the recorded terminfo entry `xterm-256color` that has a

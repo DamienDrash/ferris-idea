@@ -79,7 +79,7 @@ impl Grammar {
 /// A variable declared in SCSS (`$farbe: …`) or Less (`@farbe: …`) is a variable, not a property.
 const STYLE_VARIABLES: &str = "((property_name) @variable (#match? @variable \"^[$@]\"))";
 
-/// IDECraft's colour roles per language (`SPEC-0027` v6), placed before the grammar's query.
+/// Ferris IDEA's colour roles per language (`SPEC-0027` v6), placed before the grammar's query.
 const PYTHON_ROLES: &str = include_str!("../queries/python-roles.scm");
 const JAVASCRIPT_ROLES: &str = include_str!("../queries/javascript-roles.scm");
 const TYPESCRIPT_ROLES: &str = include_str!("../queries/typescript-roles.scm");
@@ -108,7 +108,7 @@ fn grammar(language: LanguageId, tsx: bool) -> Option<&'static Grammar> {
         }};
     }
     Some(match language {
-        // IDECraft's colour roles come first (`SPEC-0027` v6): for the same node the earlier
+        // Ferris IDEA's colour roles come first (`SPEC-0027` v6): for the same node the earlier
         // pattern wins.
         LanguageId::Python => cached!(
             tree_sitter_python::LANGUAGE,
@@ -255,6 +255,8 @@ fn grammar(language: LanguageId, tsx: bool) -> Option<&'static Grammar> {
             tree_sitter_html::LANGUAGE,
             tree_sitter_html::HIGHLIGHTS_QUERY
         ),
+        // Coloured by Ferris IDEA's own lexer (`properties::highlight`, SPEC-0155 v5 behaviour 12).
+        LanguageId::Properties => return None,
     })
 }
 
@@ -706,6 +708,48 @@ impl SyntaxDocument {
 }
 
 impl SyntaxDocument {
+    /// Byte ranges of the string literals, outermost only, in text order, each with whether it is
+    /// documentation: a Python string that stands as a statement of its own (a docstring). For
+    /// the scope of the grammar check (`SPEC-0155` v8 behaviour 14).
+    pub fn string_ranges(&self) -> Vec<(Range<usize>, bool)> {
+        let is_string = |kind: &str| {
+            kind == "string"
+                || kind.ends_with("string_literal")
+                || kind == "template_string"
+                || kind == "text_block"
+        };
+        let mut out = Vec::new();
+        let mut cursor = self.tree.walk();
+        let mut descend = true;
+        loop {
+            let node = cursor.node();
+            if descend && is_string(node.kind()) && node.byte_range().start < node.byte_range().end
+            {
+                let doc = self.language == LanguageId::Python
+                    && node.parent().is_some_and(|p| {
+                        p.kind() == "expression_statement" && p.named_child_count() == 1
+                    });
+                out.push((node.byte_range(), doc));
+                descend = false;
+            }
+            if descend && cursor.goto_first_child() {
+                continue;
+            }
+            descend = true;
+            if cursor.goto_next_sibling() {
+                continue;
+            }
+            loop {
+                if !cursor.goto_parent() {
+                    return out;
+                }
+                if cursor.goto_next_sibling() {
+                    break;
+                }
+            }
+        }
+    }
+
     /// Char ranges a selection around the char range `at` can grow to (`SPEC-0057` v3 behaviour
     /// 13), smallest first: every enclosing node (`…declarator` nodes left out), the text of a
     /// string literal without its quotes, the whole lines of a node that fills its lines, and the
@@ -1811,7 +1855,7 @@ const REASSIGNED_PARAMETER_ROLE: u32 = 7;
 /// Whether the comment `text` of `language` is a documentation comment (`SPEC-0027` v10):
 /// `/** … */` in Java, Kotlin, JavaScript, TypeScript, Groovy, Scala and PHP (not the empty
 /// `/**/`); in Rust also `///` (not `////`), `//!` and `/*! … */`.
-fn doc_comment(language: LanguageId, text: &str) -> bool {
+pub(crate) fn doc_comment(language: LanguageId, text: &str) -> bool {
     let block = text.starts_with("/**") && !text.starts_with("/**/");
     match language {
         LanguageId::Java
@@ -2309,9 +2353,164 @@ fn sql_aliases(statement: tree_sitter::Node, text: &str) -> Vec<String> {
     out
 }
 
+/// Whether a capture names a name (a variable, field, property, parameter, type, function,
+/// constant or label), which a quoted name of a layer keeps (see [`with_layer`]).
+fn names_a_name(kind: &str) -> bool {
+    let head = kind.split('.').next().unwrap_or_default();
+    matches!(
+        head,
+        "variable"
+            | "field"
+            | "property"
+            | "parameter"
+            | "type"
+            | "function"
+            | "constant"
+            | "label"
+    )
+}
+
+/// `spans` of the char range `range` with the runs of `layer` laid over them (`SPEC-0005` v7
+/// behaviour 20, the lexis of a SQL dialect over the grammar's colours): a run with a kind shows
+/// it, whatever the spans said there; a run without one is a quoted name, which keeps a span's role
+/// of a name and is a `variable` otherwise. The layer decides every string and comment: the spans'
+/// own strings and comments are dropped. `layer` is in text order without overlaps; the result is
+/// sorted by start.
+pub fn with_layer(
+    spans: Vec<Span>,
+    layer: &[(Range<usize>, Option<&str>)],
+    range: Range<usize>,
+) -> Vec<Span> {
+    let first = layer.partition_point(|(r, _)| r.end <= range.start);
+    let runs: Vec<(Range<usize>, Option<&str>)> = layer[first..]
+        .iter()
+        .take_while(|(r, _)| r.start < range.end)
+        .map(|(r, k)| (r.start.max(range.start)..r.end.min(range.end), *k))
+        .filter(|(r, _)| r.start < r.end)
+        .collect();
+    let mut out = Vec::with_capacity(spans.len() + runs.len());
+    let mut named: Vec<Range<usize>> = Vec::new();
+    for span in spans {
+        if span.kind.starts_with("string") || span.kind.starts_with("comment") {
+            continue;
+        }
+        let keeps = names_a_name(&span.kind);
+        let mut at = span.start;
+        let from = runs.partition_point(|(r, _)| r.end <= span.start);
+        for (r, kind) in runs[from..].iter().take_while(|(r, _)| r.start < span.end) {
+            if kind.is_none() && keeps {
+                named.push(r.start.max(span.start)..r.end.min(span.end));
+                continue;
+            }
+            if at < r.start {
+                out.push(Span {
+                    start: at,
+                    end: r.start,
+                    kind: span.kind.clone(),
+                });
+            }
+            at = at.max(r.end);
+        }
+        if at < span.end {
+            out.push(Span {
+                start: at,
+                end: span.end,
+                kind: span.kind,
+            });
+        }
+    }
+    for (r, kind) in runs {
+        match kind {
+            Some(kind) => out.push(Span {
+                start: r.start,
+                end: r.end,
+                kind: kind.to_owned(),
+            }),
+            None => {
+                // The parts no span named, e.g. the quotes around a name the grammar found.
+                let mut at = r.start;
+                let mut inside: Vec<&Range<usize>> = named
+                    .iter()
+                    .filter(|n| n.start < r.end && r.start < n.end)
+                    .collect();
+                inside.sort_by_key(|n| n.start);
+                for n in inside.into_iter().chain(std::iter::once(&(r.end..r.end))) {
+                    if at < n.start {
+                        out.push(Span {
+                            start: at,
+                            end: n.start,
+                            kind: "variable".into(),
+                        });
+                    }
+                    at = at.max(n.end);
+                }
+            }
+        }
+    }
+    out.sort_by_key(|s| (s.start, s.end));
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// SPEC-0005 v7 AK-23 (OBS-0083 L7): a layer's runs show their kind over the grammar's spans,
+    /// the grammar's strings and comments give way, a quoted name keeps the grammar's role of a
+    /// name or becomes a variable, and the rest of the grammar's spans stay.
+    #[test]
+    fn a_layer_wins_over_the_grammar() {
+        let span = |start, end, kind: &str| Span {
+            start,
+            end,
+            kind: kind.into(),
+        };
+        // `select `id`, 'a\'b' from t` as a broken tree colours it.
+        let tree = vec![
+            span(0, 6, "keyword"),
+            span(7, 11, "string"),
+            span(13, 16, "string"),
+            span(16, 24, "variable"),
+            span(25, 26, "field"),
+        ];
+        let layer: Vec<(Range<usize>, Option<&str>)> = vec![
+            (0..6, Some("keyword")),
+            (7..11, None),
+            (13..19, Some("string")),
+            (20..24, Some("keyword")),
+        ];
+        let out = with_layer(tree, &layer, 0..26);
+        let kind_at = |at: usize| {
+            out.iter()
+                .find(|s| s.start <= at && at < s.end)
+                .map(|s| s.kind.as_str())
+        };
+        assert_eq!(kind_at(0), Some("keyword"));
+        assert_eq!(kind_at(8), Some("variable"), "{out:?}");
+        assert_eq!(kind_at(14), Some("string"));
+        assert_eq!(kind_at(17), Some("string"));
+        assert_eq!(kind_at(19), Some("variable"));
+        assert_eq!(kind_at(21), Some("keyword"));
+        assert_eq!(kind_at(25), Some("field"));
+        assert!(out.windows(2).all(|w| w[0].end <= w[1].start), "{out:?}");
+        // A quoted name the grammar named keeps its role; only the quotes become a variable.
+        let out = with_layer(vec![span(8, 10, "field")], &[(7..11, None)], 0..20);
+        assert_eq!(
+            out,
+            vec![
+                span(7, 8, "variable"),
+                span(8, 10, "field"),
+                span(10, 11, "variable")
+            ]
+        );
+        // Only the runs inside the asked range count.
+        let out = with_layer(
+            Vec::new(),
+            &[(0..4, Some("comment")), (10..12, Some("number"))],
+            2..11,
+        );
+        assert_eq!(out, vec![span(2, 4, "comment"), span(10, 11, "number")]);
+    }
 
     /// SPEC-0065 v4 behaviour 13: matches in comments and string literals told apart.
     #[test]
@@ -2966,7 +3165,7 @@ mod tests {
         assert_eq!(b.folded_width, folded.chars().count());
         assert!(b.folded_width <= 120, "within the default right margin");
         assert!(
-            idecraft_core::IdeSettings::default()
+            ferris_idea_core::IdeSettings::default()
                 .editor
                 .fold_one_line_methods
         );

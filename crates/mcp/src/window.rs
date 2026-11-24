@@ -23,6 +23,12 @@ pub enum Scope {
     Workspace,
     /// A database permission of the named connection (`SPEC-0012`).
     Connection(String),
+    /// A use of the named vault entry (`SPEC-0353` behaviour 9): the meaning says the tool, the
+    /// destination and the form; never the value.
+    Vault(String),
+    /// One action that needs a person's confirmation for this call only, never remembered
+    /// (`SPEC-0352` behaviour 19): only Deny and Allow Once are offered.
+    ThisCall,
 }
 
 /// One question for the user.
@@ -56,26 +62,49 @@ pub enum PermissionAnswer {
 impl PermissionRequest {
     /// Headline and detail of the native alert.
     pub fn question(&self) -> (String, String) {
-        let place = match &self.scope {
-            Scope::Workspace => format!(
-                "workspace \"{}\"",
-                self.workspace.file_name().map_or_else(
-                    || self.workspace.display().to_string(),
-                    |n| { n.to_string_lossy().into_owned() }
-                )
-            ),
-            Scope::Connection(name) => format!("connection \"{name}\""),
-        };
-        let message = format!(
-            "Allow \"{}\" the right \"{}\" in {place}?",
-            self.client, self.right
+        let name = self.workspace.file_name().map_or_else(
+            || self.workspace.display().to_string(),
+            |n| n.to_string_lossy().into_owned(),
         );
+        if self.scope == Scope::ThisCall {
+            return (
+                format!(
+                    "Allow \"{}\" this action in workspace \"{name}\": {}?",
+                    self.client, self.meaning
+                ),
+                format!(
+                    "Client: {}\nRight: {}\nAction: {}\nScope: this call only, nothing is remembered",
+                    self.client, self.right, self.action
+                ),
+            );
+        }
+        let place = match &self.scope {
+            Scope::Workspace => format!("workspace \"{name}\""),
+            Scope::Connection(c) => format!("connection \"{c}\""),
+            Scope::Vault(entry) => format!("vault entry \"{entry}\""),
+            Scope::ThisCall => String::new(),
+        };
+        let message = match &self.scope {
+            Scope::Vault(entry) => format!(
+                "Allow \"{}\" to use the vault entry \"{entry}\"?",
+                self.client
+            ),
+            _ => format!(
+                "Allow \"{}\" the right \"{}\" in {place}?",
+                self.client, self.right
+            ),
+        };
         let scope = match &self.scope {
             Scope::Workspace => format!("workspace {}", self.workspace.display()),
             Scope::Connection(name) => format!(
                 "connection \"{name}\" of workspace {}",
                 self.workspace.display()
             ),
+            Scope::Vault(entry) => format!(
+                "vault entry \"{entry}\" in workspace {} (the agent never sees the value)",
+                self.workspace.display()
+            ),
+            Scope::ThisCall => String::new(),
         };
         let detail = format!(
             "Client: {}\nRight: {} ({})\nAction: {}\nScope: {scope}",
@@ -86,16 +115,22 @@ impl PermissionRequest {
 
     /// Button labels with their answers, in the order the alert adds them; the first is the
     /// default (Return).
-    pub fn answers(&self) -> [(&'static str, PermissionAnswer); 3] {
-        let always = match self.scope {
-            Scope::Workspace => "Always for This Workspace",
-            Scope::Connection(_) => "Always for This Connection",
-        };
-        [
+    pub fn answers(&self) -> Vec<(&'static str, PermissionAnswer)> {
+        let mut answers = vec![
             ("Deny", PermissionAnswer::Deny),
             ("Allow Once", PermissionAnswer::AllowOnce),
-            (always, PermissionAnswer::Always),
-        ]
+        ];
+        match self.scope {
+            Scope::Workspace => {
+                answers.push(("Always for This Workspace", PermissionAnswer::Always))
+            }
+            Scope::Connection(_) => {
+                answers.push(("Always for This Connection", PermissionAnswer::Always))
+            }
+            Scope::Vault(_) => answers.push(("Allow for This Session", PermissionAnswer::Always)),
+            Scope::ThisCall => {}
+        }
+        answers
     }
 }
 
@@ -209,6 +244,17 @@ pub trait Window: Send + Sync {
         let _ = (host, folder);
         drop(reply);
     }
+    /// Joins the project room of the full room `link` through the front window (`SPEC-0323` v7
+    /// behaviour 52): host key check, connection, `room.join`, then a remote project window.
+    /// Replies with the room's answer, or the failure's text. A window that cannot drops `reply`.
+    fn join_room_by_link(
+        &self,
+        link: String,
+        reply: oneshot::Sender<Result<serde_json::Value, String>>,
+    ) {
+        let _ = link;
+        drop(reply);
+    }
     /// Pairs with `address` using `code` (`SPEC-0321`): the window shows the digits and only the
     /// user confirms them. A window that cannot drops `reply`.
     fn pair_remote_host(
@@ -220,9 +266,34 @@ pub trait Window: Send + Sync {
         let _ = (address, code);
         drop(reply);
     }
+    /// Carries out `action` of the MCP tool `welcome` in the window (`SPEC-0355` behaviour 22):
+    /// `show` shows the Welcome window, `open_recent` opens the project `path` as a click in its
+    /// list does. Replies with what happened, or why not. A window that cannot drops `reply`.
+    fn welcome(
+        &self,
+        action: String,
+        path: Option<PathBuf>,
+        reply: oneshot::Sender<Result<serde_json::Value, String>>,
+    ) {
+        let _ = (action, path);
+        drop(reply);
+    }
+    /// Opens `folder` of the SSH host `host` as a remote project as a click in the Welcome
+    /// window's SSH section does (`SPEC-0355` v3 behaviour 22, `open_ssh`), also while only the
+    /// Welcome window is open. Replies with the project's state, or why not. A window that cannot
+    /// drops `reply`.
+    fn welcome_ssh(
+        &self,
+        host: String,
+        folder: String,
+        reply: oneshot::Sender<Result<serde_json::Value, String>>,
+    ) {
+        let _ = (host, folder);
+        drop(reply);
+    }
     /// Serves a UI driver call (`SPEC-0319`); the reply comes when the call is done, after the
     /// frames it waited for. A window that cannot drops `reply`.
-    fn ui(&self, call: UiCall, reply: oneshot::Sender<idecraft_uidriver::Reply>) {
+    fn ui(&self, call: UiCall, reply: oneshot::Sender<ferris_idea_uidriver::Reply>) {
         let _ = call;
         drop(reply);
     }
@@ -259,8 +330,8 @@ pub trait Window: Send + Sync {
     /// (behaviour 10).
     fn edit_document(
         &self,
-        edit: idecraft_editor::documents::DocumentEdit,
-        reply: oneshot::Sender<Result<idecraft_editor::documents::DocumentEdited, String>>,
+        edit: ferris_idea_editor::documents::DocumentEdit,
+        reply: oneshot::Sender<Result<ferris_idea_editor::documents::DocumentEdited, String>>,
     ) {
         let _ = edit;
         drop(reply);
@@ -273,9 +344,9 @@ pub trait Window: Send + Sync {
     /// file and why; a refusal changed nothing. A window that cannot drops `reply`.
     fn edit_documents(
         &self,
-        change: idecraft_editor::documents::DocumentChange,
+        change: ferris_idea_editor::documents::DocumentChange,
         reply: oneshot::Sender<
-            Result<Vec<idecraft_editor::documents::DocumentEdited>, (PathBuf, String)>,
+            Result<Vec<ferris_idea_editor::documents::DocumentEdited>, (PathBuf, String)>,
         >,
     ) {
         let _ = change;
@@ -377,11 +448,11 @@ pub struct UiCall {
 #[derive(Debug, Clone)]
 pub enum UiCallKind {
     /// A driver call: snapshot, find, act, expect.
-    Driver(idecraft_uidriver::Request),
+    Driver(ferris_idea_uidriver::Request),
     /// `ui_driver_status`.
     Status,
-    /// `ui_driver_stop` or `idecraft drive stop`.
-    Stop(idecraft_uidriver::StopSource),
+    /// `ui_driver_stop` or `ferris-idea drive stop`.
+    Stop(ferris_idea_uidriver::StopSource),
     /// `ui_trace start`.
     TraceStart,
     /// `ui_trace stop`, written below `dir` (the user's folder, or a folder in the workspace).
@@ -391,8 +462,27 @@ pub enum UiCallKind {
     },
     /// `ui_trace status`.
     TraceStatus,
-    /// `ui_screenshot`.
-    Screenshot,
+    /// `ui_screenshot` (`SPEC-0319` v7 behaviour 53): the window's own frame, filled where
+    /// behaviour 33 says, of the window, one element or a region.
+    Screenshot {
+        /// Only this element.
+        locator: Option<ferris_idea_uidriver::Locator>,
+        /// Only this region, in logical window coordinates.
+        region: Option<ferris_idea_uidriver::Rect>,
+        /// Whether the client may see terminal text (`terminal-read`); without it the terminal
+        /// is filled.
+        terminal_read: bool,
+    },
+    /// `ui_command` (`SPEC-0319` v7 behaviours 46-52), already checked for its static effects;
+    /// the window checks the effects only it knows against `grants`.
+    Command {
+        /// The command.
+        command: ferris_idea_uidriver::UiCommand,
+        /// Who asks.
+        actor: ferris_idea_uidriver::Actor,
+        /// The rights of the call.
+        grants: ferris_idea_uidriver::Grants,
+    },
 }
 
 /// The tooltip shown at the moment (`SPEC-0294` behaviour 10).
@@ -478,6 +568,17 @@ mod tests {
         assert!(db.question().0.ends_with("in connection \"shop-db\"?"));
         assert_eq!(db.answers()[2].0, "Always for This Connection");
         assert_eq!(db.answers()[0].1, PermissionAnswer::Deny);
+        // SPEC-0352 behaviour 19: one call only, nothing to remember.
+        let mut once = request(Scope::ThisCall);
+        once.meaning = "moving the item to `done` on T-7K3QDX \"Fix\"".into();
+        let (message, detail) = once.question();
+        assert_eq!(
+            message,
+            "Allow \"claude-code 2.1\" this action in workspace \"shop\": moving the item to `done` on T-7K3QDX \"Fix\"?"
+        );
+        assert!(detail.contains("Scope: this call only, nothing is remembered"));
+        let labels: Vec<_> = once.answers().iter().map(|(l, _)| *l).collect();
+        assert_eq!(labels, ["Deny", "Allow Once"]);
     }
 
     #[test]

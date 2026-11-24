@@ -8,9 +8,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use idecraft_session::{
-    Backend, BackendConfig, ClientSession, ErrorCode, Reconnected, Recovery, RpcError, Transport,
-    in_process,
+use ferris_idea_session::{
+    Backend, BackendConfig, ClientSession, ErrorCode, Peer, Reconnected, Recovery, RpcError,
+    Transport, in_process,
 };
 use serde_json::{Value, json};
 
@@ -34,6 +34,8 @@ pub struct InProcessProject {
     pub session: ClientSession,
     switch: HostSwitch,
     log: Vec<String>,
+    /// Who the session is on the backend, when not the owner (`SPEC-0323` v7 window tests).
+    peer: Option<Peer>,
 }
 
 /// What a test does to the "host" of an [`InProcessProject`] after the window took it over.
@@ -86,7 +88,41 @@ impl InProcessProject {
         delay: Duration,
         setup: Option<Setup>,
     ) -> Result<Self, RemoteError> {
+        Self::open_inner(
+            host, folder, state_dir, reattach, recovery, delay, setup, false,
+        )
+    }
+
+    /// [`InProcessProject::open_with`] with the backend bound to `folder`, as
+    /// `ferris-idea serve --pair <folder>` is, so that other people may connect to it as paired
+    /// devices or SSH users through [`Backend::serve_as`] (`SPEC-0323` v6 window tests).
+    pub fn open_fixed_with(
+        host: &str,
+        folder: &Path,
+        state_dir: &Path,
+        reattach: Duration,
+        recovery: Option<PathBuf>,
+        delay: Duration,
+        setup: Option<Setup>,
+    ) -> Result<Self, RemoteError> {
+        Self::open_inner(
+            host, folder, state_dir, reattach, recovery, delay, setup, true,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn open_inner(
+        host: &str,
+        folder: &Path,
+        state_dir: &Path,
+        reattach: Duration,
+        recovery: Option<PathBuf>,
+        delay: Duration,
+        setup: Option<Setup>,
+        fixed: bool,
+    ) -> Result<Self, RemoteError> {
         let config = BackendConfig {
+            folder: fixed.then(|| folder.to_path_buf()),
             state_dir: Some(state_dir.to_path_buf()),
             peer: format!("test:{host}"),
             reattach,
@@ -102,11 +138,11 @@ impl InProcessProject {
             host: host.to_owned(),
             folder: folder_text.clone(),
         });
-        let transport = Self::channel(&backend, delay);
+        let transport = Self::channel(&backend, delay, None);
         let session = ClientSession::open(
             transport,
             &folder_text,
-            &format!("idecraft {}", env!("CARGO_PKG_VERSION")),
+            &format!("ferris-idea {}", env!("CARGO_PKG_VERSION")),
             host,
             recovery,
         )
@@ -121,14 +157,51 @@ impl InProcessProject {
             session,
             switch: HostSwitch::default(),
             log: Vec::new(),
+            peer: None,
         })
     }
 
-    fn channel(backend: &Backend, delay: Duration) -> Transport {
+    /// A second person's project on the running `backend` of another [`InProcessProject`]: the
+    /// session is `peer` there, e.g. another SSH user joining the room by link (`SPEC-0323` v7
+    /// window tests). `folder` is the backend's bound folder.
+    pub fn open_on(
+        backend: &Backend,
+        host: &str,
+        folder: &Path,
+        peer: Peer,
+    ) -> Result<Self, RemoteError> {
+        let folder_text = folder.display().to_string();
+        let transport = Self::channel(backend, Duration::ZERO, Some(&peer));
+        let session = ClientSession::open(
+            transport,
+            &folder_text,
+            &format!("ferris-idea {}", env!("CARGO_PKG_VERSION")),
+            host,
+            None,
+        )
+        .map_err(|e| rpc(host, e))?;
+        Ok(Self {
+            host: host.to_owned(),
+            folder: folder_text,
+            config: BackendConfig::default(),
+            setup: None,
+            backend: backend.clone(),
+            delay: Duration::ZERO,
+            session,
+            switch: HostSwitch::default(),
+            log: Vec::new(),
+            peer: Some(peer),
+        })
+    }
+
+    fn channel(backend: &Backend, delay: Duration, peer: Option<&Peer>) -> Transport {
         let (window, server) = in_process();
         let b = backend.clone();
-        std::thread::spawn(move || b.serve(server));
-        idecraft_session::testing::delayed(window, delay)
+        match peer.cloned() {
+            Some(p) => std::thread::spawn(move || b.serve_as(server, p)),
+            None => std::thread::spawn(move || b.serve(server)),
+        };
+        ferris_idea_session::testing::delayed(window, delay)
     }
 
     /// The switch of this project's "host".
@@ -143,7 +216,7 @@ impl InProcessProject {
 
     /// A transport to the current backend (a second client).
     pub fn connect(&self) -> Transport {
-        Self::channel(&self.backend, Duration::ZERO)
+        Self::channel(&self.backend, Duration::ZERO, None)
     }
 }
 
@@ -170,11 +243,11 @@ impl ProjectLink for InProcessProject {
             }
             self.log.push("the host was restarted".into());
         }
-        let t = Self::channel(&self.backend, self.delay);
+        let t = Self::channel(&self.backend, self.delay, self.peer.as_ref());
         match self.session.resume(t) {
             Ok(r) => Ok(r),
             Err(e) if matches!(e.code, ErrorCode::NotFound | ErrorCode::Denied) => {
-                let t = Self::channel(&self.backend, self.delay);
+                let t = Self::channel(&self.backend, self.delay, self.peer.as_ref());
                 self.session
                     .replace_backend(t)
                     .map_err(|e| rpc(&self.host, e))

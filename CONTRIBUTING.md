@@ -35,7 +35,7 @@ after a maintainer approved the run.
 4. Commits are prefixed by role: `obs:`, `spec:`, `impl:`, or `docs:`, `ci:`,
    `chore:` for everything else. One role per commit.
 5. Each module names the spec it implements; each acceptance criterion is
-   mapped to a test in `docs/specifications/TRACEABILITY.md`.
+   mapped to a test in `docs/specifications/TRACEABILITY.md` (new rows as fragments, rule 10).
 6. Dependencies must pass `cargo deny check licenses`: the allow-list in `deny.toml` holds
    permissive licenses plus MPL-2.0 and three narrow exceptions.
 7. Public-facing text follows [`docs/design/`](docs/design/README.md): English, the
@@ -45,6 +45,14 @@ after a maintainer approved the run.
    [`docs/legal/APACHE_PORTING.md`](docs/legal/APACHE_PORTING.md).
 9. A user-visible change adds its lines as `changelog.d/<PR number>.md`, not in `CHANGELOG.md`
    ([changelog.d/README.md](changelog.d/README.md)).
+10. Shared lists are not edited by parallel pull requests
+   ([ADR-0035](docs/adr/0035-tool-registry-and-number-reservations.md)): a new MCP tool module
+   keeps its router, its rows of the effects table and its open-files entries in its own file;
+   traceability rows go to
+   [`docs/specifications/traceability.d/`](docs/specifications/traceability.d/README.md); a new
+   specification or ADR number is reserved first in
+   [`docs/specifications/RESERVED.md`](docs/specifications/RESERVED.md)
+   (`scripts/spec-number.sh next` prints the next free one).
 
 ## Checks
 
@@ -77,14 +85,14 @@ Ferris IDEA is source-available under the PolyForm Shield License 1.0.0; the ter
 common questions are in [LICENSING.md](LICENSING.md). It is not open-source software.
 
 Contributions are accepted only under the
-[Ferris IDEA Contributor License Agreement](docs/legal/CLA.md) (CLA), version 1.0. You keep the
+[Ferris IDEA Contributor License Agreement](docs/legal/CLA.md) (CLA), version 1.1. You keep the
 copyright in your work. The CLA gives the licensor a license to ship it under any terms, now and
 later, plus a patent license. You confirm that the work is yours to give, or that its source and
 license are named.
 
 To accept it, put this sentence in the description of your first pull request:
 
-> I have read the Ferris IDEA Contributor License Agreement, version 1.0, and I accept it for all my
+> I have read the Ferris IDEA Contributor License Agreement, version 1.1, and I accept it for all my
 > contributions. — @your-login
 
 The project records the acceptance in [docs/legal/CLA_SIGNATURES.md](docs/legal/CLA_SIGNATURES.md)

@@ -692,6 +692,7 @@ pub fn package_script_config(dir: &Path, rel_dir: &str, text: &str, script: &str
         allow_multiple: false,
         before_launch: Vec::new(),
         verbatim: false,
+        http: None,
     }
 }
 
@@ -867,6 +868,7 @@ pub fn node_environment(search: &NodeSearch) -> NodeEnvironment {
         allow_multiple: false,
         before_launch: Vec::new(),
         verbatim: false,
+        http: None,
     };
     let (test_framework, test_config) = if has("vitest") {
         (
@@ -878,11 +880,11 @@ pub fn node_environment(search: &NodeSearch) -> NodeEnvironment {
                     "vitest".into(),
                     "run".into(),
                     "--reporter=json".into(),
-                    "--outputFile=.idecraft/vitest.json".into(),
+                    "--outputFile=.ferris-idea/vitest.json".into(),
                 ],
                 RunKind::Test,
                 Some("jest"),
-                Some(".idecraft/vitest.json"),
+                Some(".ferris-idea/vitest.json"),
             )),
         )
     } else if has("jest") {
@@ -895,11 +897,11 @@ pub fn node_environment(search: &NodeSearch) -> NodeEnvironment {
                     "jest".into(),
                     "--ci".into(),
                     "--json".into(),
-                    "--outputFile=.idecraft/jest.json".into(),
+                    "--outputFile=.ferris-idea/jest.json".into(),
                 ],
                 RunKind::Test,
                 Some("jest"),
-                Some(".idecraft/jest.json"),
+                Some(".ferris-idea/jest.json"),
             )),
         )
     } else if has("mocha") {
@@ -1025,7 +1027,7 @@ mod tests {
         assert!(package_scripts("{}").is_empty());
         assert!(package_scripts("not json").is_empty());
 
-        let dir = std::env::temp_dir().join(format!("idecraft-pm-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-pm-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         assert_eq!(package_manager_of(&dir, "{}"), "npm");
         std::fs::write(dir.join("pnpm-lock.yaml"), "").unwrap();

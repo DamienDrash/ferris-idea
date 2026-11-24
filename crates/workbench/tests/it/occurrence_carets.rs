@@ -8,9 +8,9 @@
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
+use ferris_idea_workbench::{EditorView, WorkbenchView};
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
-use idecraft_workbench::{EditorView, WorkbenchView};
 
 const TEXT: &str = "foo one foo\nbar foo two\nfoo three\nabc\ndef\nghi\n";
 
@@ -19,8 +19,10 @@ fn workspace() -> PathBuf {
 }
 
 fn workspace_with(tag: &str, text: &str) -> PathBuf {
-    let root =
-        std::env::temp_dir().join(format!("idecraft-occurrence-{tag}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!(
+        "ferris-idea-occurrence-{tag}-{}",
+        std::process::id()
+    ));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     std::fs::write(root.join("caret.txt"), text).unwrap();
@@ -41,7 +43,7 @@ fn window(
     cx.update(|cx| {
         cx.set_global(IdeSettingsFile(settings.join("settings.toml")));
         cx.set_global(ThemeFile(settings.join("theme")));
-        cx.set_global(CurrentIdeSettings(idecraft_core::IdeSettings::default()));
+        cx.set_global(CurrentIdeSettings(ferris_idea_core::IdeSettings::default()));
     });
     let at = root.to_path_buf();
     let window = cx.add_window(move |_, cx| WorkbenchView::new(&at, cx));
@@ -110,7 +112,7 @@ fn carets_keep_their_place_in_the_occurrence(cx: &mut TestAppContext) {
     keys(cx, "ctrl-g ctrl-g");
     assert_eq!(carets(&editor, cx), [(0, 3), (8, 11)]);
 
-    // From inside the word: at the ends (IDECraft's choice, not observed).
+    // From inside the word: at the ends (Ferris IDEA's choice, not observed).
     keys(cx, "escape cmd-home right ctrl-cmd-g");
     assert_eq!(carets(&editor, cx), [(0, 3), (8, 11), (16, 19), (24, 27)]);
 

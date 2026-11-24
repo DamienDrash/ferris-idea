@@ -6,12 +6,13 @@
 
 #![cfg(target_os = "macos")]
 
+use ferris_idea_workbench::everywhere_model::Filter;
+use ferris_idea_workbench::{MenuPlace, WorkbenchView};
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_workbench::everywhere_model::Filter;
-use idecraft_workbench::{MenuPlace, WorkbenchView};
 
 fn workspace(tag: &str) -> std::path::PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-fourth-{tag}-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-fourth-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src/inner")).unwrap();
     std::fs::create_dir_all(root.join("docs")).unwrap();

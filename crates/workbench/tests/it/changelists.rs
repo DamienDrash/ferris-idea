@@ -7,16 +7,16 @@
 
 use std::path::{Path, PathBuf};
 
-use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_core::changelists::{CHANGELISTS_FILE, Changelists};
-use idecraft_workbench::changelist_model::{
+use ferris_idea_core::changelists::{CHANGELISTS_FILE, Changelists};
+use ferris_idea_workbench::changelist_model::{
     LAST_LIST_STAYS, ListStrip, NO_LIST_TO_DELETE, NOTHING_TO_MOVE,
 };
-use idecraft_workbench::commit_model::RowKind;
-use idecraft_workbench::keymap_actions::{
+use ferris_idea_workbench::commit_model::RowKind;
+use ferris_idea_workbench::keymap_actions::{
     DELETE_CHANGELIST, EDIT_CHANGELIST, MOVE_TO_CHANGELIST, NEW_CHANGELIST, SET_ACTIVE_CHANGELIST,
 };
-use idecraft_workbench::{CommitView, WorkbenchView};
+use ferris_idea_workbench::{CommitView, WorkbenchView};
+use gpui::{Entity, TestAppContext, VisualTestContext, px};
 
 fn git(dir: &Path, args: &[&str]) -> bool {
     std::process::Command::new("git")
@@ -38,8 +38,10 @@ fn body(first: &str) -> String {
 /// A repository with one commit of `a.txt`, `b.txt` and `c.txt`, of which `a.txt` and `b.txt`
 /// are changed; `None` without `git`.
 fn workspace(tag: &str) -> Option<PathBuf> {
-    let root =
-        std::env::temp_dir().join(format!("idecraft-changelists-{tag}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!(
+        "ferris-idea-changelists-{tag}-{}",
+        std::process::id()
+    ));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     for name in ["a.txt", "b.txt", "c.txt"] {
@@ -125,7 +127,7 @@ fn list(name: &str, active: bool, files: &[&str]) -> (String, bool, Vec<String>)
 }
 
 /// The rows of the changelists as indented labels, the active list marked with `*`. The group
-/// of the unversioned files below them is left out: IDECraft's own files appear there.
+/// of the unversioned files below them is left out: Ferris IDEA's own files appear there.
 fn shown(view: &Entity<CommitView>, cx: &mut VisualTestContext) -> Vec<String> {
     view.read_with(cx, |v, _| {
         v.rows()
@@ -190,7 +192,7 @@ fn lists_are_made_filled_renamed_and_deleted_from_the_window(cx: &mut TestAppCon
     let (kept, problem) = Changelists::load(&root);
     assert_eq!(problem, None);
     assert!(kept.get("Cart").is_some());
-    let ignore = std::fs::read_to_string(root.join(".idecraft/.gitignore")).unwrap();
+    let ignore = std::fs::read_to_string(root.join(".ferris-idea/.gitignore")).unwrap();
     assert!(ignore.lines().any(|l| l == "changelists.toml"));
 
     // A taken name keeps the strip open and says why; Escape closes it without a change.
@@ -458,7 +460,7 @@ fn a_broken_and_a_newer_state_file_are_said(cx: &mut TestAppContext) {
     let Some(root) = workspace("unusable") else {
         return;
     };
-    std::fs::create_dir_all(root.join(".idecraft")).unwrap();
+    std::fs::create_dir_all(root.join(".ferris-idea")).unwrap();
     let file = root.join(CHANGELISTS_FILE);
     let broken = "version = 1\n[[list]\nname = \"s3cr3t-token\"\n";
     std::fs::write(&file, broken).unwrap();
@@ -586,7 +588,7 @@ fn a_typed_name_replaces_the_name_in_the_other_name_fields(cx: &mut TestAppConte
         return;
     };
     let settings = std::env::temp_dir().join(format!(
-        "idecraft-changelists-other-fields-settings-{}",
+        "ferris-idea-changelists-other-fields-settings-{}",
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&settings);
@@ -616,7 +618,7 @@ fn a_typed_name_replaces_the_name_in_the_other_name_fields(cx: &mut TestAppConte
     assert_eq!(layout_names(cx), ["One"]);
 
     // Rename… of the layout: its name is selected and replaced.
-    action(&bench, cx, "IDECraft.Layout.Rename:One");
+    action(&bench, cx, "FerrisIDEA.Layout.Rename:One");
     assert_eq!(
         bench
             .read_with(cx, |b, cx| b.name_field_text(cx))

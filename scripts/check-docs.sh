@@ -46,10 +46,12 @@ if 'not affiliated with, endorsed by, or' not in readme:
 # Cargo.toml (CONTENT_STYLE_GUIDE.md §7).
 changelog = (root / 'CHANGELOG.md').read_text(encoding='utf-8')
 cargo = re.search(r'\[workspace\.package\]\s*\nversion = "([^"]+)"', (root / 'Cargo.toml').read_text(encoding='utf-8'))
-releases = re.findall(r'^## IDECraft v(\S+) — \d{4}-\d{2}-\d{2}$', changelog, flags=re.M)
+# Versions released before the rename keep the former name in their heading (SPEC-0356).
+headings = re.findall(r'^(## (?:Ferris IDEA|IDECraft) v(\S+)) — \d{4}-\d{2}-\d{2}$', changelog, flags=re.M)  # rebrand:keep
+releases = [v for _, v in headings]
 if '\n## Unreleased\n' not in changelog:
     errors.append('CHANGELOG.md: "## Unreleased" section missing')
-elif releases and changelog.index('\n## Unreleased\n') > changelog.index(f'## IDECraft v{releases[0]} '):
+elif releases and changelog.index('\n## Unreleased\n') > changelog.index(headings[0][0] + ' '):
     errors.append('CHANGELOG.md: "## Unreleased" must come before the versions')
 if not cargo or not releases or releases[0] != cargo.group(1):
     errors.append(f'CHANGELOG.md: newest version {releases[0] if releases else None} differs from Cargo.toml {cargo.group(1) if cargo else None}')
@@ -87,6 +89,11 @@ PY
 # them into CHANGELOG.md passes its own tests.
 scripts/changelog.sh check
 scripts/changelog.sh selftest >/dev/null || { scripts/changelog.sh selftest; exit 1; }
+# Traceability fragments are rows of TRACEABILITY.md, each key once (ADR-0035 decision 5); the
+# scripts of the fragments and of the number reservations pass their own tests.
+scripts/traceability.sh check
+scripts/traceability.sh selftest >/dev/null || { scripts/traceability.sh selftest; exit 1; }
+scripts/spec-number.sh selftest >/dev/null || { scripts/spec-number.sh selftest; exit 1; }
 # The crate diagram in ARCHITECTURE.md matches the workspace.
 scripts/crate-graph.sh --check >/dev/null
 # Every feature-matrix row must be rated in docs/research/PARITY.md.
@@ -122,3 +129,5 @@ if git grep -n -I -E '^(<<<<<<< |>>>>>>> )' -- . ':!scripts/check-docs.sh' >/dev
   git grep -n -I -E '^(<<<<<<< |>>>>>>> )' -- . ':!scripts/check-docs.sh' >&2
   exit 1
 fi
+# Every test in quarantine has its reason, date and owner issue (ADR-0030, decision 11).
+python3 -I scripts/ci-quarantine.py check || { echo "error: scripts/ci-quarantine.txt has entries without reason, date or owner issue" >&2; exit 1; }

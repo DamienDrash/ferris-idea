@@ -7,14 +7,14 @@
 //! (`SPEC-0056` v5 behaviour 21) and Quick Evaluate Expression (`SPEC-0091` v19 behaviour 44).
 //! Next and previous editor tab are the tab steps of `run_action`; Introduce Parameter is a
 //! refactoring shortcut (`SPEC-0095` v11 behaviour 14); Complete Current Statement is an editor
-//! command (`idecraft_editor::statement`). The decisions without a window are in
+//! command (`ferris_idea_editor::statement`). The decisions without a window are in
 //! [`crate::keymap_actions`], [`crate::completion_model`], [`crate::debug_model`] and
 //! [`crate::tips`].
 
 use std::path::PathBuf;
 
+use ferris_idea_languages::insight::{CompletionItem, SignatureHelp};
 use gpui::{Context, Window};
-use idecraft_languages::insight::{CompletionItem, SignatureHelp};
 
 use super::{DocPopup, ParamInfo, WorkbenchView};
 use crate::completion_model;
@@ -76,7 +76,7 @@ impl WorkbenchView {
             "QuickEvaluateExpression" => self.quick_evaluate_expression(window, cx),
             "IntroduceParameter" => {
                 self.refactor_shortcut(
-                    idecraft_languages::actions::Refactoring::Parameter,
+                    ferris_idea_languages::actions::Refactoring::Parameter,
                     window,
                     cx,
                 );
@@ -132,7 +132,7 @@ impl WorkbenchView {
         let sql = path
             .extension()
             .is_some_and(|e| e.eq_ignore_ascii_case("sql"));
-        if sql || idecraft_languages::LanguageId::detect(&path).is_none() {
+        if sql || ferris_idea_languages::LanguageId::detect(&path).is_none() {
             self.status = Some(keymap_actions::NO_CLASS_NAMES.into());
             cx.notify();
             return;
@@ -242,7 +242,7 @@ impl WorkbenchView {
         let mut headings = Vec::new();
         let mut ids = Vec::new();
         let mut language = "";
-        for info in idecraft_languages::inspections::catalogue() {
+        for info in ferris_idea_languages::inspections::catalogue() {
             if info.language != language {
                 language = info.language;
                 items.push(language.to_owned());
@@ -271,6 +271,7 @@ impl WorkbenchView {
                 let choices =
                     crate::problems_model::InspectScope::choices(this.active_path().as_deref());
                 this.inspect_only = Some(id);
+                this.copyright_dialog = false;
                 this.inspect_dialog = Some((choices, 0));
                 window.focus(&this.inspect_dialog_focus);
                 cx.notify();
@@ -297,7 +298,7 @@ impl WorkbenchView {
         let Some(id) = log.read(cx).selected_id().map(str::to_owned) else {
             return false;
         };
-        let details = idecraft_vcs::Repo::discover(&self.root)
+        let details = ferris_idea_vcs::Repo::discover(&self.root)
             .and_then(|r| r.commit_details(&id))
             .ok()
             .or_else(|| log.read(cx).details().filter(|d| d.info.id == id).cloned());
@@ -369,13 +370,13 @@ impl WorkbenchView {
         } else {
             self.active_path()
         };
-        let files = idecraft_core::Workspace::open(&self.root)
+        let files = ferris_idea_core::Workspace::open(&self.root)
             .and_then(|w| w.files())
             .unwrap_or_default();
-        let model = idecraft_core::read_project(&self.root, &files);
-        let options = idecraft_core::buildtools::BuildOptions::load(&self.root);
+        let model = ferris_idea_core::read_project(&self.root, &files);
+        let options = ferris_idea_core::buildtools::BuildOptions::load(&self.root);
         let Some(step) = file.and_then(|f| {
-            idecraft_core::buildtasks::recompile_step(&self.root, &model, &options, &f)
+            ferris_idea_core::buildtasks::recompile_step(&self.root, &model, &options, &f)
         }) else {
             self.status = Some(keymap_actions::NOTHING_TO_COMPILE.into());
             cx.notify();
@@ -412,7 +413,7 @@ impl WorkbenchView {
                 .split('\n')
                 .map(|l| l.trim_end_matches('\r').to_owned())
                 .collect();
-            let choices = idecraft_editor::statement::unwrap_choices(
+            let choices = ferris_idea_editor::statement::unwrap_choices(
                 &lines,
                 s.line - 1,
                 s.column - 1,
@@ -440,19 +441,19 @@ impl WorkbenchView {
                 let Some(editor) = this.editors.get(&path).cloned() else {
                     return;
                 };
-                let (range, body) = idecraft_editor::statement::unwrapped(&lines, u);
+                let (range, body) = ferris_idea_editor::statement::unwrapped(&lines, u);
                 editor.update(cx, |e, cx| {
                     let buffer = &e.state.buffer;
                     let nl = buffer.line_ending().as_str();
                     let start = buffer
-                        .position_to_offset(idecraft_editor::Position::new(range.start, 0))
+                        .position_to_offset(ferris_idea_editor::Position::new(range.start, 0))
                         .unwrap_or(0);
                     let last = range.end >= buffer.len_lines();
                     let end = if last {
                         buffer.len_chars()
                     } else {
                         buffer
-                            .position_to_offset(idecraft_editor::Position::new(range.end, 0))
+                            .position_to_offset(ferris_idea_editor::Position::new(range.end, 0))
                             .unwrap_or(buffer.len_chars())
                     };
                     let mut text = body.join(nl);

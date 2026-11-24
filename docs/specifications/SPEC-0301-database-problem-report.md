@@ -8,7 +8,7 @@
 
 ## Purpose
 When a Beta (or any) database system fails, the user can hand the maintainers a precise report in
-two clicks — without IDECraft sending anything by itself and without leaking credentials, data or
+two clicks — without Ferris IDEA sending anything by itself and without leaking credentials, data or
 host names.
 
 ## Behaviour
@@ -17,7 +17,7 @@ host names.
    Imported (a failed test's message becomes the error, step `connect`); and as Tools › Database ›
    "Report a Problem with This Database…" and in Find Action (`Database.ReportProblem`) for the
    connection selected in the Database tool window. [GEN]
-2. **What is collected — locally, nothing is sent.** IDECraft version and platform (`macos-arm64`),
+2. **What is collected — locally, nothing is sent.** Ferris IDEA version and platform (`macos-arm64`),
    the system (connector id, name, status, origin, definition `format` and, for user or imported
    ones, a SHA-256 of the definition file), the family, the server version if a session was open
    (the connector's `version_query`, else the family's), the failing step (`connect`, `test query`,
@@ -35,11 +35,11 @@ host names.
    and a body with the sections of behaviour 2. Buttons: **Copy** (title and body to the clipboard),
    **Open issue in browser** (opens the configured destination with title and body as URL query
    parameters, cut to 6 000 characters of body with a note "(shortened — paste the full report
-   from the clipboard)", and copies the full report first), **Cancel**. Nothing is sent by IDECraft
+   from the clipboard)", and copies the full report first), **Cancel**. Nothing is sent by Ferris IDEA
    itself; opening the browser is the only network effect and only on the user's click. [GEN,
    ADR-0007]
 5. **Destination.** GitHub Issues (project owner, 2026-11-05): by default "Open issue in browser" opens a
-   new issue from the template `database-system-problem.md` of IDECraft's repository with title and
+   new issue from the template `database-system-problem.md` of Ferris IDEA's repository with title and
    body filled in (usable by others once the repository is public, GO-4). The setting
    `[database] report_url` in the user settings file (`settings.toml`, SPEC-0129; agents set it with
    `set_ide_settings` → `database_report_url`) replaces it: an `https://` template with `{title}`
@@ -64,7 +64,7 @@ host names.
   with the redacted text; Copy fills the clipboard; Escape closes it.
 
 ## Out of scope
-Sending reports from IDECraft, attachments, logs or crash dumps, any automatic collection.
+Sending reports from Ferris IDEA, attachments, logs or crash dumps, any automatic collection.
 
 ## Known deviations from the reference
 Problem reports are written and edited by the user and never sent by the IDE (ADR-0007, IMP-0298).

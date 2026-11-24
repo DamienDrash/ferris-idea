@@ -7,8 +7,8 @@
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_workbench::{EditorView, WorkbenchView};
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_workbench::{EditorView, WorkbenchView};
 
 /// The file of the comparison: a header comment 0–3, imports 4–6, a documentation comment
 /// 8–11, the class body 12–50 with a custom region 13–16, line comments 18–20, a one-line
@@ -68,7 +68,8 @@ public class Fold {
 ";
 
 fn workspace(tag: &str) -> PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-folding-{tag}-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-folding-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src")).unwrap();
     std::fs::write(root.join("src/Fold.java"), FOLD).unwrap();
@@ -351,14 +352,16 @@ fn folding_arrows_follow_the_pointer(cx: &mut TestAppContext) {
     assert_eq!(arrows(cx), [(4, true), (21, true)]);
     // The setting: always.
     cx.update(|_, cx| {
-        let mut settings = idecraft_workbench::appearance::ide_settings(cx);
+        let mut settings = ferris_idea_workbench::appearance::ide_settings(cx);
         assert_eq!(
             settings.editor.folding_arrows,
-            idecraft_core::FoldingArrows::Hover,
+            ferris_idea_core::FoldingArrows::Hover,
             "on hover by default"
         );
-        settings.editor.folding_arrows = idecraft_core::FoldingArrows::Always;
-        cx.set_global(idecraft_workbench::appearance::CurrentIdeSettings(settings));
+        settings.editor.folding_arrows = ferris_idea_core::FoldingArrows::Always;
+        cx.set_global(ferris_idea_workbench::appearance::CurrentIdeSettings(
+            settings,
+        ));
     });
     editor.update(cx, |_, cx| cx.notify());
     assert_eq!(arrows(cx), all);

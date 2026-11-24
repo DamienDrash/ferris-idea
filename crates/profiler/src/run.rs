@@ -31,10 +31,10 @@ sampler that records call stacks without administrator rights";
 /// The macOS sampler; part of the system, needs no rights for the user's own processes.
 pub const SAMPLE: &str = "/usr/bin/sample";
 
-/// Note when macOS refused `sample` access to the program: the process that started IDECraft
+/// Note when macOS refused `sample` access to the program: the process that started Ferris IDEA
 /// (here: a launchd service) has no Developer Tools permission.
 pub const SAMPLE_REFUSED: &str = "macOS did not let /usr/bin/sample examine the program; allow the \
-app that starts IDECraft in System Settings › Privacy & Security › Developer Tools";
+app that starts Ferris IDEA in System Settings › Privacy & Security › Developer Tools";
 
 /// File name of the last profile in the profile directory.
 pub const LAST: &str = "last.json";
@@ -121,12 +121,53 @@ pub struct ProfileRun {
     /// Process id when attached to a running process (`SPEC-0251`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attached: Option<u32>,
+    /// SHA-256 of each project source file with line costs, by the file as reported, read when
+    /// the profile was stored (`SPEC-0120` v5 behaviour 10).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub sources: BTreeMap<String, String>,
+    /// Whether the project's frames are marked (`SPEC-0120` v5 behaviour 11).
+    #[serde(default)]
+    pub marked: bool,
+}
+
+/// Stores `run` as `dir/last.json`; in a workspace's profile directory its project frames are
+/// marked and the digests of its source files kept first (`SPEC-0120` v5 behaviours 10, 11).
+pub(crate) fn store(dir: &Path, run: &mut ProfileRun) -> Result<(), String> {
+    if let Some(root) = crate::project::workspace_of(dir) {
+        crate::project::prepare(run, root);
+    }
+    let json = serde_json::to_string(run).map_err(|e| e.to_string())?;
+    fs::write(dir.join(LAST), json).map_err(|e| e.to_string())
 }
 
 /// Whether `program` is found on the `PATH`.
 pub(crate) fn on_path(program: &str) -> bool {
     std::env::var_os("PATH")
         .is_some_and(|p| std::env::split_paths(&p).any(|d| d.join(program).is_file()))
+}
+
+/// Whether the first `perf` on `path` runs: `perf --version` answers. The Ubuntu launcher of
+/// `linux-tools-common` is on the PATH but fails without the running kernel's tools
+/// (`SPEC-0252` v4 behaviour 1).
+pub(crate) fn perf_runs_on(path: &std::ffi::OsStr) -> bool {
+    let Some(perf) = std::env::split_paths(path)
+        .map(|d| d.join("perf"))
+        .find(|p| p.is_file())
+    else {
+        return false;
+    };
+    Command::new(perf)
+        .arg("--version")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success())
+}
+
+/// [`perf_runs_on`] for this process's PATH.
+pub(crate) fn perf_runs() -> bool {
+    std::env::var_os("PATH").is_some_and(|p| perf_runs_on(&p))
 }
 
 fn is_python(program: &str) -> bool {
@@ -142,6 +183,17 @@ fn is_python(program: &str) -> bool {
 /// stay in front of `-m cProfile`.
 pub fn plan(target: &ProfileTarget) -> Result<ProfilePlan, String> {
     plan_kind(target, Kind::Cpu)
+}
+
+/// Whether the CPU profiler can run `command` (`SPEC-0076` v11 behaviour 14: the context actions
+/// offer Profile only then).
+pub fn can_profile(command: &[String]) -> bool {
+    plan(&ProfileTarget {
+        command: command.to_vec(),
+        cwd: PathBuf::new(),
+        env: BTreeMap::new(),
+    })
+    .is_ok()
 }
 
 /// Where the script or module starts in a Python call's arguments (after interpreter options).
@@ -286,8 +338,12 @@ pub fn plan_kind(target: &ProfileTarget, kind: Kind) -> Result<ProfilePlan, Stri
         });
     }
     if cfg!(target_os = "linux") {
-        if !on_path("perf") {
+        if !perf_runs() {
             return Err(PERF_MISSING.into());
+        }
+        // Said before anything runs, also in a dry run (SPEC-0252 v3 behaviour 1).
+        if crate::perf::perf_blocked() {
+            return Err(PERF_REFUSED.into());
         }
         let mut command: Vec<String> = vec!["perf".into()];
         command.extend(PERF_RECORD.map(str::to_owned));
@@ -625,7 +681,7 @@ pub fn profile_kind(
         .filter(|l| !l.starts_with("leaks(") && !l.starts_with("Output graph successfully"))
         .collect::<Vec<_>>()
         .join("\n");
-    let run = ProfileRun {
+    let mut run = ProfileRun {
         plan,
         exit_code,
         timed_out,
@@ -635,21 +691,22 @@ pub fn profile_kind(
         kind,
         exit_unknown,
         attached: None,
+        sources: BTreeMap::new(),
+        marked: false,
     };
-    let json = serde_json::to_string(&run).map_err(|e| e.to_string())?;
-    fs::write(dir.join(LAST), json).map_err(|e| e.to_string())?;
+    store(dir, &mut run)?;
     Ok(run)
 }
 
 /// Profile directory of a workspace.
-pub const PROFILES_DIR: &str = ".idecraft/profiles";
+pub const PROFILES_DIR: &str = ".ferris-idea/profiles";
 
 /// Profiles run configuration `name` of `root` (behaviour 5): its before-launch configurations run
 /// normally first, each once; then the configuration itself runs under its profiler with its own
 /// time limit. The result is stored in [`PROFILES_DIR`].
 pub fn profile_config(
     root: &Path,
-    configs: &idecraft_core::RunConfigs,
+    configs: &ferris_idea_core::RunConfigs,
     name: &str,
 ) -> Result<ProfileRun, String> {
     profile_config_kind(root, configs, name, Kind::Cpu)
@@ -658,26 +715,36 @@ pub fn profile_config(
 /// [`profile_config`] for CPU or memory (`SPEC-0250` behaviour 6).
 pub fn profile_config_kind(
     root: &Path,
-    configs: &idecraft_core::RunConfigs,
+    configs: &ferris_idea_core::RunConfigs,
     name: &str,
     kind: Kind,
 ) -> Result<ProfileRun, String> {
     if !configs.problems.is_empty() {
         return Err(format!(
             "{} has problems: {}",
-            idecraft_core::RUN_FILE,
+            ferris_idea_core::RUN_FILE,
             configs.problems.join("; ")
         ));
     }
-    let steps = idecraft_core::run_plan(root, configs, name)?;
+    let steps = ferris_idea_core::run_plan(root, configs, name)?;
     let (last, before) = steps.split_last().ok_or("nothing to run")?;
+    // The profiler is chosen before anything runs, so a missing or forbidden one is said first
+    // (SPEC-0252 v3 behaviour 1).
+    plan_kind(
+        &ProfileTarget {
+            command: last.command.clone(),
+            cwd: root.join(&last.cwd),
+            env: BTreeMap::new(),
+        },
+        kind,
+    )?;
     for step in before {
         let config = configs
             .configs
             .iter()
             .find(|c| c.name == step.name)
             .ok_or_else(|| format!("no run configuration {}", step.name))?;
-        let outcome = idecraft_core::run_one(root, config);
+        let outcome = ferris_idea_core::run_one(root, config);
         if !outcome.success() {
             return Err(format!(
                 "{} failed before profiling (exit code {:?})",
@@ -696,7 +763,7 @@ pub fn profile_config_kind(
         env: config
             .env
             .iter()
-            .map(|(k, v)| (k.clone(), idecraft_core::expand_vars(v, root)))
+            .map(|(k, v)| (k.clone(), ferris_idea_core::expand_vars(v, root)))
             .collect(),
     };
     profile_kind(
@@ -719,7 +786,7 @@ pub fn find_source(root: &Path, reported: &str) -> Option<PathBuf> {
         return Some(root.join(path));
     }
     let name = path.file_name()?;
-    let files = idecraft_core::Workspace::open(root).ok()?.files().ok()?;
+    let files = ferris_idea_core::Workspace::open(root).ok()?.files().ok()?;
     if path.components().count() > 1 {
         let mut found = files.iter().filter(|f| f.ends_with(path));
         if let (Some(first), None) = (found.next(), found.next()) {
@@ -731,14 +798,60 @@ pub fn find_source(root: &Path, reported: &str) -> Option<PathBuf> {
     found.next().is_none().then(|| root.join(first))
 }
 
-/// The last stored run in `dir`, if any.
+/// The last stored run in `dir`, if any; one stored before `SPEC-0120` v5 gets its project
+/// frames marked (behaviour 11).
 pub fn last_profile(dir: &Path) -> Option<ProfileRun> {
-    serde_json::from_str(&fs::read_to_string(dir.join(LAST)).ok()?).ok()
+    let mut run: ProfileRun =
+        serde_json::from_str(&fs::read_to_string(dir.join(LAST)).ok()?).ok()?;
+    if !run.marked
+        && let Some(root) = crate::project::workspace_of(dir)
+    {
+        crate::project::mark_older(&mut run, root);
+    }
+    Some(run)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// SPEC-0252 AK-8 (v4, behaviour 1).
+    #[cfg(unix)]
+    #[test]
+    fn a_perf_that_cannot_run_counts_as_missing() {
+        use std::os::unix::fs::PermissionsExt;
+        let base =
+            std::env::temp_dir().join(format!("ferris-idea-perf-runs-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        let make = |dir: &str, body: &str| {
+            let d = base.join(dir);
+            fs::create_dir_all(&d).unwrap();
+            let perf = d.join("perf");
+            fs::write(&perf, format!("#!/bin/sh\n{body}\n")).unwrap();
+            fs::set_permissions(&perf, fs::Permissions::from_mode(0o755)).unwrap();
+            d
+        };
+        // Like the Ubuntu launcher without the kernel's tools.
+        let launcher = make(
+            "launcher",
+            "echo 'WARNING: perf not found for kernel' >&2; exit 2",
+        );
+        let works = make("works", "echo 'perf version 6.8.12'");
+        let empty = base.join("empty");
+        fs::create_dir_all(&empty).unwrap();
+        let path = |dirs: &[&PathBuf]| std::env::join_paths(dirs).unwrap();
+        assert!(!perf_runs_on(&path(&[&launcher])));
+        assert!(!perf_runs_on(&path(&[&empty])));
+        assert!(perf_runs_on(&path(&[&works])));
+        assert!(perf_runs_on(&path(&[&empty, &works])));
+        assert!(
+            !perf_runs_on(&path(&[&launcher, &works])),
+            "the first perf is the one run"
+        );
+        assert!(PERF_MISSING.contains("linux-tools-common"));
+        assert!(PERF_MISSING.contains("linux-tools-generic"));
+        let _ = fs::remove_dir_all(&base);
+    }
 
     fn target(command: &[&str]) -> ProfileTarget {
         ProfileTarget {
@@ -781,7 +894,7 @@ mod tests {
     #[test]
     fn sources_are_found_by_path_or_unique_name() {
         let root =
-            std::env::temp_dir().join(format!("idecraft-find-source-{}", std::process::id()));
+            std::env::temp_dir().join(format!("ferris-idea-find-source-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(root.join("src/a")).unwrap();
         fs::create_dir_all(root.join("src/b")).unwrap();
@@ -812,7 +925,8 @@ mod tests {
         } else if cfg!(target_os = "linux") {
             match p {
                 Ok(p) => assert_eq!(&p.command[..2], ["perf", "record"]),
-                Err(e) => assert_eq!(e, PERF_MISSING),
+                // No perf, or a kernel that does not allow it (SPEC-0252 v3 behaviour 1).
+                Err(e) => assert!(e == PERF_MISSING || e == PERF_REFUSED, "{e}"),
             }
         } else {
             assert_eq!(p.unwrap_err(), WINDOWS_REFUSED);
@@ -884,5 +998,61 @@ mod tests {
             ["mvn", "-q", "compile", "exec:java", "-Dexec.mainClass=a.B"]
         );
         assert!(m.env["MAVEN_OPTS"].contains("jdk.ExecutionSample#period=1ms"));
+    }
+
+    // SPEC-0120 v5 behaviours 10 and 11: a stored profile has its project frames marked and the
+    // digests of its project files; one stored before has marks once read, but no digests.
+    #[test]
+    fn stored_profiles_keep_marks_and_digests() {
+        let root = crate::project::tests::workspace("store", &["app.py"]);
+        let dir = root.join(PROFILES_DIR);
+        fs::create_dir_all(&dir).unwrap();
+        let mut tree = crate::StackTree::default();
+        let at = |name: &str, file: &str, line: u32| crate::StackFrame {
+            name: name.into(),
+            module: None,
+            location: Some((file.into(), line)),
+        };
+        tree.add(
+            "all",
+            &[
+                at("main", "app.py", 2),
+                at("dumps", "/usr/lib/python3/json/__init__.py", 231),
+            ],
+            5.0,
+        );
+        let mut run = ProfileRun {
+            plan: ProfilePlan {
+                engine: Engine::CProfile,
+                command: vec!["python3".into(), "app.py".into()],
+                env: BTreeMap::new(),
+            },
+            exit_code: Some(0),
+            timed_out: false,
+            millis: 5,
+            output: String::new(),
+            profile: tree.profile("test", crate::Unit::Samples),
+            kind: Kind::Cpu,
+            exit_unknown: false,
+            attached: None,
+            sources: BTreeMap::new(),
+            marked: false,
+        };
+        let older = serde_json::to_string(&run).unwrap();
+        store(&dir, &mut run).unwrap();
+        let stored = last_profile(&dir).unwrap();
+        assert!(stored.marked);
+        let main = &stored.profile.roots[0].children[0];
+        assert!(main.in_project && !main.children[0].in_project);
+        assert_eq!(
+            stored.sources.get("app.py"),
+            Some(&ferris_idea_core::sha256_hex(b"// app.py\n"))
+        );
+        assert_eq!(stored.sources.len(), 1, "only the project's files");
+        fs::write(dir.join(LAST), older).unwrap();
+        let read = last_profile(&dir).unwrap();
+        assert!(read.marked && read.profile.roots[0].children[0].in_project);
+        assert!(read.sources.is_empty());
+        let _ = fs::remove_dir_all(&root);
     }
 }

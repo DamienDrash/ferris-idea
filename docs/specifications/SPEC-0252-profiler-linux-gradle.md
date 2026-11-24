@@ -1,6 +1,6 @@
 # SPEC-0252: Profiling on Linux and Gradle `run`
 
-- **Version:** 2 · **Date:** 2026-11-16 (v2: AK-6, hand test 182's Gradle part with real keys)
+- **Version:** 4 · **Date:** 2026-11-22 (v4: a `perf` on the PATH that cannot run, such as the Ubuntu launcher without the kernel's tools, counts as missing, and the note names the Ubuntu package that brings the program, behaviour 1, AK-8, hand test 182; v3: a kernel that forbids `perf` is named before anything runs, also in a dry run, behaviour 1, AK-7; hand test 182 Linux part without a screen); 2026-11-16 (v2: AK-6, hand test 182's Gradle part with real keys)
 - **Sources:** GEN (IDE profilers work on every desktop system and for build-tool launches;
   F-083), STD (Linux `perf record -F 1000 -g -e cpu-clock:u -o <file> -- <command>`,
   `perf script -F comm,tid,ip,sym,dso -i <file>` and its output: a header line per sample, then
@@ -18,8 +18,17 @@ Profile the same programs on Linux as on macOS, and Java programs started by Gra
    samples are read with `perf script`; each thread (`name tid`) becomes a root with the frames
    from the outermost call down; offsets are dropped; an unknown symbol shows its object
    (`[unknown] (libfoo.so)`). Costs are samples of one millisecond. Without `perf` the run is
-   refused and names the package (`linux-perf`, `linux-tools-common`, `perf`). When the kernel
-   refuses (`perf_event_paranoid` above 2), the note says so and how to allow it. [STD]
+   refused and names the package (`linux-perf`, `linux-tools-common`, `perf`). **v4:** `perf` counts
+   as present only when `perf --version` answers; on Ubuntu `linux-tools-common` brings only a
+   launcher that fails without the tools of the running kernel, so that launcher alone counts as
+   missing, and the note names `linux-tools-generic` beside `linux-tools-common`. When the kernel
+   refuses (`perf_event_paranoid` above 2), the note says so and how to allow it. Since v3 this
+   is known before anything runs: Ferris IDEA reads the level (and whether the process has
+   `CAP_PERFMON` or `CAP_SYS_ADMIN`, which lift it) when it plans the run, so the dry run of
+   `profile_run` and the window refuse with that note before the before-launch configurations
+   and the program start; a level it cannot read leaves the decision to `perf`, whose answer is
+   still recognised. Ferris IDEA never changes the kernel setting. Until v2 the program and its
+   before-launch configurations ran first and only `perf`'s answer gave the note. [STD]
 2. **Same elsewhere:** Python (cProfile, SPEC-0120; tracemalloc, SPEC-0250) and Java (JFR,
    SPEC-0136) work on Linux unchanged; native memory uses Massif (SPEC-0250), attaching uses
    `perf` (SPEC-0251). [STD]
@@ -30,7 +39,7 @@ Profile the same programs on Linux as on macOS, and Java programs started by Gra
    recording is read as in SPEC-0136. [STD]
 4. **Windows:** profiling native programs is refused on Windows: Windows ships no sampler that
    records call stacks without administrator rights (ETW kernel sampling needs them), and
-   IDECraft has no Windows machine to test on. Python and Java profiling are not tested there.
+   Ferris IDEA has no Windows machine to test on. Python and Java profiling are not tested there.
    [GEN]
 
 ## Acceptance criteria
@@ -51,7 +60,17 @@ Profile the same programs on Linux as on macOS, and Java programs started by Gra
   a Gradle application (`application` plugin) with the run configuration `./gradlew run`, Find
   Action › Profile Selected and Enter record it with JFR; the application ran, Hot Spots shows
   `Busy.inner` first with `Busy.java:6` and no Gradle frame, and Enter opens that line. The Linux
-  part needs IDECraft running on Linux and stays with the hand test.
+  part needs Ferris IDEA running on Linux and stays with the hand test.
+- **AK-7 (v3, behaviour 1)** Unit test `perf::tests::the_kernels_level_refuses_perf_before_the_run`
+  (level above 2 refuses, 2 and below do not, the two capabilities lift it, an unreadable level
+  does not refuse); on Linux the plan of a native program is `perf record` or one of the two
+  notes (`run::tests::native_programs_use_sample_on_macos_and_perf_on_linux`). Through MCP on a
+  Linux machine with level 4 (`ferris-idea call`, OBS of hand test 182's Linux part): the dry run of
+  `profile_run` for a C program answers with the note.
+- **AK-8 (v4, behaviour 1)** Unit test `run::tests::a_perf_that_cannot_run_counts_as_missing`: a
+  `perf` on the PATH that fails `--version` (as the Ubuntu launcher does without the kernel's
+  tools) or is absent counts as missing, one that answers counts as present; the note names
+  `linux-tools-common` and `linux-tools-generic`.
 
 ## Out of scope
 Kernel stacks, `perf` source lines, hardware counters, other Gradle tasks than `run` (tests,

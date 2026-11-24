@@ -101,9 +101,15 @@ fn check_key_permissions(key: &Path) -> Result<(), TlsError> {
     Ok(())
 }
 
+/// Without POSIX modes who may read the key cannot be checked yet, so no key is accepted
+/// (`SPEC-0321` v6 behaviour 8a): never a weaker check than on Unix.
 #[cfg(not(unix))]
-fn check_key_permissions(_key: &Path) -> Result<(), TlsError> {
-    Ok(())
+fn check_key_permissions(key: &Path) -> Result<(), TlsError> {
+    Err(TlsError(format!(
+        "the key {} cannot be checked for other readers: TLS keys are not supported on this \
+         platform yet",
+        key.display()
+    )))
 }
 
 /// `https://name[:port]` as a normalized authority, `name:port` in lower case, or an explanation.

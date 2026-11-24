@@ -1,5 +1,5 @@
 //! `SPEC-0149` v5 AK-10 (behaviour 11, beta finding B2 of hand test 209): a library source is read,
-//! not checked. An editor that is not checked shows none of IDECraft's own findings, keeps none
+//! not checked. An editor that is not checked shows none of Ferris IDEA's own findings, keeps none
 //! from later diagnostics, and the Problems window's File tab lists nothing for it. No language
 //! server takes part; the library-source path itself is checked in hand test 209 of
 //! `workflow_a_beta_handtests.rs`.
@@ -8,14 +8,14 @@
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_workbench::{EditorView, WorkbenchView};
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_workbench::{EditorView, WorkbenchView};
 
-/// A bare `except:` is one of IDECraft's own findings in Python (`SPEC-0098`).
+/// A bare `except:` is one of Ferris IDEA's own findings in Python (`SPEC-0098`).
 const SAFE: &str = "def safe():\n    try:\n        return 1\n    except:\n        return 0\n";
 
 fn workspace() -> PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-unchecked-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-unchecked-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     std::fs::write(root.join("safe.py"), SAFE).unwrap();

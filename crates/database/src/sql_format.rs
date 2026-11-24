@@ -1,4 +1,4 @@
-//! IDECraft's own SQL formatter (`SPEC-0043` v6 behaviour 11): one clause per line, joins
+//! Ferris IDEA's own SQL formatter (`SPEC-0043` v6 behaviour 11): one clause per line, joins
 //! under the table name of their `from` line, `and`/`or` of a condition aligned under `where`,
 //! one row per line after `values`, one column per line in `create table` between parentheses on
 //! lines of their own and with the types aligned, spaces around operators and after commas.
@@ -295,7 +295,7 @@ fn format_checked(text: &str, indent: usize) -> Result<String, String> {
     let out = layout(text, &tokens, indent)?;
     // The promise, checked on every result: same tokens, and nothing left to do.
     let unsafe_result = || {
-        "IDECraft's SQL formatter would have changed more than whitespace here, so it left the file as it is (please report the file)"
+        "Ferris IDEA's SQL formatter would have changed more than whitespace here, so it left the file as it is (please report the file)"
             .to_owned()
     };
     let after = lex_agreed(&out).map_err(|_| unsafe_result())?;

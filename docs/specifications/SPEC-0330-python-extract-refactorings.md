@@ -5,12 +5,12 @@
   on the new function, behaviour 16, AK-12; v2: Extract Variable refuses when it would change the
   order of evaluation inside the statement, behaviour 8, AK-11; the limit of v1 is gone)
 - **Sources:** OBS-0034 item 47 (L13: in a Python file the reference extracts a selected expression
-  into a variable above the statement and offers a name to type over; IDECraft did nothing, since
+  into a variable above the statement and offers a name to type over; Ferris IDEA did nothing, since
   pyright offers no extract refactoring) and item 52 (L15: for a selected statement in `def
   main(argv: list[str]) -> int:` that uses `argv` and a local list of `Item` objects, the reference
   writes both parameters of the new function with their types, `list[str]` and `list[Item]`, and
   no return type; it offers a box for parameter and return types in its dialog, seen ticked;
-  IDECraft wrote the parameters without types), an own headless check of IDECraft on 2026-11-13
+  Ferris IDEA wrote the parameters without types), an own headless check of Ferris IDEA on 2026-11-13
   (no observation of the reference: in a Python file `Inline` and `IntroduceConstant` did nothing,
   since pyright offers neither), GEN (what Extract Variable, Extract Method, Extract Constant and
   Inline Variable do; which selections they accept; that inlining and hoisting must not change
@@ -36,7 +36,7 @@ behaviour 16 may come from the server. A refusal changes nothing and names its r
 1. **Own actions:** `IntroduceVariable`, `ExtractMethod` and `Refactorings.QuickListPopupAction`
    (SPEC-0095 behaviours 1 and 4) first ask the language server as for every language. When the
    server offers no matching action at the place, or cannot be asked (not installed, failed),
-   IDECraft offers its own actions titled `Extract variable` and `Extract method` (kind
+   Ferris IDEA offers its own actions titled `Extract variable` and `Extract method` (kind
    `refactor.extract`). They are found, applied, undone and followed by the name popup exactly as
    a server's action: SPEC-0095 behaviours 3, 5, 8, 9 and 10 hold unchanged. An action with one of
    these titles that the server does offer is the server's. [OBS-0034 item 47, GEN]
@@ -254,7 +254,7 @@ behaviour 16 may come from the server. A refusal changes nothing and names its r
       shows it can be evaluated: the future import, or a `|` union already written in an
       annotation of a function's signature. Subscripted built-in types assume Python 3.9.
     - **Return type:** only when the new function's body has exactly one `return`, with a value
-      (the one IDECraft writes for an expression or for the results, or the selection's own single
+      (the one Ferris IDEA writes for an expression or for the results, or the selection's own single
       `return`; those of nested functions do not count). Each returned part is typed by itself:
       a name by sources 1 and 2, a result of the selection otherwise by the server's hover on its
       assignment when the selection assigns it exactly once and on every path; a name that is no
@@ -275,7 +275,7 @@ behaviour 16 may come from the server. A refusal changes nothing and names its r
 
 17. **Own action and place:** `Inline` (SPEC-0095 behaviour 1) first asks the language server as
     for every language. When the server offers no inline action at the place, or cannot be asked,
-    IDECraft offers its own action titled `Inline variable` (kind `refactor.inline`). It acts on
+    Ferris IDEA offers its own action titled `Inline variable` (kind `refactor.inline`). It acts on
     the name the caret is in, directly before or directly behind, or on a selection that is
     exactly one name; the name may be the variable's assignment or any of its reads. The whole
     variable is inlined: every read is replaced by the assigned expression and the assignment is
@@ -539,15 +539,15 @@ generators (`yield`).
 
 ## Known deviations from the reference
 - Own implementation because the server has none: SPEC-0095 applies what the language server
-  offers; pyright and basedpyright offer no extract refactoring, so for Python IDECraft computes
+  offers; pyright and basedpyright offer no extract refactoring, so for Python Ferris IDEA computes
   the edit itself from the syntax tree (as SPEC-0320 does for the class refactorings of
   TypeScript).
 - The reference offers to replace all occurrences and edits the name in place in the text;
-  IDECraft replaces the selected occurrence and asks for the name in the rename popup (SPEC-0095
+  Ferris IDEA replaces the selected occurrence and asks for the name in the rename popup (SPEC-0095
   behaviour 8). After Extract Method inside a class the popup stands at the call, since the new
   method follows the current one.
 - Types (behaviour 16): the reference asks in its dialog whether to add parameter and return
-  types (a box, seen ticked). IDECraft extracts at once, without a dialog before the extraction
+  types (a box, seen ticked). Ferris IDEA extracts at once, without a dialog before the extraction
   (SPEC-0095 behaviour 8), so there is no place to ask: it always writes the types it knows for
   certain and leaves the others out. A type that would need a new import is left out; whether the
   reference adds imports was not observed. Only the one case of OBS-0034 item 52 was compared: both
@@ -556,10 +556,10 @@ generators (`yield`).
 - Only the one extraction of OBS-0034 item 47 was seen in the reference. Whether it refuses the
   places of behaviour 7 was not compared. Extract Method was run in the reference once (OBS-0034 item 52): it asks for the name
   and shows the parameters in a dialog first and puts the new function after the current one;
-  IDECraft extracts at once and puts it before. Behaviours 9–13 are IDECraft's own design.
-- Inline Variable and Extract Constant (v4, behaviours 17 to 25) are IDECraft's own design from
+  Ferris IDEA extracts at once and puts it before. Behaviours 9–13 are Ferris IDEA's own design.
+- Inline Variable and Extract Constant (v4, behaviours 17 to 25) are Ferris IDEA's own design from
   what Python guarantees; the reference was not observed for them. Where a reference inlines or
-  hoists without these checks, IDECraft refuses and says why (CLAUDE.md rule 9: a refactoring
+  hoists without these checks, Ferris IDEA refuses and says why (CLAUDE.md rule 9: a refactoring
   that can change what the program does is not copied). Inline acts on the whole variable at
   once and asks nothing; the constant always goes to module level.
 - Limits of Inline Variable, where it assumes rather than proves: a call that is not handed an

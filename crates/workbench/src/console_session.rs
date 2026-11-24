@@ -4,7 +4,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use idecraft_database::{CancelHandle, ConnectionProfile};
+use ferris_idea_database::{CancelHandle, ConnectionProfile};
 
 use crate::table_session::TableSession;
 
@@ -246,7 +246,7 @@ mod tests {
     fn project_sql_files_keep_history() {
         use std::path::Path;
         assert!(keeps_history(Path::new(
-            "/w/.idecraft/consoles/inv/console.sql"
+            "/w/.ferris-idea/consoles/inv/console.sql"
         )));
         assert!(keeps_history(Path::new("/w/orders.sql")));
         assert!(keeps_history(Path::new("/w/Report.SQL")));

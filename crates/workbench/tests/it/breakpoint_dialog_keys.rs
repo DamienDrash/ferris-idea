@@ -13,25 +13,25 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
+use ferris_idea_workbench::DebugState;
+use ferris_idea_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
+use ferris_idea_workbench::debug_model::BreakpointLook;
+use ferris_idea_workbench::{EditorView, WorkbenchView};
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_workbench::DebugState;
-use idecraft_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
-use idecraft_workbench::debug_model::BreakpointLook;
-use idecraft_workbench::{EditorView, WorkbenchView};
 
 type Bench = Entity<WorkbenchView>;
 
 const LOOP_PY: &str = "total = 0\nfor i in range(5):\n    inner = i * 10\n    total += inner\nprint(\"total\", total)\n";
 
 fn debugpy_installed() -> bool {
-    idecraft_debugger::known_adapters()
+    ferris_idea_debugger::known_adapters()
         .iter()
         .any(|a| a.name == "debugpy" && a.command.is_some())
 }
 
 fn workspace(tag: &str) -> PathBuf {
     let root = std::env::temp_dir().join(format!(
-        "idecraft-breakpoint-dialog-keys-{tag}-{}",
+        "ferris-idea-breakpoint-dialog-keys-{tag}-{}",
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&root);
@@ -46,7 +46,7 @@ fn window(root: &Path, cx: &mut TestAppContext) -> (Bench, &'static mut VisualTe
     cx.update(|cx| {
         cx.set_global(IdeSettingsFile(settings.join("settings.toml")));
         cx.set_global(ThemeFile(settings.join("theme")));
-        cx.set_global(CurrentIdeSettings(idecraft_core::IdeSettings::default()));
+        cx.set_global(CurrentIdeSettings(ferris_idea_core::IdeSettings::default()));
     });
     let at = root.to_path_buf();
     let window = cx.add_window(move |_, cx| WorkbenchView::new(&at, cx));
@@ -111,7 +111,7 @@ fn look(editor: &Entity<EditorView>, cx: &mut VisualTestContext, line: usize) ->
 }
 
 fn saved(root: &Path) -> String {
-    std::fs::read_to_string(root.join(".idecraft/breakpoints.toml")).unwrap_or_default()
+    std::fs::read_to_string(root.join(".ferris-idea/breakpoints.toml")).unwrap_or_default()
 }
 
 /// ⇧⌘F8 on the caret's breakpoint, `condition` typed over the Condition field, Enter. Since
@@ -143,7 +143,7 @@ fn hand_test_54_condition_moves_with_an_inserted_line_and_a_failed_condition_is_
         return;
     }
     let root = workspace("54");
-    idecraft_core::trust::trust_for_process(&root);
+    ferris_idea_core::trust::trust_for_process(&root);
     let (bench, cx) = window(&root, cx);
     bench.update_in(cx, |b, window, cx| {
         b.open(&root.join("loop.py"), window, cx);

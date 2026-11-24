@@ -9,13 +9,14 @@
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
+use ferris_idea_workbench::WorkbenchView;
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_workbench::WorkbenchView;
 
 const PYRIGHT: &str = "Import \"requests\" could not be resolved";
 
 fn workspace(tag: &str) -> PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-pyfail-{tag}-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-pyfail-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     let env = root.join(".venv");
     std::fs::create_dir_all(env.join("bin")).unwrap();
@@ -62,7 +63,7 @@ fn open(
         let editor = b.active_editor_entity().expect("main.py is open");
         editor.update(cx, |e, cx| {
             e.set_diagnostics(
-                &[idecraft_languages::lsp::Diagnostic {
+                &[ferris_idea_languages::lsp::Diagnostic {
                     severity: "warning".into(),
                     start_line: 0,
                     start_character: 7,

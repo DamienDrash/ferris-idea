@@ -7,9 +7,9 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use ferris_idea_workbench::WorkbenchView;
+use ferris_idea_workbench::diff_actions::{self, Pane};
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_workbench::WorkbenchView;
-use idecraft_workbench::diff_actions::{self, Pane};
 
 fn git(dir: &Path, args: &[&str]) {
     let out = Command::new("git")
@@ -25,7 +25,8 @@ fn git(dir: &Path, args: &[&str]) {
 }
 
 fn folder(tag: &str) -> PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-diffact-{tag}-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-diffact-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     // The directory as the workbench names it, so paths compare equal.

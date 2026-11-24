@@ -2,7 +2,7 @@
 //! end of every selected line, indentation converted to spaces or tabs.
 //!
 //! The rules are those of the open platform's actions of the same ids (intellij-community,
-//! `docs/legal/PROVENANCE.md`: logic template); the code is IDECraft's own, on char offsets and
+//! `docs/legal/PROVENANCE.md`: logic template); the code is Ferris IDEA's own, on char offsets and
 //! with every line break left as it is (behaviour 2).
 
 use std::ops::Range;

@@ -10,15 +10,15 @@
   [ADR-0026](0026-session-protocol-window-and-serve.md) (session protocol),
   [ADR-0025](0025-network-security-for-remote-connections.md) (rights, audit, nothing listens
   openly), [ADR-0003](0003-ui-toolkit.md) (toolkit only in `ui`, `workbench`, `app`),
-  [ADR-0021](0021-idecraft-file-formats.md) (file classes), SPEC-0053 (agent rights), SPEC-0221
+  [ADR-0021](0021-ferris-idea-file-formats.md) (file classes), SPEC-0053 (agent rights), SPEC-0221
   (MCP over HTTP), SPEC-0275 (real clicks in the self-test), SPEC-0281 (dialog decisions),
   SPEC-0294 (tooltips), SPEC-0313 (masking), [SPEC-0319](../specifications/SPEC-0319-ui-driver.md)
   (first spec under this ADR)
 
 ## Context
 
-IDECraft's window is checked by a self-test that runs inside the window process
-(`crates/app/src/workbench.rs`, `idecraft ui --selftest`, 844 checks on 2026-11-07). How it finds
+Ferris IDEA's window is checked by a self-test that runs inside the window process
+(`crates/app/src/workbench.rs`, `ferris-idea ui --selftest`, 844 checks on 2026-11-07). How it finds
 and operates the interface today:
 
 - **Keys** (about 710 `Step::Key`) go through GPUI's `window.dispatch_keystroke`. Layout-dependent
@@ -35,14 +35,14 @@ and operates the interface today:
 
 MCP clients see parts of the interface through purpose-built tools (`tool_windows`,
 `dialog_decisions`, `ui_tooltips`), but nothing lets a client find "the Commit button" and press
-it. Side-by-side comparisons drive the reference through Remote Robot and IDECraft through
+it. Side-by-side comparisons drive the reference through Remote Robot and Ferris IDEA through
 keystrokes and the computer-use screen, with coordinates and system keys.
 
 GPUI 0.2.2 has no accessibility tree (ADR-0019). Upstream GPUI has AccessKit; spike #277 ported
-IDECraft to it at a pinned commit (33 files, all 1263 tests pass) and annotated three surfaces,
+Ferris IDEA to it at a pinned commit (33 files, all 1263 tests pass) and annotated three surfaces,
 but the window measurements and the tree check from outside are still pending.
 
-The Project Owner asked whether a robust UI driver would extend IDECraft itself in a sensible way
+The Project Owner asked whether a robust UI driver would extend Ferris IDEA itself in a sensible way
 and left the choice of the standard to the coordinator. The answer is **yes**, for four reasons:
 stable window self-tests and comparisons instead of pixels, coordinates and system keys; agents
 (M11/M12) that can operate the interface reliably; accessibility, because the same semantic tree
@@ -58,7 +58,7 @@ serves screen readers; and UI tests for plugin authors.
   **stable test id** and the **effects** of its actions (section 5).
 - The tree uses **AccessKit's node schema** (crate `accesskit`, MIT OR Apache-2.0, toolkit-free):
   roles, properties and action requests as AccessKit defines them, mapped by AccessKit's adapters
-  to NSAccessibility (macOS), UI Automation (Windows) and AT-SPI (Linux). IDECraft adds no
+  to NSAccessibility (macOS), UI Automation (Windows) and AT-SPI (Linux). Ferris IDEA adds no
   test-only properties. The stable test id is AccessKit's author id, which is `AXIdentifier` on
   macOS, `AutomationId` on Windows and the accessible id on Linux — the same field platform test
   frameworks use.
@@ -102,13 +102,13 @@ serves screen readers; and UI tests for plugin authors.
 
 ### 3. Input is synthesised inside the process, never system-wide
 
-Three levels, all delivered only to IDECraft's own window:
+Three levels, all delivered only to Ferris IDEA's own window:
 
 | Level | What | Used for |
 |---|---|---|
 | **semantic** | the AccessKit action request (`Click`, `Focus`, `Expand`, `SetValue`, `ShowContextMenu`, `ScrollIntoView`, …), handled by the same code that answers a screen reader | `set_value`, `expand`, `select`, invoking without a pointer; the screen-reader path itself |
 | **window** (default) | toolkit input events dispatched into the window (`PlatformInput` mouse, scroll and key events; text through the window's input handler, the path an input method commits text on) | `click`, `context_click`, `hover`, `drag`, `scroll`, `press`, `type` |
-| **native** (opt-in, macOS) | `NSEvent`s posted to IDECraft's own application queue, as `native_click.rs` does today | tests of the platform layer: `rightMouseDown:`, Control-click, the system's own event translation |
+| **native** (opt-in, macOS) | `NSEvent`s posted to Ferris IDEA's own application queue, as `native_click.rs` does today | tests of the platform layer: `rightMouseDown:`, Control-click, the system's own event translation |
 
 - `type` commits Unicode text through the input handler, so it does not depend on the keyboard
   layout, dead keys or an input method (`@`, `ö`, `é`, `日本語`, emoji all arrive as written).
@@ -132,8 +132,8 @@ Adapters only translate:
 - **MCP tools** (ADR-0008) in the window's MCP server (SPEC-0221): `ui_snapshot`, `ui_find`,
   `ui_act`, `ui_expect`, `ui_screenshot`, `ui_trace`, `ui_driver_status`, `ui_driver_stop`. The
   stdio server has no window and answers `unavailable`. `ui_tooltips` becomes a view on the tree.
-- **Command line** `idecraft drive <verb> …` for scripts: a client of the window's MCP server
-  through its discovery file (as `idecraft call`), plus `idecraft drive run <script>` for a UI
+- **Command line** `ferris-idea drive <verb> …` for scripts: a client of the window's MCP server
+  through its discovery file (as `ferris-idea call`), plus `ferris-idea drive run <script>` for a UI
   script, a project file of kind `ui-script` (ADR-0021, TOML).
 - **Session protocol** (ADR-0026): family `ui` with the same methods, capability `ui` in
   `session.hello`, served by the process that owns the window — for a paired device of M16 with
@@ -175,10 +175,10 @@ Adapters only translate:
   the user's.
 - **The user wins:** physical input while an external client drives pauses it (the client gets
   `interrupted`); **Esc** pressed by the user, the Stop button, the menu item "Stop UI Automation"
-  or `idecraft drive stop` is the **emergency stop**: it cancels every pending action within one
+  or `ferris-idea drive stop` is the **emergency stop**: it cancels every pending action within one
   frame, ends every external driver session, withdraws session-only grants of `ui`, and switches
   `ui.driver.external` off until the user switches it on again.
-- **Audit:** every external action is logged (`.idecraft/agent-log.jsonl`, actor = client and
+- **Audit:** every external action is logged (`.ferris-idea/agent-log.jsonl`, actor = client and
   session): time, action, locator, resolved role/name/id, outcome — typed text only as its length.
 
 ### 6. Order of work, and the relation to #277
@@ -191,7 +191,7 @@ not of the driver as such.** Phases 1 and 2 start on GPUI 0.2.2:
 |---|---|---|
 | **0** | Finish the spike's pending measurements on a free screen (self-test on the spike branch, SPEC-0260 window budgets, `ax-tree` dump); the project owner decides adoption (ADR-0019, PO-STATUS question 22) | free screen, the project owner |
 | **1** | `crates/uidriver` (tree, locators, actionability, assertions, masking, trace), the annotation helper — on GPUI 0.2.2 it builds the AccessKit nodes itself from the same calls (**bridge producer**, no platform adapter, so no screen reader yet) —, window-level input, `Step::Ui`/`Step::ExpectUi` in the self-test, every `hit_targets::mark` site turned into an annotation, MCP tools, CLI, security of section 5 | nothing |
-| **2** | Self-test groups move to the driver one at a time (section 7); event-driven waits replace the 16 ms sleep; dialogs (SPEC-0281's 25) and tool windows annotated; side-by-side scripts use `idecraft drive` | phase 1 |
+| **2** | Self-test groups move to the driver one at a time (section 7); event-driven waits replace the 16 ms sleep; dialogs (SPEC-0281's 25) and tool windows annotated; side-by-side scripts use `ferris-idea drive` | phase 1 |
 | **3** | Port `main` to upstream GPUI (the port of #277, brought up to date) or `gpui-ce`; the helper maps to GPUI's own accessibility API (role, label, `accessibility_id`, `on_a11y_action`); the driver reads GPUI's AccessKit tree updates; the bridge producer and `hit_targets` are removed; the conformance check runs in `ci-window`; VoiceOver hand tests; IMP-0005 for annotated views | phase 0 decision "adopt" |
 | **4** | Session family `ui` for M16 paired devices; conformance on Linux (AT-SPI) and Windows (UIA) once those builds exist; the editor's text runs as AccessKit children | phase 3, M16 |
 

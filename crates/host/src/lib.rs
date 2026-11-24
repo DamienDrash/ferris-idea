@@ -1,6 +1,6 @@
 //! The functions of a remote project that run on the host (`SPEC-0318`, M6.12 step 4): the
 //! session families `lsp`, `search`, `git`, `term`, `run`, `port`, `dap` and `mcp`, bound into a
-//! [`Backend`] of `idecraft serve` (over SSH or in process).
+//! [`Backend`] of `ferris-idea serve` (over SSH or in process).
 //!
 //! Every path on the wire is relative to the project folder (behaviour 3); host paths outside it
 //! never leave the host, and paths or URIs from the window that leave it are refused before any
@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use idecraft_session::{Backend, Call, ErrorCode, Handler, Right, RpcError};
+use ferris_idea_session::{Backend, Call, ErrorCode, Handler, Right, RpcError};
 use serde_json::Value;
 
 pub mod dap;
@@ -42,7 +42,7 @@ pub struct HostOptions {
     pub kubectl_program: Option<String>,
     /// How often listening ports and Git state are checked (1 s).
     pub poll: Duration,
-    /// Runs the host's MCP tools for `mcp.*` (`idecraft serve` passes IDECraft's MCP server).
+    /// Runs the host's MCP tools for `mcp.*` (`ferris-idea serve` passes Ferris IDEA's MCP server).
     pub mcp: Option<Arc<dyn McpBridge>>,
     /// Start the language server pool and follow the documents (off in tests without servers).
     pub language_servers: bool,
@@ -146,5 +146,5 @@ pub(crate) fn block_on<F: std::future::Future>(future: F) -> Result<F::Output, R
 
 /// The host file of a relative path from the window (refused when it leaves the project).
 pub(crate) fn resolve(root: &Path, rel: &str) -> Result<PathBuf, RpcError> {
-    idecraft_session::paths::resolve(root, rel)
+    ferris_idea_session::paths::resolve(root, rel)
 }

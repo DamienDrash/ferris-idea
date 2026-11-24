@@ -7,10 +7,10 @@
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_ui::tool_windows::{Side, ToolWindow};
+use ferris_idea_workbench::todo_model::{Filter, Node, Scope, count_label, totals_label};
+use ferris_idea_workbench::{EditorView, TodoToolView, WorkbenchView};
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_ui::tool_windows::{Side, ToolWindow};
-use idecraft_workbench::todo_model::{Filter, Node, Scope, count_label, totals_label};
-use idecraft_workbench::{EditorView, TodoToolView, WorkbenchView};
 
 const CART: &str = "package shop;
 
@@ -26,7 +26,8 @@ public class Cart {
 const FILE: &str = "app/src/main/java/shop/Cart.java";
 
 fn workspace(tag: &str) -> PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-todo-win-{tag}-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-todo-win-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("app/src/main/java/shop")).unwrap();
     std::fs::write(root.join(FILE), CART).unwrap();
@@ -303,7 +304,7 @@ fn grouping_keys_belong_to_the_todo_window(cx: &mut TestAppContext) {
     assert!(
         shown
             .iter()
-            .any(|r| r.starts_with("  [idecraft-todo-win-keys")),
+            .any(|r| r.starts_with("  [ferris-idea-todo-win-keys")),
         "{shown:?}"
     );
     // ⌃F flattens the folders; ⌃P takes them away, and then ⌃F does nothing.

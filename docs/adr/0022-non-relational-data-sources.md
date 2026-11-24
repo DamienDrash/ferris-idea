@@ -4,7 +4,7 @@
   (connectors, catalogue, Supported/Beta), follows ADR-0021 (file envelope) · decided on the project owner's request of 2026-11-05 ("offer NoSQL,
   worked out by a dedicated agent"; feedback for Beta systems and shared definitions through GitHub
   Issues)
-- **Context:** IDECraft's database tooling is built around SQL: a `Dialect` decides driver, script
+- **Context:** Ferris IDEA's database tooling is built around SQL: a `Dialect` decides driver, script
   splitting, lexis, introspection into tables/columns/keys, plans, DDL and refactorings, and every
   result is a grid of text cells (SPEC-0007). The reference lists six non-relational systems
   (OBS-0015): MongoDB, Amazon DocumentDB, Amazon DynamoDB, Apache Cassandra, Couchbase Server and
@@ -26,16 +26,16 @@ session, browser tree, query language, completion and result model. Two families
 | `document` over HTTP (later spec) | buckets → scopes → collections; SQL++ | Couchbase Server | REST/N1QL over HTTP, no official Rust SDK | — (Beta until a client exists) |
 | `key-value` over HTTP (later spec) | tables → items; PartiQL | Amazon DynamoDB | AWS SDK for Rust (Apache-2.0) | DynamoDB Local (free container → Supported possible) |
 
-The SQL `Dialect` enum stays SQL-only. A crate `idecraft-nosql` holds the families, beside
-`idecraft-database`, and reuses from it what is not SQL-specific: the keychain store and credential
+The SQL `Dialect` enum stays SQL-only. A crate `ferris-idea-nosql` holds the families, beside
+`ferris-idea-database`, and reuses from it what is not SQL-specific: the keychain store and credential
 resolution (SPEC-0016), the agent permissions (SPEC-0012), the export file writer conventions
 (SPEC-0021) and the TLS rule (no TLS mode silently weakened).
 
 **2. Profiles.** A non-relational connection is a *store profile* in its own workspace file
-`.idecraft/stores.toml` (array `[[store]]`), a project file with the envelope of ADR-0021
-(`[idecraft] kind = "stores"`, `format = 1`), shared like `connections.toml` and never holding a
+`.ferris-idea/stores.toml` (array `[[store]]`), a project file with the envelope of ADR-0021
+(`[ferris-idea] kind = "stores"`, `format = 1`), shared like `connections.toml` and never holding a
 password. A separate file keeps the SQL profile reader (`deny_unknown_fields`) and every older
-IDECraft untouched; the Database tool window and MCP list both files together. A store profile has `id`, `name`,
+Ferris IDEA untouched; the Database tool window and MCP list both files together. A store profile has `id`, `name`,
 `family` (`document` | `key-value`), `system` (connector id, `mongodb` | `redis` now), the URL it was
 made from minus any password, `tls`, `read_only`, `secret` (keychain entry) and `ai` permissions.
 URL schemes: `mongodb://`, `mongodb+srv://` (DNS seed list), `redis://`, `rediss://` (TLS). A

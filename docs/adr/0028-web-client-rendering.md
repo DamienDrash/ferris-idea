@@ -68,7 +68,7 @@ applies: a lean TypeScript client, with the full interface staying in the deskto
 
 - Moving to the upstream GPUI (PR #277) becomes a precondition of the GPUI path: `crates/ui` uses
   the crates.io GPUI 0.2.2, which has no web platform.
-- `idecraft serve` must then serve the bundle itself (M18.1), which SPEC-0325 does not yet do.
+- `ferris-idea serve` must then serve the bundle itself (M18.1), which SPEC-0325 does not yet do.
 - The CSP of SPEC-0325 behaviour 10 has to allow `wasm-unsafe-eval` for a served client.
 
 ## Alternatives

@@ -1,5 +1,5 @@
 //! A small MCP client for the running window's HTTP server (`SPEC-0221`), used by the command line
-//! (`idecraft quit`, `SPEC-0261` v2 behaviour 11). It finds running windows through their discovery
+//! (`ferris-idea quit`, `SPEC-0261` v2 behaviour 11). It finds running windows through their discovery
 //! files and speaks JSON-RPC over plain HTTP/1.1 to `127.0.0.1`.
 
 use std::io::{Read, Write};
@@ -69,9 +69,12 @@ fn alive(pid: u32) -> bool {
             .is_ok_and(|s| s.success())
 }
 
+/// Without a check of other processes a discovery file of a window that ended could name a port
+/// someone else holds now, so off Unix only this process's own file counts (`SPEC-0321` v6
+/// behaviour 8a).
 #[cfg(not(unix))]
-fn alive(_pid: u32) -> bool {
-    true
+fn alive(pid: u32) -> bool {
+    pid == std::process::id()
 }
 
 /// A connected MCP session with a window.
@@ -82,6 +85,17 @@ pub struct Client {
     path: String,
     session: Option<String>,
     next_id: u64,
+    /// How long one request may take ([`REQUEST_TIMEOUT`] unless set otherwise).
+    timeout: Duration,
+}
+
+/// Why a call within a limit failed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CallError {
+    /// No answer within the limit; the call was withdrawn (`SPEC-0261` v10 behaviour 11).
+    TimedOut,
+    /// Refused, failed, or the window could not be reached: the error text.
+    Failed(String),
 }
 
 impl Client {
@@ -98,13 +112,38 @@ impl Client {
         Self::connect_path(window, format!("/mcp/{id}"), name)
     }
 
+    /// [`Client::connect`] that gives up after `limit`, also for every later request until
+    /// [`Client::set_timeout`] changes it.
+    pub fn connect_within(
+        window: &RunningWindow,
+        name: &str,
+        limit: Duration,
+    ) -> Result<Self, String> {
+        Self::connect_path_within(window, "/mcp".into(), name, limit)
+    }
+
+    /// The limit of each later request.
+    pub fn set_timeout(&mut self, limit: Duration) {
+        self.timeout = limit;
+    }
+
     fn connect_path(window: &RunningWindow, path: String, name: &str) -> Result<Self, String> {
+        Self::connect_path_within(window, path, name, REQUEST_TIMEOUT)
+    }
+
+    fn connect_path_within(
+        window: &RunningWindow,
+        path: String,
+        name: &str,
+        limit: Duration,
+    ) -> Result<Self, String> {
         let mut client = Self {
             port: window.port,
             token: window.token.clone(),
             path,
             session: None,
             next_id: 0,
+            timeout: limit,
         };
         let reply = client.request(
             "initialize",
@@ -121,7 +160,70 @@ impl Client {
     /// Calls `tool`: `Ok` with the tool's JSON result (text that is not JSON as a string), `Err` with
     /// the error text of a refused or failed call.
     pub fn call(&mut self, tool: &str, arguments: Value) -> Result<Value, String> {
-        let reply = self.request("tools/call", json!({"name": tool, "arguments": arguments}))?;
+        self.call_with_images(tool, arguments).map(|(v, _)| v)
+    }
+
+    /// Like [`Client::call`], with the image content of the result as `(mime type, base64
+    /// data)` (`ui_screenshot`, `SPEC-0319` v7 behaviour 53).
+    pub fn call_with_images(
+        &mut self,
+        tool: &str,
+        arguments: Value,
+    ) -> Result<(Value, Vec<(String, String)>), String> {
+        self.call_within_images(tool, arguments, self.timeout)
+            .map_err(|e| match e {
+                CallError::TimedOut => format!(
+                    "no answer within {} s; the call was withdrawn",
+                    self.timeout.as_secs()
+                ),
+                CallError::Failed(m) => m,
+            })
+    }
+
+    /// [`Client::call`] with its own limit: without an answer by then the connection closes and
+    /// the call is cancelled (`notifications/cancelled`), so a question it waits for is withdrawn
+    /// and it never takes effect later (`SPEC-0261` v10 behaviour 11, `SPEC-0053` v12 behaviour 8).
+    pub fn call_within(
+        &mut self,
+        tool: &str,
+        arguments: Value,
+        limit: Duration,
+    ) -> Result<Value, CallError> {
+        self.call_within_images(tool, arguments, limit)
+            .map(|(v, _)| v)
+    }
+
+    fn call_within_images(
+        &mut self,
+        tool: &str,
+        arguments: Value,
+        limit: Duration,
+    ) -> Result<(Value, Vec<(String, String)>), CallError> {
+        self.next_id += 1;
+        let id = self.next_id;
+        let message = json!({
+            "jsonrpc": "2.0", "id": id, "method": "tools/call",
+            "params": {"name": tool, "arguments": arguments},
+        });
+        let body = match self.post_within(&message, limit) {
+            Ok((_, body)) => body,
+            Err(PostError::TimedOut) => {
+                let note = json!({
+                    "jsonrpc": "2.0", "method": "notifications/cancelled",
+                    "params": {"requestId": id, "reason": "no answer in time"},
+                });
+                let _ = self.post_within(&note, Duration::from_secs(1));
+                return Err(CallError::TimedOut);
+            }
+            Err(PostError::Failed(m)) => return Err(CallError::Failed(m)),
+        };
+        let reply: Value = serde_json::from_str(&body)
+            .map_err(|e| CallError::Failed(format!("tools/call: {e}: {body:?}")))?;
+        Self::reply_of(reply).map_err(CallError::Failed)
+    }
+
+    /// The tool's result and its images in a `tools/call` reply.
+    fn reply_of(reply: Value) -> Result<(Value, Vec<(String, String)>), String> {
         if let Some(error) = reply.get("error") {
             return Err(error["message"].as_str().unwrap_or_default().to_owned());
         }
@@ -139,7 +241,25 @@ impl Client {
         if result["isError"] == json!(true) {
             return Err(text);
         }
-        Ok(serde_json::from_str(&text).unwrap_or(Value::String(text)))
+        let images = result["content"]
+            .as_array()
+            .map(|parts| {
+                parts
+                    .iter()
+                    .filter(|p| p["type"] == json!("image"))
+                    .filter_map(|p| {
+                        Some((
+                            p["mimeType"].as_str()?.to_owned(),
+                            p["data"].as_str()?.to_owned(),
+                        ))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        Ok((
+            serde_json::from_str(&text).unwrap_or(Value::String(text)),
+            images,
+        ))
     }
 
     fn request(&mut self, method: &str, params: Value) -> Result<Value, String> {
@@ -156,6 +276,24 @@ impl Client {
 
     /// One POST; returns the session header and the JSON-RPC message of the body.
     fn post(&self, message: &Value) -> Result<(Option<String>, String), String> {
+        self.post_within(message, self.timeout)
+            .map_err(|e| match e {
+                PostError::TimedOut => format!(
+                    "the window at 127.0.0.1:{} did not answer within {} s",
+                    self.port,
+                    self.timeout.as_secs()
+                ),
+                PostError::Failed(m) => m,
+            })
+    }
+
+    /// [`Client::post`] that gives up after `limit`; closing the connection then ends the waiting
+    /// call on the server.
+    fn post_within(
+        &self,
+        message: &Value,
+        limit: Duration,
+    ) -> Result<(Option<String>, String), PostError> {
         let body = message.to_string();
         let mut head = format!(
             "POST {} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nContent-Type: application/json\r\nAccept: application/json, text/event-stream\r\nAuthorization: Bearer {}\r\nMCP-Protocol-Version: 2025-06-18\r\nContent-Length: {}\r\nConnection: close\r\n",
@@ -168,17 +306,47 @@ impl Client {
             head.push_str(&format!("Mcp-Session-Id: {s}\r\n"));
         }
         head.push_str("\r\n");
-        let failed = |e: std::io::Error| format!("the window at 127.0.0.1:{}: {e}", self.port);
-        let mut stream = std::net::TcpStream::connect(("127.0.0.1", self.port)).map_err(failed)?;
-        stream
-            .set_read_timeout(Some(REQUEST_TIMEOUT))
-            .map_err(failed)?;
+        let port = self.port;
+        let failed = move |e: std::io::Error| {
+            if matches!(
+                e.kind(),
+                std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+            ) {
+                PostError::TimedOut
+            } else {
+                PostError::Failed(format!("the window at 127.0.0.1:{port}: {e}"))
+            }
+        };
+        let start = std::time::Instant::now();
+        let address = std::net::SocketAddr::from(([127, 0, 0, 1], self.port));
+        let mut stream = std::net::TcpStream::connect_timeout(&address, limit).map_err(failed)?;
+        stream.set_write_timeout(Some(limit)).map_err(failed)?;
         stream.write_all(head.as_bytes()).map_err(failed)?;
         stream.write_all(body.as_bytes()).map_err(failed)?;
+        // One limit for the whole answer, also when it arrives in pieces.
         let mut raw = Vec::new();
-        stream.read_to_end(&mut raw).map_err(failed)?;
-        parse_response(&String::from_utf8_lossy(&raw))
+        let mut buf = [0u8; 8192];
+        loop {
+            let left = limit.saturating_sub(start.elapsed());
+            if left.is_zero() {
+                return Err(PostError::TimedOut);
+            }
+            stream.set_read_timeout(Some(left)).map_err(failed)?;
+            match stream.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => raw.extend_from_slice(&buf[..n]),
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+                Err(e) => return Err(failed(e)),
+            }
+        }
+        parse_response(&String::from_utf8_lossy(&raw)).map_err(PostError::Failed)
     }
+}
+
+/// Why one POST failed.
+enum PostError {
+    TimedOut,
+    Failed(String),
 }
 
 /// Status, session header and JSON-RPC message of a raw HTTP response (JSON body or event stream,
@@ -264,7 +432,7 @@ mod tests {
 
     #[test]
     fn running_windows_skip_dead_processes() {
-        let dir = std::env::temp_dir().join(format!("idecraft-client-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-client-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("mcp-http")).unwrap();
         let me = std::process::id();

@@ -3,8 +3,8 @@
 
 use std::path::PathBuf;
 
+use ferris_idea_ui::theme::ThemeId;
 use gpui::{App, Global};
-use idecraft_ui::theme::ThemeId;
 
 use crate::palette::set_current_theme;
 
@@ -17,19 +17,19 @@ impl Global for ThemeFile {}
 pub fn theme_file(cx: &App) -> Option<PathBuf> {
     match cx.try_global::<ThemeFile>() {
         Some(f) => Some(f.0.clone()),
-        None => idecraft_core::theme_file(),
+        None => ferris_idea_core::theme_file(),
     }
 }
 
-/// Draws with the saved theme; an unknown or missing name gives the default, `IDECraft Dark`
+/// Draws with the saved theme; an unknown or missing name gives the default, `Ferris IDEA Dark`
 /// (`SPEC-0060` v6). A saved choice is never replaced.
 pub fn apply_saved_theme(cx: &App) {
     // `appearance.theme` of the IDE settings, else the theme file of older versions (SPEC-0303
     // behaviour 14).
     let legacy = theme_file(cx);
     let saved = match ide_settings_file(cx) {
-        Some(f) => idecraft_core::chosen_theme(&f, legacy.as_deref()),
-        None => legacy.and_then(|f| idecraft_core::load_theme(&f)),
+        Some(f) => ferris_idea_core::chosen_theme(&f, legacy.as_deref()),
+        None => legacy.and_then(|f| ferris_idea_core::load_theme(&f)),
     };
     show_theme(ThemeId::from_saved(saved.as_deref()), cx);
 }
@@ -63,14 +63,14 @@ fn show_theme(theme: ThemeId, cx: &App) {
             line.split_once(' ').map_or(line.as_str(), |(_, l)| l)
         );
         if let Some(log) = &log {
-            let _ = idecraft_core::logs::append_line(log, &line);
+            let _ = ferris_idea_core::logs::append_line(log, &line);
         }
     }
 }
 
 /// The lines the theme log gets for `notes`: each with the time in front.
 pub fn theme_log_lines(notes: &[String], time: std::time::SystemTime) -> Vec<String> {
-    let stamp = idecraft_core::logs::utc_stamp(time);
+    let stamp = ferris_idea_core::logs::utc_stamp(time);
     notes.iter().map(|n| format!("{stamp} {n}")).collect()
 }
 
@@ -96,9 +96,9 @@ pub fn choose_theme(theme: ThemeId, cx: &mut App) -> std::io::Result<()> {
     cx.set_global(CurrentIdeSettings(settings.clone()));
     match ide_settings_file(cx) {
         Some(f) => {
-            idecraft_core::save_ide_settings(&f, &settings)?;
+            ferris_idea_core::save_ide_settings(&f, &settings)?;
             match theme_file(cx) {
-                Some(old) => idecraft_core::format::retire(&old),
+                Some(old) => ferris_idea_core::format::retire(&old),
                 None => Ok(()),
             }
         }
@@ -112,7 +112,7 @@ pub struct IdeSettingsFile(pub PathBuf);
 impl Global for IdeSettingsFile {}
 
 /// The IDE settings in effect.
-pub struct CurrentIdeSettings(pub idecraft_core::IdeSettings);
+pub struct CurrentIdeSettings(pub ferris_idea_core::IdeSettings);
 
 impl Global for CurrentIdeSettings {}
 
@@ -120,12 +120,12 @@ impl Global for CurrentIdeSettings {}
 pub fn ide_settings_file(cx: &App) -> Option<PathBuf> {
     match cx.try_global::<IdeSettingsFile>() {
         Some(f) => Some(f.0.clone()),
-        None => idecraft_core::ide_settings_file(),
+        None => ferris_idea_core::ide_settings_file(),
     }
 }
 
 /// The IDE settings in effect (the defaults before they were read).
-pub fn ide_settings(cx: &App) -> idecraft_core::IdeSettings {
+pub fn ide_settings(cx: &App) -> ferris_idea_core::IdeSettings {
     cx.try_global::<CurrentIdeSettings>()
         .map(|s| s.0.clone())
         .unwrap_or_default()
@@ -135,37 +135,48 @@ pub fn ide_settings(cx: &App) -> idecraft_core::IdeSettings {
 /// 22); by default only while the pointer is over the editor.
 pub fn fold_arrows_always(cx: &App) -> bool {
     cx.try_global::<CurrentIdeSettings>()
-        .is_some_and(|s| s.0.editor.folding_arrows == idecraft_core::FoldingArrows::Always)
+        .is_some_and(|s| s.0.editor.folding_arrows == ferris_idea_core::FoldingArrows::Always)
+}
+
+/// Reads the typo check's word list and its suggestion index on a background thread, so the
+/// editor's first inspection and ⌥↩ on a typo do not wait for them (`SPEC-0155` v6 behaviour 7).
+fn prepare_spelling() {
+    let _ = std::thread::Builder::new()
+        .name("spelling".into())
+        .spawn(ferris_idea_languages::grazie::prepare);
 }
 
 /// Reads the saved IDE settings and applies them (start-up).
 pub fn apply_saved_settings(cx: &mut App) {
     let settings = ide_settings_file(cx)
-        .map(|f| idecraft_core::load_ide_settings(&f))
+        .map(|f| ferris_idea_core::load_ide_settings(&f))
         .unwrap_or_default();
     crate::fonts::set_editor_font(&settings);
-    idecraft_languages::grazie::choose_dictionary(&settings.editor.spelling_dictionary);
+    ferris_idea_languages::grazie::choose_dictionary(&settings.editor.spelling_dictionary);
+    // The scope of the grammar check (SPEC-0155 v8 behaviour 14).
+    ferris_idea_languages::grazie::set_grammar_settings(&settings.editor.grammar);
+    prepare_spelling();
     crate::palette::set_compact_mode(settings.appearance.compact_mode);
     // The editor colour scheme apart from the theme (SPEC-0337 behaviour 4).
     crate::palette::set_editor_scheme(&settings.appearance.editor_scheme);
     // Git over SSH to Azure DevOps and own ProxyCommands (ADR-0025 section 1a).
-    idecraft_remote::set_azure_classic_kex(settings.git.ssh.allow_classic_kex_for_azure_devops);
-    idecraft_remote::set_own_proxy_command(settings.ssh.allow_own_proxy_command);
+    ferris_idea_remote::set_azure_classic_kex(settings.git.ssh.allow_classic_kex_for_azure_devops);
+    ferris_idea_remote::set_own_proxy_command(settings.ssh.allow_own_proxy_command);
     cx.set_global(CurrentIdeSettings(settings));
     follow_os(cx);
 }
 
 /// The theme for the system's appearance when the theme follows the system (`SPEC-0131`
 /// behaviour 1): the chosen dark theme while the system is dark, the light one otherwise.
-pub fn os_theme(settings: &idecraft_core::IdeSettings, dark: bool) -> Option<ThemeId> {
+pub fn os_theme(settings: &ferris_idea_core::IdeSettings, dark: bool) -> Option<ThemeId> {
     let a = &settings.appearance;
     if !a.sync_with_os {
         return None;
     }
     let (name, fallback) = if dark {
-        (&a.dark_theme, ThemeId::IdecraftDark)
+        (&a.dark_theme, ThemeId::FerrisIdeaDark)
     } else {
-        (&a.light_theme, ThemeId::IdecraftLight)
+        (&a.light_theme, ThemeId::FerrisIdeaLight)
     };
     Some(ThemeId::from_name(name).unwrap_or(fallback))
 }
@@ -192,7 +203,7 @@ pub fn follow_os(cx: &mut App) {
 /// appearance (`dark`), else the chosen one; none when nothing was chosen yet. Switching Sync with
 /// OS off therefore shows the theme chosen without it again, at once, as the next start would
 /// (`SPEC-0131` v4 behaviour 3a).
-pub fn theme_for(settings: &idecraft_core::IdeSettings, dark: bool) -> Option<ThemeId> {
+pub fn theme_for(settings: &ferris_idea_core::IdeSettings, dark: bool) -> Option<ThemeId> {
     os_theme(settings, dark).or_else(|| {
         let saved = settings.appearance.theme.as_deref()?;
         (!saved.trim().is_empty()).then(|| ThemeId::from_saved(Some(saved)))
@@ -207,19 +218,25 @@ pub fn watch_os_appearance(window: &gpui::Window) {
 }
 
 /// Applies `settings` to every window at once and saves them (`SPEC-0129` behaviour 1).
-pub fn set_ide_settings(settings: idecraft_core::IdeSettings, cx: &mut App) -> std::io::Result<()> {
+pub fn set_ide_settings(
+    settings: ferris_idea_core::IdeSettings,
+    cx: &mut App,
+) -> std::io::Result<()> {
     let settings = settings.clamped();
     crate::fonts::set_editor_font(&settings);
-    idecraft_languages::grazie::choose_dictionary(&settings.editor.spelling_dictionary);
+    ferris_idea_languages::grazie::choose_dictionary(&settings.editor.spelling_dictionary);
+    // The scope of the grammar check (SPEC-0155 v8 behaviour 14).
+    ferris_idea_languages::grazie::set_grammar_settings(&settings.editor.grammar);
+    prepare_spelling();
     crate::palette::set_compact_mode(settings.appearance.compact_mode);
     crate::palette::set_editor_scheme(&settings.appearance.editor_scheme);
-    idecraft_remote::set_azure_classic_kex(settings.git.ssh.allow_classic_kex_for_azure_devops);
-    idecraft_remote::set_own_proxy_command(settings.ssh.allow_own_proxy_command);
+    ferris_idea_remote::set_azure_classic_kex(settings.git.ssh.allow_classic_kex_for_azure_devops);
+    ferris_idea_remote::set_own_proxy_command(settings.ssh.allow_own_proxy_command);
     cx.set_global(CurrentIdeSettings(settings.clone()));
     // The theme for the system's appearance, or without syncing the chosen one (behaviour 3a).
     // A theme chosen in an older version is still in its own file (SPEC-0303 behaviour 14).
     let older = || {
-        let name = theme_file(cx).and_then(|f| idecraft_core::load_theme(&f))?;
+        let name = theme_file(cx).and_then(|f| ferris_idea_core::load_theme(&f))?;
         (!settings.appearance.sync_with_os).then(|| ThemeId::from_saved(Some(&name)))
     };
     if let Some(t) = theme_for(&settings, os_is_dark(cx)).or_else(older)
@@ -229,7 +246,7 @@ pub fn set_ide_settings(settings: idecraft_core::IdeSettings, cx: &mut App) -> s
     }
     cx.refresh_windows();
     match ide_settings_file(cx) {
-        Some(f) => idecraft_core::save_ide_settings(&f, &settings),
+        Some(f) => ferris_idea_core::save_ide_settings(&f, &settings),
         None => Ok(()),
     }
 }

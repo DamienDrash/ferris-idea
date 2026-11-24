@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use idecraft_database::{ConnectionProfile, Credentials, OnError, Outcome, SqliteSession};
+use ferris_idea_database::{ConnectionProfile, Credentials, OnError, Outcome, SqliteSession};
 
 struct TempDb(PathBuf);
 
@@ -10,7 +10,7 @@ impl TempDb {
     /// Builds `inventory.sqlite` from `tests/reference-projects/sql-basic`.
     fn reference(tag: &str) -> Self {
         let dir =
-            std::env::temp_dir().join(format!("idecraft-sqlite-{tag}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("ferris-idea-sqlite-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let sql =

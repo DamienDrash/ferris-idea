@@ -36,7 +36,7 @@ pub struct Owner {
 pub fn chooser(
     root: &Path,
     places: Vec<Place>,
-    contexts: &[Option<idecraft_languages::context::PlaceContext>],
+    contexts: &[Option<ferris_idea_languages::context::PlaceContext>],
     line_text: impl Fn(&Path, usize) -> Option<String>,
 ) -> Vec<Usage> {
     let mut out: Vec<Usage> = places
@@ -212,9 +212,9 @@ pub fn signature_report(function: &str, files: usize, skipped: &[String]) -> Str
 /// file are not the project's own and stay unchanged (v3 behaviour 8).
 pub fn move_report(to: &str, changed: usize, server: bool, outside: usize) -> String {
     let by = if server {
-        "the language server and IDECraft"
+        "the language server and Ferris IDEA"
     } else {
-        "IDECraft"
+        "Ferris IDEA"
     };
     let mut report = match changed {
         0 => format!("Moved to {to}; no references to update."),
@@ -266,11 +266,11 @@ mod tests {
         );
         assert_eq!(
             move_report("include/a.h", 2, true, 0),
-            "Moved to include/a.h; 2 file(s) updated by the language server and IDECraft."
+            "Moved to include/a.h; 2 file(s) updated by the language server and Ferris IDEA."
         );
         assert_eq!(
             move_report("include/a.h", 1, false, 2),
-            "Moved to include/a.h; 1 file(s) updated by IDECraft. 2 file(s) outside the project's own sources left unchanged."
+            "Moved to include/a.h; 1 file(s) updated by Ferris IDEA. 2 file(s) outside the project's own sources left unchanged."
         );
     }
 
@@ -289,7 +289,7 @@ mod tests {
     /// SPEC-0081 v2 AK-4: rows name the class, sorted by it.
     #[test]
     fn chooser_rows_name_the_class() {
-        use idecraft_languages::context::PlaceContext;
+        use ferris_idea_languages::context::PlaceContext;
         let ctx = |c: &str| {
             Some(PlaceContext {
                 module: "shop".into(),
@@ -343,7 +343,7 @@ mod tests {
         assert!(hint.contains("Find Usages (⌥F7) shows"), "{hint}");
         // SPEC-0028 v9 AK-16: the key of the keymap in use, written for Linux.
         let linux =
-            idecraft_ui::keymap::Keymap::bundled_default().shortcut_label("FindUsages", false);
+            ferris_idea_ui::keymap::Keymap::bundled_default().shortcut_label("FindUsages", false);
         let (_, hint) = one_usage("helper", &usage, 6, &place("/w/bad.c", 1, 27), &linux);
         assert!(hint.contains("Find Usages (Alt+F7) shows"), "{hint}");
         let (_, hint) = one_usage("helper", &usage, 6, &place("/w/bad.c", 1, 27), "");

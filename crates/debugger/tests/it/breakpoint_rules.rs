@@ -1,4 +1,4 @@
-//! SPEC-0127 v3 AK-5: the further breakpoint options IDECraft applies at each hit — dependent
+//! SPEC-0127 v3 AK-5: the further breakpoint options Ferris IDEA applies at each hit — dependent
 //! breakpoints, removal after the first hit, messages, "no suspend" and the instance, class and
 //! caller filters — against a fake adapter.
 //!
@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use idecraft_debugger::{
+use ferris_idea_debugger::{
     BreakpointRules, DapClient, DebugSession, Event, SourceBreakpoint, Suspend, read_message,
     write_message,
 };
@@ -178,7 +178,7 @@ fn fake_adapter(source: PathBuf) -> (String, Log) {
 }
 
 fn source(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("idecraft-rules-{name}-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-rules-{name}-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("Main.java");
     std::fs::write(

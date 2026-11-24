@@ -1,17 +1,19 @@
-//! Optional AI Assistant for IDECraft (`SPEC-0138`): a chat with an OpenAI-compatible endpoint the
+//! Optional AI Assistant for Ferris IDEA (`SPEC-0138`): a chat with an OpenAI-compatible endpoint the
 //! user names — a local server (Ollama, LM Studio, llama.cpp) or any provider. Off by default; no
 //! provider is built in, and nothing is sent until the user switches it on and names an endpoint.
 //! The API key stays in the system keychain and is sent only to that endpoint (no redirects).
 
+pub mod agent_config;
 pub mod context;
 pub mod live;
+pub mod providers;
 pub mod subscription;
 
 use std::time::Duration;
 
-use idecraft_core::AiSettings;
-use idecraft_database::{SecretRef, SecretStore};
-use idecraft_http::{ResolvedRequest, parse_url, send_once, send_streaming};
+use ferris_idea_core::AiSettings;
+use ferris_idea_database::{SecretRef, SecretStore};
+use ferris_idea_http::{ResolvedRequest, parse_url, send_once, send_streaming};
 use serde::{Deserialize, Serialize};
 
 /// Providers with an OpenAI-compatible API the settings offer as templates (`SPEC-0143`): name and
@@ -78,13 +80,13 @@ pub fn list_models(endpoint: &str, key: Option<&str>) -> Result<Vec<String>, AiE
 }
 
 /// Keychain service of API keys; the account is the endpoint's host and port.
-pub const KEY_SERVICE: &str = "idecraft-ai";
+pub const KEY_SERVICE: &str = "ferris-idea-ai";
 
 /// How long one answer may take.
 pub const TIMEOUT: Duration = Duration::from_secs(120);
 
 /// What the assistant is told before every conversation.
-pub const SYSTEM_PROMPT: &str = "You are a programming assistant inside the IDECraft IDE. \
+pub const SYSTEM_PROMPT: &str = "You are a programming assistant inside the Ferris IDEA IDE. \
 Answer concisely; put code in fenced blocks with the language name.";
 
 /// One message of a conversation.
@@ -155,6 +157,10 @@ pub enum AiError {
     /// The subscription's program failed or is missing (`SPEC-0160`).
     #[error("{0}")]
     Subscription(String),
+    /// Claude with the plan is set to run in the Terminal and no Anthropic API key is set up;
+    /// nothing was sent (`SPEC-0160` v2 behaviour 6).
+    #[error("{} Nothing was sent.", subscription::CLAUDE_PLAN_MESSAGE)]
+    ClaudePlan,
 }
 
 /// The keychain entry of the endpoint's API key.
@@ -220,20 +226,54 @@ fn body_with(model: &str, system: &str, messages: &[Message], stream: bool) -> S
 /// How long a subscription's program may take for a chat answer.
 pub const SUBSCRIPTION_TIMEOUT: Duration = Duration::from_secs(300);
 
+/// Whether the settings choose Claude with the plan while the plan is to be used only in the
+/// Terminal (`SPEC-0160` v2 behaviour 6).
+pub fn claude_in_terminal(settings: &AiSettings) -> bool {
+    subscription::Cli::from_id(&settings.subscription) == Some(subscription::Cli::Claude)
+        && settings.claude_plan_mode == ferris_idea_core::ClaudePlanMode::Terminal
+}
+
+/// Whether Claude in the chat can go through the user's own Anthropic API key: the endpoint is the
+/// Anthropic template, a model is named and a key is stored for it (`SPEC-0160` v2 behaviour 6).
+pub fn claude_through_api(settings: &AiSettings, key: Option<&str>) -> bool {
+    provider_of(&settings.endpoint) == Some("Anthropic")
+        && !settings.model.trim().is_empty()
+        && key.is_some_and(|k| !k.trim().is_empty())
+}
+
 /// The subscription program the settings choose (`SPEC-0160`), or `None` for the endpoint; refuses
-/// when the assistant is off.
-pub fn subscribed(settings: &AiSettings) -> Result<Option<subscription::Cli>, AiError> {
+/// when the assistant is off. With Claude's plan in the Terminal the chat uses the Anthropic API
+/// key when one is set up and otherwise refuses, sending nothing anywhere (`SPEC-0160` v2
+/// behaviour 6: no silent fallback to another endpoint).
+pub fn subscribed(
+    settings: &AiSettings,
+    key: Option<&str>,
+) -> Result<Option<subscription::Cli>, AiError> {
     let cli = subscription::Cli::from_id(&settings.subscription);
     if cli.is_some() && !settings.enabled {
         return Err(AiError::Disabled);
     }
+    if claude_in_terminal(settings) {
+        if claude_through_api(settings, key) {
+            return Ok(None);
+        }
+        return Err(AiError::ClaudePlan);
+    }
     Ok(cli)
 }
+
+/// Name of the connection while Claude's plan runs in the Terminal and the chat has no Anthropic
+/// API template (`SPEC-0160` v2 behaviour 6).
+pub const CLAUDE_TERMINAL_NAME: &str = "Claude plan in the Terminal";
 
 /// What the assistant uses, for the settings and the chat: the subscription's name or the
 /// endpoint.
 pub fn connection_name(settings: &AiSettings) -> String {
+    if claude_in_terminal(settings) && provider_of(&settings.endpoint) != Some("Anthropic") {
+        return CLAUDE_TERMINAL_NAME.to_owned();
+    }
     match subscription::Cli::from_id(&settings.subscription) {
+        Some(_) if claude_in_terminal(settings) => settings.endpoint.trim().to_owned(),
         Some(cli) => cli.name().to_owned(),
         None if settings.endpoint.trim().is_empty() => "no endpoint".to_owned(),
         None => settings.endpoint.trim().to_owned(),
@@ -323,7 +363,7 @@ pub fn chat(
     key: Option<&str>,
     messages: &[Message],
 ) -> Result<String, AiError> {
-    if let Some(cli) = subscribed(settings)? {
+    if let Some(cli) = subscribed(settings, key)? {
         return subscription::ask(
             cli,
             &settings.model,
@@ -377,7 +417,7 @@ pub fn chat_stream(
     messages: &[Message],
     on_piece: &mut dyn FnMut(&str) -> bool,
 ) -> Result<String, AiError> {
-    if let Some(cli) = subscribed(settings)? {
+    if let Some(cli) = subscribed(settings, key)? {
         return subscription::ask(
             cli,
             &settings.model,
@@ -547,7 +587,7 @@ fn inline_answer(
 ) -> Result<String, AiError> {
     let prompt = prompt.to_owned();
     let before_part = before_part.to_owned();
-    if let Some(cli) = subscribed(settings)? {
+    if let Some(cli) = subscribed(settings, key)? {
         let answer = subscription::ask(
             cli,
             &settings.model,
@@ -684,6 +724,16 @@ pub mod fake {
 mod tests {
     use super::*;
 
+    /// SPEC-0356 AK-11: the API keys' service is one of those the rename takes over (the short
+    /// name and `-ai`), so a key saved by an older version is still found.
+    #[test]
+    fn the_key_service_follows_the_product_name() {
+        assert_eq!(
+            KEY_SERVICE,
+            format!("{}-ai", ferris_idea_database::KEYCHAIN_SERVICE)
+        );
+    }
+
     fn on(endpoint: &str) -> AiSettings {
         AiSettings {
             enabled: true,
@@ -815,6 +865,54 @@ mod tests {
         );
         let e = list_models(&failing.endpoint, Some("sk-wrong-0123456789")).unwrap_err();
         assert!(!e.to_string().contains("0123456789"), "{e}");
+    }
+
+    /// `SPEC-0160` v2 AK-7: with Claude's plan in the Terminal and no Anthropic API key nothing is
+    /// sent — no program runs, the endpoint beside it is not asked (no silent fallback) — and every
+    /// way of asking gets the message; with the Anthropic template, a model and a key the chat goes
+    /// through the API; in Chat mode (the default) Claude Code stays the subscription.
+    #[test]
+    fn claude_plan_in_the_terminal_sends_nothing_without_an_api_key() {
+        let server = fake::start("from the endpoint", 200).unwrap();
+        let mut s = on(&server.endpoint);
+        s.subscription = "claude".into();
+        assert_eq!(
+            s.claude_plan_mode,
+            ferris_idea_core::ClaudePlanMode::Chat,
+            "the default"
+        );
+        assert_eq!(subscribed(&s, None), Ok(Some(subscription::Cli::Claude)));
+        s.claude_plan_mode = ferris_idea_core::ClaudePlanMode::Terminal;
+        let question = [Message::new("user", "hi")];
+        assert_eq!(chat(&s, Some("k"), &question), Err(AiError::ClaudePlan));
+        let mut pieces = 0;
+        assert_eq!(
+            chat_stream(&s, Some("k"), &question, &mut |_| {
+                pieces += 1;
+                true
+            }),
+            Err(AiError::ClaudePlan)
+        );
+        assert_eq!(pieces, 0);
+        assert_eq!(
+            inline_completion(&s, Some("k"), "rust", "let a = ", ";"),
+            Err(AiError::ClaudePlan)
+        );
+        assert!(server.seen.lock().unwrap().is_empty(), "nothing was sent");
+        let message = AiError::ClaudePlan.to_string();
+        assert!(
+            message.starts_with(subscription::CLAUDE_PLAN_MESSAGE)
+                && message.ends_with("Nothing was sent.")
+        );
+        assert_eq!(connection_name(&s), CLAUDE_TERMINAL_NAME);
+        // The Anthropic template with a model and a key: the chat uses the API, not the plan.
+        s.endpoint = "https://api.anthropic.com/v1".into();
+        assert_eq!(subscribed(&s, None), Err(AiError::ClaudePlan), "no key yet");
+        assert_eq!(subscribed(&s, Some("k")), Ok(None));
+        assert_eq!(connection_name(&s), "https://api.anthropic.com/v1");
+        // Off stays off first.
+        s.enabled = false;
+        assert_eq!(chat(&s, None, &question), Err(AiError::Disabled));
     }
 
     #[test]

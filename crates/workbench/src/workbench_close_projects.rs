@@ -65,7 +65,7 @@ impl WorkbenchView {
         });
         let open: Vec<PathBuf> = benches.iter().map(|((r, _, _), _)| r.clone()).collect();
         let projects = scope.targets(&open, current);
-        let modified: Vec<PathBuf> = idecraft_editor::documents::DocumentRegistry::global()
+        let modified: Vec<PathBuf> = ferris_idea_editor::documents::DocumentRegistry::global()
             .list()
             .into_iter()
             .filter(|d| d.modified)
@@ -171,7 +171,7 @@ impl WorkbenchView {
             .collect();
         let pending = |cx: &App| {
             let open: Vec<PathBuf> = Self::open_benches(cx).into_iter().map(|(r, _)| r).collect();
-            let modified: Vec<PathBuf> = idecraft_editor::documents::DocumentRegistry::global()
+            let modified: Vec<PathBuf> = ferris_idea_editor::documents::DocumentRegistry::global()
                 .list()
                 .into_iter()
                 .filter(|d| d.modified)
@@ -215,7 +215,7 @@ impl WorkbenchView {
 
     /// Closes the windows of `projects` in that order (the current one last, behaviour 8): stops
     /// their runs and debug sessions, notes them closed and removes the windows. When no project
-    /// window is left the app offers its folder chooser (behaviour 9).
+    /// window is left the app shows its Welcome window (behaviour 9, `SPEC-0355`).
     pub fn close_now(projects: &[PathBuf], cx: &mut App) {
         let benches = Self::open_benches(cx);
         for root in projects {

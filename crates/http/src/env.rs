@@ -209,7 +209,7 @@ mod tests {
 
     #[test]
     fn shared_private_and_nearest_folder() {
-        let root = std::env::temp_dir().join(format!("idecraft-httpenv-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("ferris-idea-httpenv-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("api/requests")).unwrap();
         std::fs::write(
@@ -253,7 +253,8 @@ mod tests {
     /// none, asking only for requests that use a variable of one.
     #[test]
     fn the_environment_is_chosen_or_asked_for() {
-        let root = std::env::temp_dir().join(format!("idecraft-httpchoose-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("ferris-idea-httpchoose-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("one")).unwrap();
         std::fs::write(
@@ -300,7 +301,8 @@ mod tests {
 
     #[test]
     fn private_values_are_masked_for_the_log() {
-        let root = std::env::temp_dir().join(format!("idecraft-httpmask-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("ferris-idea-httpmask-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         std::fs::write(

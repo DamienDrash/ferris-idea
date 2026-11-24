@@ -1,4 +1,4 @@
-//! The backend half of the session protocol, the heart of `idecraft serve` (`ADR-0026`,
+//! The backend half of the session protocol, the heart of `ferris-idea serve` (`ADR-0026`,
 //! `SPEC-0317`, M10.3): one workspace, its documents, sessions that survive a broken connection
 //! for the reattach period, rights per session, the numbered event stream, file watching, the
 //! audit log and the reattach socket.
@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, Weak};
 use std::time::{Duration, Instant};
 
-use idecraft_editor::documents::DocumentRegistry;
+use ferris_idea_editor::documents::DocumentRegistry;
 use serde_json::{Value, json};
 
 use crate::docs::{DiskEvent, DocInfo, DocStore, EditOutcome};
@@ -156,7 +156,7 @@ pub struct BackendConfig {
 impl Default for BackendConfig {
     fn default() -> Self {
         Self {
-            build: format!("idecraft {}", env!("CARGO_PKG_VERSION")),
+            build: format!("ferris-idea {}", env!("CARGO_PKG_VERSION")),
             folder: None,
             rights: Right::ALL.to_vec(),
             reattach: Duration::from_secs(600),
@@ -280,7 +280,7 @@ struct Session {
 struct Workspace {
     root: PathBuf,
     store: DocStore,
-    _watch: Option<idecraft_core::WatchHandle>,
+    _watch: Option<ferris_idea_core::WatchHandle>,
 }
 
 #[derive(Default)]
@@ -329,7 +329,7 @@ struct Shared {
 }
 
 /// Gets the workspace root and the changes of one watcher batch.
-pub type DiskListener = Box<dyn Fn(&Path, &[idecraft_core::FileChange]) + Send + Sync>;
+pub type DiskListener = Box<dyn Fn(&Path, &[ferris_idea_core::FileChange]) + Send + Sync>;
 
 /// What a project room adds to a backend (`SPEC-0323`).
 pub trait RoomLink: Send + Sync {
@@ -379,7 +379,7 @@ fn now_ms() -> u64 {
 
 fn log(line: &str) {
     // Standard error only: on stdio, standard output carries nothing but frames.
-    eprintln!("idecraft serve: {line}");
+    eprintln!("ferris-idea serve: {line}");
 }
 
 struct ConnectionLink {
@@ -1306,7 +1306,7 @@ impl Backend {
                     ErrorCode::Denied,
                     "a paired device needs a backend with a fixed folder",
                 )
-                .hint("start it as `idecraft serve --pair <folder>`"),
+                .hint("start it as `ferris-idea serve --pair <folder>`"),
             );
         }
         if let Some(fixed) = &self.0.config.folder
@@ -1570,9 +1570,9 @@ impl Backend {
         }
     }
 
-    fn start_watch(&self, root: &Path) -> Option<idecraft_core::WatchHandle> {
-        let ws = idecraft_core::Workspace::open(root).ok()?;
-        let (handle, rx) = idecraft_core::watch(ws, self.0.config.watch_interval).ok()?;
+    fn start_watch(&self, root: &Path) -> Option<ferris_idea_core::WatchHandle> {
+        let ws = ferris_idea_core::Workspace::open(root).ok()?;
+        let (handle, rx) = ferris_idea_core::watch(ws, self.0.config.watch_interval).ok()?;
         let weak = Arc::downgrade(&self.0);
         let root = root.to_path_buf();
         std::thread::spawn(move || {
@@ -1591,8 +1591,8 @@ impl Backend {
         Some(handle)
     }
 
-    fn file_changes(&self, root: &Path, changes: &[idecraft_core::FileChange]) {
-        use idecraft_core::FileChange as C;
+    fn file_changes(&self, root: &Path, changes: &[ferris_idea_core::FileChange]) {
+        use ferris_idea_core::FileChange as C;
         let rel = |p: &Path| crate::paths::relative(root, &root.join(p));
         let mut events = Vec::new();
         let mut touched = Vec::new();

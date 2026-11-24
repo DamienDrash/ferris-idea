@@ -95,7 +95,7 @@ impl PgSession {
         config
             .host(&host)
             .connect_timeout(limit)
-            .application_name("IDECraft");
+            .application_name("Ferris IDEA");
         // Host and port are lists in tokio-postgres: set each once.
         match via {
             Some(local) => config.hostaddr(local.ip()).port(local.port()),
@@ -300,14 +300,14 @@ mod tests {
         let missing = Credentials::Missing {
             profile: "ref-pg".into(),
             reference: SecretRef {
-                service: "idecraft".into(),
+                service: "ferris-idea".into(),
                 account: "ref-pg".into(),
             },
         };
         let err = PgSession::connect(&p, &missing).await.err().unwrap();
         assert_eq!(
             err.to_string(),
-            "connection `ref-pg`: password missing in keychain entry idecraft/ref-pg"
+            "connection `ref-pg`: password missing in keychain entry ferris-idea/ref-pg"
         );
     }
 

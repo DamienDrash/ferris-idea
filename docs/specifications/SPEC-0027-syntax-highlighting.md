@@ -1,6 +1,6 @@
 # SPEC-0027: Syntax highlighting with Tree-sitter
 
-- **Version:** 13 · **Date:** 2026-11-17 (v13: roles before the bundled queries of C, C++, YAML, Ruby, Lua, Swift and R, which name every identifier or scalar first, OBS-0074; AK-16); 2026-11-15 (v12: AK-15; v11: reassigned Java locals and parameters underlined, OBS-0050; v10: doc comments and Java fields by syntax, OBS-0047 T2/T3; v9: fields have their own colour in the brand schemes; v2: C++; v3: thirteen more languages, Markdown colour keys; v4:
+- **Version:** 14 · **Date:** 2026-11-17 (v14: a SQL file is coloured in its dialect, in the editor and in `highlight_file`, behaviour 6, AK-17 — OBS-0083 L7); 2026-11-17 (v13: roles before the bundled queries of C, C++, YAML, Ruby, Lua, Swift and R, which name every identifier or scalar first, OBS-0074; AK-16); 2026-11-15 (v12: AK-15; v11: reassigned Java locals and parameters underlined, OBS-0050; v10: doc comments and Java fields by syntax, OBS-0047 T2/T3; v9: fields have their own colour in the brand schemes; v2: C++; v3: thirteen more languages, Markdown colour keys; v4:
   Kotlin; v5: Ruby and PHP; v6: colour roles per language after OBS-0033; v7: SQL built-in functions in
   the function-declaration colour, italic, after the AK-9 window check; v8: Kotlin functions and
   properties by role, OBS-0035 L8)
@@ -23,7 +23,7 @@ the whole file.
    TypeScript uses the JavaScript queries plus its own; TSX adds the JSX queries. Other languages have no
    highlighting yet. [STD]
    **v3:** also XML, YAML, Markdown (block structure: headings, code fences), TOML, Shell (bash
-   grammar), Dockerfile (containerfile grammar), Groovy (with IDECraft's own query, as the grammar ships
+   grammar), Dockerfile (containerfile grammar), Groovy (with Ferris IDEA's own query, as the grammar ships
    none), Scala, SCSS, Less, Swift, Lua and R. Markdown captures use the reference's `MARKDOWN_*` colour
    keys with their fallbacks (headings → constant, code fences → string; logic template
    `MarkdownHighlighterColors`). [STD, OSS]
@@ -36,7 +36,8 @@ the whole file.
 4. After any sequence of edits, highlighting equals highlighting the final text from scratch. [GEN]
 5. Parsing never fails: syntax errors give an error node and the rest is still highlighted. [STD]
 6. MCP tool `highlight_file` (path, optional line range): tokens with 0-based line, start and end
-   character and kind. [ADR-0008]
+   character and kind. [ADR-0008] **v14:** a SQL file is read in its dialect as in the editor: the
+   lexis of the dialect over the grammar's colours, SPEC-0005 v7 behaviour 20. [STD]
 
 **v4:** Kotlin files are highlighted with the `tree-sitter-kotlin-ng` grammar (MIT) and an own query
 (`queries/kotlin-highlights.scm`: keywords, comments, strings, numbers, types, annotations, function
@@ -63,7 +64,7 @@ still shows the neutral colour. Required roles:
   types and `NULL` → keyword; built-in functions (`COUNT`, `SUM`, `MIN`, `MAX`, `AVG`, `COALESCE`, `NOW`,
   `CURRENT_DATE`, `CURRENT_TIMESTAMP`, …) → predefined symbol, italic; every keyword (also `DEFAULT`, `DESC`,
   `ASC`) → keyword; numbers → number; an alias where it is used → plain text. [OBS-0033 L12–L17]
-- **SQL, v7:** built-in functions take IDECraft's own key `SQL_BUILTIN_FUNCTION`, always italic, whose
+- **SQL, v7:** built-in functions take Ferris IDEA's own key `SQL_BUILTIN_FUNCTION`, always italic, whose
   colour falls back to the foreground of `DEFAULT_FUNCTION_DECLARATION`: a scheme without the key shows
   them in the function-declaration colour, italic (the reference showed them italic in the same blue as
   function declarations; no value taken from it). This replaces "predefined symbol" above. [OBS-0033 L14,
@@ -86,13 +87,13 @@ roles a Java file has:
 Before v8 declared functions and unqualified calls shared one role (`function.method`) and member calls
 and properties had none. Which colour a role has is the scheme's business: `Dark`, `Light` and the Islands
 schemes give function declarations and fields their own colour and leave calls plain; the brand schemes
-`IDECraft Dark` and `IDECraft Light` (SPEC-0060 v6) colour declarations and calls alike. Since v9 they give
+`Ferris IDEA Dark` and `Ferris IDEA Light` (SPEC-0060 v6) colour declarations and calls alike. Since v9 they give
 fields the colour of numbers and constants (Aurora purple, lightened `C3A2BD` on dark, darkened `85597E` on
 light), in every language: Java fields, Kotlin properties, record components, SQL columns. Before v9 a field
 had the text colour there (decision of the Project Owner, 2026-11-11). [OBS-0035 item 13, GEN, STD]
 
 **v10 – Doc comments and Java fields (OBS-0047 T2, T3):** the reference shows Javadoc green and italic
-and Java fields purple; IDECraft showed both like plain comments and plain text. A file looks the same
+and Java fields purple; Ferris IDEA showed both like plain comments and plain text. A file looks the same
 before its language server answers and without one:
 - **Doc comments** get the role `comment.documentation` (key `DEFAULT_DOC_COMMENT`, in `Islands Dark`
   `5F826B` italic): a block comment beginning with `/**` (not the empty `/**/`) in Java, Kotlin
@@ -119,7 +120,7 @@ before its language server answers and without one:
   typescript-language-server `property`, rust-analyzer `property` for struct fields — all of which
   map to the field keys already. A comment is no semantic token, so doc comments always keep their
   syntax role.
-- **Brand schemes:** `IDECraft Dark` and `IDECraft Light` define `DEFAULT_STATIC_FIELD` as their field
+- **Brand schemes:** `Ferris IDEA Dark` and `Ferris IDEA Light` define `DEFAULT_STATIC_FIELD` as their field
   colour in italics (SPEC-0060 v11), and their doc comments stay their comment grey in italics, as
   their files say. [OBS-0047, OSS, STD, GEN]
 
@@ -127,7 +128,7 @@ before its language server answers and without one:
 gets a new value after its declaration (`i` of `for (int i = 0; i < 2; i++)`) at every place it is named —
 its declaration and each use — with a thin line in a muted colour, while the text keeps its colour; fields,
 and locals and parameters that never change, are not underlined. The underline is no problem: it is not
-listed and not counted. IDECraft does the same by syntax, without a language server: [OBS-0050, STD, OSS]
+listed and not counted. Ferris IDEA does the same by syntax, without a language server: [OBS-0050, STD, OSS]
 - **Reassigned:** a parameter of a method, constructor or lambda that is the target of an assignment (`=`,
   `+=`, …) or of `++`/`--` anywhere in its scope; a local variable that has a value from the start — declared
   with one, the variable of an enhanced `for`, a `catch` parameter — and is such a target; a local declared without a value that is the target
@@ -151,7 +152,7 @@ listed and not counted. IDECraft does the same by syntax, without a language ser
 pattern wins (behaviour 2). The bundled queries of C (also read for C++), Ruby, Lua, Swift and R begin with a
 pattern that names every identifier a variable, and YAML's names every scalar a string before its key
 patterns, so their own function, constant, parameter and key patterns never applied: in `highlight_file` and
-in the editor a C function, a Ruby method, a YAML key were plain variables or strings. IDECraft therefore
+in the editor a C function, a Ruby method, a YAML key were plain variables or strings. Ferris IDEA therefore
 places short role queries of its own (`queries/<language>-roles.scm`) before them, as for Python,
 JavaScript and SQL (v6):
 - **C and C++:** the name of a declared or defined function → `function` (function declaration); a called
@@ -196,7 +197,7 @@ comparison plan is OBS-0074, part 2. [STD, GEN, OBS-0074]
   `syntax::tests::kotlin_colour_roles`). In every bundled scheme the roles `function`, `function.call` and
   `property` resolve to the style of the Java keys the server's tokens use, and in `Dark` function
   declarations and fields differ from the text colour (`theme::tests::kotlin_tokens_take_the_java_roles`).
-- **AK-11 (v9)** In `IDECraft Dark` and `IDECraft Light` a field (`DEFAULT_INSTANCE_FIELD`, and the role
+- **AK-11 (v9)** In `Ferris IDEA Dark` and `Ferris IDEA Light` a field (`DEFAULT_INSTANCE_FIELD`, and the role
   `property`) has the colour of numbers and constants and differs from the text colour (unit test
   `theme::tests::brand_schemes_give_fields_the_constant_colour`).
 
@@ -228,6 +229,8 @@ comparison plan is OBS-0074, part 2. [STD, GEN, OBS-0074]
   plain, quoted and flow keys, a Ruby sample with `private`, `def`, `def self.`, a call and `puts`, and Lua,
   Swift and R samples with declared and called functions and parameters get exactly these roles
   (`syntax::tests::roles_before_the_bundled_queries`).
+- **AK-17 (v14)** SPEC-0005 AK-22 to AK-24 (`sql_colours::tests`, `syntax::tests::a_layer_wins_over_the_grammar`,
+  `protocol.rs::highlight_file_reads_sql_in_its_dialect`).
 
 ## Out of scope
 Themes and colours (UI, ADR-0009), language injections (e.g. CSS inside HTML, Markdown inline
@@ -240,7 +243,7 @@ per language. v6: Kotlin files without a Kotlin module keep full highlighting (t
 off there, OBS-0033 item 13).
 
 v8 (OBS-0035): the reference sets calls of top-level functions in italics and marks a variable that a type
-check has narrowed (smart cast); IDECraft does neither — the syntax tree does not know where a called
+check has narrowed (smart cast); Ferris IDEA does neither — the syntax tree does not know where a called
 function is declared, and kotlin-language-server's tokens do not say it either. Until v9 a field had the
-text colour in the default scheme `IDECraft Dark`, so Kotlin properties stood out only in the other schemes;
+text colour in the default scheme `Ferris IDEA Dark`, so Kotlin properties stood out only in the other schemes;
 v9 gives fields their own colour there.

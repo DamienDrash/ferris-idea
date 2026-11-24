@@ -2,7 +2,7 @@
 
 use std::process::Command;
 
-use idecraft_core::{ReportFormat, TestStatus, TestSuite, parse_report};
+use ferris_idea_core::{ReportFormat, TestStatus, TestSuite, parse_report};
 
 fn statuses(s: &TestSuite) -> Vec<(String, TestStatus)> {
     s.tests.iter().map(|t| (t.name.clone(), t.status)).collect()
@@ -191,7 +191,7 @@ fn libtest_report() {
 
 #[test]
 fn libtest_from_real_cargo() {
-    let dir = std::env::temp_dir().join(format!("idecraft-libtest-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-libtest-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("src")).unwrap();
     std::fs::write(
@@ -279,7 +279,7 @@ fn tree(s: &TestSuite, depth: usize, out: &mut Vec<String>) {
     }
 }
 
-fn lines(r: &idecraft_core::TestReport) -> Vec<String> {
+fn lines(r: &ferris_idea_core::TestReport) -> Vec<String> {
     let mut out = Vec::new();
     for s in &r.suites {
         out.push(format!("{}/", s.name));

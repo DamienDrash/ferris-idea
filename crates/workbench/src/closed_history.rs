@@ -4,7 +4,7 @@
 
 use std::path::{Path, PathBuf};
 
-use idecraft_editor::TextBuffer;
+use ferris_idea_editor::TextBuffer;
 
 /// How many closed files keep their history.
 pub const MAX_CLOSED: usize = 32;

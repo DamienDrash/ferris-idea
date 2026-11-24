@@ -5,7 +5,7 @@
 
 use std::path::{Path, PathBuf};
 
-use idecraft_session::{Backend, ErrorCode, RpcError};
+use ferris_idea_session::{Backend, ErrorCode, RpcError};
 use serde_json::{Value, json};
 
 use crate::invalid;
@@ -47,7 +47,7 @@ pub fn doc_param(root: &Path, params: &Value) -> Result<String, RpcError> {
             .map_err(|_| invalid(format!("{uri:?} is outside the project folder")))?;
         let rel = rel.to_string_lossy().replace('\\', "/");
         let checked =
-            idecraft_session::paths::check_relative(if rel.is_empty() { "." } else { &rel })?;
+            ferris_idea_session::paths::check_relative(if rel.is_empty() { "." } else { &rel })?;
         crate::resolve(root, &checked)?;
         return Ok(checked);
     }
@@ -55,7 +55,7 @@ pub fn doc_param(root: &Path, params: &Value) -> Result<String, RpcError> {
         .as_str()
         .or(params["path"].as_str())
         .ok_or_else(|| invalid("`doc` is missing"))?;
-    let checked = idecraft_session::paths::check_relative(rel)?;
+    let checked = ferris_idea_session::paths::check_relative(rel)?;
     crate::resolve(root, &checked)?;
     Ok(checked)
 }
@@ -64,7 +64,7 @@ pub fn doc_param(root: &Path, params: &Value) -> Result<String, RpcError> {
 /// with the file name only.
 pub fn wire(root: &Path, path: &Path) -> Value {
     let real = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    match idecraft_session::paths::relative(root, &real) {
+    match ferris_idea_session::paths::relative(root, &real) {
         Some(rel) if rel != "." => json!({ "doc": rel }),
         _ => json!({ "outside": outside_name(path) }),
     }
@@ -73,7 +73,7 @@ pub fn wire(root: &Path, path: &Path) -> Value {
 /// The relative path of `path`, if it lies in the project.
 pub fn relative(root: &Path, path: &Path) -> Option<String> {
     let real = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    idecraft_session::paths::relative(root, &real).filter(|r| r != ".")
+    ferris_idea_session::paths::relative(root, &real).filter(|r| r != ".")
 }
 
 /// What the window sees of a place outside the project: its file name and the folder above it
@@ -160,7 +160,8 @@ mod tests {
 
     #[test]
     fn uris_and_paths_leaving_the_project_are_refused() {
-        let dir = std::env::temp_dir().join(format!("idecraft-host-paths-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("ferris-idea-host-paths-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("p/src")).unwrap();
         std::fs::write(dir.join("p/src/a b.c"), "x").unwrap();

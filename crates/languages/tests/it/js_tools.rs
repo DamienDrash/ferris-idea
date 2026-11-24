@@ -1,9 +1,9 @@
 //! SPEC-0123 AK-2: the project's real ESLint 9 and Prettier 3 (`js.sh install`
-//! of the reference environment; folder from `IDECRAFT_TEST_JSLINT`). Skipped when they are not installed.
+//! of the reference environment; folder from `FERRIS_IDEA_TEST_JSLINT`). Skipped when they are not installed.
 
 use std::path::PathBuf;
 
-use idecraft_languages::js_tools::{
+use ferris_idea_languages::js_tools::{
     LintSeverity, eslint_check, eslint_fix, find_eslint, find_prettier, minimal_edit,
     prettier_format,
 };
@@ -11,7 +11,7 @@ use idecraft_languages::js_tools::{
 const APP: &str = include_str!("../../../../tests/reference-projects/js-lint/src/app.js");
 
 fn project() -> Option<PathBuf> {
-    let dir = std::env::var_os("IDECRAFT_TEST_JSLINT")
+    let dir = ferris_idea_core::product_var_os("FERRIS_IDEA_TEST_JSLINT")
         .map(PathBuf::from)
         .or_else(|| {
             std::env::var_os("HOME").map(|h| PathBuf::from(h).join("ReferenceEnv/projects/js-lint"))

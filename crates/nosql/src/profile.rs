@@ -1,4 +1,4 @@
-//! Store profiles and `.idecraft/stores.toml` (`SPEC-0310` behaviours 1–4).
+//! Store profiles and `.ferris-idea/stores.toml` (`SPEC-0310` behaviours 1–4).
 //!
 //! A store profile is plain data: system, URL without password, read-only flag, keychain entry and
 //! agent rights. The file carries the ADR-0021 envelope.
@@ -7,16 +7,16 @@ use std::collections::{BTreeSet, HashSet};
 use std::fs;
 use std::path::Path;
 
-use idecraft_database::{Permission, SecretRef, SecretStore, default_permissions};
+use ferris_idea_database::{Permission, SecretRef, SecretStore, default_permissions};
 use serde::{Deserialize, Serialize};
 
 use crate::StoreError;
 
 /// Workspace-relative location of the store file.
-pub const STORE_FILE: &str = ".idecraft/stores.toml";
+pub const STORE_FILE: &str = ".ferris-idea/stores.toml";
 /// Envelope kind of the store file (ADR-0021).
 pub const STORE_KIND: &str = "stores";
-/// Format version this IDECraft reads and writes.
+/// Format version this Ferris IDEA reads and writes.
 pub const STORE_FORMAT: u32 = 1;
 
 /// Non-relational system of a store profile.
@@ -370,7 +370,7 @@ impl StoreProfile {
     pub fn password(
         &self,
         store: &dyn SecretStore,
-    ) -> Result<Option<idecraft_database::Secret>, StoreError> {
+    ) -> Result<Option<ferris_idea_database::Secret>, StoreError> {
         let Some(reference) = &self.secret else {
             return Ok(None);
         };
@@ -408,8 +408,12 @@ struct Envelope {
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct StoreFile {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    idecraft: Option<Envelope>,
+    #[serde(
+        default,
+        rename = "ferris-idea",
+        skip_serializing_if = "Option::is_none"
+    )]
+    ferris_idea: Option<Envelope>,
     #[serde(default)]
     store: Vec<StoreProfile>,
 }
@@ -447,16 +451,17 @@ pub fn validate_stores(profiles: &[StoreProfile], sql_ids: &[String]) -> Result<
 }
 
 fn sql_ids(root: &Path) -> Vec<String> {
-    idecraft_database::load_profiles(root)
+    ferris_idea_database::load_profiles(root)
         .map(|ps| ps.into_iter().map(|p| p.id).collect())
         .unwrap_or_default()
 }
 
 /// Parses the text of a store file (envelope rules of ADR-0021).
 pub fn parse_stores(text: &str) -> Result<Vec<StoreProfile>, StoreError> {
-    let file: StoreFile =
-        toml::from_str(text).map_err(|e| StoreError::File(e.message().to_owned()))?;
-    if let Some(env) = &file.idecraft {
+    // An envelope written under the product's former name is read too (`SPEC-0356` behaviour 10).
+    let file: StoreFile = ferris_idea_core::format::from_str_adopting(text)
+        .map_err(|e| StoreError::File(e.message().to_owned()))?;
+    if let Some(env) = &file.ferris_idea {
         if env.kind != STORE_KIND {
             return Err(StoreError::File(format!(
                 "kind `{}` is not a store file (expected `{STORE_KIND}`)",
@@ -465,7 +470,7 @@ pub fn parse_stores(text: &str) -> Result<Vec<StoreProfile>, StoreError> {
         }
         if env.format > STORE_FORMAT {
             return Err(StoreError::File(format!(
-                "written by a newer IDECraft, format {}; this version reads up to {STORE_FORMAT}",
+                "written by a newer Ferris IDEA, format {}; this version reads up to {STORE_FORMAT}",
                 env.format
             )));
         }
@@ -473,7 +478,7 @@ pub fn parse_stores(text: &str) -> Result<Vec<StoreProfile>, StoreError> {
     Ok(file.store)
 }
 
-/// Loads `.idecraft/stores.toml` under `root`; no file means no stores.
+/// Loads `.ferris-idea/stores.toml` under `root`; no file means no stores.
 pub fn load_stores(root: &Path) -> Result<Vec<StoreProfile>, StoreError> {
     let path = root.join(STORE_FILE);
     let text = match fs::read_to_string(&path) {
@@ -490,7 +495,7 @@ pub fn load_stores(root: &Path) -> Result<Vec<StoreProfile>, StoreError> {
 /// Text of a store file with the envelope.
 pub fn render_stores(profiles: &[StoreProfile]) -> Result<String, StoreError> {
     let file = StoreFile {
-        idecraft: Some(Envelope {
+        ferris_idea: Some(Envelope {
             kind: STORE_KIND.into(),
             format: STORE_FORMAT,
         }),
@@ -499,7 +504,7 @@ pub fn render_stores(profiles: &[StoreProfile]) -> Result<String, StoreError> {
     toml::to_string(&file).map_err(|e| StoreError::File(e.to_string()))
 }
 
-/// Validates and writes `.idecraft/stores.toml` under `root`.
+/// Validates and writes `.ferris-idea/stores.toml` under `root`.
 pub fn save_stores(root: &Path, profiles: &[StoreProfile]) -> Result<(), StoreError> {
     validate_stores(profiles, &sql_ids(root))?;
     let path = root.join(STORE_FILE);
@@ -531,7 +536,7 @@ pub fn sql_connection_ids(root: &Path) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use idecraft_database::MemoryStore;
+    use ferris_idea_database::MemoryStore;
 
     #[test]
     fn urls_select_system_ports_and_tls() {
@@ -616,12 +621,12 @@ mod tests {
 
     #[test]
     fn profiles_round_trip_through_the_file_with_the_envelope() {
-        let dir = std::env::temp_dir().join(format!("idecraft-stores-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-stores-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         let mut mongo =
             StoreProfile::from_url("Shop Mongo", "mongodb://app@localhost/shop").unwrap();
         mongo.secret = Some(SecretRef {
-            service: "idecraft".into(),
+            service: "ferris-idea".into(),
             account: "shop-mongo".into(),
         });
         let mut redis = StoreProfile::from_url("Cache", "redis://localhost/2").unwrap();
@@ -629,7 +634,7 @@ mod tests {
         save_stores(&dir, &[mongo.clone(), redis.clone()]).unwrap();
         let text = fs::read_to_string(dir.join(STORE_FILE)).unwrap();
         assert!(
-            text.starts_with("[idecraft]\nkind = \"stores\"\nformat = 1"),
+            text.starts_with("[ferris-idea]\nkind = \"stores\"\nformat = 1"),
             "{text}"
         );
         assert!(!text.contains("ai ="), "{text}");
@@ -639,7 +644,7 @@ mod tests {
 
         // SQL connection with the same id.
         fs::write(
-            dir.join(".idecraft/connections.toml"),
+            dir.join(".ferris-idea/connections.toml"),
             "[[connection]]\nid = \"cache\"\nname = \"C\"\ndialect = \"sqlite\"\npath = \"a.db\"\n",
         )
         .unwrap();
@@ -663,17 +668,17 @@ mod tests {
         );
         assert!(parse_stores(&format!("{entry}colour = \"red\"\n")).is_err());
         let err = parse_stores(&format!(
-            "[idecraft]\nkind = \"keymap\"\nformat = 1\n{entry}"
+            "[ferris-idea]\nkind = \"keymap\"\nformat = 1\n{entry}"
         ))
         .unwrap_err()
         .to_string();
         assert!(err.contains("kind `keymap`"), "{err}");
         let err = parse_stores(&format!(
-            "[idecraft]\nkind = \"stores\"\nformat = 2\n{entry}"
+            "[ferris-idea]\nkind = \"stores\"\nformat = 2\n{entry}"
         ))
         .unwrap_err()
         .to_string();
-        assert!(err.contains("newer IDECraft, format 2"), "{err}");
+        assert!(err.contains("newer Ferris IDEA, format 2"), "{err}");
         let twice = parse_stores(&format!("{entry}{}", entry.replace("\"A\"", "\"B\""))).unwrap();
         assert!(
             validate_stores(&twice, &[])
@@ -687,13 +692,13 @@ mod tests {
     fn a_missing_keychain_entry_fails_before_any_network_access() {
         let mut p = StoreProfile::from_url("Far", "redis://10.255.255.1:6379/0").unwrap();
         p.secret = Some(SecretRef {
-            service: "idecraft-test".into(),
+            service: "ferris-idea-test".into(),
             account: "far".into(),
         });
         let started = std::time::Instant::now();
         let err = p.password(&MemoryStore::default()).unwrap_err().to_string();
         assert!(
-            err.contains("password missing in keychain entry idecraft-test/far"),
+            err.contains("password missing in keychain entry ferris-idea-test/far"),
             "{err}"
         );
         assert!(started.elapsed() < std::time::Duration::from_millis(500));

@@ -1,6 +1,6 @@
-//! The steps of the F-084 hand tests that run the `idecraft` program itself, without a window:
-//! hand test 202 step 8 (`idecraft mcp` over stdio without a grant), 204 step 6 (`idecraft quit`
-//! without a running window) and 206 step 5 (`idecraft call … dialog_decisions`). Each run has a
+//! The steps of the F-084 hand tests that run the `ferris-idea` program itself, without a window:
+//! hand test 202 step 8 (`ferris-idea mcp` over stdio without a grant), 204 step 6 (`ferris-idea quit`
+//! without a running window) and 206 step 5 (`ferris-idea call … dialog_decisions`). Each run has a
 //! settings folder of its own, so the user's rights, trust and windows never count. The window
 //! steps of the same hand tests are window tests of the binary (`src/f084_handtests.rs`).
 //!
@@ -15,7 +15,8 @@ use serde_json::{Value, json};
 
 /// A project folder and a settings folder beside it.
 fn folders(tag: &str) -> (PathBuf, PathBuf) {
-    let base = std::env::temp_dir().join(format!("idecraft-f084-cli-{tag}-{}", std::process::id()));
+    let base =
+        std::env::temp_dir().join(format!("ferris-idea-f084-cli-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
     let root = base.join("handtest");
     let config = base.join("settings");
@@ -24,11 +25,11 @@ fn folders(tag: &str) -> (PathBuf, PathBuf) {
     (root.canonicalize().unwrap(), config.canonicalize().unwrap())
 }
 
-fn idecraft(config: &Path) -> Command {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_idecraft"));
+fn ferris_idea(config: &Path) -> Command {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_ferris-idea"));
     command
-        .env("IDECRAFT_CONFIG_DIR", config)
-        .env_remove("IDECRAFT_TRUST_PROJECTS");
+        .env("FERRIS_IDEA_CONFIG_DIR", config)
+        .env_remove("FERRIS_IDEA_TRUST_PROJECTS");
     command
 }
 
@@ -42,7 +43,7 @@ fn git(root: &Path, args: &[&str]) {
     assert!(done.status.success(), "git {args:?}: {done:?}");
 }
 
-/// Hand test 202 step 8 (`SPEC-0053` v8 behaviours 3 and 7, AK-7): `idecraft mcp` over stdio
+/// Hand test 202 step 8 (`SPEC-0053` v8 behaviours 3 and 7, AK-7): `ferris-idea mcp` over stdio
 /// cannot ask; `git_create_branch` without `vcs-write` is refused at once with a message that
 /// starts with "not granted:", names the right, the grant file and the entry to add, and says
 /// neither "rejected" nor "denied". No branch is made.
@@ -63,7 +64,7 @@ fn hand_test_202_stdio_without_a_grant_is_not_granted() {
         ),
     )
     .unwrap();
-    let mut child = idecraft(&config)
+    let mut child = ferris_idea(&config)
         .arg("mcp")
         .arg(&root)
         .stdin(Stdio::piped())
@@ -128,28 +129,28 @@ fn hand_test_202_stdio_without_a_grant_is_not_granted() {
 }
 
 /// Hand test 204 step 6 (`SPEC-0261` v9 behaviour 11, AK-4): without a running window,
-/// `idecraft quit` says so and exits with status 1.
+/// `ferris-idea quit` says so and exits with status 1.
 #[test]
 fn hand_test_204_quit_without_a_running_window() {
     let (root, config) = folders("204");
-    let out = idecraft(&config).arg("quit").output().unwrap();
+    let out = ferris_idea(&config).arg("quit").output().unwrap();
     assert_eq!(out.status.code(), Some(1), "{out:?}");
     let err = String::from_utf8_lossy(&out.stderr);
     assert!(
-        err.starts_with("error: no running IDECraft window serves MCP over HTTP ("),
+        err.starts_with("error: no running Ferris IDEA window serves MCP over HTTP ("),
         "{err}"
     );
     assert!(out.stdout.is_empty());
     let _ = std::fs::remove_dir_all(root.parent().unwrap());
 }
 
-/// Hand test 206 step 5 (`SPEC-0281` v2 behaviours 1, 3 and 5): `idecraft call … dialog_decisions
+/// Hand test 206 step 5 (`SPEC-0281` v2 behaviours 1, 3 and 5): `ferris-idea call … dialog_decisions
 /// {"id": "delete-file"}` prints the Delete question as a native alert with the tool that makes
 /// each decision.
 #[test]
 fn hand_test_206_the_delete_decision_from_a_shell() {
     let (root, config) = folders("206");
-    let out = idecraft(&config)
+    let out = ferris_idea(&config)
         .arg("call")
         .arg(&root)
         .arg("dialog_decisions")

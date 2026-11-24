@@ -5,8 +5,8 @@
 
 use std::path::PathBuf;
 
+use ferris_idea_languages::spring::{SpringModel, SpringProblem};
 use gpui::{Context, EventEmitter, FocusHandle, KeyDownEvent, Window, div, prelude::*, px, rgb};
-use idecraft_languages::spring::{SpringModel, SpringProblem};
 
 use crate::palette::Palette;
 use crate::workbench_view::c;
@@ -86,7 +86,7 @@ impl EventEmitter<SpringEvent> for SpringView {}
 
 /// Whether `p` is a recommendation (`SPEC-0115` v4 behaviour 11), shown muted.
 fn is_weak(p: &SpringProblem) -> bool {
-    p.severity == idecraft_languages::inspections::Level::Weak
+    p.severity == ferris_idea_languages::inspections::Level::Weak
 }
 
 /// The kinds of the beans `filter.tests` lets through, sorted.
@@ -112,7 +112,7 @@ fn rows_of(model: &SpringModel, filter: &BeanFilter) -> Vec<Row> {
         model.problems().into_iter().map(Row::Problem).collect()
     };
     let needle = filter.text.to_lowercase();
-    let fits = |b: &idecraft_languages::spring::Bean| {
+    let fits = |b: &ferris_idea_languages::spring::Bean| {
         (filter.tests || !b.test)
             && filter.kind.as_ref().is_none_or(|k| *k == b.kind)
             && (needle.is_empty()
@@ -690,7 +690,7 @@ mod tests {
                     .to_owned(),
             ),
         ];
-        idecraft_languages::spring::model_of(&files)
+        ferris_idea_languages::spring::model_of(&files)
     }
 
     #[test]

@@ -1,5 +1,5 @@
 //! Published ports and Kubernetes port forwards (`SPEC-0241`): browser addresses of published
-//! ports, and `kubectl port-forward` processes owned by this IDECraft process.
+//! ports, and `kubectl port-forward` processes owned by this Ferris IDEA process.
 
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, ChildStdin, Command, Stdio};
@@ -151,7 +151,7 @@ impl PortForwards {
         let local = local_port(remote, local).map_err(|e| KubeError::Failed(e.to_string()))?;
         let args = kubectl.port_forward_args(context, namespace, &target, local, remote)?;
         // A small shell ties kubectl to this process: a watcher waits for the end of the pipe on
-        // its input (closed on stop or when IDECraft ends) and then ends kubectl, which replaces
+        // its input (closed on stop or when Ferris IDEA ends) and then ends kubectl, which replaces
         // the shell and so keeps its process id.
         let mut child = Command::new("/bin/sh")
             .arg("-c")

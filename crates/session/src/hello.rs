@@ -4,7 +4,7 @@
 use crate::rpc::{ErrorCode, RpcError};
 
 /// The protocol name in `session.hello`.
-pub const PROTOCOL: &str = "idecraft-session";
+pub const PROTOCOL: &str = "idecraft-session"; // rebrand:keep (wire protocol name)
 
 /// The major this build speaks first.
 pub const MAJOR: u32 = 1;
@@ -40,7 +40,7 @@ pub fn choose_major(offered: &[u32], supported: &[u32]) -> Result<u32, RpcError>
                     "the window speaks protocol versions {offered:?}, this backend {supported:?}"
                 ),
             )
-            .hint("update IDECraft on the older side so both speak the same major version")
+            .hint("update Ferris IDEA on the older side so both speak the same major version")
         })
 }
 
@@ -58,7 +58,7 @@ pub fn check_backend_minor(minor: Option<u64>, build: &str) -> Result<(), RpcErr
         format!(
             "the backend on the host ({build}) is older than this window, even if the version \
              number is the same: it serves protocol revision {revision}, this window needs \
-             {MINOR}. Build the backends again (scripts/build-backends.sh) or update IDECraft on \
+             {MINOR}. Build the backends again (scripts/build-backends.sh) or update Ferris IDEA on \
              the host, then open the project again",
         ),
     )
@@ -147,12 +147,12 @@ mod tests {
     #[test]
     fn an_older_backend_is_refused_a_newer_one_accepted() {
         let current = u64::from(MINOR);
-        assert!(check_backend_minor(Some(current), "idecraft x").is_ok());
-        assert!(check_backend_minor(Some(current + 1), "idecraft x").is_ok());
+        assert!(check_backend_minor(Some(current), "ferris-idea x").is_ok());
+        assert!(check_backend_minor(Some(current + 1), "ferris-idea x").is_ok());
         for stale in [None, Some(0), Some(current - 1)] {
-            let e = check_backend_minor(stale, "idecraft 0.11.0").unwrap_err();
+            let e = check_backend_minor(stale, "ferris-idea 0.11.0").unwrap_err();
             assert_eq!(e.code, ErrorCode::UnsupportedVersion);
-            assert!(e.message.contains("idecraft 0.11.0"), "{e}");
+            assert!(e.message.contains("ferris-idea 0.11.0"), "{e}");
             assert!(e.message.contains("build-backends.sh"), "{e}");
             assert!(e.message.contains(&format!("needs {MINOR}")), "{e}");
         }

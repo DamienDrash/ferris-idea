@@ -22,20 +22,20 @@
 - **Feature matrix rows:** F-084, F-087
 
 ## Purpose
-No decision IDECraft asks for in a modal dialog depends on a mouse and eyes. Until the toolkit has
+No decision Ferris IDEA asks for in a modal dialog depends on a mouse and eyes. Until the toolkit has
 an accessibility tree (ADR-0019), each decision is reachable through MCP and the command line, and
 simple confirmations are native alerts that screen readers can read and press.
 
 ## Behaviour
 
 ### Inventory
-1. **One machine-readable list.** Every modal dialog IDECraft shows is listed with its
-   specification, how it is shown (native alert or drawn by IDECraft), its answers, and for each
+1. **One machine-readable list.** Every modal dialog Ferris IDEA shows is listed with its
+   specification, how it is shown (native alert or drawn by Ferris IDEA), its answers, and for each
    answer the MCP tool and arguments that make the same decision. The MCP tool
    `dialog_decisions` returns the list; with `id` it returns one dialog. [ADR-0008]
 2. **Dialogs in the list (version 2).** Native alerts: trust project (SPEC-0278), an agent's
    request for a right (SPEC-0053 v4), delete from the project tree (SPEC-0275, behaviour 6 here).
-   Drawn by IDECraft: quit with unsaved files or running work (SPEC-0261 v4), close a remote
+   Drawn by Ferris IDEA: quit with unsaved files or running work (SPEC-0261 v4), close a remote
    project with unsaved files (SPEC-0317 behaviour 11), command suggested by a plugin (SPEC-0276), rename table or column (SPEC-0128), copy
    table (SPEC-0191), breakpoints (SPEC-0127), attach to process (SPEC-0147), database connection
    (SPEC-0108), push (SPEC-0109/0144), update project (SPEC-0144), interactive rebase (SPEC-0145),
@@ -49,19 +49,19 @@ simple confirmations are native alerts that screen readers can read and press.
    Workspace" for a plugin's command (SPEC-0276) and answering an agent's request for a right
    (SPEC-0053 v4). The list names the reason and what an agent can read instead (`plugins`,
    `inspect_plugin_file`, `run_plugin_configuration` with `dry_run`, `agent_permissions`).
-   Quitting is `quit_ide` and `idecraft quit` (SPEC-0261 v2). [ADR-0008, SPEC-0276]
+   Quitting is `quit_ide` and `ferris-idea quit` (SPEC-0261 v2). [ADR-0008, SPEC-0276]
 4. **Kept true by tests.** A test fails when the list names a tool the server does not have, names
    a test that does not exist, or when the workbench has a dialog type (`…Dialog`) that the list
    does not name. [GEN]
 
 ### Command line
-5. **`idecraft call <folder> <tool> [<json arguments>]`** calls one MCP tool on the folder as
-   `idecraft mcp <folder>` would serve it — same agent rights (SPEC-0053), same safe mode for an
+5. **`ferris-idea call <folder> <tool> [<json arguments>]`** calls one MCP tool on the folder as
+   `ferris-idea mcp <folder>` would serve it — same agent rights (SPEC-0053), same safe mode for an
    untrusted folder (SPEC-0278) — prints the tool's result as JSON on standard output and exits
    with 0; when the tool reports an error it prints the error on standard error and exits with 1;
    wrong usage, a folder that cannot be opened or arguments that are not a JSON object exit
    with 2. So every decision in the list is also reachable from a shell. Trust also keeps its
-   own commands (`idecraft trust …`, SPEC-0278). [ADR-0008]
+   own commands (`ferris-idea trust …`, SPEC-0278). [ADR-0008]
 
 ### Native alerts
 6. **Simple confirmations are native alerts.** A question whose answers are only buttons (no
@@ -71,7 +71,7 @@ simple confirmations are native alerts that screen readers can read and press.
    6) to a native alert: message "Delete file "…"?" (or the folder with its counts), detail
    "Deleted files stay in Local History.", buttons **Delete** (default, Return) and **Cancel**
    (Escape). [STD, IMP-0005]
-   **Exception (v2):** a question that keeps IDECraft from quitting or a window from closing is
+   **Exception (v2):** a question that keeps Ferris IDEA from quitting or a window from closing is
    drawn in the window, with the same message, detail, buttons and keys: quitting (SPEC-0261 v4
    behaviour 5) and closing a remote project with unsaved files (SPEC-0317 behaviour 11: "n remote
    files are unsaved", the files named, **Save All** (default), **Don't Save**, **Cancel**). In the
@@ -81,7 +81,7 @@ simple confirmations are native alerts that screen readers can read and press.
    [GEN]
 7. **Window self-test.** The self-test cannot answer a native alert, so it shows the same question
    drawn in the window, answered with the same keys and the same code path. [GEN]
-8. **Keyboard focus (v3).** In every native alert IDECraft shows, the button that holds the
+8. **Keyboard focus (v3).** In every native alert Ferris IDEA shows, the button that holds the
    keyboard focus when the alert appears is the question's safe answer, so that with keyboard
    navigation on — where Space presses the focused button — a stray Space neither grants anything
    (trust, rights, pairing) nor removes or closes anything. A question may name its safe answer:
@@ -91,7 +91,7 @@ simple confirmations are native alerts that screen readers can read and press.
    the cancel answer; any other answer needs the mouse, VoiceOver or Tab first. The focus per
    question: an agent's request for a right names Deny (also its default); the trust question
    names Preview in Safe Mode (also its default; it grants no trust and changes nothing — Don't
-   Open, its cancel answer when the window opens, would close the window and may quit IDECraft),
+   Open, its cancel answer when the window opens, would close the window and may quit Ferris IDEA),
    both when the window opens and when asked again from the safe-mode banner; Delete in the
    project tree — Cancel (Return stays Delete); pairing with a remote host — Cancel (Return stays
    Digits Match); closing tabs with unsaved changes — Cancel (Return stays Save All); a plugin's
@@ -147,7 +147,7 @@ simple confirmations are native alerts that screen readers can read and press.
   (`dialogs::tests`).
 - **AK-2** MCP: `dialog_decisions` lists every dialog, `id` selects one, an unknown id is an
   error, and every tool it names is in `tools/list` (`crates/mcp/tests/it/protocol.rs::dialog_decisions_name_existing_tools`).
-- **AK-3** Command line: `idecraft call` prints a tool's JSON, reports a tool error with exit
+- **AK-3** Command line: `ferris-idea call` prints a tool's JSON, reports a tool error with exit
   code 1 and wrong usage with 2 (`crates/app/tests/it/call_cli.rs`).
 - **AK-4** The Delete alert's message, detail and buttons (`workbench_menus::tests::delete_alert_question_and_buttons`).
 - **AK-6** The drawn question: keys and buttons, quit and remote close listed as drawn
@@ -203,6 +203,6 @@ the trust question grant nothing; telling repeats apart on X11 (detectable auto-
 change of the toolkit's X11 backend.
 
 ## Known deviations from the reference
-The reference's modal dialogs were not reachable for automation (OBS-0002 … OBS-0004); IDECraft
+The reference's modal dialogs were not reachable for automation (OBS-0002 … OBS-0004); Ferris IDEA
 offers every decision as an MCP tool and on the command line, and asks simple confirmations in
 native alerts (IMP-0005).

@@ -98,7 +98,7 @@ fn visit(node: Node<'_>, text: &str, suites: &mut Vec<String>, out: &mut Vec<Fou
 }
 
 fn scan(rel: &str, text: &str) -> Vec<Found> {
-    if !idecraft_core::is_js_test_file(rel) {
+    if !ferris_idea_core::is_js_test_file(rel) {
         return Vec::new();
     }
     let ext = Path::new(rel)

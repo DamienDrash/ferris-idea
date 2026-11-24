@@ -3,7 +3,7 @@
 
 use std::path::{Path, PathBuf};
 
-use idecraft_core::{
+use ferris_idea_core::{
     RunConfigs, RunKind, TestStatus, TestSuite, Workspace, read_project, run_config,
     suggest_run_configs,
 };
@@ -16,7 +16,7 @@ fn works(cmd: &[&str]) -> bool {
 }
 
 fn project(tag: &str) -> PathBuf {
-    let p = std::env::temp_dir().join(format!("idecraft-runner-{tag}-{}", std::process::id()));
+    let p = std::env::temp_dir().join(format!("ferris-idea-runner-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&p);
     std::fs::create_dir_all(&p).unwrap();
     p
@@ -134,7 +134,7 @@ fn pytest_junit_tree_and_no_stale_report() {
         ]
     );
     // A run that writes no report does not show the previous run's tree.
-    let report = root.join(".idecraft/pytest.xml");
+    let report = root.join(".ferris-idea/pytest.xml");
     let old = std::time::SystemTime::now() - std::time::Duration::from_secs(60);
     std::fs::File::options()
         .write(true)

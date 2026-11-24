@@ -1,4 +1,4 @@
-# IDECraft documentation
+# Ferris IDEA documentation
 
 Start here. Each topic has one home; other files link to it.
 
@@ -6,7 +6,7 @@ Start here. Each topic has one home; other files link to it.
 |---|---|---|
 | Overview | [README](../README.md) | English |
 | Architecture | [ARCHITECTURE.md](../ARCHITECTURE.md), [decision records](adr/README.md) | English |
-| Agent side (IDE AI harness) | [README section](../README.md#what-an-agent-can-do-with-it), [agent rights](specifications/SPEC-0053-agent-permissions.md), [MCP over HTTP](specifications/SPEC-0221-mcp-http-transport.md), [direction, proposed](adr/0023-idecraft-as-agent-harness.md) | English |
+| Agent side (IDE AI harness) | [README section](../README.md#what-an-agent-can-do-with-it), [agent rights](specifications/SPEC-0053-agent-permissions.md), [MCP over HTTP](specifications/SPEC-0221-mcp-http-transport.md), [direction, proposed](adr/0023-ferris-idea-as-agent-harness.md) | English |
 | Long-term direction (AI-native, planned) | [vision](architecture/AI_NATIVE_VISION.md), [readiness](architecture/READINESS.md), [future milestones](architecture/FUTURE_MILESTONES.md) | English |
 | Contributing | [CONTRIBUTING.md](../CONTRIBUTING.md), agent rules in [AGENTS.md](../AGENTS.md), [checks, batch merges and the window self-test](testing/CHECKS_AND_SELFTEST.md) | English |
 | Licensing | [LICENSING.md](../LICENSING.md), [TRADEMARKS.md](../TRADEMARKS.md) (proposal), [third-party notices](../THIRD-PARTY-NOTICES.md) | English |

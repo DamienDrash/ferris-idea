@@ -1,4 +1,4 @@
-# SPEC-0178: Breakpoint conditions evaluated by IDECraft
+# SPEC-0178: Breakpoint conditions evaluated by Ferris IDEA
 
 - **Version:** 3 · **Date:** 2026-11-05 (v2: own evaluation of simple expressions, behaviour 4a; v3:
   log messages in order with the program's output)
@@ -14,18 +14,18 @@
 
 ## Purpose
 Conditions, pass counts and logging breakpoints work in every debug session, also with adapters that
-cannot evaluate them themselves (kotlin-debug-adapter). The user sees when IDECraft does the work and
+cannot evaluate them themselves (kotlin-debug-adapter). The user sees when Ferris IDEA does the work and
 that it is slower.
 
 ## Behaviour
 1. **Who evaluates:** for each of the three features separately, an adapter that announces the
-   capability gets the feature in `setBreakpoints` as before and IDECraft does nothing else. When
-   the adapter does not announce it, IDECraft sends the breakpoint without that part and keeps it
+   capability gets the feature in `setBreakpoints` as before and Ferris IDEA does nothing else. When
+   the adapter does not announce it, Ferris IDEA sends the breakpoint without that part and keeps it
    to evaluate itself. A breakpoint reports which of the two applies (`evaluated_by`: `adapter` or
-   `idecraft`). [STD]
+   `ferris-idea`). [STD]
 2. **Recognising the hit:** a `stopped` event with reason `breakpoint` (or with
    `hitBreakpointIds`) whose thread's top frame is in the same file (compared after resolving
-   symbolic links) and on the line of a breakpoint kept by IDECraft is that breakpoint's hit. Stops
+   symbolic links) and on the line of a breakpoint kept by Ferris IDEA is that breakpoint's hit. Stops
    for other reasons (step, pause, exception, entry) are never evaluated or skipped. [STD]
 3. **Order per hit:** first the condition; when it is false the program continues and the hit does
    not count. Then the hit counter of the breakpoint goes up by one and the hit condition is
@@ -36,7 +36,7 @@ that it is slower.
 4. **Values:** the condition is evaluated in the top frame of the stopped thread (`evaluate`,
    context `watch`). `true`/`True` and numbers other than zero are true; `false`/`False`, `0`,
    `null`, `nil`, `None`, `undefined` are false. [GEN]
-4a. **Own evaluation:** when the adapter's answer is an error or not a truth value, IDECraft
+4a. **Own evaluation:** when the adapter's answer is an error or not a truth value, Ferris IDEA
    evaluates the expression itself if it is simple: literals (whole and decimal numbers, strings
    in `"…"`, characters in `'…'`, `true`, `false`, `null`), names and field paths (`order.total`),
    parentheses, `!` and unary `-`, `* / %`, `+ -` (`+` joins text), the comparisons
@@ -50,15 +50,15 @@ that it is slower.
    debug console says which condition at which file and line failed and why; an unreadable
    `{expression}` in a log message is written as `<error: …>` and the program continues. An
    unknown hit condition syntax is refused when the breakpoint is set. [GEN]
-6. **Visible:** when a session keeps at least one breakpoint for IDECraft to evaluate, the debug
+6. **Visible:** when a session keeps at least one breakpoint for Ferris IDEA to evaluate, the debug
    console says once, at the start or when such a breakpoint is first set, that the adapter cannot
-   evaluate them, that IDECraft evaluates them at each hit, and that this is slower because the
+   evaluate them, that Ferris IDEA evaluates them at each hit, and that this is slower because the
    program stops briefly every time the line is reached. The Breakpoints dialog says the same under
    the condition field for Kotlin files. Log messages and these notes stand in the console in the
    order they happen, between the program's output from before and after them (v3, hand test 54,
    D17: they came after the program's later output). [GEN]
 7. **Time:** skipped hits are handled inside the wait for the next stop; a wait that ends while
-   IDECraft is skipping hits reports the program as running. Hit counters belong to the session;
+   Ferris IDEA is skipping hits reports the program as running. Hit counters belong to the session;
    they start again when the breakpoint's condition or hit condition changes. [GEN]
 8. **Function breakpoints** keep their behaviour (SPEC-0146): a condition on a function breakpoint
    for an adapter without the capability is still refused with the reason. [STD]
@@ -72,10 +72,10 @@ that it is slower.
   right hits; a logpoint writes each line to the console and never stops; a condition that fails to
   evaluate stops with the reason in the console; a stop by stepping onto the line is not evaluated;
   with an adapter that resolves only names (like kotlin-debug-adapter), `i % 2 == 0 && i > 2`
-  is evaluated by IDECraft (`crates/debugger/tests/it/client_conditions.rs`); the expression
+  is evaluated by Ferris IDEA (`crates/debugger/tests/it/client_conditions.rs`); the expression
   evaluator on its own (`expr::tests`).
 - **AK-2** With a fake adapter that announces the capabilities: the condition goes to the adapter
-  and IDECraft sends no `evaluate` (same file); unit tests for truth values and hit conditions
+  and Ferris IDEA sends no `evaluate` (same file); unit tests for truth values and hit conditions
   (`session::tests`).
 - **AK-3** With the real kotlin-debug-adapter and a Gradle project built offline: the condition
   `x == 2` stops once with `x = 2`, then the program ends with `total 12`; skipped cleanly without
@@ -86,10 +86,10 @@ that it is slower.
   window, the console note visible.
 
 ## Out of scope
-Conditions on function and exception breakpoints evaluated by IDECraft, making skipped hits faster
+Conditions on function and exception breakpoints evaluated by Ferris IDEA, making skipped hits faster
 (each one is a stop and a resume over the protocol), counting hits of a breakpoint whose line the
 adapter moved (matched by the line the adapter reports, else the line asked for).
 
 ## Known deviations from the reference
 The reference evaluates conditions inside its own JVM debugger without a round trip per hit;
-IDECraft is slower with kotlin-debug-adapter and says so. Not compared side by side.
+Ferris IDEA is slower with kotlin-debug-adapter and says so. Not compared side by side.

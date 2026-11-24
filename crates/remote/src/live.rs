@@ -15,7 +15,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, Weak};
 use std::time::{Duration, Instant};
 
-use idecraft_session::{
+use ferris_idea_session::{
     ClientSession, Connection, ErrorCode, Op, Reconnected, Recovery, RecoveryCopy, RpcError, TextOp,
 };
 use serde::Serialize;
@@ -256,7 +256,15 @@ struct Shared {
 struct WindowState {
     parts: std::collections::BTreeMap<String, Value>,
     root: Option<std::path::PathBuf>,
+    /// Requests of agents to the window (`room_follow`, `SPEC-0323` v5 behaviour 36), oldest
+    /// first, and the window's answers by request number.
+    asks: std::collections::VecDeque<(u64, String, Value)>,
+    answers: HashMap<u64, Value>,
+    next_ask: u64,
 }
+
+/// Unanswered requests to a window kept at most: a window that never looks drops the oldest.
+const WINDOW_ASKS_KEPT: usize = 64;
 
 fn lock<T: ?Sized>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|e| e.into_inner())
@@ -273,7 +281,7 @@ pub struct DocSync {
     pub modified: bool,
     /// The last revision of the backend then.
     pub base_revision: u64,
-    /// The replica's [`idecraft_session::RemoteDoc::stamp`] then.
+    /// The replica's [`ferris_idea_session::RemoteDoc::stamp`] then.
     pub stamp: u64,
     /// Hash of the host file at load or last save then.
     pub base_hash: String,
@@ -292,7 +300,7 @@ pub struct DocState {
     pub save_requested: bool,
     /// The backend's revision the window knows.
     pub revision: u64,
-    /// The replica's [`idecraft_session::RemoteDoc::stamp`].
+    /// The replica's [`ferris_idea_session::RemoteDoc::stamp`].
     pub stamp: u64,
 }
 
@@ -569,6 +577,43 @@ impl LiveProject {
         lock(&self.0.window).parts.insert(kind.to_owned(), value);
     }
 
+    /// What the window last published of `kind` (see [`LiveProject::set_window_part`]).
+    pub fn window_part(&self, kind: &str) -> Option<Value> {
+        lock(&self.0.window).parts.get(kind).cloned()
+    }
+
+    /// Hands the window a request of an agent (`kind` names what it asks, `SPEC-0323` v5
+    /// behaviour 36); the window answers on its next look. Returns the request's number.
+    pub fn ask_window(&self, kind: &str, value: Value) -> u64 {
+        let mut w = lock(&self.0.window);
+        w.next_ask += 1;
+        let id = w.next_ask;
+        w.asks.push_back((id, kind.to_owned(), value));
+        while w.asks.len() > WINDOW_ASKS_KEPT {
+            w.asks.pop_front();
+        }
+        id
+    }
+
+    /// The requests of agents since the window last looked, oldest first.
+    pub fn take_window_asks(&self) -> Vec<(u64, String, Value)> {
+        lock(&self.0.window).asks.drain(..).collect()
+    }
+
+    /// The window's answer to request `id`.
+    pub fn answer_window_ask(&self, id: u64, answer: Value) {
+        let mut w = lock(&self.0.window);
+        w.answers.insert(id, answer);
+        // Answers nobody fetches do not pile up.
+        let oldest = id.saturating_sub(WINDOW_ASKS_KEPT as u64);
+        w.answers.retain(|k, _| *k > oldest);
+    }
+
+    /// The window's answer to request `id` once it is there; taken only once.
+    pub fn take_window_answer(&self, id: u64) -> Option<Value> {
+        lock(&self.0.window).answers.remove(&id)
+    }
+
     /// The folder of this machine the window's tool windows of this project are registered under
     /// (its stand-in folder), once a window shows it.
     pub fn window_root(&self) -> Option<std::path::PathBuf> {
@@ -741,7 +786,7 @@ impl LiveProject {
                             let op = TextOp::diff(&t, &c.text);
                             match s.edit(&c.path, &op.to_ops()) {
                                 Err(e) => Restored::Failed(e.message),
-                                Ok(()) if idecraft_session::ot::str_hash(&t) == c.base_hash => {
+                                Ok(()) if ferris_idea_session::ot::str_hash(&t) == c.base_hash => {
                                     Restored::Followed
                                 }
                                 Ok(()) => Restored::HostChanged,
@@ -1070,7 +1115,8 @@ mod tests {
 
     /// A project open in a window whose supervisor never runs by itself (the test plays it).
     fn idle_project(tag: &str) -> (LiveProject, std::path::PathBuf) {
-        let dir = std::env::temp_dir().join(format!("idecraft-close-{tag}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("ferris-idea-close-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("project")).unwrap();
         std::fs::write(dir.join("project/a.txt"), "a\n").unwrap();

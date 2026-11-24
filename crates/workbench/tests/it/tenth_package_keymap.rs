@@ -8,14 +8,14 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
+use ferris_idea_languages::insight::CompletionItem;
+use ferris_idea_workbench::WorkbenchView;
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_languages::insight::CompletionItem;
-use idecraft_workbench::WorkbenchView;
 
 type Bench = Entity<WorkbenchView>;
 
 fn workspace(tag: &str, files: &[(&str, &str)]) -> PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-tenth-{tag}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-tenth-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     for (name, text) in files {
         let path = root.join(name);
@@ -127,7 +127,7 @@ fn insert_live_template_lists_the_servers_templates(cx: &mut TestAppContext) {
         let _ = std::fs::remove_dir_all(&root);
         return;
     }
-    idecraft_core::trust::trust_for_process(&root);
+    ferris_idea_core::trust::trust_for_process(&root);
     open(&bench, cx, &root.join("src/main.rs"));
     keys(cx, "cmd-down");
     keys(cx, "down down");

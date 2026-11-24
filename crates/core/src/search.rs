@@ -368,7 +368,7 @@ pub fn search_candidates(
 
 /// Why a replacement must not change `path` (relative to the project folder); `None` when it may
 /// (`SPEC-0029` v2 behaviour 9). A file that is not the project's own is changed only with
-/// `include_non_project`; version control data, IDECraft's own data, files behind a symbolic link
+/// `include_non_project`; version control data, Ferris IDEA's own data, files behind a symbolic link
 /// and files outside the project folder never.
 pub fn not_replaceable(own: &OwnSources, path: &Path, include_non_project: bool) -> Option<NotOwn> {
     let why = own.not_own(path)?;

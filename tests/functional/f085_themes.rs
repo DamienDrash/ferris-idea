@@ -20,8 +20,8 @@ fn bundled_themes_are_listed_chosen_and_unknown_names_refused() {
         .map(|t| text(&t["name"]))
         .collect();
     for n in [
-        "IDECraft Dark",
-        "IDECraft Light",
+        "Ferris IDEA Dark",
+        "Ferris IDEA Light",
         "Islands Dark",
         "Islands Light",
         "Dark",
@@ -30,7 +30,7 @@ fn bundled_themes_are_listed_chosen_and_unknown_names_refused() {
         assert!(names.contains(&n.to_owned()), "{r}");
     }
     // A new install draws with the brand theme (SPEC-0060 v6).
-    assert_eq!(r["chosen"], "IDECraft Dark", "{r}");
+    assert_eq!(r["chosen"], "Ferris IDEA Dark", "{r}");
     let set = ide.ok("themes", json!({"set": "Light"}));
     assert_eq!(set["chosen"], "Light", "{set}");
     assert_eq!(ide.ok("themes", json!({}))["chosen"], "Light");

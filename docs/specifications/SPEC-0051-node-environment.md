@@ -35,7 +35,7 @@ Know which Node.js and package manager a project uses, whether the installed pac
    name; optional and peer dependencies may be absent. Values that are not ranges (tags, `workspace:`,
    `file:`, git, URLs, `npm:` aliases) are listed as not checked. [STD]
 7. Test framework from the declared dependencies: Vitest (test configuration with JSON report file
-   `.idecraft/vitest.json`), Jest (test configuration `jest --ci --json`, report `.idecraft/jest.json`), Mocha (TAP report), otherwise the built-in
+   `.ferris-idea/vitest.json`), Jest (test configuration `jest --ci --json`, report `.ferris-idea/jest.json`), Mocha (TAP report), otherwise the built-in
    `node:test` runner of the selected runtime with its TAP reporter. `npx` next to the selected node is used
    when present. Nothing is written automatically. [GEN]
 8. MCP tool `node_environment` (optional `runtime`). [ADR-0008]

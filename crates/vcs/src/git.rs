@@ -1375,7 +1375,7 @@ impl Repo {
         let workdir = self
             .workdir()
             .ok_or_else(|| GitError::Rejected("the repository has no working tree".into()))?;
-        let work = self.git_dir().join("idecraft");
+        let work = self.git_dir().join("ferris-idea");
         std::fs::create_dir_all(&work).map_err(git)?;
         let index = work.join(format!("commit-index-{}", std::process::id()));
         struct Remove<'a>(&'a Path);
@@ -2187,7 +2187,7 @@ fn fallback_identity(repo: &mut gix::Repository) {
     use gix::config::tree::gitoxide;
     let user = std::env::var("USER")
         .or_else(|_| std::env::var("USERNAME"))
-        .unwrap_or_else(|_| "idecraft".to_owned());
+        .unwrap_or_else(|_| "ferris-idea".to_owned());
     let email = format!("{user}@{}", host_name());
     let mut config = repo.config_snapshot_mut();
     for (key, value) in [
@@ -2216,13 +2216,14 @@ fn host_name() -> &'static str {
     })
 }
 
-/// The local history the IDE keeps below `.idecraft/history` is its own state, in any folder of
+/// The local history the IDE keeps below `.ferris-idea/history` is its own state, in any folder of
 /// the repository: never offered for committing (`SPEC-0032` v2). A file someone added to Git on
 /// purpose stays listed.
 fn is_untracked_ide_state(s: &FileStatus) -> bool {
     s.staged.is_none()
         && s.unstaged == Some(ChangeKind::Added)
-        && (s.path.starts_with(".idecraft/history/") || s.path.contains("/.idecraft/history/"))
+        && (s.path.starts_with(".ferris-idea/history/")
+            || s.path.contains("/.ferris-idea/history/"))
 }
 
 #[cfg(test)]
@@ -2234,13 +2235,13 @@ mod tests {
             staged: None,
             unstaged: Some(ChangeKind::Added),
         };
-        assert!(is_untracked_ide_state(&added(".idecraft/history/ab/1")));
-        assert!(is_untracked_ide_state(&added("sub/.idecraft/history/1")));
-        assert!(!is_untracked_ide_state(&added(".idecraft/run.toml")));
-        assert!(!is_untracked_ide_state(&added("my.idecraft/history/1")));
+        assert!(is_untracked_ide_state(&added(".ferris-idea/history/ab/1")));
+        assert!(is_untracked_ide_state(&added("sub/.ferris-idea/history/1")));
+        assert!(!is_untracked_ide_state(&added(".ferris-idea/run.toml")));
+        assert!(!is_untracked_ide_state(&added("my.ferris-idea/history/1")));
         let tracked = FileStatus {
             unstaged: Some(ChangeKind::Modified),
-            ..added(".idecraft/history/ab/1")
+            ..added(".ferris-idea/history/ab/1")
         };
         assert!(!is_untracked_ide_state(&tracked));
     }
@@ -2251,7 +2252,7 @@ mod tests {
     /// had in HEAD; a rename outside the index is a deletion and an untracked file.
     #[test]
     fn status_names_the_old_path_of_a_staged_rename() {
-        let dir = std::env::temp_dir().join(format!("idecraft-renames-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-renames-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("src")).unwrap();
         let git = |args: &[&str]| {
@@ -2311,7 +2312,7 @@ mod tests {
 
     #[test]
     fn branches_work_without_a_configured_identity() {
-        let dir = std::env::temp_dir().join(format!("idecraft-identity-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-identity-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let git = |args: &[&str]| {

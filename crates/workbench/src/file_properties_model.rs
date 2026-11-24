@@ -1,8 +1,8 @@
 //! What the file property actions offer, ask and say (`SPEC-0336`), without a window: the rows
 //! of the File Encoding list, the questions before a reload or a conversion, and the status bar
-//! lines. The properties themselves are in [`idecraft_core::file_properties`].
+//! lines. The properties themselves are in [`ferris_idea_core::file_properties`].
 
-use idecraft_core::file_properties::{
+use ferris_idea_core::file_properties::{
     Charset, FileEncoding, LineSeparator, Refusal, Reload, Safety, Unrepresentable,
 };
 
@@ -254,7 +254,7 @@ pub fn read_only_summary(results: &[ReadOnlyResult], folders: &[String]) -> Stri
 #[cfg(test)]
 mod tests {
     use super::*;
-    use idecraft_core::file_properties::{convert_safety, reload_safety};
+    use ferris_idea_core::file_properties::{convert_safety, reload_safety};
 
     /// SPEC-0336 AK-8: the list has the byte order mark action that applies and every encoding,
     /// the current one selected.

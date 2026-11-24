@@ -24,22 +24,22 @@ else that is looked up on the `PATH` or configured through environment variables
    takes (7) in its own environment. This happens once per process, before any thread exists, so every
    later tool lookup and every child process — language servers, run and debug, terminals, build tools,
    installers and the MCP tool calls the window serves — uses it without any change of their own. [GEN, STD]
-2. **When.** Only for a command that opens the IDE window (`idecraft launch`, the start from the app
-   bundle, `idecraft ui` without `--selftest`, and `idecraft open <exchange file>`, which starts a window
+2. **When.** Only for a command that opens the IDE window (`ferris-idea launch`, the start from the app
+   bundle, `ferris-idea ui` without `--selftest`, and `ferris-idea open <exchange file>`, which starts a window
    when none runs), and only when the process does not look as if a shell started it:
    - neither `SHLVL` is set nor `TERM` is set to something other than `dumb`, or
    - `PATH` is missing, empty or exactly the one macOS gives programs it starts itself.
 
    Every other command (`call`, `mcp`, `serve`, `quit`, `drive`, `trust`, `--version`, the self-test, …) and
    every test keeps the environment it was started with. [GEN, STD]
-3. **Switch.** The environment variable `IDECRAFT_SHELL_ENV` overrides behaviour 2: `off` never asks the
+3. **Switch.** The environment variable `FERRIS_IDEA_SHELL_ENV` overrides behaviour 2: `off` never asks the
    shell and changes nothing (also no fallback); `force` asks it for every command and every kind of
    start. Other values count as not set. The case of the value does not matter. [GEN]
 4. **Which shell, how.** The shell is `$SHELL`, else the shell of the user's account in the account
    database, each only when it is an absolute path to an existing file; else `/bin/zsh` on macOS and
    `/bin/sh` elsewhere. It is started as an interactive login shell (`-l -i -c <command>`; `csh` and `tcsh`
    accept the login flag only alone and are started with `-i -c`) with
-   - the process's environment plus `IDECRAFT_RESOLVING_ENVIRONMENT=1`, so start-up files can skip slow or
+   - the process's environment plus `FERRIS_IDEA_RESOLVING_ENVIRONMENT=1`, so start-up files can skip slow or
      interactive parts,
    - no input (the null device), so a question in a start-up file cannot wait for an answer; its error
      output is discarded,
@@ -56,16 +56,16 @@ else that is looked up on the `PATH` or configured through environment variables
    marker arrived, also when a background program of a start-up file keeps the output open. The shell has
    5 seconds. When the time is over, when it ends without both markers, when it prints more than 8 MiB or
    cannot be started, there is no answer (behaviour 8). In every case the shell's process group is killed
-   and the shell reaped before IDECraft goes on; after an answer the shell first gets a quarter of a
+   and the shell reaped before Ferris IDEA goes on; after an answer the shell first gets a quarter of a
    second to end by itself. [GEN, STD]
 6. **Nothing is kept.** The answer is held in memory only until the variables are set. It is not written
    to disk, not logged, not shown and not sent anywhere. [rule 12, ADR-0007]
 7. **What is taken.** Every variable of the answer is set in the process with the shell's value, with
    these exceptions, which are never taken:
-   - `DYLD_*` and `LD_*`: they would change which code IDECraft itself loads;
+   - `DYLD_*` and `LD_*`: they would change which code Ferris IDEA itself loads;
    - `BASH_FUNC_*`: functions exported by bash, code rather than settings;
    - what describes the asked shell and not the user's setup: `_`, `PWD`, `OLDPWD`, `SHLVL`, `TERM`,
-     `TERMCAP`, `COLUMNS`, `LINES`, and `IDECRAFT_RESOLVING_ENVIRONMENT`;
+     `TERMCAP`, `COLUMNS`, `LINES`, and `FERRIS_IDEA_RESOLVING_ENVIRONMENT`;
    - entries without a name, or whose name is not text.
 
    Variables the process has and the shell does not set stay as they are; nothing is removed. The whole
@@ -80,7 +80,7 @@ else that is looked up on the `PATH` or configured through environment variables
 9. **Visible outcome, without values.** The outcome has a source — `inherited` (as started), `login_shell`
    or `fallback` —, the time asking took, and a note in words that names the shell's program name and, for
    the fallback, the reason and the folders added. No value of a variable appears in any of it.
-   - After asking the shell, one line is appended to `environment.log` in the IDECraft log folder
+   - After asking the shell, one line is appended to `environment.log` in the Ferris IDEA log folder
      (SPEC-0270 behaviour 3): time, source, duration in milliseconds, the number of `PATH` entries and the
      note.
    - For the fallback, the note is also written to the error output, and the first window shows it in
@@ -100,7 +100,7 @@ else that is looked up on the `PATH` or configured through environment variables
   at NUL, values keep line breaks and `=`, entries without a name or without `=` are dropped, and an
   answer without the second marker is none (unit test).
 - **AK-3** The filter: `DYLD_*`, `LD_*`, `BASH_FUNC_*`, the shell-state names and
-  `IDECRAFT_RESOLVING_ENVIRONMENT` are not taken; other names are; variables only the process has are
+  `FERRIS_IDEA_RESOLVING_ENVIRONMENT` are not taken; other names are; variables only the process has are
   neither set again nor removed (unit tests).
 - **AK-4** The fallback appends only the tool folders that exist, each once, after the existing entries,
   and starts from the system's default when there is no `PATH` (unit test).
@@ -108,7 +108,7 @@ else that is looked up on the `PATH` or configured through environment variables
   folder at the front of `PATH`: the source is `login_shell`, a program in that folder is found on the
   resulting `PATH`, a value with a line break arrives whole, no loader variable is set, the shell was
   started with `-l -i -c`, in the home folder, without input and with
-  `IDECRAFT_RESOLVING_ENVIRONMENT=1`, and the note holds no value (integration test).
+  `FERRIS_IDEA_RESOLVING_ENVIRONMENT=1`, and the note holds no value (integration test).
 - **AK-6** With a shell that sleeps past the time limit: the source is `fallback`, only `PATH` changes
   (the existing tool folder is appended), the note names the reason and the folder, and the shell and
   its child process are gone (integration test).
@@ -117,12 +117,12 @@ else that is looked up on the `PATH` or configured through environment variables
 - **AK-8** The shell is not started for a process started from a shell, with `off`, or without a window;
   with `force` it is (integration test).
 - **AK-9** `environment_source` returns exactly `source`, `duration_ms`, `note` and `path` (protocol test).
-- **AK-10** Through the binary: `idecraft call … environment_source` with `IDECRAFT_SHELL_ENV=force`, a
+- **AK-10** Through the binary: `ferris-idea call … environment_source` with `FERRIS_IDEA_SHELL_ENV=force`, a
   bare `PATH` and a stub shell reports `login_shell` and the stub's folder on `path`, and a tool call of
   the same process finds a program in that folder; the log line and all output hold no value the stub
   exported; without the switch the same command keeps its environment and does not start the shell
   (binary tests). The command lines that open a window are told from the others (unit test).
-- **AK-11** Hand test: start `IDECraft.app` from Finder with a Python project; the status bar names a
+- **AK-11** Hand test: start `FerrisIDEA.app` from Finder with a Python project; the status bar names a
   running Python language server, and `environment_source` over the window's MCP endpoint says
   `login_shell`.
 
@@ -130,7 +130,7 @@ else that is looked up on the `PATH` or configured through environment variables
 Refreshing the environment while the window runs (a change in a start-up file needs a restart); a
 settings page for the shell or the time limit; per-project environments (`.envrc`, `.env` files, version
 managers that switch by folder — the shell is asked in the home folder); the environment of
-`idecraft serve` on a remote host (SPEC-0158); shells that do not accept `-l -i -c` or have no `printf`
+`ferris-idea serve` on a remote host (SPEC-0158); shells that do not accept `-l -i -c` or have no `printf`
 (they give the fallback).
 
 ## Known deviations from the reference

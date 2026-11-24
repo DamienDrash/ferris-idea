@@ -1,14 +1,14 @@
 //! SPEC-0310 AK-5, SPEC-0311 AK-6, SPEC-0312 AK-6 against real servers. Start them with
 //! `nosql.sh start` of the reference environment and export what `nosql.sh env` prints:
-//! `IDECRAFT_TEST_MONGO` / `IDECRAFT_TEST_REDIS` (URLs without password) and
-//! `IDECRAFT_TEST_MONGO_PASSWORD_FILE` / `IDECRAFT_TEST_REDIS_PASSWORD_FILE`. Without the URLs these
+//! `FERRIS_IDEA_TEST_MONGO` / `FERRIS_IDEA_TEST_REDIS` (URLs without password) and
+//! `FERRIS_IDEA_TEST_MONGO_PASSWORD_FILE` / `FERRIS_IDEA_TEST_REDIS_PASSWORD_FILE`. Without the URLs these
 //! tests pass without doing anything.
 
 use std::collections::BTreeSet;
 
-use idecraft_database::{Permission, Secret, default_permissions};
-use idecraft_nosql::bson::Bson;
-use idecraft_nosql::{
+use ferris_idea_database::{Permission, Secret, default_permissions};
+use ferris_idea_nosql::bson::Bson;
+use ferris_idea_nosql::{
     ExportFormat, MongoReply, MongoSession, RedisEdit, RedisSession, Reply, StoreError,
     StoreProfile, ValueData, diff_documents, export_documents, plan_update,
 };
@@ -20,28 +20,28 @@ fn password(var: &str) -> Option<Secret> {
 }
 
 async fn mongo(read_only: bool) -> Option<MongoSession> {
-    let url = std::env::var("IDECRAFT_TEST_MONGO").ok()?;
+    let url = ferris_idea_core::product_var("FERRIS_IDEA_TEST_MONGO").ok()?;
     let mut p = StoreProfile::from_url("live mongo", &url).unwrap();
     p.read_only = read_only;
     Some(
-        MongoSession::connect(&p, password("IDECRAFT_TEST_MONGO_PASSWORD_FILE"))
+        MongoSession::connect(&p, password("FERRIS_IDEA_TEST_MONGO_PASSWORD_FILE"))
             .await
             .unwrap(),
     )
 }
 
 async fn redis(read_only: bool) -> Option<RedisSession> {
-    let url = std::env::var("IDECRAFT_TEST_REDIS").ok()?;
+    let url = ferris_idea_core::product_var("FERRIS_IDEA_TEST_REDIS").ok()?;
     let mut p = StoreProfile::from_url("live redis", &url).unwrap();
     p.read_only = read_only;
     Some(
-        RedisSession::connect(&p, password("IDECRAFT_TEST_REDIS_PASSWORD_FILE"))
+        RedisSession::connect(&p, password("FERRIS_IDEA_TEST_REDIS_PASSWORD_FILE"))
             .await
             .unwrap(),
     )
 }
 
-fn docs(reply: MongoReply) -> (Vec<idecraft_nosql::bson::Document>, bool) {
+fn docs(reply: MongoReply) -> (Vec<ferris_idea_nosql::bson::Document>, bool) {
     match reply {
         MongoReply::Documents {
             documents, more, ..
@@ -55,7 +55,7 @@ async fn mongo_tree_crud_paging_and_edit_conflict() {
     let Some(mut s) = mongo(false).await else {
         return;
     };
-    let db = format!("idecraft_live_{}", std::process::id());
+    let db = format!("ferris_idea_live_{}", std::process::id());
     s.run(&format!("use {db}"), 0, 50, false, None)
         .await
         .unwrap();
@@ -106,18 +106,18 @@ async fn mongo_tree_crud_paging_and_edit_conflict() {
     );
 
     // The browser tree (SPEC-0310 behaviour 5).
-    let level = idecraft_nosql::browse_mongo(&s, &[]).await.unwrap();
+    let level = ferris_idea_nosql::browse_mongo(&s, &[]).await.unwrap();
     assert!(level.iter().any(|i| i.label == db && i.kind == "database"));
-    let level = idecraft_nosql::browse_mongo(&s, std::slice::from_ref(&db))
+    let level = ferris_idea_nosql::browse_mongo(&s, std::slice::from_ref(&db))
         .await
         .unwrap();
     assert_eq!(level[0].label, "items");
     assert_eq!(level[0].detail, "120 documents");
     let path = vec![db.clone(), "items".to_owned(), "indexes".to_owned()];
-    let level = idecraft_nosql::browse_mongo(&s, &path).await.unwrap();
+    let level = ferris_idea_nosql::browse_mongo(&s, &path).await.unwrap();
     assert!(level.iter().any(|i| i.label == "by_price"), "{level:?}");
     let path = vec![db.clone(), "items".to_owned(), "fields".to_owned()];
-    let level = idecraft_nosql::browse_mongo(&s, &path).await.unwrap();
+    let level = ferris_idea_nosql::browse_mongo(&s, &path).await.unwrap();
     assert!(
         level
             .iter()
@@ -288,7 +288,7 @@ async fn redis_types_ttl_pages_and_rights() {
     let Some(mut s) = redis(false).await else {
         return;
     };
-    let p = format!("idecraft:live:{}", std::process::id());
+    let p = format!("ferris-idea:live:{}", std::process::id());
     let script = format!(
         "SET {p}:s \"hello world\"\nSET {p}:j '{{\"a\": 1}}'\nSET {p}:bin \"\\xff\\x00\"\n\
          HSET {p}:h f1 v1 f2 v2\nRPUSH {p}:l a b c\nSADD {p}:set x y\nZADD {p}:z 1 one 2.5 two\n\
@@ -312,7 +312,7 @@ async fn redis_types_ttl_pages_and_rights() {
     let v = s.read(format!("{p}:bin").as_bytes()).await.unwrap();
     assert_eq!(v.data, ValueData::String(vec![0xff, 0x00]));
     assert_eq!(
-        idecraft_nosql::bytes_display(&[0xff, 0x00]),
+        ferris_idea_nosql::bytes_display(&[0xff, 0x00]),
         "0xff00 (2 bytes)"
     );
     let v = s.read(format!("{p}:h").as_bytes()).await.unwrap();
@@ -416,7 +416,7 @@ async fn redis_types_ttl_pages_and_rights() {
 
     // The browser tree groups keys by `:` and pages with a cursor.
     let db = s.db().to_string();
-    let level = idecraft_nosql::browse_redis(&mut s, &[db.clone(), format!("{p}:")], 0)
+    let level = ferris_idea_nosql::browse_redis(&mut s, &[db.clone(), format!("{p}:")], 0)
         .await
         .unwrap();
     assert!(
@@ -436,7 +436,7 @@ async fn redis_types_ttl_pages_and_rights() {
         "keys show their type: {:?}",
         level.items
     );
-    let level = idecraft_nosql::browse_redis(&mut s, &[db.clone(), format!("{p}:page:")], 0)
+    let level = ferris_idea_nosql::browse_redis(&mut s, &[db.clone(), format!("{p}:page:")], 0)
         .await
         .unwrap();
     assert!(level.cursor != 0, "1200 keys need more than one page");
@@ -500,19 +500,27 @@ async fn redis_read_only_refuses_writes() {
 #[tokio::test]
 async fn test_connection_names_the_server_version() {
     for (var, pw) in [
-        ("IDECRAFT_TEST_MONGO", "IDECRAFT_TEST_MONGO_PASSWORD_FILE"),
-        ("IDECRAFT_TEST_REDIS", "IDECRAFT_TEST_REDIS_PASSWORD_FILE"),
+        (
+            "FERRIS_IDEA_TEST_MONGO",
+            "FERRIS_IDEA_TEST_MONGO_PASSWORD_FILE",
+        ),
+        (
+            "FERRIS_IDEA_TEST_REDIS",
+            "FERRIS_IDEA_TEST_REDIS_PASSWORD_FILE",
+        ),
     ] {
         let Ok(url) = std::env::var(var) else {
             continue;
         };
         let p = StoreProfile::from_url("live", &url).unwrap();
-        let note = idecraft_nosql::test_store(&p, password(pw)).await.unwrap();
+        let note = ferris_idea_nosql::test_store(&p, password(pw))
+            .await
+            .unwrap();
         assert!(
             note.starts_with("Connected: ") && note.contains("8."),
             "{note}"
         );
-        let err = idecraft_nosql::test_store(&p, Some(Secret::new("wrong")))
+        let err = ferris_idea_nosql::test_store(&p, Some(Secret::new("wrong")))
             .await
             .unwrap_err();
         assert!(matches!(err, StoreError::Connect { .. }), "{err}");

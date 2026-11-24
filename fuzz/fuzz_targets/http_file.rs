@@ -1,3 +1,3 @@
 #![no_main]
 
-libfuzzer_sys::fuzz_target!(|data: &[u8]| idecraft_hardening::targets::http_file(data));
+libfuzzer_sys::fuzz_target!(|data: &[u8]| ferris_idea_hardening::targets::http_file(data));

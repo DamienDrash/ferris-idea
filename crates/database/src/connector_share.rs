@@ -1,7 +1,7 @@
 //! Importing, exporting and removing connector definitions (`SPEC-0302`). A definition is shown
 //! and validated before anything is stored; stored files keep the received text unchanged, and
 //! `imported.json` records where each imported one came from. Exports use the exchange layout of
-//! ADR-0021 (`[idecraft]` envelope, `.idcconnector`).
+//! ADR-0021 (`[ferris-idea]` envelope, `.idcconnector`).
 
 use std::path::{Path, PathBuf};
 
@@ -194,8 +194,9 @@ fn read_record(path: &Path) -> serde_json::Map<String, serde_json::Value> {
 /// otherwise the envelope first, then `[connector]` without `status` and `tested` (a shared copy
 /// never claims Supported) and the tables of the definition.
 pub fn export(c: &Connector) -> String {
-    let table: toml::Table = toml::from_str(&c.source).unwrap_or_default();
-    if c.origin != Origin::BuiltIn && table.contains_key("idecraft") {
+    let mut table: toml::Table = toml::from_str(&c.source).unwrap_or_default();
+    ferris_idea_core::format::adopt_former_envelope(&mut table);
+    if c.origin != Origin::BuiltIn && table.contains_key("ferris-idea") {
         return c.source.clone();
     }
     // Written by hand so the envelope keys keep the order SPEC-0303 shows.
@@ -224,15 +225,15 @@ pub fn export(c: &Connector) -> String {
     }
     let part = |t: &toml::Table| toml::to_string(t).unwrap_or_default();
     format!(
-        "# IDECraft database connector (SPEC-0300); import it with \"Import database system…\".\n\
-         [idecraft]\n{envelope}\n[connector]\n{}\n{}",
+        "# Ferris IDEA database connector (SPEC-0300); import it with \"Import database system…\".\n\
+         [ferris-idea]\n{envelope}\n[connector]\n{}\n{}",
         part(&body),
         toml::to_string_pretty(&rest).unwrap_or_default()
     )
 }
 
 /// Where "Share…" opens a prefilled issue (GitHub Issues, the project owner 2026-11-05; behaviour 4).
-pub const SHARE_URL: &str = "https://github.com/DamienDrash/idecraft/issues/new?template=connector-definition.md&title={title}&body={body}";
+pub const SHARE_URL: &str = "https://github.com/DamienDrash/ferris-idea/issues/new?template=connector-definition.md&title={title}&body={body}";
 
 /// The prefilled issue for sharing `c` and whether its body was cut (behaviour 4).
 pub fn share_url(c: &Connector) -> (String, bool) {
@@ -264,7 +265,8 @@ pub fn export_file_name(c: &Connector) -> String {
 pub fn export_profile(profile: &ConnectionProfile, include_user: bool) -> (String, Vec<String>) {
     #[derive(Serialize)]
     struct File<'a> {
-        idecraft: Envelope,
+        #[serde(rename = "ferris-idea")]
+        ferris_idea: Envelope,
         connection: [&'a ConnectionProfile; 1],
     }
     #[derive(Serialize)]
@@ -289,7 +291,7 @@ pub fn export_profile(profile: &ConnectionProfile, include_user: bool) -> (Strin
         left_out.push("path (absolute paths are machine-bound)".to_owned());
     }
     let text = toml::to_string_pretty(&File {
-        idecraft: Envelope {
+        ferris_idea: Envelope {
             kind: "sources",
             format: 1,
         },
@@ -324,7 +326,7 @@ mod tests {
 
     fn temp(name: &str) -> PathBuf {
         let dir =
-            std::env::temp_dir().join(format!("idecraft-share-{name}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("ferris-idea-share-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         dir
     }
@@ -404,7 +406,7 @@ mod tests {
         let catalogue = Catalogue::built_in();
         let pg = export(catalogue.get("postgresql").unwrap());
         assert!(
-            pg.contains("[idecraft]\nkind = \"connector\"\nformat = 1\nid = \"postgresql\""),
+            pg.contains("[ferris-idea]\nkind = \"connector\"\nformat = 1\nid = \"postgresql\""),
             "{pg}"
         );
         assert!(!pg.contains("status") && !pg.contains("tested"), "{pg}");
@@ -449,10 +451,10 @@ mod tests {
         let (url, cut) = share_url(catalogue.get("tidb").unwrap());
         assert!(!cut);
         assert!(url.starts_with(
-            "https://github.com/DamienDrash/idecraft/issues/new?template=connector-definition.md&title=%5Bconnector%5D%20TiDB&body="
+            "https://github.com/DamienDrash/ferris-idea/issues/new?template=connector-definition.md&title=%5Bconnector%5D%20TiDB&body="
         ));
         assert!(
-            url.contains("%5Bidecraft%5D"),
+            url.contains("%5Bferris-idea%5D"),
             "the definition is in the body"
         );
     }
@@ -461,13 +463,13 @@ mod tests {
     fn profile_export_has_no_secrets() {
         let mut p = ConnectionProfile::from_url("Shop", "tidb://alice@h:4000/shop").unwrap();
         p.secret = Some(crate::SecretRef {
-            service: "idecraft".into(),
+            service: "ferris-idea".into(),
             account: "connection:shop".into(),
         });
         p.ai = [crate::Permission::ModifyData].into_iter().collect();
         let (text, left_out) = export_profile(&p, false);
         assert!(
-            text.starts_with("[idecraft]\nkind = \"sources\"\nformat = 1\n"),
+            text.starts_with("[ferris-idea]\nkind = \"sources\"\nformat = 1\n"),
             "{text}"
         );
         assert!(

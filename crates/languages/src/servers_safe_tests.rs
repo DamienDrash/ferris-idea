@@ -14,7 +14,7 @@ fn program(dir: &Path, name: &str) -> PathBuf {
 /// of enum members, for both languages, and for no kind beyond those of behaviours 1 and 2b.
 #[test]
 fn typescript_hint_settings() {
-    let base = std::env::temp_dir().join(format!("idecraft-ts-hints-{}", std::process::id()));
+    let base = std::env::temp_dir().join(format!("ferris-idea-ts-hints-{}", std::process::id()));
     let bin = base.join("bin");
     let root = base.join("project");
     std::fs::create_dir_all(&bin).unwrap();
@@ -47,7 +47,7 @@ fn typescript_hint_settings() {
 
 #[test]
 fn servers_in_safe_mode() {
-    let base = std::env::temp_dir().join(format!("idecraft-safe-srv-{}", std::process::id()));
+    let base = std::env::temp_dir().join(format!("ferris-idea-safe-srv-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
     let (bin, root) = (base.join("bin"), base.join("project"));
     std::fs::create_dir_all(&bin).unwrap();
@@ -58,16 +58,18 @@ fn servers_in_safe_mode() {
     program(&bin, "rust-analyzer");
     let full = resolve_for_mode(&path, LanguageId::Rust, &root, false).unwrap();
     assert!(!full.safe);
-    assert_eq!(
-        full.initialization_options(std::path::Path::new("/nonexistent")),
-        serde_json::Value::Null
-    );
+    // SPEC-0292 v8 behaviour 11: reference lenses in both modes, nothing of safe mode in full.
+    let o = full.initialization_options(std::path::Path::new("/nonexistent"));
+    assert_eq!(o["lens"]["references"]["adt"]["enable"], true);
+    assert!(o["procMacro"].is_null() && o["cargo"].is_null(), "{o}");
+    assert_eq!(full.settings(&root)["rust-analyzer"], o);
     let safe = resolve_for_mode(&path, LanguageId::Rust, &root, true).unwrap();
     assert!(safe.safe);
     let o = safe.initialization_options(std::path::Path::new("/nonexistent"));
     assert_eq!(o["cargo"]["buildScripts"]["enable"], false);
     assert_eq!(o["procMacro"]["enable"], false);
     assert_eq!(o["checkOnSave"], false);
+    assert_eq!(o["lens"]["references"]["method"]["enable"], true);
     assert_eq!(safe.settings(&root)["rust-analyzer"], o);
     assert_eq!(serde_json::to_value(&safe).unwrap()["safe_mode"], true);
 
@@ -153,7 +155,7 @@ fn servers_in_safe_mode() {
         "GEM\n  remote: https://rubygems.org/\n  specs:\n    ruby-lsp (0.20.0)\n\nBUNDLED WITH\n   2.5.22\n",
     )
     .unwrap();
-    let search = idecraft_core::RubySearch {
+    let search = ferris_idea_core::RubySearch {
         root: root.clone(),
         path_var: Some(std::env::join_paths([&rb]).unwrap()),
         ..Default::default()

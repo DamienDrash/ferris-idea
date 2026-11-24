@@ -6,7 +6,7 @@
 //! resize.
 //!
 //! The workbench tells of every press on a control of the toolbar while the press is dispatched
-//! (`idecraft_workbench::title_bar`). The recognisers that wait for more than one click are then
+//! (`ferris_idea_workbench::title_bar`). The recognisers that wait for more than one click are then
 //! switched off and on again, which makes them forget the clicks they counted: the press on the
 //! control is never the first or the second click of the title bar's double click. A press
 //! beside the controls tells nothing, so a double click on the empty title bar zooms the window

@@ -8,19 +8,19 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
+use ferris_idea_languages::LanguageId;
+use ferris_idea_languages::file_types::{Associations, Choice, FILE};
+use ferris_idea_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
+use ferris_idea_workbench::{ChoiceView, EditorView, MenuPlace, WorkbenchView, semantics};
 use gpui::{
     Entity, EntityInputHandler, Modifiers, MouseButton, TestAppContext, VisualTestContext, px,
 };
-use idecraft_languages::LanguageId;
-use idecraft_languages::file_types::{Associations, Choice, FILE};
-use idecraft_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
-use idecraft_workbench::{ChoiceView, EditorView, MenuPlace, WorkbenchView, semantics};
 
 type Bench = Entity<WorkbenchView>;
 
 fn workspace(tag: &str, files: &[(&str, &str)]) -> PathBuf {
     let root = std::env::temp_dir().join(format!(
-        "idecraft-file-types-window-{tag}-{}",
+        "ferris-idea-file-types-window-{tag}-{}",
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&root);
@@ -35,13 +35,13 @@ fn workspace(tag: &str, files: &[(&str, &str)]) -> PathBuf {
 
 /// A window on `root` with settings of its own: the user's settings are never read or written.
 fn window(root: &Path, cx: &mut TestAppContext) -> (Bench, &'static mut VisualTestContext) {
-    idecraft_workbench::hit_targets::enable();
+    ferris_idea_workbench::hit_targets::enable();
     let settings = root.join(".test-settings");
     std::fs::create_dir_all(&settings).unwrap();
     cx.update(|cx| {
         cx.set_global(IdeSettingsFile(settings.join("settings.toml")));
         cx.set_global(ThemeFile(settings.join("theme")));
-        cx.set_global(CurrentIdeSettings(idecraft_core::IdeSettings::default()));
+        cx.set_global(CurrentIdeSettings(ferris_idea_core::IdeSettings::default()));
     });
     let at = root.to_path_buf();
     let window = cx.add_window(move |_, cx| WorkbenchView::new(&at, cx));
@@ -251,7 +251,7 @@ fn typed_text_reaches_the_file_type_list(cx: &mut TestAppContext) {
 /// SPEC-0004 v6 AK-9 (OBS-0052 G1): the icons of the Project tree and the tabs follow the
 /// detected language — a hashbang script is Python; an override gives the language's icon and
 /// the override mark at once; a pattern gives the icon without the mark; Revert brings the
-/// name's icon back.
+/// name's icon back (v11: the text icon for a text file whose name gives none).
 #[gpui::test]
 fn icons_follow_the_detected_language(cx: &mut TestAppContext) {
     let root = workspace(
@@ -272,7 +272,7 @@ fn icons_follow_the_detected_language(cx: &mut TestAppContext) {
     let page = root.join("page.tpl");
     let data = root.join("notes.data");
     assert_eq!(icon(&bench, cx, &script), ("fileTypes/python", false));
-    assert_eq!(icon(&bench, cx, &page), ("fileTypes/unknown", false));
+    assert_eq!(icon(&bench, cx, &page), ("fileTypes/text", false));
     open(&bench, cx, &page);
     find_action(&bench, cx, "override file type", "OverrideFileTypeAction");
     cx.simulate_input("html");
@@ -300,7 +300,60 @@ fn icons_follow_the_detected_language(cx: &mut TestAppContext) {
         "revert file type override",
         "ReverteOverrideFileTypeAction",
     );
-    assert_eq!(icon(&bench, cx, &page), ("fileTypes/unknown", false));
+    assert_eq!(icon(&bench, cx, &page), ("fileTypes/text", false));
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// SPEC-0004 v12 AK-21 (OBS-0090 L1–L3): files that open as plain text show the text icon in the
+/// tree and on their tab, a binary file the unknown icon; `.gitignore` and `.dockerignore` have
+/// the ignore icon;
+/// ⌘/ comments a Makefile's line with `# ` and an ignore file's with `#`, ⌘Z takes it back.
+#[gpui::test]
+fn plain_text_icons_and_comments_without_a_grammar(cx: &mut TestAppContext) {
+    let root = workspace(
+        "plain",
+        &[
+            ("data", "{\"a\": 1}\n"),
+            ("Makefile", "all:\n\techo hi\n"),
+            ("GNUmakefile", "all:\n"),
+            ("notes.data", "x\n"),
+            ("tools.cmake", "set(X 1)\n"),
+            (".gitignore", "*.log\n"),
+            (".dockerignore", "target\n"),
+        ],
+    );
+    std::fs::write(root.join("blob"), [0x7f, b'E', b'L', b'F', 0, 1, 2]).unwrap();
+    let (bench, cx) = window(&root, cx);
+    let icon = |bench: &Bench, cx: &mut VisualTestContext, name: &str| {
+        let path = root.join(name);
+        bench.read_with(cx, |b, cx| b.icon_of(&path, cx))
+    };
+    for name in [
+        "data",
+        "Makefile",
+        "GNUmakefile",
+        "notes.data",
+        "tools.cmake",
+    ] {
+        assert_eq!(icon(&bench, cx, name), "fileTypes/text", "{name}");
+    }
+    assert_eq!(icon(&bench, cx, "blob"), "fileTypes/unknown");
+    assert_eq!(icon(&bench, cx, ".dockerignore"), "ferris-idea/ignore");
+    assert_eq!(icon(&bench, cx, ".gitignore"), "ferris-idea/ignore");
+
+    let make = open(&bench, cx, &root.join("Makefile"));
+    keys(cx, "cmd-/");
+    assert_eq!(text(&make, cx), "# all:\n\techo hi\n");
+    keys(cx, "cmd-z");
+    assert_eq!(text(&make, cx), "all:\n\techo hi\n");
+    // The tab shows the text icon too.
+    assert_eq!(icon(&bench, cx, "Makefile"), "fileTypes/text");
+    let ignore = open(&bench, cx, &root.join(".gitignore"));
+    keys(cx, "cmd-/");
+    assert_eq!(text(&ignore, cx), "#*.log\n");
+    let docker = open(&bench, cx, &root.join(".dockerignore"));
+    keys(cx, "cmd-/");
+    assert_eq!(text(&docker, cx), "#target\n");
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -545,7 +598,7 @@ fn the_tree_selection_and_the_menus(cx: &mut TestAppContext) {
     assert_eq!(language(&editor, cx), None);
     // A secondary click on the tab of a.cfg: no override now, the type unknown.
     cx.update(|window, cx| window.draw(cx).clear());
-    let r = idecraft_workbench::hit_targets::get("tab-0").expect("the tab is drawn");
+    let r = ferris_idea_workbench::hit_targets::get("tab-0").expect("the tab is drawn");
     let at = gpui::point(px(r.x + r.w / 2.), px(r.y + r.h / 2.));
     cx.simulate_mouse_down(at, MouseButton::Right, Modifiers::none());
     cx.simulate_mouse_up(at, MouseButton::Right, Modifiers::none());

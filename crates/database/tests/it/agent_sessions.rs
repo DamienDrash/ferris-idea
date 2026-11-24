@@ -3,7 +3,7 @@
 
 use std::path::{Path, PathBuf};
 
-use idecraft_database::{ConnectionProfile, Credentials, OnError, Outcome, Session};
+use ferris_idea_database::{ConnectionProfile, Credentials, OnError, Outcome, Session};
 
 /// A workspace folder with a sibling folder outside it.
 struct Place(PathBuf);
@@ -11,7 +11,7 @@ struct Place(PathBuf);
 impl Place {
     fn new(tag: &str) -> Self {
         let dir =
-            std::env::temp_dir().join(format!("idecraft-agent-db-{tag}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("ferris-idea-agent-db-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("ws")).unwrap();
         std::fs::create_dir_all(dir.join("outside")).unwrap();
@@ -40,14 +40,14 @@ fn sqlite_file(path: &Path, sql: &str) {
         .unwrap();
 }
 
-fn error_of(run: &idecraft_database::ScriptRun) -> Option<String> {
+fn error_of(run: &ferris_idea_database::ScriptRun) -> Option<String> {
     run.outcomes.iter().find_map(|o| match &o.outcome {
         Outcome::Error(e) => Some(e.to_string()),
         _ => None,
     })
 }
 
-fn first_rows(run: &idecraft_database::ScriptRun) -> Vec<Vec<Option<String>>> {
+fn first_rows(run: &ferris_idea_database::ScriptRun) -> Vec<Vec<Option<String>>> {
     match &run.outcomes[0].outcome {
         Outcome::ResultSet { rows, .. } => rows.clone(),
         other => panic!("{other:?}"),

@@ -1,6 +1,8 @@
 # ADR-0033: Internal vault for agents — handles instead of values, injection at the point of use
 
-- **Status:** proposed · **Version:** 1 · **Date:** 2026-11-17 · written on the Project Owner's
+- **Status:** accepted (2026-11-18, by the coordinator under the Project Owner's general authority
+  of 2026-11-13; phase 1 implemented by [SPEC-0353](../specifications/SPEC-0353-internal-vault-for-agents.md))
+  · **Version:** 1 · **Date:** 2026-11-17 · written on the Project Owner's
   request of 2026-11-17 (ROADMAP M19.15, "interner Tresor für Agenten"): agents should never pass
   credentials around in plain text, should not depend on a person typing them, and should be able
   to store new ones. Rule 12 ("security first") applies throughout; every weaker option is named as
@@ -10,7 +12,7 @@
   [ADR-0008](0008-mcp-server.md) (MCP server),
   [ADR-0016](0016-plugins-as-wasm.md) and [ADR-0024](0024-plugin-network-to-profile-host.md)
   (plugins), [ADR-0017](0017-ai-subscriptions-through-provider-clis.md) (provider programs),
-  [ADR-0023](0023-idecraft-as-agent-harness.md) rule 7 (no secrets in context),
+  [ADR-0023](0023-ferris-idea-as-agent-harness.md) rule 7 (no secrets in context),
   [ADR-0025](0025-network-security-for-remote-connections.md) sections 3 and 3a (keys in the
   keychain), [ADR-0027](0027-ui-driver-and-semantic-tree.md) (UI driver),
   [ADR-0029](0029-mobile-rust-core-native-ui.md) decision 4 (platform stores on mobile),
@@ -21,7 +23,7 @@
 
 ## Context
 
-How IDECraft handles secrets today:
+How Ferris IDEA handles secrets today:
 
 - **Database passwords** live in the operating system's credential store. A connection profile names
   only a secret reference (service and account); the value is read and written only through a
@@ -31,7 +33,7 @@ How IDECraft handles secrets today:
   (behaviour 17). Resolving credentials never waits for input; a missing password is reported so a
   non-modal prompt can ask the person (behaviour 13).
 - **Test secrets folder:** only in builds with debug assertions, and only while
-  `IDECRAFT_TEST_SECRETS_DIR` (or `test_store::use_dir`) names it, a private folder (0700, files
+  `FERRIS_IDEA_TEST_SECRETS_DIR` (or `test_store::use_dir`) names it, a private folder (0700, files
   0600, no symbolic links) replaces the system store, so the functional tests reach
   password-protected databases unattended. Release builds ignore it (SPEC-0008 behaviour 14,
   AK-14).
@@ -61,11 +63,11 @@ Assets: the stored credentials; the vault key; the audit trail; the grants.
 | # | Threat | What the attacker has | What they want | Answer in this ADR |
 |---|---|---|---|---|
 | V1 | **Prompt injection through project content** (file text, issue, web page, database row, another agent's message) | control over text an agent reads | make the agent exfiltrate a credential: print it, write it to a file, send it to a host of theirs, put it in a commit | the agent never holds a value (D1); a use is bound to the entry's hosts and tools (D5), so the agent cannot point a credential at another host; injected values are redacted (D3) |
-| V2 | **A malicious or confused MCP client** | a connection to IDECraft's MCP server | read values, use entries it was never granted, widen scopes, swap a value for one it knows | no read tool exists (D1, D9); grants are bound to the client identity IDECraft established, never to a name the client reports (D5); scopes are changed only by the person (D6); replacing a value needs approval (D4) |
-| V3 | **A compromised agent process** (the agent program itself, its dependencies, its sandbox escape) | code execution as the agent, its MCP session | as V1 and V2, plus anything in that process's memory and environment | the agent process holds handles only; values reach only the processes IDECraft starts for a use, inside the sandbox (D2, section "Environment variables") |
-| V4 | **Malware running as the same OS user** | the user's files, processes, keychain requests | the vault file and its key, memory of IDECraft | the vault file is useless without a key held by the platform's key store, bound to IDECraft's code signature where the platform allows (D7); hardened process (D8). Limit: on a fully compromised account without hardware binding, the vault raises the cost, it does not stop a determined attacker (see Consequences) |
+| V2 | **A malicious or confused MCP client** | a connection to Ferris IDEA's MCP server | read values, use entries it was never granted, widen scopes, swap a value for one it knows | no read tool exists (D1, D9); grants are bound to the client identity Ferris IDEA established, never to a name the client reports (D5); scopes are changed only by the person (D6); replacing a value needs approval (D4) |
+| V3 | **A compromised agent process** (the agent program itself, its dependencies, its sandbox escape) | code execution as the agent, its MCP session | as V1 and V2, plus anything in that process's memory and environment | the agent process holds handles only; values reach only the processes Ferris IDEA starts for a use, inside the sandbox (D2, section "Environment variables") |
+| V4 | **Malware running as the same OS user** | the user's files, processes, keychain requests | the vault file and its key, memory of Ferris IDEA | the vault file is useless without a key held by the platform's key store, bound to Ferris IDEA's code signature where the platform allows (D7); hardened process (D8). Limit: on a fully compromised account without hardware binding, the vault raises the cost, it does not stop a determined attacker (see Consequences) |
 | V5 | **Backups and sync** | a copy of the settings folder (Time Machine, cloud sync, a stolen disk image) | offline decryption; rolling back to restore a revoked credential | the key never leaves the device (this-device-only, not synchronisable); a backup is ciphertext only; a version counter in the key store detects rollback (D7) |
-| V6 | **Leakage through logs and transcripts** | access to IDECraft's logs, session history (M19.10), crash reports, the agent provider's transcript | values written there | values never enter tool results; every known value is redacted from output before it is stored or sent (D3); the vault process writes no crash dumps (D8) |
+| V6 | **Leakage through logs and transcripts** | access to Ferris IDEA's logs, session history (M19.10), crash reports, the agent provider's transcript | values written there | values never enter tool results; every known value is redacted from output before it is stored or sent (D3); the vault process writes no crash dumps (D8) |
 | V7 | **Shoulder-surfing and screen capture in the UI** | a view of the screen, a screenshot, the UI driver | a value shown in the window | values are hidden by default; revealing needs the OS user check and hides again; the semantic tree and the UI driver never carry a value (D10) |
 | V8 | **Supply chain** | a malicious or vulnerable dependency, a manipulated importer program | key or values from inside the vault process | the vault process has few, pinned, audited dependencies; importers are the vendors' own programs, called read-only (D11); plugins get injection only (D12) |
 
@@ -83,25 +85,25 @@ created on, expires, last used). Knowing a handle grants nothing.
 There is **no MCP tool, right or setting that returns a value to an agent**, now or later. The
 right `secret-read` (SPEC-0053 behaviour 10) keeps its meaning for files in the workspace and does
 not reach the vault. A value never appears in a tool result, an error, a log line, the session
-history or anything IDECraft hands to a model. This is the rule of ADR-0023 rule 7 made structural:
+history or anything Ferris IDEA hands to a model. This is the rule of ADR-0023 rule 7 made structural:
 there is no code path that could break it by mistake.
 
-### D2. IDECraft injects the value at the point of use
+### D2. Ferris IDEA injects the value at the point of use
 
-A tool that needs a credential takes a handle and IDECraft puts the value in place itself. The forms,
+A tool that needs a credential takes a handle and Ferris IDEA puts the value in place itself. The forms,
 in order of preference, the most contained first:
 
-1. **Inside IDECraft's own code:** a database connection (the profile's secret reference becomes a
-   handle; SPEC-0008 behaviour 3 is unchanged in spirit); an HTTP request of IDECraft's HTTP client,
+1. **Inside Ferris IDEA's own code:** a database connection (the profile's secret reference becomes a
+   handle; SPEC-0008 behaviour 3 is unchanged in spirit); an HTTP request of Ferris IDEA's HTTP client,
    where a header or field written as `{{vault:<handle>}}` is filled when the request is sent.
-2. **Git credential helper:** for a Git command IDECraft starts, it passes
-   `-c credential.helper=<IDECraft's helper>` for that invocation only. The helper answers Git's
+2. **Git credential helper:** for a Git command Ferris IDEA starts, it passes
+   `-c credential.helper=<Ferris IDEA's helper>` for that invocation only. The helper answers Git's
    credential protocol over a local socket with a one-time token tied to that invocation, and only
    for the protocol and host in the entry's scope. Hooks of the repository get nothing.
 3. **Local forwarder** for a sandboxed process: a loopback listener, reachable only from that
    process and authenticated with a per-process token (ADR-0025 section 6), that forwards to the
    entry's host over TLS and adds the header. The process never holds the value.
-4. **Environment variable or file descriptor** of a process IDECraft starts in the sandbox (M19.9).
+4. **Environment variable or file descriptor** of a process Ferris IDEA starts in the sandbox (M19.9).
    Only for entries the person marked "may be given to a process", and only when 1–3 cannot work.
    What this still exposes is in the section "Environment variables" below.
 
@@ -110,7 +112,7 @@ agent asks.
 
 ### D3. Redaction
 
-IDECraft knows every value it injected into a use. Before any output reaches a tool result, a log,
+Ferris IDEA knows every value it injected into a use. Before any output reaches a tool result, a log,
 the session history or a model, it is searched for each value in use and its common encodings
 (raw, base64 with and without padding, URL-encoded, hex, JSON- and shell-escaped) and the match is
 replaced by `«vault:<name>»`. The same applies to files a process with an injected value wrote
@@ -156,7 +158,7 @@ process (D2 form 4). Answers: *deny*, *once*, *for this agent within this scope 
 default is the entry's expiry or 30 days, whichever is earlier). After that, uses within the scope
 run unattended. A grant lives in the user's grant file (ADR-0031), never in the project.
 
-The **agent identity** is the one IDECraft established: a hosted agent IDECraft started (ADR-0023
+The **agent identity** is the one Ferris IDEA established: a hosted agent Ferris IDEA started (ADR-0023
 rule 2), or an external MCP client's registered connection key. A name a client reports about itself
 is shown, never trusted. A new client is a new identity and asks again.
 
@@ -167,7 +169,7 @@ Windows Hello, polkit). For production databases and signing keys this is the pr
 
 - **Expiry:** an entry or a grant past its date is not used; the agent gets the error
   `vault_expired` with the entry name, and the window lists what expired.
-- **Rotation:** an entry may carry `rotate_after`; IDECraft reminds. Where IDECraft knows how to
+- **Rotation:** an entry may carry `rotate_after`; Ferris IDEA reminds. Where Ferris IDEA knows how to
   change the credential at the target (a database role's password through the connection), it
   offers to generate and set a new value in one step. Older versions are kept encrypted for a short
   window (7 days) for rollback, then destroyed.
@@ -191,7 +193,7 @@ Windows Hello, polkit). For production databases and signing keys this is the pr
   and field, so a value cannot be moved to another entry or field. The whole file is authenticated
   with HMAC-SHA-256 under a key derived from VK by HKDF-SHA-256, and carries a monotonic counter.
 - **Wrapping VK** with a key that never leaves the device:
-  - **macOS:** a P-256 key in the **Secure Enclave**, not exportable, usable only by IDECraft's
+  - **macOS:** a P-256 key in the **Secure Enclave**, not exportable, usable only by Ferris IDEA's
     signed binary (access control with `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`). Because
     Secure Enclave keys are elliptic-curve only, which a future quantum computer could break given
     the stored public values, VK is wrapped under `HKDF(ECDH secret ‖ K2)`, where K2 is a random
@@ -214,8 +216,8 @@ Windows Hello, polkit). For production databases and signing keys this is the pr
 
 ### D8. A small process holds the key
 
-The vault runs as its own process (`idecraft-vault`), started by IDECraft, speaking a narrow
-protocol over a socket only IDECraft's process can reach (peer credentials checked). It holds VK and
+The vault runs as its own process (`ferris-idea-vault`), started by Ferris IDEA, speaking a narrow
+protocol over a socket only Ferris IDEA's process can reach (peer credentials checked). It holds VK and
 decrypts one value at a time, for one use, into the component that injects it. Agent programs,
 plugins and the large IDE process never hold VK or entries they do not currently use. The process:
 
@@ -250,7 +252,7 @@ machine is open (question 3).
 
 ### D11. Import from existing password managers, read-only and optional
 
-IDECraft can use entries of an existing password manager through that manager's **official
+Ferris IDEA can use entries of an existing password manager through that manager's **official
 interface**: its command line program or documented API (for example the programs of 1Password,
 Bitwarden-compatible servers and KeePassXC), never by reading its files or memory. Two modes:
 
@@ -288,7 +290,7 @@ The sandbox of M19.9 limits this:
 - **Files:** writes only in the worktree and a scratch folder; files written during the run pass
   D3 before a tool returns them, and a change set touching them is flagged.
 - **Processes:** the sandboxed process cannot attach to or read other processes; its children stay
-  in the same sandbox; the variable is removed from the environment of anything IDECraft starts
+  in the same sandbox; the variable is removed from the environment of anything Ferris IDEA starts
   after the run.
 - **Lifetime:** the variable exists for that one process tree; on revocation the tree is offered to
   stop (D6).

@@ -36,7 +36,7 @@ impl Default for FormatOptions {
     }
 }
 
-/// The Code Style language (`SPEC-0150` behaviour 2, `idecraft_core::CODE_STYLE_LANGUAGES`) whose
+/// The Code Style language (`SPEC-0150` behaviour 2, `ferris_idea_core::CODE_STYLE_LANGUAGES`) whose
 /// indentation applies to `path`; "Default" for a language without a row of its own.
 pub fn code_style_language(path: &Path) -> &'static str {
     use LanguageId as L;
@@ -64,30 +64,38 @@ pub fn code_style_language(path: &Path) -> &'static str {
 
 impl FormatOptions {
     /// The options `file` is formatted with when nobody chose others (behaviour 1, v5): the
-    /// indentation of its `.editorconfig` (`SPEC-0137`), else of Code Style for its language
-    /// (`style`: what the user set, else the built-in table
-    /// `idecraft_core::CodeStyleSettings::default_indent` — two spaces for JSON, YAML, SCSS and
-    /// Less, four for CSS and most others).
-    pub fn for_file(file: &Path, style: &idecraft_core::CodeStyleSettings) -> Self {
-        let config = idecraft_core::editorconfig::editorconfig_for(file);
-        let style = style.indent_for(code_style_language(file));
-        let unit = config.indent_unit().unwrap_or_else(|| style.unit());
-        let tabs = unit == "\t";
-        Self {
-            tab_size: if tabs {
-                config.tab_width().map_or(style.tab, |w| w as u32)
-            } else {
-                unit.chars().count().max(1) as u32
-            },
-            insert_spaces: !tabs,
+    /// indentation of its `.editorconfig` (`SPEC-0137`), else of the project's own code scheme
+    /// (`SPEC-0150` v6 behaviour 8), else of Code Style for its language (`style`: what the user
+    /// set, else the built-in table `ferris_idea_core::CodeStyleSettings::default_indent` — two
+    /// spaces for JSON, YAML, SCSS and Less, four for CSS and most others).
+    pub fn for_file(file: &Path, style: &ferris_idea_core::CodeStyleSettings) -> Self {
+        Self::resolved(file, None, style).0
+    }
+
+    /// [`FormatOptions::for_file`] with the level each value came from (`SPEC-0150` v6
+    /// behaviour 8); the project's scheme is looked for no higher than `root` when given.
+    pub fn resolved(
+        file: &Path,
+        root: Option<&Path>,
+        style: &ferris_idea_core::CodeStyleSettings,
+    ) -> (Self, ferris_idea_core::project_code_style::ResolvedStyle) {
+        use ferris_idea_core::project_code_style::{ProjectStyle, resolve};
+        let config = ferris_idea_core::editorconfig::editorconfig_for(file);
+        let language = code_style_language(file);
+        let project = ProjectStyle::for_file(file, root, language);
+        let r = resolve(&config, &project, style, language);
+        let options = Self {
+            tab_size: r.tab_size,
+            insert_spaces: r.insert_spaces,
             ..Self::default()
         }
-        .with_editorconfig(&config)
+        .with_editorconfig(&config);
+        (options, r)
     }
 
     /// These options with trim trailing whitespace and insert final newline as `config` sets them
     /// (behaviour 1, v8); what it leaves unset stays.
-    pub fn with_editorconfig(self, config: &idecraft_core::editorconfig::EditorConfig) -> Self {
+    pub fn with_editorconfig(self, config: &ferris_idea_core::editorconfig::EditorConfig) -> Self {
         Self {
             trim_trailing_whitespace: config
                 .trim_trailing_whitespace()
@@ -109,20 +117,20 @@ impl FormatOptions {
     }
 }
 
-/// A language IDECraft formats with a formatter of its own (behaviours 11 and 12).
+/// A language Ferris IDEA formats with a formatter of its own (behaviours 11 and 12).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OwnFormatter {
-    /// `idecraft_database::sql_format`.
+    /// `ferris_idea_database::sql_format`.
     Sql,
     /// [`crate::markdown_format`].
     Markdown,
 }
 
-/// What `format_file` names as formatter when IDECraft formatted itself.
-pub const OWN_FORMATTER: &str = "idecraft";
+/// What `format_file` names as formatter when Ferris IDEA formatted itself.
+pub const OWN_FORMATTER: &str = "ferris-idea";
 
 impl OwnFormatter {
-    /// The formatter of `file`'s language, if IDECraft has one of its own.
+    /// The formatter of `file`'s language, if Ferris IDEA has one of its own.
     pub fn of(file: &Path) -> Option<Self> {
         match LanguageId::detect(file)? {
             LanguageId::Sql => Some(Self::Sql),
@@ -142,7 +150,7 @@ impl OwnFormatter {
     /// What to say when a selection was to be formatted: these formatters lay out whole files.
     pub fn whole_files_only(self) -> String {
         format!(
-            "IDECraft's {} formatter formats whole files only, not a selection: reformat without a selection (MCP: without `range`)",
+            "Ferris IDEA's {} formatter formats whole files only, not a selection: reformat without a selection (MCP: without `range`)",
             self.language()
         )
     }
@@ -158,7 +166,7 @@ impl OwnFormatter {
         match formatted {
             Ok(new) => Ok(crate::python_tools::plan(file, old, &new)),
             Err(why) => Err(LspError::Refused(format!(
-                "IDECraft's {} formatter changed nothing: {why}",
+                "Ferris IDEA's {} formatter changed nothing: {why}",
                 self.language()
             ))),
         }
@@ -326,8 +334,8 @@ fn prettier_hint(file: &Path) -> &'static str {
 }
 
 /// Why `file` has no formatter at all, before any server is looked for (behaviour 8): its type is
-/// unknown, or IDECraft serves the language itself and has no formatter for it. `None` when a
-/// language server or IDECraft's own formatter ([`OwnFormatter`]) is the one to ask.
+/// unknown, or Ferris IDEA serves the language itself and has no formatter for it. `None` when a
+/// language server or Ferris IDEA's own formatter ([`OwnFormatter`]) is the one to ask.
 pub fn no_formatter(file: &Path) -> Option<String> {
     let name = file
         .file_name()
@@ -335,13 +343,13 @@ pub fn no_formatter(file: &Path) -> Option<String> {
         .unwrap_or_default();
     let Some(language) = LanguageId::detect(file) else {
         return Some(format!(
-            "No formatter for {name}: IDECraft knows no language for this file type.{}",
+            "No formatter for {name}: Ferris IDEA knows no language for this file type.{}",
             prettier_hint(file)
         ));
     };
     (crate::servers::candidates(language).is_empty() && OwnFormatter::of(file).is_none()).then(|| {
         format!(
-            "No formatter for {}: IDECraft serves them itself, without a language server, and has no formatter of its own for them.{}",
+            "No formatter for {}: Ferris IDEA serves them itself, without a language server, and has no formatter of its own for them.{}",
             files_of(language),
             prettier_hint(file)
         )
@@ -450,7 +458,7 @@ fn selection_of(
 pub fn said_instead(program: &str, messages: &[String]) -> Option<String> {
     let last = messages.last()?;
     Some(format!(
-        "{program} changed nothing and says: {last} (IDECraft chooses none of a server's answers for you)"
+        "{program} changed nothing and says: {last} (Ferris IDEA chooses none of a server's answers for you)"
     ))
 }
 
@@ -495,11 +503,11 @@ pub async fn plan_format_in(
             let new = crate::markdown_format::format_markdown(&old);
             return own.plan(file, &old, new);
         }
-        // The SQL formatter lives with the SQL lexer in `idecraft_database`, which this crate
+        // The SQL formatter lives with the SQL lexer in `ferris_idea_database`, which this crate
         // cannot call; `format_file` and Reformat Code call it themselves (behaviour 11).
         Some(OwnFormatter::Sql) => {
             return Err(LspError::Refused(
-                "SQL files are formatted by IDECraft's own SQL formatter, not by a language server"
+                "SQL files are formatted by Ferris IDEA's own SQL formatter, not by a language server"
                     .to_owned(),
             ));
         }
@@ -614,9 +622,9 @@ mod tests {
         let text = no_formatter(Path::new("notes/todo.txt")).unwrap();
         assert_eq!(
             text,
-            "No formatter for todo.txt: IDECraft knows no language for this file type."
+            "No formatter for todo.txt: Ferris IDEA knows no language for this file type."
         );
-        // Prettier formats GraphQL, which has no language in IDECraft.
+        // Prettier formats GraphQL, which has no language in Ferris IDEA.
         let graphql = no_formatter(Path::new("schema.graphql")).unwrap();
         assert!(
             graphql.starts_with("No formatter for schema.graphql: "),
@@ -626,7 +634,7 @@ mod tests {
             graphql.contains("add prettier to the package's devDependencies"),
             "{graphql}"
         );
-        // v5: SQL and Markdown have IDECraft's own formatter.
+        // v5: SQL and Markdown have Ferris IDEA's own formatter.
         for served in [
             "main.c",
             "a.json",
@@ -644,13 +652,13 @@ mod tests {
     #[test]
     fn default_options_per_language() {
         let dir =
-            std::env::temp_dir().join(format!("idecraft-fmt-defaults-{}", std::process::id()));
+            std::env::temp_dir().join(format!("ferris-idea-fmt-defaults-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("configured")).unwrap();
         // Nothing above the folder decides.
         std::fs::write(dir.join(".editorconfig"), "root = true\n").unwrap();
-        let mut style = idecraft_core::CodeStyleSettings::default();
-        let options = |name: &str, style: &idecraft_core::CodeStyleSettings| {
+        let mut style = ferris_idea_core::CodeStyleSettings::default();
+        let options = |name: &str, style: &ferris_idea_core::CodeStyleSettings| {
             let o = FormatOptions::for_file(&dir.join(name), style);
             assert!(o.trim_trailing_whitespace && o.insert_final_newline);
             (o.tab_size, o.insert_spaces)
@@ -699,7 +707,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// AK-9 and AK-11: SQL and Markdown have a formatter of IDECraft's own; a selection is
+    /// AK-9 and AK-11: SQL and Markdown have a formatter of Ferris IDEA's own; a selection is
     /// refused, a refusal of the formatter says that nothing changed, and a Markdown file is
     /// planned without any server.
     #[tokio::test]
@@ -716,7 +724,7 @@ mod tests {
         assert_eq!(OwnFormatter::of(Path::new("a.unknown")), None);
         assert_eq!(
             OwnFormatter::Sql.whole_files_only(),
-            "IDECraft's SQL formatter formats whole files only, not a selection: reformat without a selection (MCP: without `range`)"
+            "Ferris IDEA's SQL formatter formats whole files only, not a selection: reformat without a selection (MCP: without `range`)"
         );
         let refused = OwnFormatter::Sql
             .plan(
@@ -727,7 +735,8 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(
-            refused.contains("IDECraft's SQL formatter changed nothing: line 1: the quoted text"),
+            refused
+                .contains("Ferris IDEA's SQL formatter changed nothing: line 1: the quoted text"),
             "{refused}"
         );
         let plan = OwnFormatter::Sql
@@ -737,7 +746,7 @@ mod tests {
         assert_eq!(plan.formatted, "select 1;\n");
         assert_eq!(plan.edits.edits.len(), 1);
 
-        let dir = std::env::temp_dir().join(format!("idecraft-fmt-own-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-fmt-own-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("notes.md");
@@ -780,7 +789,7 @@ mod tests {
         .unwrap_err()
         .to_string();
         assert!(
-            why.contains("IDECraft's Markdown formatter formats whole files only"),
+            why.contains("Ferris IDEA's Markdown formatter formats whole files only"),
             "{why}"
         );
         let _ = std::fs::remove_dir_all(&dir);
@@ -916,7 +925,8 @@ mod tests {
     #[test]
     fn tools_a_server_formats_with() {
         use std::os::unix::fs::PermissionsExt;
-        let base = std::env::temp_dir().join(format!("idecraft-fmt-tools-{}", std::process::id()));
+        let base =
+            std::env::temp_dir().join(format!("ferris-idea-fmt-tools-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         let (bin, root) = (base.join("bin"), base.join("project"));
         std::fs::create_dir_all(&bin).unwrap();
@@ -958,7 +968,48 @@ mod tests {
                 ]
             )
             .unwrap(),
-            "metals changed nothing and says: No configuration. Proceed? [Create | Not now] (IDECraft chooses none of a server's answers for you)"
+            "metals changed nothing and says: No configuration. Proceed? [Create | Not now] (Ferris IDEA chooses none of a server's answers for you)"
         );
+    }
+
+    /// `SPEC-0150` v6 AK-8 (behaviour 8): the project's own scheme comes between the
+    /// `.editorconfig` and Code Style, and only when `codeStyleConfig.xml` switches it on.
+    #[test]
+    fn the_projects_scheme_between_editorconfig_and_code_style() {
+        let dir =
+            std::env::temp_dir().join(format!("ferris-idea-fmt-scheme-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join(".idea/codeStyles")).unwrap();
+        std::fs::create_dir_all(dir.join("src")).unwrap();
+        std::fs::write(dir.join(".editorconfig"), "root = true\n").unwrap();
+        std::fs::write(
+            dir.join(".idea/codeStyles/Project.xml"),
+            r#"<component name="ProjectCodeStyleConfiguration"><code_scheme name="Project"><option name="RIGHT_MARGIN" value="100" /><codeStyleSettings language="JAVA"><indentOptions><option name="INDENT_SIZE" value="2" /></indentOptions></codeStyleSettings></code_scheme></component>"#,
+        )
+        .unwrap();
+        let style = ferris_idea_core::CodeStyleSettings::default();
+        let file = dir.join("src/A.java");
+        let of = |root: Option<&Path>| {
+            let (o, r) = FormatOptions::resolved(&file, root, &style);
+            (o.tab_size, o.insert_spaces, r.indent_source, r.right_margin)
+        };
+        use ferris_idea_core::project_code_style::StyleSource as S;
+        // Not switched on: Code Style.
+        assert_eq!(of(None), (4, true, S::Ide, Some(120)));
+        std::fs::write(
+            dir.join(".idea/codeStyles/codeStyleConfig.xml"),
+            r#"<component name="ProjectCodeStyleConfiguration"><state><option name="USE_PER_PROJECT_SETTINGS" value="true" /></state></component>"#,
+        )
+        .unwrap();
+        assert_eq!(of(None), (2, true, S::Project, Some(100)));
+        assert_eq!(of(Some(&dir)), (2, true, S::Project, Some(100)));
+        assert_eq!(FormatOptions::for_file(&file, &style).tab_size, 2);
+        // A Python file keeps Code Style's indentation.
+        let (py, _) = FormatOptions::resolved(&dir.join("src/a.py"), None, &style);
+        assert_eq!(py.tab_size, 4);
+        // The `.editorconfig` wins.
+        std::fs::write(dir.join("src/.editorconfig"), "[*.java]\nindent_size = 3\n").unwrap();
+        assert_eq!(of(None), (3, true, S::Editorconfig, Some(100)));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

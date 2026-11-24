@@ -6,8 +6,8 @@ use std::path::Path;
 use std::sync::OnceLock;
 use std::time::Duration;
 
+use ferris_idea_session::Transport;
 use futures_util::{SinkExt, StreamExt};
-use idecraft_session::Transport;
 use serde_json::{Value, json};
 use tokio::net::TcpStream;
 use tokio_rustls::TlsConnector;

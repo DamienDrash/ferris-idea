@@ -70,7 +70,7 @@ fn create_script_rebuilds_the_schema() {
 fn different_dialects_are_refused() {
     let p = Project::empty();
     p.sqlite("lite");
-    if !live_connection(&p, "pg", "IDECRAFT_TEST_PG") {
+    if !live_connection(&p, "pg", "FERRIS_IDEA_TEST_PG") {
         return;
     }
     let mut ide = Ide::stdio(&p);

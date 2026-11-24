@@ -1,4 +1,4 @@
-//! `idecraft drive [--project <folder>] [--pid <pid>] [--json] <verb> …` (`SPEC-0319` behaviour
+//! `ferris-idea drive [--project <folder>] [--pid <pid>] [--json] <verb> …` (`SPEC-0319` behaviour
 //! 30): a client of the running window's MCP server, found through its discovery file — no
 //! listener of its own. It connects to the route of one project, so it reaches only that
 //! project's window. Exit status: 0 success, 1 a failed assertion or action, 2 a usage error,
@@ -9,7 +9,7 @@ use std::process::ExitCode;
 
 use serde_json::{Value, json};
 
-const USAGE: &str = "usage: idecraft drive [--project <folder>] [--pid <pid>] [--json] <verb> …
+const USAGE: &str = "usage: ferris-idea drive [--project <folder>] [--pid <pid>] [--json] <verb> …
 verbs:
   status | stop
   snapshot [<locator>] [--text] [--depth <n>]
@@ -21,7 +21,14 @@ verbs:
   scroll <locator> [--dx <n>] [--dy <n>] [--pixels]
   drag <locator> (--to <locator> | --offset <x>,<y>)
   expect <locator> <matcher> [<text>] [--not] [--contains | --regex] [--timeout <ms>]
-  screenshot <file> [--of <locator>]
+  screenshot <file.png> [--of <locator>] [--region <x>,<y>,<w>,<h>]
+  open <path> [--line <n>] [--column <n>]
+  tool-window <id> [open | focus | close]
+  settings <page> | settings close
+  invoke <action id>
+  type-text <text>
+  popup | choose <index> | choose --label <label> | dismiss
+  list
   trace start | trace stop [<folder in the workspace>] | trace status
   run <script.toml>
 locators: role=button[name=\"Commit\"], id=project-tree >> role=treeitem[name~=\"main\"], text=\"No problems\"";
@@ -70,7 +77,7 @@ struct Options {
     json: bool,
 }
 
-/// Runs `idecraft drive …`.
+/// Runs `ferris-idea drive …`.
 pub fn drive_cli(args: &[String]) -> ExitCode {
     let mut options = Options {
         project: None,
@@ -116,8 +123,43 @@ fn run(options: &Options, args: &[String]) -> Result<(), Failure> {
     }
     let (tool, arguments) = call_of(verb, rest)?;
     let mut client = connect(options)?;
-    let result = client.call(tool, arguments).map_err(Failure::of_tool)?;
+    let (result, images) = client
+        .call_with_images(tool, arguments)
+        .map_err(Failure::of_tool)?;
+    if verb == "screenshot"
+        && let Some(file) = rest.iter().find(|a| !a.starts_with("--") && is_png_name(a))
+    {
+        save_png(Path::new(file), &images)?;
+    }
     print(options.json, verb, &result);
+    Ok(())
+}
+
+fn is_png_name(a: &str) -> bool {
+    a.to_ascii_lowercase().ends_with(".png")
+}
+
+/// Writes the PNG of a screenshot (`SPEC-0319` v7 behaviour 53), readable by the user only.
+fn save_png(file: &Path, images: &[(String, String)]) -> Result<(), Failure> {
+    use base64::Engine as _;
+    let Some((_, data)) = images.iter().find(|(m, _)| m == "image/png") else {
+        return Err(Failure::Failed("the window sent no image".into()));
+    };
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data)
+        .map_err(|e| Failure::Failed(format!("the image is not base64: {e}")))?;
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut out = options
+        .open(file)
+        .map_err(|e| Failure::Usage(format!("{}: {e}", file.display())))?;
+    std::io::Write::write_all(&mut out, &bytes)
+        .map_err(|e| Failure::Failed(format!("{}: {e}", file.display())))?;
     Ok(())
 }
 
@@ -138,6 +180,10 @@ fn call_of(verb: &str, rest: &[String]) -> Result<(&'static str, Value), Failure
         "--to",
         "--offset",
         "--of",
+        "--region",
+        "--line",
+        "--column",
+        "--label",
     ];
     let mut it = rest.iter();
     while let Some(a) = it.next() {
@@ -298,12 +344,76 @@ fn call_of(verb: &str, rest: &[String]) -> Result<(&'static str, Value), Failure
             }
             "ui_expect"
         }
-        ("screenshot", [_file]) => {
+        ("screenshot", [file]) if is_png_name(file) => {
             put(
                 "locator",
                 flags.get("--of").copied().flatten().map(|l| json!(l)),
             );
+            if let Some(r) = flags.get("--region").copied().flatten() {
+                let n: Vec<f32> = r
+                    .split(',')
+                    .map(|v| v.trim().parse::<f32>())
+                    .collect::<Result<_, _>>()
+                    .map_err(|_| Failure::Usage("--region takes <x>,<y>,<w>,<h>".into()))?;
+                let [x, y, w, h] = n.as_slice() else {
+                    return Err(Failure::Usage("--region takes <x>,<y>,<w>,<h>".into()));
+                };
+                put("region", Some(json!({"x": x, "y": y, "w": w, "h": h})));
+            }
             "ui_screenshot"
+        }
+        // The window commands of SPEC-0319 v7 behaviours 46-52.
+        ("open", [path]) => {
+            put("command", Some(json!("open_file")));
+            put("path", Some(json!(path)));
+            put("line", int("--line")?);
+            put("column", int("--column")?);
+            "ui_command"
+        }
+        ("tool-window", [id, op @ ..]) if op.len() <= 1 => {
+            put("command", Some(json!("tool_window")));
+            put("id", Some(json!(id)));
+            put("op", op.first().map(|o| json!(o)));
+            "ui_command"
+        }
+        ("settings", ["close"]) => {
+            put("command", Some(json!("close_settings")));
+            "ui_command"
+        }
+        ("settings", [page]) => {
+            put("command", Some(json!("settings")));
+            put("page", Some(json!(page)));
+            "ui_command"
+        }
+        ("invoke", [action]) => {
+            put("command", Some(json!("invoke")));
+            put("action", Some(json!(action)));
+            "ui_command"
+        }
+        ("type-text", [text]) => {
+            put("command", Some(json!("type_text")));
+            put("text", Some(json!(text)));
+            "ui_command"
+        }
+        ("popup" | "list" | "dismiss", []) => {
+            put("command", Some(json!(verb)));
+            "ui_command"
+        }
+        ("choose", []) if flags.get("--label").copied().flatten().is_some() => {
+            put("command", Some(json!("choose")));
+            put(
+                "label",
+                flags.get("--label").copied().flatten().map(|l| json!(l)),
+            );
+            "ui_command"
+        }
+        ("choose", [index]) => {
+            let index = index
+                .parse::<u64>()
+                .map_err(|_| Failure::Usage("choose <index> | choose --label <label>".into()))?;
+            put("command", Some(json!("choose")));
+            put("index", Some(json!(index)));
+            "ui_command"
         }
         ("trace", ["start" | "status"]) => {
             put("command", positional.first().map(|c| json!(c)));
@@ -320,8 +430,8 @@ fn call_of(verb: &str, rest: &[String]) -> Result<(&'static str, Value), Failure
 }
 
 /// Connects to the window that serves the project (`--project`, else the current folder).
-fn connect(options: &Options) -> Result<idecraft_mcp::client::Client, Failure> {
-    let Some(config) = idecraft_core::user_config_dir() else {
+fn connect(options: &Options) -> Result<ferris_idea_mcp::client::Client, Failure> {
+    let Some(config) = ferris_idea_core::user_config_dir() else {
         return Err(Failure::Unavailable(
             "no settings folder (HOME unset)".into(),
         ));
@@ -331,7 +441,7 @@ fn connect(options: &Options) -> Result<idecraft_mcp::client::Client, Failure> {
         None => std::env::current_dir().map_err(|e| Failure::Unavailable(e.to_string()))?,
     };
     let folder = std::fs::canonicalize(&folder).unwrap_or(folder);
-    let windows = idecraft_mcp::client::running_windows(&config);
+    let windows = ferris_idea_mcp::client::running_windows(&config);
     let candidates: Vec<_> = windows
         .iter()
         .filter(|w| options.pid.is_none_or(|p| w.pid == p))
@@ -351,7 +461,7 @@ fn connect(options: &Options) -> Result<idecraft_mcp::client::Client, Failure> {
         [one] => one.clone(),
         [] => {
             return Err(Failure::Unavailable(format!(
-                "no running IDECraft window serves a project containing {} over MCP (Settings › AI Assistant › \"Serve MCP to local agents over HTTP\")",
+                "no running Ferris IDEA window serves a project containing {} over MCP (Settings › AI Assistant › \"Serve MCP to local agents over HTTP\")",
                 folder.display()
             )));
         }
@@ -361,12 +471,12 @@ fn connect(options: &Options) -> Result<idecraft_mcp::client::Client, Failure> {
                 .map(|(w, r)| format!("{} ({r})", w.pid))
                 .collect();
             return Err(Failure::Usage(format!(
-                "several IDECraft windows serve this project; pass --pid with one of: {}",
+                "several Ferris IDEA windows serve this project; pass --pid with one of: {}",
                 list.join("; ")
             )));
         }
     };
-    idecraft_mcp::client::Client::connect_project(window, &root, "idecraft-drive")
+    ferris_idea_mcp::client::Client::connect_project(window, &root, "ferris-idea-drive")
         .map_err(Failure::Unavailable)
 }
 
@@ -421,6 +531,64 @@ fn print(json_out: bool, verb: &str, result: &Value) {
             "ok: {} holds",
             result["matcher"].as_str().unwrap_or("assertion")
         ),
+        "screenshot" => println!(
+            "ok: {}x{} pixels at scale {}, {} area(s) filled",
+            result["width"], result["height"], result["scale"], result["masked"]
+        ),
+        "popup" => {
+            if result["open"] == json!(true) {
+                println!("{} popup:", result["kind"].as_str().unwrap_or("?"));
+                for (i, item) in result["items"].as_array().into_iter().flatten().enumerate() {
+                    let mark = if result["selected"] == json!(i) {
+                        ">"
+                    } else {
+                        " "
+                    };
+                    let mut line = format!(
+                        "{mark}{i:>3} [{}] {}",
+                        item["kind"].as_str().unwrap_or("?"),
+                        item["label"].as_str().unwrap_or_default()
+                    );
+                    if let Some(d) = item["detail"].as_str() {
+                        line.push_str(&format!("  ({d})"));
+                    }
+                    println!("{line}");
+                }
+            } else {
+                println!("no popup is open");
+            }
+        }
+        "list" => {
+            println!("tool windows:");
+            for t in result["tool_windows"].as_array().into_iter().flatten() {
+                println!(
+                    "  {:<14} {}{}",
+                    t["id"].as_str().unwrap_or_default(),
+                    t["title"].as_str().unwrap_or_default(),
+                    if t["shown"] == json!(true) {
+                        " (shown)"
+                    } else {
+                        ""
+                    }
+                );
+            }
+            println!("settings pages:");
+            for p in result["settings_pages"].as_array().into_iter().flatten() {
+                println!(
+                    "  {:<22} {}{}",
+                    p["id"].as_str().unwrap_or_default(),
+                    p["title"].as_str().unwrap_or_default(),
+                    if p["reserved"] == json!(true) {
+                        " (reserved for the user)"
+                    } else {
+                        ""
+                    }
+                );
+            }
+        }
+        "open" | "tool-window" | "settings" | "invoke" | "type-text" | "choose" | "dismiss" => {
+            println!("ok: {result}")
+        }
         _ => match result.get("element") {
             Some(e) if !e.is_null() => println!("ok: {}", element(e)),
             _ => println!("ok"),
@@ -434,6 +602,18 @@ fn print(json_out: bool, verb: &str, result: &Value) {
 struct Step {
     locator: Option<String>,
     action: Option<String>,
+    /// A window command (`ui_command`): `open_file`, `tool_window`, `settings`, …
+    command: Option<String>,
+    path: Option<String>,
+    line: Option<u64>,
+    column: Option<u64>,
+    id: Option<String>,
+    op: Option<String>,
+    page: Option<String>,
+    /// `invoke`: the action id.
+    invoke: Option<String>,
+    index: Option<u64>,
+    label: Option<String>,
     expect: Option<String>,
     keys: Option<String>,
     text: Option<String>,
@@ -458,17 +638,18 @@ fn read_script(path: &Path) -> Result<Vec<Step>, Failure> {
         .map_err(|e| Failure::Usage(format!("{}: {e}", path.display())))?;
     let mut table: toml::Table = toml::from_str(&text)
         .map_err(|e| Failure::Usage(format!("{}: {}", path.display(), e.message())))?;
-    if !table.contains_key("idecraft") {
+    ferris_idea_core::format::adopt_former_envelope(&mut table);
+    if !table.contains_key("ferris-idea") {
         return Err(Failure::Usage(format!(
-            "{}: a UI script starts with [idecraft] kind = \"ui-script\" format = 1",
+            "{}: a UI script starts with [ferris-idea] kind = \"ui-script\" format = 1",
             path.display()
         )));
     }
-    idecraft_core::format::take_envelope(&mut table, "ui-script").map_err(|p| {
+    ferris_idea_core::format::take_envelope(&mut table, "ui-script").map_err(|p| {
         Failure::Usage(format!(
             "{}: {}",
             path.display(),
-            idecraft_core::format::problems_text(&p)
+            ferris_idea_core::format::problems_text(&p)
         ))
     })?;
     let script: Script = toml::Value::Table(table)
@@ -491,6 +672,27 @@ fn run_script(options: &Options, path: &Path) -> Result<(), Failure> {
             args.insert("timeout_ms".into(), json!(t));
         }
         let tool = match (&step.action, &step.expect) {
+            (None, None) if step.command.is_some() => {
+                args.insert("command".into(), json!(step.command));
+                for (k, v) in [
+                    ("path", step.path.as_ref().map(|v| json!(v))),
+                    ("line", step.line.map(|v| json!(v))),
+                    ("column", step.column.map(|v| json!(v))),
+                    ("id", step.id.as_ref().map(|v| json!(v))),
+                    ("op", step.op.as_ref().map(|v| json!(v))),
+                    ("page", step.page.as_ref().map(|v| json!(v))),
+                    ("action", step.invoke.as_ref().map(|v| json!(v))),
+                    ("text", step.text.as_ref().map(|v| json!(v))),
+                    ("index", step.index.map(|v| json!(v))),
+                    ("label", step.label.as_ref().map(|v| json!(v))),
+                ] {
+                    if let Some(v) = v {
+                        args.insert(k.into(), v);
+                    }
+                }
+                args.remove("locator");
+                "ui_command"
+            }
             (Some(action), None) => {
                 args.insert("action".into(), json!(action));
                 for (k, v) in [
@@ -521,7 +723,7 @@ fn run_script(options: &Options, path: &Path) -> Result<(), Failure> {
             }
             _ => {
                 return Err(Failure::Usage(format!(
-                    "{}: step {}: give `action` or `expect`",
+                    "{}: step {}: give `action`, `expect` or `command`",
                     path.display(),
                     i + 1
                 )));
@@ -573,6 +775,44 @@ mod tests {
         let (_, args) = call_of("expect", &s(&["id=list", "count", "3"])).unwrap();
         assert_eq!(args["exactly"], 3);
         assert!(args.get("text").is_none());
+        let (tool, args) = call_of("open", &s(&["src/main.rs", "--line", "3"])).unwrap();
+        assert_eq!(tool, "ui_command");
+        assert_eq!(
+            args,
+            json!({"command": "open_file", "path": "src/main.rs", "line": 3})
+        );
+        let (_, args) = call_of("tool-window", &s(&["problems"])).unwrap();
+        assert_eq!(args, json!({"command": "tool_window", "id": "problems"}));
+        let (_, args) = call_of("tool-window", &s(&["containers", "close"])).unwrap();
+        assert_eq!(args["op"], "close");
+        let (_, args) = call_of("settings", &s(&["close"])).unwrap();
+        assert_eq!(args, json!({"command": "close_settings"}));
+        let (_, args) = call_of("invoke", &s(&["ShowIntentionActions"])).unwrap();
+        assert_eq!(
+            args,
+            json!({"command": "invoke", "action": "ShowIntentionActions"})
+        );
+        let (_, args) = call_of("choose", &s(&["2"])).unwrap();
+        assert_eq!(args, json!({"command": "choose", "index": 2}));
+        let (_, args) = call_of("choose", &s(&["--label", "Remove TODO"])).unwrap();
+        assert_eq!(args["label"], "Remove TODO");
+        let (_, args) = call_of("popup", &[]).unwrap();
+        assert_eq!(args, json!({"command": "popup"}));
+        let (tool, args) =
+            call_of("screenshot", &s(&["shot.png", "--region", "0,0,200,100"])).unwrap();
+        assert_eq!(tool, "ui_screenshot");
+        assert_eq!(
+            args["region"],
+            json!({"x": 0.0, "y": 0.0, "w": 200.0, "h": 100.0})
+        );
+        assert!(matches!(
+            call_of("screenshot", &s(&["shot.txt"])),
+            Err(Failure::Usage(_))
+        ));
+        assert!(matches!(
+            call_of("choose", &s(&["first"])),
+            Err(Failure::Usage(_))
+        ));
         let (tool, _) = call_of("stop", &[]).unwrap();
         assert_eq!(tool, "ui_driver_stop");
         assert!(matches!(call_of("click", &[]), Err(Failure::Usage(_))));
@@ -602,12 +842,12 @@ mod tests {
 
     #[test]
     fn ui_scripts_need_their_envelope() {
-        let dir = std::env::temp_dir().join(format!("idecraft-drive-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-drive-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let good = dir.join("smoke.toml");
         std::fs::write(
             &good,
-            "[idecraft]\nkind = \"ui-script\"\nformat = 1\n\n[[step]]\naction = \"press\"\nkeys = \"cmd-1\"\n\n[[step]]\nlocator = \"id=project-tree\"\nexpect = \"visible\"\n",
+            "[ferris-idea]\nkind = \"ui-script\"\nformat = 1\n\n[[step]]\naction = \"press\"\nkeys = \"cmd-1\"\n\n[[step]]\nlocator = \"id=project-tree\"\nexpect = \"visible\"\n",
         )
         .unwrap();
         let steps = read_script(&good).unwrap();
@@ -617,7 +857,7 @@ mod tests {
         std::fs::write(&bare, "[[step]]\naction = \"press\"\nkeys = \"cmd-1\"\n").unwrap();
         assert!(read_script(&bare).is_err());
         let other = dir.join("other.toml");
-        std::fs::write(&other, "[idecraft]\nkind = \"run\"\nformat = 1\n").unwrap();
+        std::fs::write(&other, "[ferris-idea]\nkind = \"run\"\nformat = 1\n").unwrap();
         assert!(read_script(&other).is_err());
         let _ = std::fs::remove_dir_all(&dir);
     }

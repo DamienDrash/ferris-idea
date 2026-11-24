@@ -145,7 +145,7 @@ an action with the open platform's id, from the Edit menu, from Find Action and 
     primary caret; it needs an editor. A file's reference name is its path below its source
     folder; without one its path below the project folder; outside the project folder its
     absolute path. [OSS, `CopyPathProvider.kt`, `FqnUtil.java`,
-    `JavaVirtualFileQualifiedNameProvider.java`; GEN: IDECraft has source folders only where
+    `JavaVirtualFileQualifiedNameProvider.java`; GEN: Ferris IDEA has source folders only where
     SPEC-0048 finds them, which are the folders of JVM sources]
 13b. **Copy Reference** (`CopyReference`, ⌥⇧⌘C on macOS, Ctrl+Alt+Shift+C elsewhere) acts on the
     active editor. It copies the qualified name of the symbol the primary caret is in
@@ -308,16 +308,16 @@ on the number of carets. Sorting with options (case, numbers, removing duplicate
 - **Convert Indents measures from the start of the line (IMP-0403).** The open code starts
   measuring a line's indentation at the start of the selection when the selection begins inside
   it, and then replaces the whole indentation by the smaller width, so the first selected line
-  loses columns. IDECraft measures every line's indentation from its first column.
+  loses columns. Ferris IDEA measures every line's indentation from its first column.
 - **Sort Lines and Reverse Lines on fewer than two lines** answer in the status bar; the open
   action is disabled then (SPEC-0124: menu items are not greyed out).
 - **Messages** of Convert Indents appear in the status bar, not in a hint at the caret, and in
-  IDECraft's wording.
+  Ferris IDEA's wording.
 - **Copy Path/Reference…** lists the rows in the order of the open group without its separators
   and without the launcher link.
 - **Copy Reference names the symbol around the caret.** The open action names the element the
   caret is on — a declaration's name or, resolved, the target of a reference — and copies file
-  and line anywhere else, also inside a method body. IDECraft has only the file's document symbols
+  and line anywhere else, also inside a method body. Ferris IDEA has only the file's document symbols
   and names the innermost symbol that holds the caret; a reference under the caret is not resolved.
 - **Java names:** the parameter list of an overloaded method is the server's, with simple type
   names (`add(int, String)`); the open code writes qualified types (`add(int, java.lang.String)`).
@@ -327,19 +327,19 @@ on the number of carets. Sorting with options (case, numbers, removing duplicate
   class name for them.
 - **Kotlin names:** the open code names the JVM view: a top-level function after the file's
   class (`shop.CartKt#total`), a property after its getter (`shop.Cart#getTotal`), an overloaded
-  function with JVM parameter types. IDECraft copies `shop.total`, `shop.Cart#total` and the
+  function with JVM parameter types. Ferris IDEA copies `shop.total`, `shop.Cart#total` and the
   server's parameter list, if its name has one.
 - **Python modules** are named from the source folder or the project folder; the open code takes
   the shortest name the file can be imported under, which also knows the interpreter's paths.
 - **JSON, YAML and properties files** have reference providers in the open sources (key paths);
-  IDECraft copies file and line for them. **Rust names** are IDECraft's own form.
+  Ferris IDEA copies file and line for them. **Rust names** are Ferris IDEA's own form.
 - **The Copy Reference row of the popup** shows no text for a language with naming rules; the
   open popup shows the name.
 - **Clipboard:** the open action also puts the reference on the clipboard in a format of its own,
-  so that a paste into code can shorten and import it. IDECraft writes plain text only.
-- **Status texts** are IDECraft's own wording and cut long texts.
+  so that a paste into code can shorten and import it. Ferris IDEA writes plain text only.
+- **Status texts** are Ferris IDEA's own wording and cut long texts.
 - **A file's reference name** uses a source folder for every file in one; the open rule does so
-  in modules of the Java type only, which are the only ones IDECraft has source folders for.
+  in modules of the Java type only, which are the only ones Ferris IDEA has source folders for.
 - **Remote documents** copy file and line for Copy Reference: their symbols are not asked of the
   host.
 - **Further carets** of Sort Lines and Reverse Lines keep their offsets; how the open platform

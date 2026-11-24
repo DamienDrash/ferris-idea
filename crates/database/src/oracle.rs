@@ -1,7 +1,7 @@
 //! Oracle sessions (`SPEC-0142`, ADR-0011).
 //!
 //! Through the `oracle` crate (ODPI-C), which loads Oracle Instant Client at run time: from
-//! `IDECRAFT_ORACLE_CLIENT`, else the newest `~/.local/opt/instantclient_*`, else the system's
+//! `FERRIS_IDEA_ORACLE_CLIENT`, else the newest `~/.local/opt/instantclient_*`, else the system's
 //! library search path. The driver is blocking; every call runs on Tokio's blocking pool. Each
 //! statement is committed after it ran, except inside a transaction opened with `SET
 //! TRANSACTION` (editing, SPEC-0017), which ends with `COMMIT` or `ROLLBACK`.
@@ -30,10 +30,10 @@ pub struct OracleSession {
     read_only: bool,
 }
 
-/// The Instant Client folder to load: `IDECRAFT_ORACLE_CLIENT`, else the newest
+/// The Instant Client folder to load: `FERRIS_IDEA_ORACLE_CLIENT`, else the newest
 /// `~/.local/opt/instantclient_*` with a client library, else none (system search path).
 pub fn client_dir() -> Option<PathBuf> {
-    if let Some(dir) = std::env::var_os("IDECRAFT_ORACLE_CLIENT") {
+    if let Some(dir) = ferris_idea_core::product_var_os("FERRIS_IDEA_ORACLE_CLIENT") {
         return Some(PathBuf::from(dir));
     }
     let opt = PathBuf::from(std::env::var_os("HOME")?).join(".local/opt");
@@ -65,7 +65,7 @@ fn init_client() -> Result<(), String> {
         params.init().map(|_| ()).map_err(|e| {
             format!(
                 "Oracle Instant Client could not be loaded ({e}); install it under \
-                 ~/.local/opt/instantclient_* or set IDECRAFT_ORACLE_CLIENT"
+                 ~/.local/opt/instantclient_* or set FERRIS_IDEA_ORACLE_CLIENT"
             )
         })
     })
@@ -159,12 +159,14 @@ impl OracleSession {
             };
             let mut out = Vec::new();
             for sql in &texts {
+                let note = (!inner.in_transaction && bare_rollback(sql))
+                    .then(|| NOTHING_TO_ROLL_BACK.to_owned());
                 let outcome = match refusal(sql, read_only) {
                     Some(error) => Outcome::Error(error),
                     None => execute(&mut inner, sql),
                 };
                 let failed = matches!(outcome, Outcome::Error(_));
-                out.push(outcome);
+                out.push((outcome, note.filter(|_| !failed)));
                 if failed && on_error == OnError::Stop {
                     break;
                 }
@@ -175,8 +177,11 @@ impl OracleSession {
         .unwrap_or_default();
         let mut run = ScriptRun::default();
         let count = outcomes.len();
-        for (statement, outcome) in statements.iter().zip(outcomes) {
+        for (statement, (outcome, note)) in statements.iter().zip(outcomes) {
             run.push(script, statement, outcome);
+            if let (Some(note), Some(last)) = (note, run.outcomes.last_mut()) {
+                last.notices.push(note);
+            }
         }
         if count < statements.len() {
             run.not_run = statements.len() - count;
@@ -288,15 +293,59 @@ fn rows(conn: &oracle::Connection, sql: &str) -> Result<ResultSet, DbError> {
         .iter()
         .map(|c| c.name().to_owned())
         .collect();
+    // The scale of each NUMBER(p, s) column with s > 0: its values keep that many digits.
+    let scales: Vec<Option<usize>> = result
+        .column_info()
+        .iter()
+        .map(|c| match c.oracle_type() {
+            oracle::sql_type::OracleType::Number(_, s) if *s > 0 => Some(*s as usize),
+            _ => None,
+        })
+        .collect();
     let mut out = Vec::new();
     for row in result {
         let row = row.map_err(|e| to_db_error(&e))?;
         let values = (0..columns.len())
-            .map(|i| row.get::<usize, Option<String>>(i).unwrap_or(None))
+            .map(|i| {
+                let value = row.get::<usize, Option<String>>(i).unwrap_or(None)?;
+                Some(match scales[i] {
+                    Some(scale) => number_text(&value, scale),
+                    None => value,
+                })
+            })
             .collect();
         out.push(values);
     }
     Ok((columns, out))
+}
+
+/// A value of a `NUMBER(p, s)` column with exactly `scale` digits after the point and a zero
+/// before it (`SPEC-0142` v5 behaviour 3b): Oracle keeps no trailing zeros, so 4.50 comes as
+/// `4.5`. Text that is no plain decimal number (an exponent) is left as it is.
+fn number_text(value: &str, scale: usize) -> String {
+    let (sign, digits) = match value.strip_prefix('-') {
+        Some(rest) => ("-", rest),
+        None => ("", value),
+    };
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit() || b == b'.') {
+        return value.to_owned();
+    }
+    let (int, frac) = digits.split_once('.').unwrap_or((digits, ""));
+    if frac.contains('.') || frac.len() > scale {
+        return value.to_owned();
+    }
+    let int = if int.is_empty() { "0" } else { int };
+    format!("{sign}{int}.{frac:0<scale$}")
+}
+
+/// The note for a `ROLLBACK` outside a transaction opened with `SET TRANSACTION`: every statement
+/// was committed when it ran, so there is nothing to undo (`SPEC-0142` v5 behaviour 3c).
+pub(crate) const NOTHING_TO_ROLL_BACK: &str = "NOTE: auto-commit is on: every statement was committed when it ran, so ROLLBACK had nothing to undo";
+
+/// Whether `sql` is a `ROLLBACK [WORK]` of the whole transaction, not to a savepoint.
+fn bare_rollback(sql: &str) -> bool {
+    let words = crate::script::code_words(sql, Dialect::Oracle);
+    words.first().map(String::as_str) == Some("rollback") && !words.iter().any(|w| w == "to")
 }
 
 fn execute(inner: &mut Inner, sql: &str) -> Outcome {
@@ -523,6 +572,22 @@ fn compile_error(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// SPEC-0142 v5 AK-9: NUMBER(p, s) values keep their scale and a zero before the point;
+    /// a ROLLBACK of the whole transaction is told apart from one to a savepoint.
+    #[test]
+    fn numbers_keep_their_scale_and_rollbacks_are_recognised() {
+        assert_eq!(number_text("4.5", 2), "4.50");
+        assert_eq!(number_text(".05", 2), "0.05");
+        assert_eq!(number_text("-.5", 3), "-0.500");
+        assert_eq!(number_text("12", 2), "12.00");
+        assert_eq!(number_text("1.2345", 2), "1.2345");
+        assert_eq!(number_text("1E+40", 2), "1E+40");
+        assert!(bare_rollback("ROLLBACK"));
+        assert!(bare_rollback("rollback work"));
+        assert!(!bare_rollback("rollback to savepoint a"));
+        assert!(!bare_rollback("select 1 from dual"));
+    }
 
     /// SPEC-0142 v2 AK-5: the unit a `CREATE` stores and where its compile errors are.
     #[test]

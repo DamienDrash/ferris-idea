@@ -1,5 +1,5 @@
 [package]
-name = "idecraft-database"
+name = "ferris-idea-database"
 description = "Database tooling: dialects, connection profiles, SQL script handling"
 version.workspace = true
 edition.workspace = true
@@ -10,9 +10,9 @@ publish.workspace = true
 
 [dependencies]
 # The file envelope of `connections.toml` and `sql-files.toml` (`SPEC-0303`).
-idecraft-core.workspace = true
+ferris-idea-core.workspace = true
 # SSH tunnels go through the system `ssh` exactly as remote hosts do (`SPEC-0108` v4, ADR-0025).
-idecraft-remote.workspace = true
+ferris-idea-remote.workspace = true
 keyring.workspace = true
 mysql_async.workspace = true
 native-tls.workspace = true
@@ -46,8 +46,13 @@ futures-lite.workspace = true
 oo7.workspace = true
 
 [dev-dependencies]
+# The SSH test host runs inside the test process (`ferris_idea_remote::testing`, feature `test-host`).
+ferris-idea-remote = { workspace = true, features = ["test-host"] }
 # Test certificate authorities and server certificates (same version and features as `web`).
 rcgen = { version = "0.14", default-features = false, features = ["crypto", "pem", "ring"] }
+# The stand-in SQL Server's TLS 1.2 in `tests/it/tds_handshake.rs` (SPEC-0116 v9 AK-13); same
+# version and features as `plugins`, already in the lock file.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 rusqlite.workspace = true
 duckdb.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

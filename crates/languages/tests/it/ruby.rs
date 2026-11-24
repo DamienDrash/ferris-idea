@@ -1,14 +1,14 @@
 //! Ruby language servers for real (`SPEC-0185` AK-7): ruby-lsp started directly and solargraph
 //! through `bundle exec` in a project that locks it: outline, hover and completion. ruby-lsp indexes
 //! saved files only (`SPEC-0042` v6 behaviour 13), so its file is saved; solargraph's stays a stub.
-//! Skipped cleanly when the servers are missing (`IDECRAFT_REQUIRE_TOOLS` makes that a failure).
+//! Skipped cleanly when the servers are missing (`FERRIS_IDEA_REQUIRE_TOOLS` makes that a failure).
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use idecraft_languages::LanguageId;
-use idecraft_languages::insight::{complete_in, hover_in, symbols_in};
-use idecraft_languages::servers::resolve_for;
+use ferris_idea_languages::LanguageId;
+use ferris_idea_languages::insight::{complete_in, hover_in, symbols_in};
+use ferris_idea_languages::servers::resolve_for;
 
 const WAIT: Duration = Duration::from_secs(120);
 
@@ -16,14 +16,14 @@ const TEXT: &str = "class Greeter\n  # Says hello to someone.\n  def greet(name)
 
 fn skip(reason: &str) {
     assert!(
-        std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+        ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
         "required tool missing: {reason}"
     );
     eprintln!("skipped: {reason}");
 }
 
 fn project(name: &str) -> PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-ruby-{name}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-ruby-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     root.canonicalize().unwrap()
@@ -51,13 +51,13 @@ async fn check(name: &str, root: &Path, saved: bool) {
     assert!(hover.text.contains("Greeter"), "{name}: {}", hover.text);
 
     // ⌘B on `Greeter` of `Greeter.new` finds the class, once (hand test 110, D61).
-    let found = idecraft_languages::insight::locations_in(
+    let found = ferris_idea_languages::insight::locations_in(
         root,
         &file,
         text,
         7,
         12,
-        idecraft_languages::insight::LocationKind::Definition,
+        ferris_idea_languages::insight::LocationKind::Definition,
         WAIT,
     )
     .await
@@ -101,7 +101,7 @@ async fn solargraph_through_bundler() {
     )
     .unwrap();
     // The lockfile from the gems installed with the Ruby the workspace selects.
-    let env = idecraft_core::ruby_environment(&idecraft_core::RubySearch::from_env(&root));
+    let env = ferris_idea_core::ruby_environment(&ferris_idea_core::RubySearch::from_env(&root));
     let path = std::env::join_paths(
         env.server_path.iter().map(PathBuf::from).chain(
             std::env::var_os("PATH")
@@ -152,11 +152,11 @@ async fn ruby_lsp_reports_problems_when_asked() {
     std::fs::write(&good, TEXT).unwrap();
     let wait = Duration::from_secs(60);
     let started = std::time::Instant::now();
-    let found = idecraft_languages::lsp::file_diagnostics(&root, &broken, wait)
+    let found = ferris_idea_languages::lsp::file_diagnostics(&root, &broken, wait)
         .await
         .unwrap();
     assert!(found.iter().any(|d| d.severity == "error"), "{found:?}");
-    let found = idecraft_languages::lsp::file_diagnostics(&root, &good, wait)
+    let found = ferris_idea_languages::lsp::file_diagnostics(&root, &good, wait)
         .await
         .unwrap();
     assert!(found.is_empty(), "{found:?}");

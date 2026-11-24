@@ -1,6 +1,6 @@
 # SPEC-0319: UI driver and semantic interface tree
 
-- **Version:** 6 · **Date:** 2026-11-16 (v6: the question the toolkit draws where the platform has no alert — Linux — is in the tree, reserved for the user, and while one is open in a window no input of an external client reaches that window, behaviour 35, SPEC-0281 v4 behaviour 9); 2026-11-15 (v5: the native level on Linux delivers pointer events in process into the window's own input handler, never through the X server or the compositor, behaviour 20c, UISEC-9; decision on open question 40 of PO-STATUS); 2026-11-08 (v4: behaviour 37b, sessions of clients that went away; v1 written before the implementation; v2 records what
+- **Version:** 7 · **Date:** 2026-11-23 (v7: window commands with declared effects — open a project file at a line, tool windows, Settings pages, allowed actions, typing into the focused editor or popup field, reading and choosing in popups — and screenshots drawn by the window itself while it is covered, behaviours 16b, 46-56, section "Window commands and screenshots (v7)"; lifts 25a on macOS; OBS-0116 and OBS-0117 could not operate the window); 2026-11-16 (v6: the question the toolkit draws where the platform has no alert — Linux — is in the tree, reserved for the user, and while one is open in a window no input of an external client reaches that window, behaviour 35, SPEC-0281 v4 behaviour 9); 2026-11-15 (v5: the native level on Linux delivers pointer events in process into the window's own input handler, never through the X server or the compositor, behaviour 20c, UISEC-9; decision on open question 40 of PO-STATUS); 2026-11-08 (v4: behaviour 37b, sessions of clients that went away; v1 written before the implementation; v2 records what
   phase 1 on GPUI 0.2.2 does differently, section "Phase 1 on GPUI 0.2.2 (v2)"; v3: the window
   check of phase 1, section "Window check of phase 1 (v3)"; phase 3 waits for the toolkit
   decision of ADR-0019)
@@ -19,11 +19,11 @@
 - **Roadmap:** M6.16
 
 ## Purpose
-People, agents, scripts and the self-test find the controls of the IDECraft window by what they
+People, agents, scripts and the self-test find the controls of the Ferris IDEA window by what they
 are and what they are called — "the button Commit", "the tree item `main.rs` in the Project
 tree" — and operate them reliably, without coordinates, fixed sleeps or system-wide keystrokes.
 The same semantic tree that the driver reads is the one a screen reader reads. Nothing outside
-IDECraft can use it unless the user switches it on and grants the right.
+Ferris IDEA can use it unless the user switches it on and grants the right.
 
 ## Behaviour
 
@@ -107,9 +107,9 @@ IDECraft can use it unless the user switches it on and grants the right.
 19. **Semantic actions:** `focus`, `select`, `expand`, `collapse`, `invoke` (AccessKit `Click`
     without a pointer), `show_context_menu`, `increment`, `decrement` and any custom action the
     element lists, handled by the same code that answers a screen reader. [STD]
-20. **Delivery levels:** `window` (default) dispatches toolkit input events into IDECraft's
+20. **Delivery levels:** `window` (default) dispatches toolkit input events into Ferris IDEA's
     window; `semantic` sends the AccessKit action request; `native` (opt-in) posts `NSEvent`s to
-    IDECraft's own application queue on macOS (SPEC-0275 behaviour 12) and hands the toolkit's
+    Ferris IDEA's own application queue on macOS (SPEC-0275 behaviour 12) and hands the toolkit's
     pointer events to the window's own input handler on Linux (behaviour 20c). No level sends
     events to the system, to the display server or to another application. [ADR-0027 section 3]
 21. **Result:** an action answers once its input was delivered and the next frame was presented,
@@ -142,7 +142,7 @@ IDECraft can use it unless the user switches it on and grants the right.
     PNGs) in `ui-traces/<time>/` in the user state folder (folder 0700, files 0600), never into the
     project unless a path inside the workspace is given. Traces are masked like everything else
     and hold typed text only as its length. The self-test writes a trace of a failed step when
-    `IDECRAFT_SELFTEST_TRACE` is set. [GEN]
+    `FERRIS_IDEA_SELFTEST_TRACE` is set. [GEN]
 
 ### Events
 27. **`ui.changed`** (session protocol and MCP progress notifications of a subscription) reports
@@ -169,17 +169,17 @@ IDECraft can use it unless the user switches it on and grants the right.
     - `ui_driver_status` — whether external driving is on, which clients drive which windows,
       whether a pause or stop is in effect; needs no right.
     - `ui_driver_stop` — the emergency stop of behaviour 37 for every client; needs no right.
-    The stdio server (`idecraft mcp`) has no window and answers `unavailable` naming the window's
+    The stdio server (`ferris-idea mcp`) has no window and answers `unavailable` naming the window's
     HTTP server. `ui_tooltips` (SPEC-0294) keeps its output and reads it from the tree. [ADR-0008]
-30. **Command line:** `idecraft drive [--project <folder>] <verb> …` with the verbs `snapshot`,
+30. **Command line:** `ferris-idea drive [--project <folder>] <verb> …` with the verbs `snapshot`,
     `find`, `click`, `context-click`, `hover`, `press`, `type`, `scroll`, `drag`, `expect`,
     `screenshot <file>`, `trace start|stop`, `status`, `stop`, and `run <script>`. It reaches the
     running window through the discovery file of SPEC-0221 (no new listener), prints results as
     text or with `--json` as JSON, and exits 0 on success, 1 on a failed assertion or action, 2 on
     a usage error and 3 when no window or no driver is available. A **UI script** is a project file
-    of kind `ui-script` (ADR-0021: TOML with the `[idecraft]` envelope) with a list of steps
-    (`locator`, `action` or `expect`, arguments); it runs only through `idecraft drive run`, never
-    by opening or importing it. `idecraft drive stop` needs no right. [ADR-0021]
+    of kind `ui-script` (ADR-0021: TOML with the `[ferris-idea]` envelope) with a list of steps
+    (`locator`, `action` or `expect`, arguments); it runs only through `ferris-idea drive run`, never
+    by opening or importing it. `ferris-idea drive stop` needs no right. [ADR-0021]
 31. **Session protocol:** family `ui` with `ui.snapshot`, `ui.find`, `ui.act`, `ui.expect`,
     `ui.screenshot`, `ui.trace.start`, `ui.trace.stop`, `ui.subscribe` → `ui.changed`, `ui.event`;
     capability `ui` in `session.hello`. Served by the process that owns the window, for paired
@@ -189,7 +189,7 @@ IDECraft can use it unless the user switches it on and grants the right.
 ### Security
 32. **Off by default:** setting "Allow agents and scripts to operate the window"
     (`ui.driver.external`, Settings → Tools → UI Automation) is off. While off, every external
-    `ui_*` tool except `ui_driver_status` and `ui_driver_stop`, every `idecraft drive` verb except
+    `ui_*` tool except `ui_driver_status` and `ui_driver_stop`, every `ferris-idea drive` verb except
     `status` and `stop`, and every `ui.*` session request answer `unavailable` with the hint where
     to switch it on. The setting is not writable through `set_ide_settings` or any other MCP tool,
     and its Settings page is reserved (behaviour 35). The in-process self-test does not depend on
@@ -201,7 +201,7 @@ IDECraft can use it unless the user switches it on and grants the right.
     SPEC-0313 behaviour 6 masks it; without the right the terminal's text node has no value and its
     area is filled. Editors showing a file outside the workspace root expose no value to external
     clients. [SPEC-0313, ADR-0007]
-34. **Right `ui`:** external clients need the workspace right `ui` ("operate the IDECraft window:
+34. **Right `ui`:** external clients need the workspace right `ui` ("operate the Ferris IDEA window:
     read its interface, click, type and press keys in it"), granted as SPEC-0053 describes (grant
     file in the user folder; a client of the window's HTTP server is asked in the window). Every
     call is checked once; a missing right answers `not_granted` naming `ui`. A client of one
@@ -232,11 +232,11 @@ IDECraft can use it unless the user switches it on and grants the right.
     drives pauses that client for 3 s after the last input (pending and new actions answer
     `interrupted`). **Emergency stop:** Esc pressed by the user while the marking is shown, the
     Stop button, the menu item "Stop UI Automation" (Tools), `ui_driver_stop` or
-    `idecraft drive stop` cancels every pending action within one frame, ends every external driver
+    `ferris-idea drive stop` cancels every pending action within one frame, ends every external driver
     session, withdraws grants of `ui` given for this session only, switches `ui.driver.external`
     off until the user switches it on again, and is logged. [GEN]
 38. **Audit:** every external action, assertion, screenshot and trace start is written to
-    `.idecraft/agent-log.jsonl` with time, actor (client name and session), tool, locator, resolved
+    `.ferris-idea/agent-log.jsonl` with time, actor (client name and session), tool, locator, resolved
     role, name and test id, effects, outcome and duration; typed text only as its length, never a
     value. [SPEC-0053, ADR-0025 section 4]
 39. **Transport:** the driver opens no listener. External clients reach it only through the
@@ -276,7 +276,7 @@ IDECraft can use it unless the user switches it on and grants the right.
   `role=button[name="Commit"]` is resolved, then it matches one (exact name) and
   `role=button[name~="Commit"]` (contains) fails an action with `ambiguous` listing both; the text
   and JSON forms parse to the same locator; an invalid locator answers `invalid` with the position.
-- **AK-2** *Selftest group `mouse` without coordinates:* `IDECRAFT_SELFTEST_ONLY=mouse` passes with
+- **AK-2** *Selftest group `mouse` without coordinates:* `FERRIS_IDEA_SELFTEST_ONLY=mouse` passes with
   every click, context click and hover going through `Step::Ui` by role and name or test id; the
   group's source contains no coordinates, no `hit_targets::get` and no `std::thread::sleep`.
 - **AK-3** *No fixed sleeps:* the driver crate and the self-test executor contain no
@@ -300,7 +300,7 @@ IDECraft can use it unless the user switches it on and grants the right.
   sees that nothing happened.
 - **AK-8** *MCP and CLI:* with the setting on and `ui` granted, a client of the window's HTTP
   server opens the Commit window with `ui_act` (`press` of its shortcut), finds the Commit button
-  with `ui_find`, asserts it disabled with `ui_expect`, and `idecraft drive find
+  with `ui_find`, asserts it disabled with `ui_expect`, and `ferris-idea drive find
   'role=button[name="Commit"]' --json` prints the same element; the stdio server answers
   `unavailable`.
 - **AK-9** *Screenshots and traces:* `ui_screenshot` of the connection dialog with a filled
@@ -319,7 +319,7 @@ IDECraft can use it unless the user switches it on and grants the right.
 ### Security tests (mandatory)
 | ID | Test | Expected |
 |---|---|---|
-| UISEC-1 | **Off by default:** fresh settings; every `ui_*` tool, every `idecraft drive` verb and every `ui.*` request | `unavailable` with the hint, except `ui_driver_status`/`ui_driver_stop`/`status`/`stop`; nothing delivered, nothing in the tree built for the client |
+| UISEC-1 | **Off by default:** fresh settings; every `ui_*` tool, every `ferris-idea drive` verb and every `ui.*` request | `unavailable` with the hint, except `ui_driver_status`/`ui_driver_stop`/`status`/`stop`; nothing delivered, nothing in the tree built for the client |
 | UISEC-2 | **Setting not writable by agents:** `set_ide_settings` with `ui.driver.external`; `ui_act` on the Settings page of UI automation and on agent rights | refused (`invalid` naming the key; `reserved`); setting unchanged |
 | UISEC-3 | **Missing right:** setting on, no `ui` grant; then `ui` granted but not `vcs-write`, and `ui_act` on Commit | `not_granted` naming `ui`, then naming `vcs-write`; no input delivered; both logged |
 | UISEC-4 | **Reserved:** external `ui_act` on the agent-right question's buttons, "Trust Project…", plugin installation, "Always Allow", a keychain prompt, `type` into a password field, `press("cmd-v")` and the Paste menu item | `reserved`; nothing changes; logged |
@@ -327,8 +327,8 @@ IDECraft can use it unless the user switches it on and grants the right.
 | UISEC-6 | **Secrets never leave:** a connection dialog with a known password, a run configuration with a secret environment value and a terminal printing a token; scan `ui_snapshot`, `ui_find`, `ui.changed`, `ui.event`, errors, traces, `agent-log.jsonl` and stderr; decode every screenshot | the known secrets appear nowhere; secret bounds filled in the PNG; terminal text absent without `terminal-read`, masked with it |
 | UISEC-7 | **Project isolation:** two project windows; a client of project A's route addresses project B's window | `not_found` (B's windows are not visible to A's route); nothing delivered |
 | UISEC-8 | **Host cannot drive:** the backend of a remote project sends `ui.snapshot` and `ui.act` over its session | `denied`; logged; the window unchanged |
-| UISEC-9 | **No listener, no system input:** list the listening sockets of the window process with the driver on and off; intercept event posting; on Linux, an observer client of the same X display watches the raw input of every device while the native level clicks | no new socket; no `CGEventPost`/`CGEventCreate*`, XTest, `XSendEvent`, virtual-pointer or uinput call in the workspace (scan test); native events only to IDECraft's own application (macOS) or its own window's input handler (Linux, behaviour 20c, called in `native_click.rs` only); the observer sees no input and the display's pointer does not move |
-| UISEC-10 | **Emergency stop:** while a client waits on a 10 s assertion and another drags: physical Esc, Stop, menu item, `ui_driver_stop`, `idecraft drive stop` (one per run) | pending calls answer `cancelled` within one frame; sessions ended; session-only `ui` grants gone; setting off; logged; a new call answers `unavailable` |
+| UISEC-9 | **No listener, no system input:** list the listening sockets of the window process with the driver on and off; intercept event posting; on Linux, an observer client of the same X display watches the raw input of every device while the native level clicks | no new socket; no `CGEventPost`/`CGEventCreate*`, XTest, `XSendEvent`, virtual-pointer or uinput call in the workspace (scan test); native events only to Ferris IDEA's own application (macOS) or its own window's input handler (Linux, behaviour 20c, called in `native_click.rs` only); the observer sees no input and the display's pointer does not move |
+| UISEC-10 | **Emergency stop:** while a client waits on a 10 s assertion and another drags: physical Esc, Stop, menu item, `ui_driver_stop`, `ferris-idea drive stop` (one per run) | pending calls answer `cancelled` within one frame; sessions ended; session-only `ui` grants gone; setting off; logged; a new call answers `unavailable` |
 | UISEC-11 | **User input wins:** physical key and pointer input during an external action sequence | actions answer `interrupted` until 3 s after the last input; no input of the client is mixed into the user's typing |
 | UISEC-12 | **Marking:** an external client drives | frame, chip with the client's name and Stop, target highlight and pointer marker present (read through the tree and the painted frame); no layout change (bounds of all nodes equal with and without marking) |
 | UISEC-13 | **Audit without content:** `type` of a known text | log entry with length only; the text appears in no log or trace |
@@ -341,7 +341,7 @@ IDECraft can use it unless the user switches it on and grants the right.
   the event stream).
 - Driving the reference IDE; side-by-side scripts keep using Remote Robot there, with the same
   locator vocabulary where the reference exposes accessible names.
-- A published SDK for plugin authors (M11.4, after GO-4); the Rust API and `idecraft drive` are
+- A published SDK for plugin authors (M11.4, after GO-4); the Rust API and `ferris-idea drive` are
   the interfaces until then.
 
 ## Phase 1 on GPUI 0.2.2 (v2)
@@ -370,26 +370,26 @@ behaviour v1 as written, the safer variant applies until phase 3; each item name
 - **19a — Semantic actions.** GPUI 0.2.2 has no accessibility actions; the semantic level answers
   `unsupported` (except `scroll_into_view` of a node that is already shown, which needs nothing).
   Lifted in phase 3 (`on_a11y_action`).
-- **20a — The native level only in process.** Native events posted to IDECraft's own queue cannot
+- **20a — The native level only in process.** Native events posted to Ferris IDEA's own queue cannot
   be told from the user's own input when they arrive, so the user could not take over
   (behaviour 37): external clients get `unsupported` for `level: native`. The self-test's clicks
   use it, as before (SPEC-0275 behaviour 12). The UISEC-9 scan allows `CGEventCreateCopy` in
-  `native_click.rs`: it copies an event of IDECraft's own queue to set its button number and posts
-  the copy to IDECraft only; it forbids `CGEventPost*`, `CGEventCreate{Mouse,Keyboard,ScrollWheel}
+  `native_click.rs`: it copies an event of Ferris IDEA's own queue to set its button number and posts
+  the copy to Ferris IDEA only; it forbids `CGEventPost*`, `CGEventCreate{Mouse,Keyboard,ScrollWheel}
   Event`, event taps, XTest, `XSendEvent`, `SendInput` and `AXUIElementPostKeyboardEvent`.
 - **20c — The native level on Linux (v5).** X11 and Wayland have no queue of the application's
   own that events can be posted to: the only native paths are the display server's (XTEST,
   `XSendEvent`, a virtual pointer of the compositor, uinput), and each of them puts input into the
   whole display, where any client and any window under the point could receive it. They stay
-  forbidden (UISEC-9), also restricted to IDECraft's own windows and also in the self-test: the
-  display decides who gets the input, not IDECraft. Instead the native level on Linux (and on
+  forbidden (UISEC-9), also restricted to Ferris IDEA's own windows and also in the self-test: the
+  display decides who gets the input, not Ferris IDEA. Instead the native level on Linux (and on
   every platform other than macOS) builds the toolkit's own pointer events — the pointer moves to
   the point, then each press and release with its click count, Control on a Control-click and a
   move without it afterwards — and hands them, after the current frame, to the window's input
   handler: the handler gpui's X11 and Wayland layers call for a real click. Nothing reaches the X
   server or the compositor. GPUI 0.2.2 has no public way to do that (16a), so the workspace uses
   gpui 0.2.2 vendored in `vendor/gpui/` with one addition, `Window::dispatch_in_process_pointer_input`
-  (pointer events only; keys and file drops are refused), recorded in `vendor/gpui/IDECRAFT.md`.
+  (pointer events only; keys and file drops are refused), recorded in `vendor/gpui/FERRIS_IDEA.md`.
   Only `crates/app/src/native_click.rs` calls it (scan test), and only the self-test reaches that
   file: external clients keep `unsupported` for the native level (20a) and for pointer actions at
   the window level (16a). What the platform layer adds to a real click and this path leaves out:
@@ -399,13 +399,14 @@ behaviour v1 as written, the safer variant applies until phase 3; each item name
   the system puts it (the platform's key equivalents, as the self-test resolves `[`); Option
   combinations carry no character.
 - **25a — Screenshots.** `ui_screenshot` answers `unsupported` (behaviour 25 allows it); no
-  read-back of the frame exists in GPUI 0.2.2.
+  read-back of the frame exists in GPUI 0.2.2. **(v7)** Lifted on macOS by behaviour 53; Linux
+  and Windows keep `unsupported`.
 - **26a — Traces.** Traces have every field of behaviour 26 except element screenshots (25a) and
   stderr lines, which phase 1 does not capture. `ui_trace stop` writes into `ui-traces/<time>/`
-  of the user's settings folder (IDECraft has no separate state folder yet) or into a folder of
+  of the user's settings folder (Ferris IDEA has no separate state folder yet) or into a folder of
   the workspace named by `path`.
 - **28a — Self-test steps.** `Step::Click` and `Step::Hover` run on the driver when
-  `IDECRAFT_SELFTEST_DRIVER=1` is set (default: the old path until the window run proves it):
+  `FERRIS_IDEA_SELFTEST_DRIVER=1` is set (default: the old path until the window run proves it):
   locator `id=<mark name>`, auto-waiting, delivery at the native level. `Step::Ui` and
   `Step::ExpectUi` come with the first group that moves (phase 2). `WaitFor` keeps its 16 ms sleep
   until phase 2 (behaviour 42); the driver crate and its window host have none (AK-3 scan).
@@ -438,7 +439,7 @@ behaviour v1 as written, the safer variant applies until phase 3; each item name
 ## Window check of phase 1 (v3)
 The window check of 2026-11-07 drove a window over the MCP server on HTTP (isolated settings
 folder, `ui` and `write` granted in the grant file) and ran the self-test groups `mouse` and
-`tooltips` with `IDECRAFT_SELFTEST_DRIVER=1`. What holds and what follows from it: [GEN]
+`tooltips` with `FERRIS_IDEA_SELFTEST_DRIVER=1`. What holds and what follows from it: [GEN]
 
 1. **Holds:** with the switch off every `ui_*` tool except status and stop answers `unavailable`
    with the place of the switch; `press` of a key with a declared effect is delivered (⌘⇧O opened
@@ -460,22 +461,178 @@ folder, `ui` and `write` granted in the grant file) and ran the self-test groups
    the check's computer use could not take the screen (the user was at the Mac).
 5. **37b — Clients that went away (v4):** a driver session without a call for 60 s and without a
    call waiting ends and leaves `ui_driver_status`, with an entry `ui_session_ended` in
-   `.idecraft/agent-log.jsonl`; the same client's next call lists it again. Phase 1 uses only this
+   `.ferris-idea/agent-log.jsonl`; the same client's next call lists it again. Phase 1 uses only this
    timeout: the MCP transport tells the window nothing when a client closes its connection.
+
+## Window commands and screenshots (v7)
+In OBS-0116 and OBS-0117 the observing agents could not operate Ferris IDEA's window with the driver:
+in phase 1 almost no view is annotated (3a), so clicks on tool-window buttons, keys without a
+declared effect, typing and popups answered `undeclared`, and computer use is cancelled whenever
+the user works at the Mac. A side-by-side check needs to open files, tool windows and Settings
+pages, invoke actions, type, read popups and take screenshots without the screen. Version 7 adds
+**window commands**: each one is a named operation with a declared effect, carried out by the
+window through the same code its menu and keys use, so an agent does not depend on annotations or
+pointer input. Behaviours 32-39 apply to every command unchanged: the user's switch, the right
+`ui`, effect rights, reserved elements, marking, the user's input winning, the emergency stop,
+audit, no listener. [GEN, rule 12]
+
+46. **`open_file`** (`path`, optional 1-based `line` and `column`) opens a file in an editor tab and
+    puts the caret there, as choosing it in Search Everywhere does. Effect `none`. The path is
+    relative to the project root or absolute inside it; `..` is refused, links are followed and the
+    real path must lie inside the real project root (`denied` otherwise, UISEC-15), be a regular
+    file, and not be **secret-like**: anything below `.ferris-idea/`, `.git/`, `.ssh/`, `.gnupg/`,
+    `.aws/`, `.docker/` or `.kube/`, `.env` and `.env.*`, `.netrc`, `.npmrc`, `.pypirc`, `.pgpass`,
+    `.git-credentials`, `credentials`, `id_rsa*`/`id_ed25519*`/`id_ecdsa*`/`id_dsa*`, names with
+    `secret`, and the extensions `pem`, `key`, `p12`, `pfx`, `jks`, `keystore`, `kdbx`, `gpg`,
+    `asc` (`reserved`). The project's agent state is excluded so that no command can open, then
+    type into, a file that holds grants or the audit log.
+47. **`tool_window`** (`id` as `ToolWindow::id` writes it — `project`, `problems`, `containers`,
+    `remote`, `terminal`, …; `op` `open` (default), `focus` or `close`) shows, focuses or hides the
+    tool window as its activation action does; an open window that already has the focus stays
+    open. It answers `shown` and `focused` afterwards. Effect `none`, except that showing the
+    Terminal starts a shell: `run`.
+48. **`settings`** (`page`: the page's title in kebab case — `appearance`, `keymap`, `code-style`,
+    `languages-frameworks`, …) opens the Settings dialog on that page; **`close_settings`** closes
+    it as Escape does (changes apply as they are made, so closing saves nothing). Effect `none`.
+    The pages `ai-assistant` (this driver's switch, the MCP server, the API key) and
+    `trusted-locations` are **reserved**. While Settings is open, behaviour 30a stays: every
+    `ui_act` and every command except `settings`, `close_settings`, `popup` and `list` answers
+    `reserved`, so a page can be looked at and photographed but not operated.
+49. **`invoke`** (`action`: a keymap action id) carries out the action as the menu bar does. Only
+    actions on the **allow list** are carried out: the effects of the id are declared
+    (`effects_of_action`, behaviour 35a) and each is `none`, `write`, `run` or `debug`, each still
+    needing its right; the id does not read the clipboard; it is not `ShowSettings`,
+    `ShowProjectStructureSettings` (Settings go through behaviour 48), `RunAnything` (any command
+    line), `CloseProject`, `CloseAllProjects`, `CloseOtherProjects`, `Exit` or `$Quit`; and it
+    contains none of the words `Delete`, `Remove`, `Revert`, `Rollback`, `Discard`, `Reset`,
+    `Drop`, `Truncate`, `Purge` (destructive), `Password`, `Credential`, `Token`, `Secret`,
+    `Keychain`, `Vault`, `Login`, `Account` (credentials), `Trust`, `Permission`, `Grant`
+    (permissions), `Paste`, `Settings`. Everything else answers `reserved` (or `undeclared` for an
+    id without declared effects); `vcs-write`, `remote`, `ssh`, `http`, `ports`, `trust` and `quit`
+    effects are never on the list.
+50. **`type_text`** (`text`, 1 to 10 000 characters) commits the text through the window's input
+    handler (behaviour 18) into the **focused editor** — effect `write`, and only when its file is
+    one behaviour 46 would open — or into the field of an **open popup** that has the focus (Search
+    Everywhere and its Go to tabs, Go to Line, the filter of the context actions) — effect `none`.
+    Anywhere else (dialogs, tool windows, the terminal, secret fields) it answers `reserved` and
+    types nothing. Typed text is never logged, only its length.
+51. **`popup`** reads the open popup or list: its `kind` (`intentions` for the context actions of
+    ⌥↩, `completion`, `search_everywhere`, `goto`), its visible items in order with `kind`,
+    `label`, `detail` (file and line, type) and, for action rows, the action id, and the selected
+    item. Effect `none`. **`choose`** (`index`, or the exact `label` of one item) chooses an item
+    as Return on it does. Its effect depends on what choosing does: a context action or a
+    completion suggestion changes the file (`write`); an action row of Search Everywhere is checked
+    as `invoke` checks it (behaviour 49) and a Settings row as `settings` (behaviour 48); a file,
+    class, symbol, text or endpoint row only navigates (`none`). Headings cannot be chosen; choosing
+    in the Go to Line / Recent Files popup answers `invalid` (type into its field instead).
+51a. **`dismiss`** closes every open popup, submenu (also one a `choose` opened), context menu,
+    completion list, parameter info and quick documentation without a choice, as Escape does, and
+    gives the keys back to the editor. Effect `none`. Opening another file — through `open_file` or
+    in any other way — closes the context actions and the completion list of the file left behind,
+    so no popup stays over a file it does not belong to. [Feedback of the F-081 comparison agent]
+52. **`list`** names the tool windows (id, title, shown, effects of showing) and the Settings pages
+    (id, title, reserved), whether Settings is open, the active file and the open popup's kind.
+    Effect `none`.
+53. **Screenshots** (lifts 25a on macOS): `ui_screenshot` of the window, of one element
+    (`locator`) or of a `region` (`{x, y, w, h}` in logical window coordinates) is drawn by the
+    window itself: when something changed since its last frame the window lays out and paints a new
+    one — also while it is covered or in the background and macOS gives it no frames — and the
+    renderer draws that frame's scene a second time into an offscreen texture and reads it back. No
+    screen capture is made and the screen-recording permission is never requested. Before the image
+    is encoded, the bounds of secret nodes, password inputs, editors of files outside the workspace
+    and — for clients without `terminal-read` — the terminal are filled with a 2-pixel margin
+    (behaviour 33). The answer has `width`, `height` (device pixels), `scale`, `masked` (filled
+    areas) and the PNG as MCP image content. Where the renderer gives no read-back (Linux, Windows,
+    the headless test platform) it answers `unsupported`. The read-back is a fourth change of the
+    vendored gpui 0.2.2 (`Window::capture_frame`, `PlatformWindow::capture_frame`, `MetalRenderer::capture`;
+    `vendor/gpui/FERRIS_IDEA.md` change 5), which delivers no input and presents nothing.
+54. **Interfaces:** the MCP tool **`ui_command`** (`command` and its arguments, `window`); the
+    command line `ferris-idea drive open <path> [--line n] [--column n]`, `tool-window <id>
+    [open|focus|close]`, `settings <page>|close`, `invoke <action>`, `type-text <text>`, `popup`,
+    `choose <index>|--label <label>`, `list`, and `screenshot <file.png> [--of <locator>]
+    [--region x,y,w,h]`, which writes the PNG (mode 0600); UI scripts take `command = "…"` steps
+    with the same fields (`invoke` for the action id). Every call — refused ones too — is one line
+    in `.ferris-idea/agent-log.jsonl` with the command and its target (never typed text), effects,
+    outcome and duration. **54a.** A command whose effect needs a right the client lacks answers
+    `not_granted` naming the right at once; unlike `ui_act`, a command never asks in the window
+    and never waits for that question, which a driving agent cannot answer. While the user's own input pauses external clients a command answers
+    `interrupted` and does nothing (behaviour 37); a command marks the window like an action
+    (behaviour 36).
+
+55. **A window in the background:** `FERRIS_IDEA_UI_BACKGROUND=1` (environment of `ferris-idea ui`)
+    starts Ferris IDEA without activating it and with its first project window minimized, so a
+    comparison agent drives it with `ferris-idea drive` while the user works at the Mac; it changes
+    no right, setting or check. [GEN]
+
+55a. **Frames of a window that draws none:** macOS stops the display link of a minimized or
+    fully covered window, so `ui_snapshot`, `ui_find`, `ui_act` and `ui_expect` would wait for a
+    frame that never comes. On each turn of the window's MCP request loop the host draws a frame
+    itself for every window whose calls wait and that has advanced none for 250 ms, and advances
+    the calls on it; waiting stays tied to requests and frames, the driver has no timer of its own
+    (AK-3).
+16b. **Pointer actions at the window level (lifts 16a):** `click`, `context_click` and `hover`
+    of an external client are delivered as the toolkit's own pointer events — the pointer moves to
+    the action point, then each press and release with its count and modifiers — through the
+    window's own input handler in process (the hook of behaviour 20c, still called only in
+    `native_click.rs`), marked as synthesised so they never count as the user's input. All checks
+    of behaviours 12 and 35 apply before: the element must be annotated with its declared effects,
+    and each effect's right is checked. Nothing reaches the system's event queue, the display
+    server or another application (UISEC-9). `drag` and `scroll` stay `unsupported`.
+56. **Annotated tool windows:** the elements agents need for the side-by-side checks declare
+    their effects. **Problems:** the scope tabs, the toolbar toggles, "Inspect Code…", the problem
+    rows and "Attach to Chat" — `none`. **Containers:** the list (keys on it start, stop, restart
+    and remove containers, open shells, URLs and port forwards: `run` and `ports`; a key's own
+    keymap effects add to these), each row (`none`: selecting; a double click shows the logs) and
+    the log pane (a read-only document). **Remote Host:** the host/path field (`ssh`: Enter
+    connects or goes to the path), SSH Terminal and Start Backend (`ssh`, `run`), Hosts (`none`),
+    New File, New Folder, Rename and Delete (`ssh`), and the rows (`ssh`: a double click connects,
+    browses or opens). Controls added by later changes (image pull, log search, Add Host…) are
+    annotated by those changes.
+
+### Acceptance criteria of v7
+- **AK-14** *Commands headless:* in a window of GPUI's test platform with the window's MCP server
+  over HTTP, the switch on and `ui` granted, a client opens `src/main.rs` at line 2 with
+  `ui_command open_file` (the active file and caret say so), opens Problems and Containers with
+  `tool_window` (both answer `shown: true`), invokes `ShowIntentionActions` and reads the context
+  actions with `popup` (`kind: intentions`, at least one item), and `ui_screenshot` answers
+  `unsupported` on the test platform; each call is one line in the agent log.
+- **AK-15** *Real window in the background (macOS):* the `ferris-idea` window started with an
+  isolated settings folder and not activated, behind the frontmost application: `ferris-idea drive`
+  opens a file, the Problems and Containers tool windows and the ⌥↩ list, reads the list, and
+  `ferris-idea drive screenshot` writes a PNG of the window's size whose pixels are not all one
+  colour.
+- **AK-16** *Allow list and files:* `invoke` passes `ShowIntentionActions`, `ActivateProblemsToolWindow`
+  and (with `write`) `ReformatCode`, and refuses `SafeDelete`, `$Delete`, `ChangesView.Revert`,
+  `Vcs.Push`, `CheckinProject`, `$Paste`, `ShowSettings`, `RunAnything`, `Exit` and `CloseProject`;
+  `open_file` refuses `../x`, an absolute path outside, a link leaving the project, `.env` and
+  `.ferris-idea/agent-log.jsonl`.
+- **AK-17** *Screenshot masking:* the filled areas cover every secret node, password input and,
+  without `terminal-read`, the terminal, with the margin; a region is cut in device pixels.
+
+### Security tests of v7 (mandatory)
+| ID | Test | Expected |
+|---|---|---|
+| UISEC-15 | **Outside the project:** `open_file` with `../`, an absolute path outside, a link to a file outside, `.env`, a file below `.ferris-idea/` | `denied` or `reserved`; nothing opens; logged |
+| UISEC-16 | **Allow list:** `invoke` of destructive, credential, permission, clipboard and Settings actions; `choose` of such a row in Search Everywhere | `reserved`; nothing happens; logged |
+| UISEC-17 | **Switch and right:** every command with the switch off, then on without `ui` | `unavailable`, then `not_granted` naming `ui`; nothing delivered |
+| UISEC-18 | **Settings and questions:** with Settings open, every command except `settings`, `close_settings`, `popup`, `list`; `settings` of `ai-assistant` and `trusted-locations`; any command but `popup`/`list` while a drawn question is open | `reserved`; nothing delivered |
+| UISEC-19 | **Typing only where it belongs:** `type_text` with the focus in a dialog, a tool window or the terminal; in an editor of a secret-like file | `reserved`; nothing typed; the log has the length only |
 
 ## Known deviations from the reference
 - **IMP-0382:** the reference platform's UI test tool (Remote Robot) serves an HTTP endpoint on a
   local port without authentication that executes scripts inside the IDE, addresses components by
-  XPath over Swing class names, and waits by polling. IDECraft's driver has no listener of its own,
+  XPath over Swing class names, and waits by polling. Ferris IDEA's driver has no listener of its own,
   is off by default, needs the right `ui` plus the effect rights, executes no scripts inside the
   process, addresses elements by role, accessible name and test id from the accessibility tree, and
   waits on events.
-- The reference has no built-in, permissioned driver for agents; IDECraft offers one through MCP
+- The reference has no built-in, permissioned driver for agents; Ferris IDEA offers one through MCP
   (ADR-0008).
 
 ## Open points
-- Frame read-back for screenshots in the upstream GPUI pin (phase 3) and in GPUI 0.2.2 (phase 1);
-  where missing, `ui_screenshot` stays `unsupported` until a small toolkit contribution lands.
+- Frame read-back for screenshots in the upstream GPUI pin (phase 3) and on Linux (Blade); macOS
+  on GPUI 0.2.2 has it since v7 (behaviour 53).
 - Whether GPUI 0.2.2's test platform lays out text well enough for AK-10 on macOS and Linux.
 - Whether frames advance in a window that is fully occluded or on a locked screen once the driver
-  requests them (behaviour 13), to be measured in phase 1.
+  requests them (behaviour 13), to be measured in phase 1. (v7: macOS stops the display link of a
+  fully covered window; commands do not wait for frames and screenshots draw a frame themselves,
+  but `ui_act` and `ui_expect` still wait for presented frames.)

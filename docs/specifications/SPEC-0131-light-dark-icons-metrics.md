@@ -14,7 +14,7 @@
 - **Feature matrix rows:** F-087
 
 ## Purpose
-IDECraft looks right in light surroundings too, switches with the system, tells file types apart
+Ferris IDEA looks right in light surroundings too, switches with the system, tells file types apart
 at a glance and has controls of the reference's size.
 
 ## Behaviour
@@ -22,8 +22,8 @@ at a glance and has controls of the reference's size.
    Light Header` and New UI `Light`, editor scheme `Light`), listed after Islands Dark in the theme
    popup and on the Appearance page. [OSS]
 2. **Sync with OS** (Appearance page, off by default): the theme follows the system's appearance —
-   the preferred dark theme (default IDECraft Dark since SPEC-0060 v6, before that Islands Dark)
-   while the system is dark, the preferred light theme (default IDECraft Light, before that Islands
+   the preferred dark theme (default Ferris IDEA Dark since SPEC-0060 v6, before that Islands Dark)
+   while the system is dark, the preferred light theme (default Ferris IDEA Light, before that Islands
    Light) otherwise — at start-up, when switched on and whenever the system changes, in every
    window. The page shows both preferred themes. A preferred name that is no bundled theme gives
    the default of its kind. [GEN]
@@ -38,7 +38,7 @@ at a glance and has controls of the reference's size.
 4. **File icons:** Python, Kotlin, Swift, Dockerfile, `.gitignore`/`.dockerignore`, Vue, GraphQL,
    HTTP requests, Jupyter, Terraform and Perl files get the reference's open icons; Rust, Go, Ruby,
    PHP and the web component languages Svelte and Astro, whose reference icons are not open, get
-   IDECraft's own icons in the same 16 px style (no product logos); HTML template files
+   Ferris IDEA's own icons in the same 16 px style (no product logos); HTML template files
    (Handlebars, Mustache, EJS, Nunjucks, Twig, Liquid, Jinja, Pug, ERB) get the HTML icon and MDX
    the Markdown icon, so no known web file shows the unknown icon; plain text keeps the text
    icon. [OSS, GEN, ADR-0009]
@@ -59,7 +59,7 @@ at a glance and has controls of the reference's size.
      type, `object`. A file with several top-level declarations, or with any top-level function, property
      or type alias, keeps the Kotlin file icon; so do `.kts` scripts.
    - **Icons:** class, interface and enum are the open node icons already bundled; record, annotation type
-     and object are IDECraft's own drawings in the same 16 px badge style (a circle with a stroked `R`,
+     and object are Ferris IDEA's own drawings in the same 16 px badge style (a circle with a stroked `R`,
      `@`, `O`), light and dark, never traced from another product.
    - **Source of the kind:** the top level of the text is scanned without a syntax tree (comments, strings,
      annotations with arguments and everything inside brackets skipped; at most the first 64 KiB, a longer
@@ -113,5 +113,5 @@ Own icons for Rust, Go, Ruby, PHP, Svelte and Astro (the reference's are not ope
 languages share the HTML icon instead of one icon each. Not compared side by side.
 
 v3 (OBS-0027 L21): the reference has Kotlin variants of the class, interface and object icons and marks
-abstract, final and test classes on the icon; IDECraft shows the plain kind. Own drawings for record,
+abstract, final and test classes on the icon; Ferris IDEA shows the plain kind. Own drawings for record,
 annotation type and object until open ones are copied.

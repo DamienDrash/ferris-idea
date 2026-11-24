@@ -1,8 +1,9 @@
 //! Copyright notices (`SPEC-0155` behaviours 1–3), as the reference's open Copyright plugin keeps
 //! them: a notice template with variables, written as a comment at the top of a file and replaced
-//! where a comment there already holds the keyword.
+//! where a comment there already holds the keyword. v5: line comments byte for byte as the
+//! reference writes them, and the files of a scope (`SPEC-0155` v5 behaviours 2 and 11).
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::LanguageId;
 
@@ -107,11 +108,11 @@ fn option(xml: &str, name: &str) -> Option<String> {
     Some(xml_unescape(&tag[v..v + end]))
 }
 
-/// The project's copyright profile: `.idecraft/copyright.txt` (the template; an optional first line
+/// The project's copyright profile: `.ferris-idea/copyright.txt` (the template; an optional first line
 /// `keyword: …` sets the keyword), else the default profile of the reference's
 /// `.idea/copyright/` folder (`profiles_settings.xml` names it; with one profile, that one).
 pub fn load_profile(root: &Path) -> Option<Profile> {
-    if let Ok(text) = std::fs::read_to_string(root.join(".idecraft/copyright.txt")) {
+    if let Ok(text) = std::fs::read_to_string(root.join(".ferris-idea/copyright.txt")) {
         let (keyword, notice) = match text.split_once('\n') {
             Some((first, rest)) if first.starts_with("keyword:") => {
                 (first["keyword:".len()..].trim().to_owned(), rest.to_owned())
@@ -157,10 +158,24 @@ pub fn load_profile(root: &Path) -> Option<Profile> {
     })
 }
 
-/// How a language writes the notice: block delimiters with a line prefix, or a line comment.
+/// How a language writes the notice: block delimiters with a line prefix, or line comments.
 enum Style {
     Block(&'static str, &'static str, &'static str),
-    Line(&'static str),
+    /// Line comments: the token, what stands between it and the text, and whether a line of the
+    /// bare token comes before and after the notice.
+    Line {
+        token: &'static str,
+        gap: &'static str,
+        frame: bool,
+    },
+}
+
+const fn line(token: &'static str) -> Style {
+    Style::Line {
+        token,
+        gap: " ",
+        frame: false,
+    }
 }
 
 fn style(language: LanguageId) -> Style {
@@ -181,10 +196,22 @@ fn style(language: LanguageId) -> Style {
         | L::Php
         | L::Go => Style::Block("/*", " * ", " */"),
         L::Html | L::Xml | L::Markdown | L::Vue | L::Svelte => Style::Block("<!--", "  ", "-->"),
-        L::Sql | L::Lua => Style::Line("--"),
-        L::Rust => Style::Line("//"),
-        L::Json => Style::Line(""),
-        _ => Style::Line("#"),
+        L::Sql | L::Lua => line("--"),
+        L::Rust => line("//"),
+        L::Json => line(""),
+        // As the reference writes them (SPEC-0155 v5 behaviour 2, OBS-0092): two spaces after `#`
+        // in Python, a bare `#` line before and after the notice in shell scripts.
+        L::Python => Style::Line {
+            token: "#",
+            gap: "  ",
+            frame: false,
+        },
+        L::Shell => Style::Line {
+            token: "#",
+            gap: " ",
+            frame: true,
+        },
+        _ => line("#"),
     }
 }
 
@@ -192,18 +219,24 @@ fn style(language: LanguageId) -> Style {
 pub fn comment(language: LanguageId, notice: &str) -> Option<String> {
     let lines: Vec<&str> = notice.lines().collect();
     Some(match style(language) {
-        Style::Line("") => return None,
-        Style::Line(token) => lines
-            .iter()
-            .map(|l| {
+        Style::Line { token: "", .. } => return None,
+        Style::Line { token, gap, frame } => {
+            let mut out: Vec<String> = Vec::new();
+            if frame {
+                out.push(token.to_owned());
+            }
+            out.extend(lines.iter().map(|l| {
                 if l.is_empty() {
                     token.to_owned()
                 } else {
-                    format!("{token} {l}")
+                    format!("{token}{gap}{l}")
                 }
-            })
-            .collect::<Vec<_>>()
-            .join("\n"),
+            }));
+            if frame {
+                out.push(token.to_owned());
+            }
+            out.join("\n")
+        }
         Style::Block(open, prefix, close) => {
             let mut out = vec![open.to_owned()];
             out.extend(
@@ -254,7 +287,7 @@ fn leading_comment(
             // Also a run of `//` comments in C-like languages.
             line_run(text, start, "//")
         }
-        Style::Line(token) if !token.is_empty() => line_run(text, start, token),
+        Style::Line { token, .. } if !token.is_empty() => line_run(text, start, token),
         _ => None,
     }
 }
@@ -299,6 +332,28 @@ pub fn update(path: &Path, text: &str, profile: &Profile, values: &Values) -> Op
     (out != text).then_some(out)
 }
 
+/// What the template's variables stand for in `file` of the project at `root` in `year`.
+pub fn values(root: &Path, file: &Path, year: i32) -> Values {
+    let name = |p: &Path| {
+        p.file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default()
+    };
+    Values {
+        year,
+        file_name: name(file),
+        project: name(root),
+        user: std::env::var("USER").unwrap_or_default(),
+    }
+}
+
+/// The files Update Copyright runs over (`SPEC-0155` v5 behaviour 11), relative to `root`: the
+/// project's own files for the whole project (`below` is `None`), else the file or the files below
+/// the folder `below` names, as Inspect Code takes them (`SPEC-0098` v8 behaviour 16).
+pub fn scope_files(root: &Path, below: Option<&Path>) -> Vec<PathBuf> {
+    crate::inspections::inspection_files(root, below).files
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -337,7 +392,7 @@ mod tests {
         let py = "#!/usr/bin/env python3\n# -*- coding: utf-8 -*-\nprint(1)\n";
         assert_eq!(
             update(Path::new("x.py"), py, &profile(), &values(2025)).unwrap(),
-            "#!/usr/bin/env python3\n# -*- coding: utf-8 -*-\n# Copyright (c) 2025 demo.\n# All rights reserved.\n\nprint(1)\n"
+            "#!/usr/bin/env python3\n# -*- coding: utf-8 -*-\n#  Copyright (c) 2025 demo.\n#  All rights reserved.\n\nprint(1)\n"
         );
         let xml = "<?xml version=\"1.0\"?>\n<a/>\n";
         assert!(
@@ -358,6 +413,72 @@ mod tests {
         );
     }
 
+    /// SPEC-0155/AK-9 (v5): the bytes OBS-0092 recorded for `tool.py` and `notice.sh`; both up to
+    /// date afterwards, a notice in the reference's form left alone, a v1 notice rewritten.
+    #[test]
+    fn line_comment_notices_as_the_reference_writes_them() {
+        let demo = Profile {
+            notice: "Copyright (c) $today.year Demo\nAll rights reserved.".into(),
+            keyword: "Copyright".into(),
+        };
+        let v = values(2026);
+        let py = update(Path::new("tool.py"), "print(1)\n", &demo, &v).unwrap();
+        assert_eq!(
+            py.as_bytes(),
+            b"#  Copyright (c) 2026 Demo\n#  All rights reserved.\n\nprint(1)\n"
+        );
+        assert_eq!(update(Path::new("tool.py"), &py, &demo, &v), None);
+        let sh = update(Path::new("notice.sh"), "#!/bin/sh\necho hi\n", &demo, &v).unwrap();
+        assert_eq!(
+            sh.as_bytes(),
+            b"#!/bin/sh\n#\n# Copyright (c) 2026 Demo\n# All rights reserved.\n#\n\necho hi\n"
+        );
+        assert_eq!(update(Path::new("notice.sh"), &sh, &demo, &v), None);
+        // The v1 form of Ferris IDEA is rewritten once into the reference's.
+        let old_py = "# Copyright (c) 2026 Demo\n# All rights reserved.\n\nprint(1)\n";
+        assert_eq!(
+            update(Path::new("tool.py"), old_py, &demo, &v).as_deref(),
+            Some(py.as_str())
+        );
+        let old_sh = "#!/bin/sh\n# Copyright (c) 2026 Demo\n# All rights reserved.\n\necho hi\n";
+        assert_eq!(
+            update(Path::new("notice.sh"), old_sh, &demo, &v).as_deref(),
+            Some(sh.as_str())
+        );
+        // Other `#` languages keep one space and no frame.
+        assert_eq!(
+            update(Path::new("a.rb"), "puts 1\n", &demo, &v).unwrap(),
+            "# Copyright (c) 2026 Demo\n# All rights reserved.\n\nputs 1\n"
+        );
+    }
+
+    /// SPEC-0155/AK-9 (v5): the whole project's own files, a folder, one file.
+    #[test]
+    fn files_of_a_scope() {
+        let dir = std::env::temp_dir().join(format!("ferris-idea-cscope-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("src")).unwrap();
+        std::fs::create_dir_all(dir.join("node_modules/x")).unwrap();
+        for f in ["src/Main.java", "tool.py", "node_modules/x/i.js"] {
+            std::fs::write(dir.join(f), "x\n").unwrap();
+        }
+        let rel = |v: Vec<PathBuf>| -> Vec<String> {
+            let mut v: Vec<String> = v.iter().map(|p| p.display().to_string()).collect();
+            v.sort();
+            v
+        };
+        assert_eq!(rel(scope_files(&dir, None)), ["src/Main.java", "tool.py"]);
+        assert_eq!(
+            rel(scope_files(&dir, Some(Path::new("src")))),
+            ["src/Main.java"]
+        );
+        assert_eq!(
+            rel(scope_files(&dir, Some(&dir.join("tool.py")))),
+            ["tool.py"]
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn years_of_days() {
         assert_eq!(year_of_day(0), 1970);
@@ -368,7 +489,8 @@ mod tests {
 
     #[test]
     fn reads_the_reference_profile_format() {
-        let dir = std::env::temp_dir().join(format!("idecraft-copyright-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("ferris-idea-copyright-{}", std::process::id()));
         let c = dir.join(".idea/copyright");
         std::fs::create_dir_all(&c).unwrap();
         std::fs::write(
@@ -384,9 +506,9 @@ mod tests {
         let p = load_profile(&dir).unwrap();
         assert_eq!(p.notice, "© $today.year Acme & Co.\nMIT");
         assert_eq!(p.keyword, "Copyright");
-        std::fs::create_dir_all(dir.join(".idecraft")).unwrap();
+        std::fs::create_dir_all(dir.join(".ferris-idea")).unwrap();
         std::fs::write(
-            dir.join(".idecraft/copyright.txt"),
+            dir.join(".ferris-idea/copyright.txt"),
             "keyword: ©\n© $today.year Own\n",
         )
         .unwrap();

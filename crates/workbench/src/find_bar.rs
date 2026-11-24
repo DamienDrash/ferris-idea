@@ -2,8 +2,8 @@
 
 use std::path::PathBuf;
 
+use ferris_idea_core::Query;
 use gpui::{Context, Entity, Subscription, div, prelude::*, px};
-use idecraft_core::Query;
 
 use crate::EditorView;
 use crate::find_model::FindState;
@@ -33,7 +33,7 @@ pub struct FindBar {
     /// Search only in this char range of the editor (v4 behaviour 12).
     pub in_selection: Option<std::ops::Range<usize>>,
     /// Comments and string literals filter (v4 behaviour 13).
-    pub context: idecraft_languages::syntax::SearchContext,
+    pub context: ferris_idea_languages::syntax::SearchContext,
     /// Typing in the query moves the editor to the first match (v4 behaviour 14).
     pub scroll_while_typing: bool,
     /// Replacements keep the case of the matched text (v4 behaviour 16).
@@ -70,7 +70,7 @@ impl FindBar {
             _query_watch: watch,
             replace: None,
             in_selection: None,
-            context: idecraft_languages::syntax::SearchContext::Anywhere,
+            context: ferris_idea_languages::syntax::SearchContext::Anywhere,
             scroll_while_typing: true,
             preserve_case: false,
             excluded: Vec::new(),
@@ -93,7 +93,7 @@ impl FindBar {
 
 /// A toggle button of the bar: label, tooltip-like id, state.
 pub fn toggle_button<V: 'static>(
-    control: &'static idecraft_ui::tooltip::Control,
+    control: &'static ferris_idea_ui::tooltip::Control,
     label: &'static str,
     on: bool,
     cx: &mut Context<V>,

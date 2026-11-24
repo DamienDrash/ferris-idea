@@ -15,11 +15,15 @@ use std::time::{Duration, Instant};
 
 /// The switch (`SPEC-0328` behaviour 3): `off` never asks the shell, `force` asks it for every
 /// command, anything else decides by the start.
-pub const SWITCH: &str = "IDECRAFT_SHELL_ENV";
+pub const SWITCH: &str = "FERRIS_IDEA_SHELL_ENV";
 
 /// Set to `1` for the shell while it is asked, so rc files can skip slow or interactive parts
 /// (behaviour 4). Never taken over.
-pub const RESOLVING: &str = "IDECRAFT_RESOLVING_ENVIRONMENT";
+pub const RESOLVING: &str = "FERRIS_IDEA_RESOLVING_ENVIRONMENT";
+
+/// [`RESOLVING`] under the product's former name, set as well, so start-up files written for an
+/// older version still recognise the question (`SPEC-0356` behaviour 6).
+pub const FORMER_RESOLVING: &str = "IDECRAFT_RESOLVING_ENVIRONMENT"; // rebrand:keep
 
 /// How long the shell may take (behaviour 5).
 pub const TIMEOUT: Duration = Duration::from_secs(5);
@@ -154,8 +158,11 @@ pub fn default_path(env: &[(OsString, OsString)]) -> bool {
 
 /// Whether the shell has to be asked (behaviours 2–3); the error says why not.
 pub fn needed(env: &[(OsString, OsString)], window: bool) -> Result<(), &'static str> {
-    match Switch::parse(lookup(env, SWITCH)) {
-        Switch::Off => Err("switched off with IDECRAFT_SHELL_ENV=off"),
+    // The switch's former name counts while it is not set (`SPEC-0356` behaviour 6).
+    let former = crate::takeover::former_var_name(SWITCH);
+    let switch = lookup(env, SWITCH).or_else(|| former.as_deref().and_then(|f| lookup(env, f)));
+    match Switch::parse(switch) {
+        Switch::Off => Err("switched off with FERRIS_IDEA_SHELL_ENV=off"),
         Switch::Force => Ok(()),
         Switch::Auto if !window => Err("not a window start"),
         Switch::Auto if from_shell(env) && !default_path(env) => Err("started from a shell"),
@@ -164,14 +171,23 @@ pub fn needed(env: &[(OsString, OsString)], window: bool) -> Result<(), &'static
 }
 
 /// Whether a variable of the shell is taken over (behaviour 7). Not taken: what changes how
-/// IDECraft itself loads code (`DYLD_*`, `LD_*`), functions exported by bash, what describes the
+/// Ferris IDEA itself loads code (`DYLD_*`, `LD_*`), functions exported by bash, what describes the
 /// asked shell rather than the user's setup, and names the process could not set.
 pub fn importable(name: &OsStr) -> bool {
     let Some(name) = name.to_str() else {
         return false;
     };
-    const SHELL_STATE: [&str; 9] = [
-        "_", "PWD", "OLDPWD", "SHLVL", "TERM", "TERMCAP", "COLUMNS", "LINES", RESOLVING,
+    const SHELL_STATE: [&str; 10] = [
+        "_",
+        "PWD",
+        "OLDPWD",
+        "SHLVL",
+        "TERM",
+        "TERMCAP",
+        "COLUMNS",
+        "LINES",
+        RESOLVING,
+        FORMER_RESOLVING,
     ];
     !(name.is_empty()
         || name.contains(['=', '\0'])
@@ -357,7 +373,7 @@ pub fn log_line(report: &Report, path_entries: usize, time: std::time::SystemTim
 /// Asking the shell.
 #[cfg(unix)]
 mod unix {
-    use super::{EXIT_GRACE, MAX_OUTPUT, RESOLVING};
+    use super::{EXIT_GRACE, FORMER_RESOLVING, MAX_OUTPUT, RESOLVING};
     use std::ffi::{OsStr, OsString};
     use std::io::Read;
     use std::os::fd::AsFd;
@@ -462,7 +478,7 @@ mod unix {
         home: Option<&Path>,
     ) -> Result<Vec<(OsString, OsString)>, Failure> {
         let marker = format!(
-            "__IDECRAFT_ENV_{}_{}__",
+            "__FERRIS_IDEA_ENV_{}_{}__",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -477,6 +493,7 @@ mod unix {
             .env_clear()
             .envs(request.env.iter().map(|(k, v)| (k, v)))
             .env(RESOLVING, "1")
+            .env(FORMER_RESOLVING, "1")
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::null());
@@ -598,7 +615,7 @@ mod tests {
         let mut finder = env(&[("PATH", LAUNCHD_PATH), (SWITCH, "off")]);
         assert_eq!(
             needed(&finder, true),
-            Err("switched off with IDECRAFT_SHELL_ENV=off")
+            Err("switched off with FERRIS_IDEA_SHELL_ENV=off")
         );
         finder[1].1 = OsString::from("force");
         assert_eq!(needed(&finder, false), Ok(()));
@@ -614,7 +631,7 @@ mod tests {
             "SSH_AUTH_SOCK",
             "LANG",
             "LDFLAGS",
-            "IDECRAFT_LOG_DIR",
+            "FERRIS_IDEA_LOG_DIR",
         ] {
             assert!(importable(OsStr::new(name)), "{name}");
         }
@@ -656,7 +673,8 @@ mod tests {
 
     #[test]
     fn the_fallback_appends_existing_tool_folders_once() {
-        let dir = std::env::temp_dir().join(format!("idecraft-shellenv-fb-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("ferris-idea-shellenv-fb-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let (bin, cargo) = (dir.join(".local/bin"), dir.join(".cargo/bin"));
         std::fs::create_dir_all(&bin).unwrap();

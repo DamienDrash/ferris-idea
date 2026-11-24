@@ -1,12 +1,12 @@
 //! SPEC-0190 (server pages, `WHERE`/`ORDER BY`, manual transactions) and SPEC-0191 (copying a
-//! table) against SQLite (always) and PostgreSQL/MySQL/MariaDB when `IDECRAFT_TEST_PG` /
-//! `IDECRAFT_TEST_MYSQL` / `IDECRAFT_TEST_MARIADB` are set. Every run creates throwaway `m56_*`
+//! table) against SQLite (always) and PostgreSQL/MySQL/MariaDB when `FERRIS_IDEA_TEST_PG` /
+//! `FERRIS_IDEA_TEST_MYSQL` / `FERRIS_IDEA_TEST_MARIADB` are set. Every run creates throwaway `m56_*`
 //! tables (and, on servers, a throwaway schema), drops leftovers of a crashed run first and drops
 //! them again at the end.
 
 use crate::common;
 
-use idecraft_database::{
+use ferris_idea_database::{
     Applied, ConnectionProfile, CopyOptions, CopyTarget, Dialect, EditSet, EditTarget, Failure,
     OnError, Outcome, Session, TableQuery, Values, begin_sql, copy_table, introspect,
 };
@@ -70,7 +70,7 @@ async fn manual(s: &Session, other: &Session, table: &str) {
         .set_cell(&row("1", "1"), "n", Some("-1".into()))
         .unwrap();
     assert_eq!(
-        first.apply_in_transaction(s, "idecraft_1").await,
+        first.apply_in_transaction(s, "ferris_idea_1").await,
         Applied::Committed(1)
     );
     assert_eq!(texts(&run(s, &n_of("1")).await.unwrap(), 0), ["-1"]);
@@ -83,7 +83,7 @@ async fn manual(s: &Session, other: &Session, table: &str) {
     second
         .set_cell(&row("3", "999"), "n", Some("-3".into()))
         .unwrap();
-    let applied = second.apply_in_transaction(s, "idecraft_2").await;
+    let applied = second.apply_in_transaction(s, "ferris_idea_2").await;
     assert!(
         matches!(
             applied,
@@ -100,7 +100,7 @@ async fn manual(s: &Session, other: &Session, table: &str) {
     assert_eq!(texts(&run(s, &n_of("1")).await.unwrap(), 0), ["1"]);
     run(s, begin_sql(d)).await.unwrap();
     assert_eq!(
-        first.apply_in_transaction(s, "idecraft_1").await,
+        first.apply_in_transaction(s, "ferris_idea_1").await,
         Applied::Committed(1)
     );
     run(s, "COMMIT").await.unwrap();
@@ -149,7 +149,7 @@ async fn copy(s: &Session, table: &str, schema: Option<&str>) {
     run(s, &format!("drop table {name}")).await.unwrap();
     // A failing copy (the target schema does not exist) leaves no table behind.
     let missing = CopyTarget {
-        schema: Some("idecraft_no_such_schema".into()),
+        schema: Some("ferris_idea_no_such_schema".into()),
         table: table.into(),
     };
     let failed = copy_table(s, table, &missing, CopyOptions::default()).await;
@@ -214,7 +214,7 @@ async fn connect(url: &str) -> Session {
 
 #[tokio::test]
 async fn sqlite_table_editor_and_copy() {
-    let dir = std::env::temp_dir().join(format!("idecraft-m56-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-m56-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("m56.sqlite");
     let _ = std::fs::remove_file(&file);
@@ -247,7 +247,7 @@ async fn server(var: &str, create_schema: &str, drop_schema: &str) {
 #[tokio::test]
 async fn postgres_table_editor_and_copy() {
     server(
-        "IDECRAFT_TEST_PG",
+        "FERRIS_IDEA_TEST_PG",
         "create schema {}",
         "drop schema if exists {} cascade",
     )
@@ -257,7 +257,7 @@ async fn postgres_table_editor_and_copy() {
 #[tokio::test]
 async fn mysql_table_editor_and_copy() {
     server(
-        "IDECRAFT_TEST_MYSQL",
+        "FERRIS_IDEA_TEST_MYSQL",
         "create database {}",
         "drop database if exists {}",
     )
@@ -267,7 +267,7 @@ async fn mysql_table_editor_and_copy() {
 #[tokio::test]
 async fn mariadb_table_editor_and_copy() {
     server(
-        "IDECRAFT_TEST_MARIADB",
+        "FERRIS_IDEA_TEST_MARIADB",
         "create database {}",
         "drop database if exists {}",
     )

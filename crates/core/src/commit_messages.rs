@@ -1,6 +1,6 @@
 //! The commit messages the user committed with in a project (`SPEC-0063` v10 behaviour 22): the
-//! last [`MAX_MESSAGES`], newest first, each once, kept in the workspace's IDECraft settings
-//! (`.idecraft/commit-messages.toml`), never read from the Git history.
+//! last [`MAX_MESSAGES`], newest first, each once, kept in the workspace's Ferris IDEA settings
+//! (`.ferris-idea/commit-messages.toml`), never read from the Git history.
 //!
 //! A message is whatever the user typed: it is stored and returned as it is and never
 //! interpreted, a message or a file over its size limit is left out, and no message is ever part
@@ -11,7 +11,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 /// Where the messages of a workspace are kept, relative to its root.
-pub const COMMIT_MESSAGES_FILE: &str = ".idecraft/commit-messages.toml";
+pub const COMMIT_MESSAGES_FILE: &str = ".ferris-idea/commit-messages.toml";
 
 /// Messages kept; the oldest goes when one more is added.
 pub const MAX_MESSAGES: usize = 25;
@@ -47,7 +47,7 @@ impl std::fmt::Display for Unreadable {
             Unreadable::Broken => f.write_str("its content is not a commit message history"),
             Unreadable::Version(v) => write!(
                 f,
-                "it has format version {v}, this IDECraft reads version {FORMAT_VERSION}"
+                "it has format version {v}, this Ferris IDEA reads version {FORMAT_VERSION}"
             ),
         }
     }
@@ -73,7 +73,7 @@ impl CommitMessages {
     /// that cannot be used is an empty history and the reason.
     pub fn load(root: &Path) -> (Self, Option<Unreadable>) {
         let file = root.join(COMMIT_MESSAGES_FILE);
-        // A link is not followed: the file is IDECraft's own or it is not used.
+        // A link is not followed: the file is Ferris IDEA's own or it is not used.
         let meta = match std::fs::symlink_metadata(&file) {
             Ok(m) => m,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return (Self::default(), None),
@@ -146,7 +146,7 @@ impl CommitMessages {
             message: self.messages.clone(),
         };
         let mut text =
-            String::from("# Commit messages used in this workspace, newest first (IDECraft)\n");
+            String::from("# Commit messages used in this workspace, newest first (Ferris IDEA)\n");
         text.push_str(&toml::to_string(&stored).map_err(std::io::Error::other)?);
         let file = root.join(COMMIT_MESSAGES_FILE);
         // Something else under the name (a link, a folder) is not written through.
@@ -183,7 +183,7 @@ mod tests {
 
     fn scratch(tag: &str) -> std::path::PathBuf {
         let dir = std::env::temp_dir().join(format!(
-            "idecraft-commit-messages-{tag}-{}",
+            "ferris-idea-commit-messages-{tag}-{}",
             std::process::id()
         ));
         let _ = std::fs::remove_dir_all(&dir);

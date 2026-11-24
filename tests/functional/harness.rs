@@ -1,4 +1,4 @@
-//! Black-box access to IDECraft as a user or agent has it: the `idecraft` binary (`open`, `mcp` on
+//! Black-box access to Ferris IDEA as a user or agent has it: the `ferris-idea` binary (`open`, `mcp` on
 //! stdin/stdout) and the MCP Streamable HTTP transport the window serves (SPEC-0221). Tests see
 //! only tool names, arguments and the JSON a tool returns; no crate internals.
 
@@ -14,9 +14,9 @@ use serde_json::{Value, json};
 /// How long one tool call may take before the test fails (language servers start cold).
 const CALL_TIMEOUT: Duration = Duration::from_secs(180);
 
-/// The `idecraft` binary under test.
+/// The `ferris-idea` binary under test.
 pub fn binary() -> &'static str {
-    env!("CARGO_BIN_EXE_idecraft")
+    env!("CARGO_BIN_EXE_ferris-idea")
 }
 
 /// The reference projects folder (`tests/reference-projects`).
@@ -25,11 +25,11 @@ pub fn reference_projects() -> PathBuf {
 }
 
 /// Records that a test could not exercise its row on this machine and why. With
-/// `IDECRAFT_REQUIRE_TOOLS` set the test fails instead. The coverage table
+/// `FERRIS_IDEA_REQUIRE_TOOLS` set the test fails instead. The coverage table
 /// (`scripts/functional.sh`) lists the reason.
 pub fn skip(reason: &str) {
     assert!(
-        std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+        ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
         "required tool missing: {reason}"
     );
     skip_optional(reason);
@@ -39,7 +39,7 @@ pub fn skip(reason: &str) {
 /// adapter or Docker it does not install): never fails.
 pub fn skip_optional(reason: &str) {
     eprintln!("skipped: {reason}");
-    if let Some(dir) = std::env::var_os("IDECRAFT_FUNCTIONAL_REPORT") {
+    if let Some(dir) = ferris_idea_core::product_var_os("FERRIS_IDEA_FUNCTIONAL_REPORT") {
         let test = std::thread::current().name().unwrap_or("?").to_owned();
         let mut f = std::fs::OpenOptions::new()
             .create(true)
@@ -70,14 +70,14 @@ pub fn on_path(program: &str) -> bool {
         .is_some_and(|paths| std::env::split_paths(&paths).any(|dir| dir.join(program).is_file()))
 }
 
-/// A throw-away copy of a project with its own IDECraft settings folder outside it.
+/// A throw-away copy of a project with its own Ferris IDEA settings folder outside it.
 pub struct Project {
     base: PathBuf,
     /// Workspace root (resolved, so it matches what the IDE reports).
     pub root: PathBuf,
-    /// The user's IDECraft settings folder for this test (`IDECRAFT_CONFIG_DIR`).
+    /// The user's Ferris IDEA settings folder for this test (`FERRIS_IDEA_CONFIG_DIR`).
     pub config: PathBuf,
-    /// The test password folder (`IDECRAFT_TEST_SECRETS_DIR`, SPEC-0008 behaviour 14) the
+    /// The test password folder (`FERRIS_IDEA_TEST_SECRETS_DIR`, SPEC-0008 behaviour 14) the
     /// processes started for this project get, so they never touch the system keychain.
     pub secrets: PathBuf,
 }
@@ -87,7 +87,8 @@ impl Project {
     pub fn empty() -> Self {
         static NEXT: AtomicUsize = AtomicUsize::new(0);
         let n = NEXT.fetch_add(1, Ordering::SeqCst);
-        let base = std::env::temp_dir().join(format!("idecraft-func-{}-{n}", std::process::id()));
+        let base =
+            std::env::temp_dir().join(format!("ferris-idea-func-{}-{n}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(base.join("ws")).unwrap();
         std::fs::create_dir_all(base.join("config")).unwrap();
@@ -179,7 +180,7 @@ impl Project {
             .and_then(|c| c["target"].as_str())
             .unwrap_or_else(|| panic!("no connection `{id}` in {listed}"))
             .to_owned();
-        idecraft_core::add_connection_grant(
+        ferris_idea_core::add_connection_grant(
             &self.config.join("agent-permissions.toml"),
             &self.root,
             id,
@@ -236,7 +237,7 @@ impl Project {
     /// ([`Project::grant_connection`]).
     pub fn connection(&self, name: &str, fields: &str, ai: &[&str]) -> &Self {
         let granted: Vec<&str> = ai.to_vec();
-        let path = self.root.join(".idecraft/connections.toml");
+        let path = self.root.join(".ferris-idea/connections.toml");
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         let mut text = std::fs::read_to_string(&path).unwrap_or_default();
         let ai: Vec<String> = ai.iter().map(|r| format!("\"{r}\"")).collect();
@@ -259,15 +260,15 @@ impl Project {
         )
     }
 
-    /// Runs `idecraft <args>` against this project's settings folder.
+    /// Runs `ferris-idea <args>` against this project's settings folder.
     pub fn cli(&self, args: &[&str]) -> std::process::Output {
         Command::new(binary())
             .args(args)
-            .env("IDECRAFT_CONFIG_DIR", &self.config)
+            .env("FERRIS_IDEA_CONFIG_DIR", &self.config)
             .env(TEST_SECRETS_ENV, &self.secrets)
-            .env_remove("IDECRAFT_PLUGINS")
+            .env_remove("FERRIS_IDEA_PLUGINS")
             .output()
-            .expect("idecraft runs")
+            .expect("ferris-idea runs")
     }
 }
 
@@ -301,7 +302,7 @@ enum Transport {
         lines: Receiver<String>,
     },
     Http {
-        server: Option<idecraft_mcp::http::HttpServer>,
+        server: Option<ferris_idea_mcp::http::HttpServer>,
         port: u16,
         path: String,
         token: String,
@@ -309,15 +310,15 @@ enum Transport {
     },
 }
 
-/// An MCP client connected to IDECraft for one project.
+/// An MCP client connected to Ferris IDEA for one project.
 pub struct Ide {
     transport: Transport,
     next_id: u64,
 }
 
 impl Ide {
-    /// `idecraft mcp <root>` on stdin/stdout, as an agent configured with the command starts it,
-    /// with the project trusted through `IDECRAFT_TRUST_PROJECTS` (SPEC-0278 behaviour 10).
+    /// `ferris-idea mcp <root>` on stdin/stdout, as an agent configured with the command starts it,
+    /// with the project trusted through `FERRIS_IDEA_TRUST_PROJECTS` (SPEC-0278 behaviour 10).
     pub fn stdio(project: &Project) -> Self {
         Self::stdio_trusted(project, true)
     }
@@ -326,21 +327,21 @@ impl Ide {
     pub fn stdio_trusted(project: &Project, trusted: bool) -> Self {
         let mut command = Command::new(binary());
         if trusted {
-            command.env("IDECRAFT_TRUST_PROJECTS", "all");
+            command.env("FERRIS_IDEA_TRUST_PROJECTS", "all");
         } else {
-            command.env_remove("IDECRAFT_TRUST_PROJECTS");
+            command.env_remove("FERRIS_IDEA_TRUST_PROJECTS");
         }
         let mut child = command
             .arg("mcp")
             .arg(&project.root)
-            .env("IDECRAFT_CONFIG_DIR", &project.config)
+            .env("FERRIS_IDEA_CONFIG_DIR", &project.config)
             .env(TEST_SECRETS_ENV, &project.secrets)
-            .env_remove("IDECRAFT_PLUGINS")
+            .env_remove("FERRIS_IDEA_PLUGINS")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .spawn()
-            .expect("idecraft mcp starts");
+            .expect("ferris-idea mcp starts");
         let stdout = child.stdout.take().unwrap();
         let (send, lines) = channel();
         std::thread::spawn(move || {
@@ -368,14 +369,14 @@ impl Ide {
     /// project; the client reads URL and token from the discovery file as an agent does. Agent
     /// rights come from the process environment there, so HTTP tests use reading tools only.
     pub fn http(project: &Project) -> Self {
-        let server = idecraft_mcp::http::HttpServer::start(Some(&project.config)).unwrap();
-        let workspace = idecraft_core::Workspace::open(&project.root).unwrap();
-        let permissions = idecraft_core::AgentPermissions {
+        let server = ferris_idea_mcp::http::HttpServer::start(Some(&project.config)).unwrap();
+        let workspace = ferris_idea_core::Workspace::open(&project.root).unwrap();
+        let permissions = ferris_idea_core::AgentPermissions {
             allow: Default::default(),
             file: Some(project.config.join("agent-permissions.toml")),
             problem: None,
         };
-        let ide_server = idecraft_mcp::IdeServer::with_permissions(workspace, permissions)
+        let ide_server = ferris_idea_mcp::IdeServer::with_permissions(workspace, permissions)
             .with_plugins_dir(project.config.join("plugins"));
         server.add_workspace(ide_server).unwrap();
         let discovery: Value = serde_json::from_str(
@@ -406,10 +407,15 @@ impl Ide {
     fn initialize(&mut self, version: &str) {
         let init = self.request(
             "initialize",
-            json!({"protocolVersion": version, "capabilities": {},
+            // Every tool, as the functional tests check them all (SPEC-0006 v58 behaviour 18).
+            json!({"protocolVersion": version,
+                   "capabilities": {"experimental": {"ferris-idea/tools": {"groups": ["all"]}}},
                    "clientInfo": {"name": "functional-tests", "version": "0"}}),
         );
-        assert_eq!(init["result"]["serverInfo"]["name"], "idecraft", "{init}");
+        assert_eq!(
+            init["result"]["serverInfo"]["name"], "ferris-idea",
+            "{init}"
+        );
         self.notify("notifications/initialized");
     }
 
@@ -665,22 +671,22 @@ pub fn load_reference_schema(ide: &mut Ide, conn: &str) {
 }
 
 /// Environment variable of the test password folder (SPEC-0008 behaviour 14; debug builds only).
-pub const TEST_SECRETS_ENV: &str = "IDECRAFT_TEST_SECRETS_DIR";
+pub const TEST_SECRETS_ENV: &str = "FERRIS_IDEA_TEST_SECRETS_DIR";
 
 /// Service of the reference databases' passwords in the test password folder.
-pub const TEST_SECRET_SERVICE: &str = "idecraft";
+pub const TEST_SECRET_SERVICE: &str = "ferris-idea";
 
 /// Adds connection `name` for the reference database in environment variable `var`
-/// (`IDECRAFT_TEST_PG`, `IDECRAFT_TEST_MYSQL`, `IDECRAFT_TEST_MARIADB`: URLs without password) with
+/// (`FERRIS_IDEA_TEST_PG`, `FERRIS_IDEA_TEST_MYSQL`, `FERRIS_IDEA_TEST_MARIADB`: URLs without password) with
 /// reading rights only; `false` (and a recorded skip) when the variable is not set.
 ///
 /// When the server needs a password (`<var>_PASSWORD` or the file named by `<var>_PASSWORD_FILE`,
 /// set by `scripts/functional.sh` and `scripts/ci-local.sh`), it is copied into the project's test
-/// password folder ([`Project::secrets`], 0700) as `idecraft/connection:<name>` (0600) — the
-/// entry IDECraft keeps for the connection, the only one an agent's call uses (SPEC-0012 v3
+/// password folder ([`Project::secrets`], 0700) as `ferris-idea/connection:<name>` (0600) — the
+/// entry Ferris IDEA keeps for the connection, the only one an agent's call uses (SPEC-0012 v3
 /// behaviour 20) — and the profile refers to it, as a password typed into the connection dialog
 /// would be. The processes
-/// started for the project read it from there (`IDECRAFT_TEST_SECRETS_DIR`); nothing touches the
+/// started for the project read it from there (`FERRIS_IDEA_TEST_SECRETS_DIR`); nothing touches the
 /// system keychain.
 pub fn live_connection(p: &Project, name: &str, var: &str) -> bool {
     let Some(url) = live_db(var) else {
@@ -709,7 +715,7 @@ pub fn live_connection(p: &Project, name: &str, var: &str) -> bool {
 }
 
 impl Project {
-    /// Writes `password` to `<secrets>/idecraft/<account>` with the modes the test store
+    /// Writes `password` to `<secrets>/ferris-idea/<account>` with the modes the test store
     /// demands (folders 0700, file 0600).
     pub fn store_secret(&self, account: &str, password: &str) {
         #[cfg(unix)]

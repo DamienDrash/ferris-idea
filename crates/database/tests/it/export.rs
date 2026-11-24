@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use idecraft_database::{
+use ferris_idea_database::{
     ConnectionProfile, Credentials, Dialect, ExportFormat, ExportOptions, OnError, Outcome,
     Session, export,
 };
@@ -55,7 +55,7 @@ fn parse_csv(text: &str) -> Rows {
 
 #[tokio::test]
 async fn sqlite_export_round_trips() {
-    let dir = std::env::temp_dir().join(format!("idecraft-export-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-export-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let sql =

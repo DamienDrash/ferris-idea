@@ -1,11 +1,11 @@
 //! Copying a table to another schema or name from the Database tool window (`SPEC-0191`): target
 //! schema and table, what is kept, a live preview of the statements, and the result in the dialog.
 
-use gpui::{Context, Entity, EventEmitter, FocusHandle, KeyDownEvent, Window, div, prelude::*, px};
-use idecraft_database::{
+use ferris_idea_database::{
     ConnectionProfile, CopyOptions, CopyReport, CopySource, CopyTarget, copy_statements,
     sequence_note,
 };
+use gpui::{Context, Entity, EventEmitter, FocusHandle, KeyDownEvent, Window, div, prelude::*, px};
 
 use crate::database_view::RenameTarget;
 use crate::editor_view::EditorView;
@@ -84,7 +84,7 @@ impl CopyTableDialog {
         let session = TableSession::open(target.profile.clone());
         let table = target.table.clone();
         let rx = session.run(move |rt, s| {
-            rt.block_on(idecraft_database::read_source(s, &table))
+            rt.block_on(ferris_idea_database::read_source(s, &table))
                 .map_err(|e| e.to_string())
         });
         let task = cx.background_executor().spawn(async move {
@@ -209,7 +209,9 @@ impl CopyTableDialog {
         }
         let (table, target, options) = (self.table.clone(), self.target(cx), self.options);
         let rx = self.session.run(move |rt, s| {
-            Ok(rt.block_on(idecraft_database::copy_table(s, &table, &target, options)))
+            Ok(rt.block_on(ferris_idea_database::copy_table(
+                s, &table, &target, options,
+            )))
         });
         self.running = true;
         self.note = Some(("Copying…".into(), false));

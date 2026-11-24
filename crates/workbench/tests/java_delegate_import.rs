@@ -10,9 +10,9 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
+use ferris_idea_workbench::popup_place;
+use ferris_idea_workbench::{ChoiceView, WorkbenchView};
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_workbench::popup_place;
-use idecraft_workbench::{ChoiceView, WorkbenchView};
 
 const DEADLINE: Duration = Duration::from_secs(300);
 
@@ -65,20 +65,20 @@ fn wait(cx: &mut VisualTestContext) {
 
 #[gpui::test]
 fn typing_narrows_the_delegate_list_and_the_hint_imports(cx: &mut TestAppContext) {
-    if idecraft_languages::servers::resolve(idecraft_languages::LanguageId::Java).is_err() {
+    if ferris_idea_languages::servers::resolve(ferris_idea_languages::LanguageId::Java).is_err() {
         assert!(
-            std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+            ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
             "required tool missing: jdtls"
         );
         eprintln!("skipped: jdtls not installed");
         return;
     }
-    let root = std::env::temp_dir().join(format!("idecraft-delegate-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-delegate-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src/main/java/shop")).unwrap();
     let root = root.canonicalize().unwrap();
-    idecraft_core::trust::trust_for_process(&root);
-    idecraft_languages::pool::enable();
+    ferris_idea_core::trust::trust_for_process(&root);
+    ferris_idea_languages::pool::enable();
     write(
         &root,
         "Engine",
@@ -197,21 +197,22 @@ const INVENTORY: &str = "package lab.inventory;\n\nimport java.util.List;\n\npub
 
 #[gpui::test]
 fn inline_on_a_method_lists_its_variants(cx: &mut TestAppContext) {
-    use idecraft_languages::java_refactor::{INLINE_ALL_KEEP, INLINE_ALL_REMOVE};
-    if idecraft_languages::servers::resolve(idecraft_languages::LanguageId::Java).is_err() {
+    use ferris_idea_languages::java_refactor::{INLINE_ALL_KEEP, INLINE_ALL_REMOVE};
+    if ferris_idea_languages::servers::resolve(ferris_idea_languages::LanguageId::Java).is_err() {
         assert!(
-            std::env::var_os("IDECRAFT_REQUIRE_TOOLS").is_none(),
+            ferris_idea_core::product_var_os("FERRIS_IDEA_REQUIRE_TOOLS").is_none(),
             "required tool missing: jdtls"
         );
         eprintln!("skipped: jdtls not installed");
         return;
     }
-    let root = std::env::temp_dir().join(format!("idecraft-inline-window-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("ferris-idea-inline-window-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src/main/java/lab/inventory")).unwrap();
     let root = root.canonicalize().unwrap();
-    idecraft_core::trust::trust_for_process(&root);
-    idecraft_languages::pool::enable();
+    ferris_idea_core::trust::trust_for_process(&root);
+    ferris_idea_languages::pool::enable();
     let file = root.join("src/main/java/lab/inventory/Inventory.java");
     std::fs::write(&file, INVENTORY).unwrap();
 
@@ -233,7 +234,7 @@ fn inline_on_a_method_lists_its_variants(cx: &mut TestAppContext) {
     // and the question is repeated by itself when jdtls is ready (SPEC-0095 v10 behaviours 11a
     // and 12). Only a final line (jdtls did not load in time, or had nothing yet) is answered
     // with another keystroke.
-    let limit = idecraft_workbench::intentions_model::REFACTORING_LIMIT;
+    let limit = ferris_idea_workbench::intentions_model::REFACTORING_LIMIT;
     let start = Instant::now();
     let mut presses = 0;
     let titles = 'list: loop {

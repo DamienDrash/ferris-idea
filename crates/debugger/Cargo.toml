@@ -1,5 +1,5 @@
 [package]
-name = "idecraft-debugger"
+name = "ferris-idea-debugger"
 description = "Debugging via the Debug Adapter Protocol"
 version.workspace = true
 edition.workspace = true
@@ -9,8 +9,8 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
-# The file envelope of `.idecraft/breakpoints.toml` (`SPEC-0303`).
-idecraft-core.workspace = true
+# The file envelope of `.ferris-idea/breakpoints.toml` (`SPEC-0303`).
+ferris-idea-core.workspace = true
 serde.workspace = true
 serde_json = "1"
 sha2 = "0.10"

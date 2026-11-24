@@ -124,7 +124,7 @@ indexes — for the schema tree, completion and agents.
     `pd_b` on `public.item` read like one on its own `item`. [STD]
 
 18. **v6 – Objects besides tables and views:** for a schema (the current one, or another from
-    SPEC-0089 v3) IDECraft reads which kinds of objects the database can hold and its objects of
+    SPEC-0089 v3) Ferris IDEA reads which kinds of objects the database can hold and its objects of
     the kinds other than tables and views, from the catalogue and nothing else [STD, GEN]:
     a. **Kinds** in this order: PostgreSQL table, view, sequence, function, procedure, aggregate,
        trigger, type; MySQL table, view, function, procedure, trigger; MariaDB the same with
@@ -238,7 +238,7 @@ indexes — for the schema tree, completion and agents.
     count as existing. Oracle, which reads the user's own schema, is not asked. [GEN]
 
 ## Acceptance criteria
-Run against the reference databases (PostgreSQL and MySQL via `IDECRAFT_TEST_PG` / `IDECRAFT_TEST_MYSQL`,
+Run against the reference databases (PostgreSQL and MySQL via `FERRIS_IDEA_TEST_PG` / `FERRIS_IDEA_TEST_MYSQL`,
 SQLite built from the seed files).
 - **AK-1** Tables `item`, `movement`, `stock`, `warehouse` and view `stock_value` are listed in that order.
 - **AK-2** `stock` has columns `warehouse_id`, `sku`, `qty` in that order, all not null, `qty` with
@@ -301,7 +301,7 @@ SQLite built from the seed files).
   `queries_per_dialect_read_the_catalogue`, `sqlite_trigger_events`); against SQLite files built in
   the test, the triggers of the main and of an attached database with table and timing, the
   fingerprint unchanged (`catalog.rs` `triggers_of_a_sqlite_schema`). Live (skipped without
-  `IDECRAFT_TEST_PG` / `IDECRAFT_TEST_MYSQL` / `IDECRAFT_TEST_MARIADB`): every kind of a
+  `FERRIS_IDEA_TEST_PG` / `FERRIS_IDEA_TEST_MYSQL` / `FERRIS_IDEA_TEST_MARIADB`): every kind of a
   PostgreSQL schema with overloads, aggregates, triggers and the four kinds of types, without the
   range type's constructors (`postgres_schema_objects`); functions, procedures and triggers of a
   MySQL or MariaDB database (`mysql_schema_objects`, `mariadb_schema_objects`). First run on
@@ -314,7 +314,7 @@ SQLite built from the seed files).
   and dialect, names written as literals or quoted identifiers, only `SELECT` or `SHOW`
   (`definition_queries_per_kind`); the statement taken from fixed `SHOW CREATE` rows, a row
   without one gives the privilege message (`definitions_from_catalogue_rows`). Live (skipped
-  without `IDECRAFT_TEST_PG` / `IDECRAFT_TEST_MYSQL` / `IDECRAFT_TEST_MARIADB`): every object of a
+  without `FERRIS_IDEA_TEST_PG` / `FERRIS_IDEA_TEST_MYSQL` / `FERRIS_IDEA_TEST_MARIADB`): every object of a
   PostgreSQL schema, routines and triggers equal to the server's `pg_get_functiondef` and
   `pg_get_triggerdef`, each overload by its arguments, aggregates and the four kinds of types as
   written, none for a sequence (`postgres_object_definitions`); MySQL and MariaDB equal to the

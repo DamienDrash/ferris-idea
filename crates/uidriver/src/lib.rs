@@ -1,4 +1,4 @@
-//! IDECraft's UI driver (`ADR-0027`, `SPEC-0319`), toolkit-free.
+//! Ferris IDEA's UI driver (`ADR-0027`, `SPEC-0319`), toolkit-free.
 //!
 //! - [`tree`]: the semantic tree in AccessKit's schema, the annotation description
 //!   ([`tree::Semantics`]) and the bridge producer's builder for GPUI 0.2.2.
@@ -9,23 +9,29 @@
 //! - [`security`]: who acts, effects and reserved elements, the emergency stop.
 //! - [`trace`]: traces and audit entries without content.
 //! - [`driver`]: the async Rust API for the self-test.
+//! - [`command`]: window commands with declared effects (open a file, tool windows, Settings
+//!   pages, allowed actions, typing, popups).
+//! - [`shot`]: what screenshots fill and cut before they leave the process.
 //!
 //! The window (`crates/app`) feeds the engine with the tree of each presented frame and delivers
-//! the input it plans; the MCP server (`crates/mcp`) and `idecraft drive` reach it only through the
+//! the input it plans; the MCP server (`crates/mcp`) and `ferris-idea drive` reach it only through the
 //! window's loopback MCP server, so the driver opens no listener of its own.
 
 pub mod action;
+pub mod command;
 pub mod driver;
 pub mod engine;
 pub mod error;
 pub mod expect;
 pub mod locator;
 pub mod security;
+pub mod shot;
 pub mod trace;
 pub mod tree;
 
 pub use accesskit::{Action as AxAction, Role};
 pub use action::{Action, Button, Check, Input, KeyPress, Level, Modifier, parse_keys};
+pub use command::{ToolWindowOp, UiCommand};
 pub use driver::{Driver, UiLocator, expect};
 pub use engine::{
     CancelHandle, Command, Done, Engine, FrameOutput, Keys, NoKeys, Op, Reply, Request, Target,

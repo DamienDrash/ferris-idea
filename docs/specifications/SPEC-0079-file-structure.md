@@ -77,7 +77,7 @@ See what a file contains and jump to one of its declarations without scrolling.
    keep them) and `inherited: true` to add inherited members with their `inherited_from` type and
    `path`. [ADR-0008, IMP-0301]
 12. **Python (v5):** pyright and basedpyright report a function's parameters and local variables
-    as its children and no signature. For a Python file IDECraft therefore reshapes the server's
+    as its children and no signature. For a Python file Ferris IDEA therefore reshapes the server's
     symbols once, where they are read (`insight::symbols_in`), so the popup, the Structure tool
     window, a remote project's host and `document_symbols` show the same. No such per-language
     step existed before; the only earlier one is the package row of behaviour 6, applied by each
@@ -137,7 +137,7 @@ See what a file contains and jump to one of its declarations without scrolling.
       unannotated members stay without a type (named deviation).
     - Where the text has no such declaration at the symbol's place, the symbol keeps the
       server's kind and detail.
-14. **HTML (v7):** the symbols of an HTML file are its elements from IDECraft's own syntax tree,
+14. **HTML (v7):** the symbols of an HTML file are its elements from Ferris IDEA's own syntax tree,
     nested as in the document, each named with its id and classes and with the address of a
     `link`, `a`, `img` or `script` as detail (SPEC-0042 v17 behaviour 31). They have the kind
     `element`. Elements are not ordered by kind and name (behaviour 7): below each parent they
@@ -148,7 +148,7 @@ See what a file contains and jump to one of its declarations without scrolling.
 15. **PHP (v8):** intelephense reports the parameters and the variables of a function or a method as
     its children. They are left out as in behaviour 12: below a function, method or constructor
     stay only nested functions and types (class, interface, enum); properties and constants of a
-    class stay, and so do variables of the file itself. This holds wherever IDECraft shows the
+    class stay, and so do variables of the file itself. This holds wherever Ferris IDEA shows the
     file's symbols, `document_symbols` included. Not compared next to the reference, whose PHP
     support needs a plugin. [OBS-0081, GEN]
 
@@ -156,7 +156,7 @@ See what a file contains and jump to one of its declarations without scrolling.
 - **AK-1** Symbols of unsaved text with their nesting (integration test with clangd).
 - **AK-2** Filter keeps parents of matches; start selection at the caret (unit tests of
   `structure_model`).
-- **AK-3** In a real window (`idecraft ui --selftest`, with clangd): ⌘F12 inside `main` lists the
+- **AK-3** In a real window (`ferris-idea ui --selftest`, with clangd): ⌘F12 inside `main` lists the
   functions with `main` selected; typing `ca` leaves `calc`; Enter jumps to it.
 - **AK-4** Use by hand: icons, nested classes, long files, Back after the jump.
 - **AK-5 (v3)** A package symbol is left out and its children keep their order (unit test
@@ -174,7 +174,7 @@ See what a file contains and jump to one of its declarations without scrolling.
   `/`, a long default cut, annotations left out, on a line with non-ASCII text before the name
   (unit tests `python_structure::tests`); with pyright, `document_symbols` on a Python file
   lists `messy` with `(a, b=2, *args, **kw)` and no children, and `Shape` with `sides`, its
-  methods and the attribute `__init__` assigns (live test `tests/servers.rs`, skipped without the server; `idecraft call`).
+  methods and the attribute `__init__` assigns (live test `tests/servers.rs`, skipped without the server; `ferris-idea call`).
 
 - **AK-8 (v6, behaviour 13; OBS-0028 T1)** For TypeScript, TSX and JavaScript text: local
   variables and constants of a function, of a method and of an arrow function are left out, a
@@ -187,7 +187,7 @@ See what a file contains and jump to one of its declarations without scrolling.
   `lam (q: number)`, `messy (a: number, b?, ...rest: string[])` without children and `Shape`
   with `area (): number`, `name ()` and `sides` (live test
   `tests/it/servers.rs::typescript_structure_without_locals`, skipped without the server;
-  `idecraft call`).
+  `ferris-idea call`).
 - **AK-9 (v7, behaviour 14; OBS-0039 W3)** SPEC-0042 AK-31: the elements of the sample with
   depths, names and details (`html_css::tests::structure_is_nested_and_named`); the order of the
   popup leaves elements where the document has them
@@ -206,19 +206,19 @@ caret while the popup is open, inherited members from library or JDK types (the 
 those of `Object` as well).
 
 ## Known deviations from the reference
-The reference builds the structure from its own parsers; IDECraft shows the language server's symbols,
+The reference builds the structure from its own parsers; Ferris IDEA shows the language server's symbols,
 so what is listed depends on the server: lambdas only when the server reports them, inherited
 members only from supertypes in project files.
-For Python (v5) the reference shows the parameter list as part of the name; IDECraft shows it as
+For Python (v5) the reference shows the parameter list as part of the name; Ferris IDEA shows it as
 the dimmed detail after the name, and leaves annotations out of it.
 For JavaScript and TypeScript (v6) the reference shows the signature as part of the name and
-also the types it infers; IDECraft shows the signature as the dimmed detail after the name and
+also the types it infers; Ferris IDEA shows the signature as the dimmed detail after the name and
 only the types the source states: `name ()` and `sides` where the reference shows
 `name(): string` and `sides: number`, `b?` where it shows `b?: number`. A rest parameter keeps
 its dots and its array type (`...rest: string[]`); the reference shows `rest: string`
 (OBS-0028 T1). Whether the reference lists callbacks inside a function was not observed;
-IDECraft keeps those the server reports.
+Ferris IDEA keeps those the server reports.
 
-v7 (HTML): the reference shows the text of a button beside it; IDECraft lists no text. All
+v7 (HTML): the reference shows the text of a button beside it; Ferris IDEA lists no text. All
 elements share one icon. The popup and the tool window were not looked at in a window for an HTML
 file; the rows were checked through `document_symbols`.

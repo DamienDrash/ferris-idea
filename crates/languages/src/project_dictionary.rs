@@ -111,16 +111,18 @@ pub fn learn_at(file: &Path, word: &str) -> Result<(), String> {
     std::fs::write(&file, render(&all)).map_err(|e| e.to_string())
 }
 
-/// Drops typo findings of `text` whose word is in the project dictionary of `path` (behaviour 2).
+/// Drops typo findings of `text` whose word is in the project dictionary of `path` (behaviour 2),
+/// and the variant findings of such a word (`SPEC-0155` v7 behaviour 7).
 pub fn filter(path: &Path, text: &str, findings: Vec<Finding>) -> Vec<Finding> {
-    if !findings.iter().any(|f| f.id == "grazie.typo") {
+    let spelling = |id: &str| id == "grazie.typo" || crate::spelling_variants::RULES.contains(&id);
+    if !findings.iter().any(|f| spelling(f.id)) {
         return findings;
     }
     let known = words(path);
     findings
         .into_iter()
         .filter(|f| {
-            f.id != "grazie.typo"
+            !spelling(f.id)
                 || !text
                     .get(f.start..f.end)
                     .is_some_and(|w| known.contains(&w.to_lowercase()))
@@ -135,6 +137,7 @@ pub fn learn_fix(word: &str) -> Fix {
         edits: Vec::new(),
         learn: Some(word.to_owned()),
         keep: None,
+        bundle_key: None,
         action: None,
     }
 }
@@ -145,7 +148,7 @@ mod tests {
 
     #[test]
     fn reads_writes_and_filters() {
-        let dir = std::env::temp_dir().join(format!("idecraft-pdict-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-pdict-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join(".git")).unwrap();
         std::fs::create_dir_all(dir.join("src")).unwrap();

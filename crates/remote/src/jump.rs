@@ -1,18 +1,18 @@
 //! Jump hosts (`ProxyJump`, `-J`, `ProxyCommand`) with the post-quantum key exchange on every hop
 //! (ADR-0025 v5 section 1a).
 //!
-//! OpenSSH opens the hops of a `ProxyJump` with its own `ssh`, without IDECraft's options, so the
-//! outer hop could negotiate a classical key exchange. IDECraft therefore never lets OpenSSH build
+//! OpenSSH opens the hops of a `ProxyJump` with its own `ssh`, without Ferris IDEA's options, so the
+//! outer hop could negotiate a classical key exchange. Ferris IDEA therefore never lets OpenSSH build
 //! a hop itself:
 //!
 //! - Before a connection, `ssh -G` resolves the target's configuration. A `ProxyJump` (from
-//!   `~/.ssh/config` or `-J`) becomes IDECraft's own `ProxyCommand`: the hop stand-in
+//!   `~/.ssh/config` or `-J`) becomes Ferris IDEA's own `ProxyCommand`: the hop stand-in
 //!   ([`hop_script`]), which runs the same `ssh` with the same shared options and `-W` to the next
 //!   host, and resolves that hop's own configuration in turn — every hop of a multi-step jump gets
 //!   the post-quantum key exchange. Without a jump, `ProxyCommand=none` pins the direct
 //!   connection, so nothing in the configuration can add a hop afterwards (OpenSSH keeps the first
 //!   value it obtains).
-//! - A `ProxyCommand` of the user's own is a program IDECraft cannot hold to the post-quantum rule:
+//! - A `ProxyCommand` of the user's own is a program Ferris IDEA cannot hold to the post-quantum rule:
 //!   it is refused ([`RemoteError::ProxyCommandRefused`]) unless the setting
 //!   [`OWN_PROXY_COMMAND_SETTING`] (default off, shown with a warning) allows it.
 //! - Git and the Docker Compose CLI start `ssh` through stand-in scripts; they use the same rules
@@ -29,16 +29,16 @@ use crate::ssh::{RemoteError, quote};
 /// The setting that allows a `ProxyCommand` of the user's own on SSH paths (default off).
 pub const OWN_PROXY_COMMAND_SETTING: &str = "ssh.allowOwnProxyCommand";
 
-/// Start of the lines the hop stand-in writes to standard error: `idecraft-ssh-hop: <hop> exit
-/// <status>` when a hop failed, `idecraft-ssh-hop: refused <host>: ProxyCommand` when a hop's own
+/// Start of the lines the hop stand-in writes to standard error: `ferris-idea-ssh-hop: <hop> exit
+/// <status>` when a hop failed, `ferris-idea-ssh-hop: refused <host>: ProxyCommand` when a hop's own
 /// `ProxyCommand` was refused.
-pub const HOP_MARKER: &str = "idecraft-ssh-hop:";
+pub const HOP_MARKER: &str = "ferris-idea-ssh-hop:";
 
 /// The most hops one connection may pass (also ends a loop in the configuration).
 pub const MAX_HOPS: u32 = 8;
 
 /// File name of the log of connections that used a `ProxyCommand` of the user's own, in the
-/// IDECraft log folder.
+/// Ferris IDEA log folder.
 pub const OWN_PROXY_COMMAND_LOG: &str = "ssh-proxy-command.log";
 
 static OWN_PROXY_ALLOWED: AtomicBool = AtomicBool::new(false);
@@ -101,7 +101,7 @@ pub(crate) fn config_file(extra: &[String]) -> Option<String> {
     None
 }
 
-/// `extra` without `-J <hops>`: the jump is resolved with `ssh -G` and replaced by IDECraft's own
+/// `extra` without `-J <hops>`: the jump is resolved with `ssh -G` and replaced by Ferris IDEA's own
 /// `ProxyCommand` (`ssh` refuses `-J` together with a `ProxyCommand`).
 pub(crate) fn without_jump(extra: &[String]) -> Vec<String> {
     let mut out = Vec::with_capacity(extra.len());
@@ -155,7 +155,7 @@ pub fn route_lib(hop: &str, allow_own: bool) -> String {
         "idc_proxy="
     } else {
         "printf '%s refused %s: ProxyCommand\\n' '@MARKER@' \"$3\" >&2; \
-         if [ -n \"$IDECRAFT_SSH_HOP_LOG\" ]; then printf '%s refused %s: ProxyCommand\\n' '@MARKER@' \"$3\" >> \"$IDECRAFT_SSH_HOP_LOG\"; fi; return 1"
+         if [ -n \"$FERRIS_IDEA_SSH_HOP_LOG\" ]; then printf '%s refused %s: ProxyCommand\\n' '@MARKER@' \"$3\" >> \"$FERRIS_IDEA_SSH_HOP_LOG\"; fi; return 1"
     };
     r#"idc_q() { printf "'%s'" "$(printf '%s' "$1" | sed -e "s/'/'\\\\''/g" -e 's/%/%%/g')"; }
 idc_jump_to() {
@@ -200,12 +200,12 @@ pub fn hop_script(real_ssh: &str, options: &[String], allow_own: bool) -> String
     let ssh = quote(real_ssh);
     format!(
         "#!/bin/sh\n\
-         # Written by IDECraft: one jump host of an SSH connection, with the same post-quantum key\n\
+         # Written by Ferris IDEA: one jump host of an SSH connection, with the same post-quantum key\n\
          # exchange as every other hop (ADR-0025 section 1a).\n\
          {lib}\
-         d=${{IDECRAFT_SSH_HOP_DEPTH:-0}}\n\
+         d=${{FERRIS_IDEA_SSH_HOP_DEPTH:-0}}\n\
          if [ \"$d\" -ge {MAX_HOPS} ]; then printf '%s more than {MAX_HOPS} jump hosts\\n' '{HOP_MARKER}' >&2; exit 255; fi\n\
-         IDECRAFT_SSH_HOP_DEPTH=$((d + 1)); export IDECRAFT_SSH_HOP_DEPTH\n\
+         FERRIS_IDEA_SSH_HOP_DEPTH=$((d + 1)); export FERRIS_IDEA_SSH_HOP_DEPTH\n\
          cfg=; jump=; given=\n\
          if [ \"$1\" = -F ]; then cfg=$2; shift 2; fi\n\
          if [ \"$1\" = --jump ]; then jump=$2; given=1; shift 2; fi\n\
@@ -237,12 +237,12 @@ pub fn hop_script(real_ssh: &str, options: &[String], allow_own: bool) -> String
          st=$?\n\
          if [ -n \"$log\" ]; then\n\
          \x20 cat \"$log\" >&2\n\
-         \x20 if [ \"$st\" -ne 0 ] && [ -n \"$IDECRAFT_SSH_HOP_LOG\" ]; then cat \"$log\" >> \"$IDECRAFT_SSH_HOP_LOG\"; fi\n\
+         \x20 if [ \"$st\" -ne 0 ] && [ -n \"$FERRIS_IDEA_SSH_HOP_LOG\" ]; then cat \"$log\" >> \"$FERRIS_IDEA_SSH_HOP_LOG\"; fi\n\
          \x20 rm -f \"$log\"\n\
          fi\n\
          if [ \"$st\" -ne 0 ]; then\n\
          \x20 printf '%s %s exit %s\\n' '{HOP_MARKER}' \"$spec\" \"$st\" >&2\n\
-         \x20 if [ -n \"$IDECRAFT_SSH_HOP_LOG\" ]; then printf '%s %s exit %s\\n' '{HOP_MARKER}' \"$spec\" \"$st\" >> \"$IDECRAFT_SSH_HOP_LOG\"; fi\n\
+         \x20 if [ -n \"$FERRIS_IDEA_SSH_HOP_LOG\" ]; then printf '%s %s exit %s\\n' '{HOP_MARKER}' \"$spec\" \"$st\" >> \"$FERRIS_IDEA_SSH_HOP_LOG\"; fi\n\
          fi\n\
          exit \"$st\"\n",
         lib = route_lib("\"$0\"", allow_own),
@@ -256,7 +256,7 @@ fn hop_options(program: &str) -> Vec<String> {
 
 /// `options` with no shared connection: a `ControlMaster` a user opened by hand (possibly without
 /// the post-quantum exchange) through a `ControlPath` of `~/.ssh/config` is never reused. For the
-/// stand-ins of Git and the Compose CLI and for every hop; IDECraft's own connections use their
+/// stand-ins of Git and the Compose CLI and for every hop; Ferris IDEA's own connections use their
 /// own `ControlPath`.
 pub(crate) fn without_shared_connection(mut o: Vec<String>) -> Vec<String> {
     o.extend(
@@ -365,20 +365,23 @@ pub(crate) fn route_options(
 /// One line per connection through a `ProxyCommand` of the user's own: time and host, nothing
 /// of the command itself.
 fn log_own_proxy_command(host: &str) {
-    let dir = LOG_DIR.get().cloned().or_else(idecraft_core::logs::log_dir);
+    let dir = LOG_DIR
+        .get()
+        .cloned()
+        .or_else(ferris_idea_core::logs::log_dir);
     if let Some(dir) = dir {
         let line = format!(
             "{} host={host} own ProxyCommand: its hops are not held to the post-quantum key exchange ({OWN_PROXY_COMMAND_SETTING}, ADR-0025 section 1a)",
-            idecraft_core::logs::utc_stamp(std::time::SystemTime::now())
+            ferris_idea_core::logs::utc_stamp(std::time::SystemTime::now())
         );
-        let _ = idecraft_core::logs::append_line(&dir.join(OWN_PROXY_COMMAND_LOG), &line);
+        let _ = ferris_idea_core::logs::append_line(&dir.join(OWN_PROXY_COMMAND_LOG), &line);
     }
 }
 
 /// Environment variable naming a private file the hop stand-ins append their messages to when a
 /// hop fails: `ssh` sends a `ProxyCommand`'s messages to `/dev/null` when it keeps a shared
 /// connection (`ControlPersist`), so the refusal would otherwise be lost.
-pub const HOP_LOG_ENV: &str = "IDECRAFT_SSH_HOP_LOG";
+pub const HOP_LOG_ENV: &str = "FERRIS_IDEA_SSH_HOP_LOG";
 
 /// A new file name for [`HOP_LOG_ENV`] in the private folder of the hop stand-ins.
 pub(crate) fn hop_log_path() -> PathBuf {
@@ -504,11 +507,11 @@ mod tests {
     #[test]
     fn failing_hops_are_found_in_the_messages() {
         let err = "Unable to negotiate with 127.0.0.1 port 2201: no matching key exchange method found.\n\
-                   idecraft-ssh-hop: inner exit 255\nidecraft-ssh-hop: outer exit 255\n\
+                   ferris-idea-ssh-hop: inner exit 255\nferris-idea-ssh-hop: outer exit 255\n\
                    Connection closed by UNKNOWN port 65535\n";
         assert_eq!(failed_hop(err), Some(("inner".into(), false)));
         assert_eq!(
-            failed_hop("idecraft-ssh-hop: refused u@b:22: ProxyCommand\n"),
+            failed_hop("ferris-idea-ssh-hop: refused u@b:22: ProxyCommand\n"),
             Some(("u@b:22".into(), true))
         );
         assert_eq!(failed_hop("Permission denied"), None);

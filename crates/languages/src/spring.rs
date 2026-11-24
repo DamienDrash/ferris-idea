@@ -1,5 +1,5 @@
 //! Beans and configuration of Spring (`SPEC-0115`), Jakarta CDI with Quarkus and MicroProfile, and
-//! Micronaut (`SPEC-0134`): IDECraft's own model of a project's Java sources, read with tree-sitter —
+//! Micronaut (`SPEC-0134`): Ferris IDEA's own model of a project's Java sources, read with tree-sitter —
 //! the beans (stereotype and scope annotations, `@Bean`/`@Produces`/factory methods), where they are
 //! injected (constructors, `@Autowired`/`@Inject` fields and setters, `@Qualifier`/`@Named`), and the
 //! configuration keys (`@Value("${…}")`, `@ConfigProperty`, `@Property`) against
@@ -1551,7 +1551,7 @@ pub fn model(root: &Path, files: &[PathBuf]) -> SpringModel {
 /// configuration files in a virtual environment, installed dependencies, build output or ignored
 /// files are not the project's beans and keys.
 pub fn project_model(root: &Path) -> SpringModel {
-    model(root, &idecraft_core::OwnSources::new(root).files())
+    model(root, &ferris_idea_core::OwnSources::new(root).files())
 }
 
 /// The recommendation on an injected field (`SPEC-0115` v4 behaviour 11).

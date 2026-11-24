@@ -7,10 +7,10 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
-use gpui::{Context, Window, prelude::*};
-use idecraft_vcs::{
+use ferris_idea_vcs::{
     CommitAction, GitError, OpOutcome, PushOptions, ResetMode, StashOptions, TodoEntry,
 };
+use gpui::{Context, Window, prelude::*};
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 
@@ -117,7 +117,7 @@ impl WorkbenchView {
             "git.pull",
             json!({ "rebase": rebase }),
             |this, done| {
-                let done: Result<idecraft_vcs::PullOutcome, GitError> = typed(done);
+                let done: Result<ferris_idea_vcs::PullOutcome, GitError> = typed(done);
                 if let Some(info) = done
                     .as_ref()
                     .ok()
@@ -286,7 +286,7 @@ impl WorkbenchView {
                             .as_str()
                             .unwrap_or_default()
                             .to_owned();
-                        serde_json::from_value::<Vec<idecraft_vcs::StashFile>>(
+                        serde_json::from_value::<Vec<ferris_idea_vcs::StashFile>>(
                             files["files"].take(),
                         )
                         .map(|f| (message, f))
@@ -553,7 +553,7 @@ impl WorkbenchView {
             "git.worktree_changes",
             json!({ "id": rev }),
             move |this, mut v, window, cx| {
-                let changes: Vec<idecraft_vcs::ChangedPath> =
+                let changes: Vec<ferris_idea_vcs::ChangedPath> =
                     match serde_json::from_value(v["changes"].take()) {
                         Ok(c) => c,
                         Err(e) => {
@@ -628,7 +628,7 @@ impl WorkbenchView {
             let Ok(listed) = task.await else {
                 return;
             };
-            let forwards = idecraft_remote::ports::list(&label, &folder);
+            let forwards = ferris_idea_remote::ports::list(&label, &folder);
             let rows = port_rows(&listed, &forwards);
             let _ = view.update(cx, |v, cx| v.set_ports(label, rows, cx));
         })
@@ -717,7 +717,7 @@ mod tests {
         assert!(o.in_progress.is_some());
         let refused: Result<OpOutcome, GitError> = typed(Err("Safe mode: …".into()));
         assert!(refused.unwrap_err().to_string().contains("Safe mode"));
-        let fetched: Result<idecraft_vcs::RemoteOutcome, GitError> = typed(Ok(json!({
+        let fetched: Result<ferris_idea_vcs::RemoteOutcome, GitError> = typed(Ok(json!({
             "ok": false, "command": ["git", "fetch"], "updates": [], "auth_required": true,
             "timed_out": false, "messages": "fatal",
         })));

@@ -31,6 +31,10 @@ pub struct Group {
     /// Files the refactoring renamed, as (before, after); their parts name the file after
     /// (`SPEC-0148` v2 behaviour 6: a Java class takes its file along).
     pub moves: Vec<(PathBuf, PathBuf)>,
+    /// For a group that moved files in a window: how many steps the Project tree's history of file
+    /// operations held when it was applied, which orders it among them for ⌘Z in the tree
+    /// (`SPEC-0193` v7 behaviour 12).
+    pub tree_depth: Option<usize>,
 }
 
 impl Group {
@@ -41,6 +45,7 @@ impl Group {
             parts,
             undone: false,
             moves: Vec::new(),
+            tree_depth: None,
         }
     }
 
@@ -67,11 +72,34 @@ impl Group {
 
     /// Renames the group's files back (`redo` false) or again; stops at the first failure.
     pub fn move_files(&self, redo: bool) -> Result<(), String> {
+        // Never over another file: a rename would replace it (`SPEC-0193` v8 behaviour 12).
+        if let Some(b) = self.occupied(redo) {
+            return Err(format!(
+                "{} already exists; nothing was touched",
+                b.display()
+            ));
+        }
         for (from, to) in &self.moves {
             let (a, b) = if redo { (from, to) } else { (to, from) };
+            // A move into a new folder makes it (`SPEC-0114` behaviour 2).
+            if let Some(dir) = b.parent() {
+                std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+            }
             std::fs::rename(a, b).map_err(|e| format!("{} → {}: {e}", a.display(), b.display()))?;
         }
         Ok(())
+    }
+}
+
+impl Group {
+    /// The place a moved file would go back to (`redo` false) or on to that something already
+    /// holds: undo and redo refuse it before they touch anything (`SPEC-0193` v8 behaviour 12).
+    pub fn occupied(&self, redo: bool) -> Option<&std::path::Path> {
+        self.moves
+            .iter()
+            .map(|(from, to)| if redo { to } else { from })
+            .find(|b| b.exists())
+            .map(|b| b.as_path())
     }
 }
 
@@ -141,7 +169,7 @@ pub fn record_history(root: &Path, paths: &[&Path], label: Option<&str>) {
 }
 
 fn record(root: &Path, paths: &[&Path], label: Option<&str>, workspace: bool) {
-    let Ok(mut history) = idecraft_core::LocalHistory::open(root) else {
+    let Ok(mut history) = ferris_idea_core::LocalHistory::open(root) else {
         return;
     };
     let now = std::time::SystemTime::now()
@@ -216,6 +244,25 @@ impl UndoGroups {
     /// and the oldest of them was undone last.
     pub fn next_redo(&self) -> Option<usize> {
         self.groups.iter().position(|g| g.undone)
+    }
+
+    /// The group ⌘Z (`redo` false) or ⇧⌘Z in the Project tree takes, given how many steps the
+    /// tree's history of file operations holds now and whether it has one to redo: the newest
+    /// group (or the one undone last) when it moved files and no file operation came after it
+    /// (`SPEC-0193` v7 behaviour 12).
+    pub fn for_tree(&self, redo: bool, tree_steps: usize, tree_redo: bool) -> Option<usize> {
+        let i = if redo {
+            self.next_redo()
+        } else {
+            self.newest()
+        }?;
+        let depth = self.groups[i].tree_depth?;
+        let first = if redo {
+            !tree_redo || tree_steps >= depth
+        } else {
+            tree_steps <= depth
+        };
+        first.then_some(i)
     }
 
     /// Group `i`.
@@ -343,12 +390,41 @@ pub fn apply_on_disk_moving(
 mod tests {
     use super::*;
 
+    /// SPEC-0193 v8 behaviour 12: a moved file never goes back over a file that took its place;
+    /// nothing is touched.
+    #[test]
+    fn a_move_never_goes_back_over_another_file() {
+        let root =
+            std::env::temp_dir().join(format!("ferris-idea-undo-occupied-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("docs")).unwrap();
+        let (old, new) = (root.join("notes.txt"), root.join("docs/notes.txt"));
+        std::fs::write(&new, "moved\n").unwrap();
+        std::fs::write(&old, "someone else's\n").unwrap();
+        let group = Group {
+            moves: vec![(old.clone(), new.clone())],
+            ..apply_on_disk_moving(&root, "Move notes.txt to docs", &[], &[]).unwrap()
+        };
+        assert_eq!(group.occupied(false), Some(old.as_path()));
+        assert!(
+            group
+                .move_files(false)
+                .unwrap_err()
+                .contains("already exists")
+        );
+        assert_eq!(std::fs::read_to_string(&old).unwrap(), "someone else's\n");
+        assert_eq!(std::fs::read_to_string(&new).unwrap(), "moved\n");
+        assert_eq!(group.occupied(true), Some(new.as_path()));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
     /// SPEC-0148 v2 behaviour 6 (D29): a renamed file goes back with undo and again with redo.
     #[test]
     fn renamed_files_follow_undo_and_redo() {
         use crate::insight::Range;
         use crate::rename::{Edit, FileEdits};
-        let root = std::env::temp_dir().join(format!("idecraft-undo-move-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("ferris-idea-undo-move-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         let root = root.canonicalize().unwrap();
@@ -532,7 +608,8 @@ mod tests {
     fn undoes_and_redoes_files_on_disk() {
         use crate::insight::Range;
         use crate::rename::{Edit, FileEdits};
-        let root = std::env::temp_dir().join(format!("idecraft-undo-group-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("ferris-idea-undo-group-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         let root = root.canonicalize().unwrap();
@@ -563,7 +640,7 @@ mod tests {
         groups.push(apply_on_disk(&root, "Rename helper to calc", &files).unwrap());
         assert_eq!(std::fs::read_to_string(&a).unwrap(), "int calc();\n");
         assert_eq!(std::fs::read_to_string(&b).unwrap(), "x = calc();\n");
-        let history = idecraft_core::LocalHistory::open(&root).unwrap();
+        let history = ferris_idea_core::LocalHistory::open(&root).unwrap();
         assert!(
             history
                 .revisions("a.c")
@@ -621,7 +698,8 @@ mod tests {
         groups.set_undone(0, false);
         assert_eq!(groups.next_redo(), Some(1));
 
-        let root = std::env::temp_dir().join(format!("idecraft-redo-order-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("ferris-idea-redo-order-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         let root = root.canonicalize().unwrap();
@@ -654,5 +732,43 @@ mod tests {
         let err = undo_on_disk(&mut groups, &root, true).unwrap_err();
         assert_eq!(err, "nothing to redo");
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// SPEC-0193 v7 AK-11: a group that moved a file into a new folder goes back and again; the
+    /// Project tree takes it only while no file operation came after it.
+    #[test]
+    fn a_moved_file_goes_back_and_the_tree_takes_its_group_in_order() {
+        let root =
+            std::env::temp_dir().join(format!("ferris-idea-undo-tree-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("a")).unwrap();
+        let root = root.canonicalize().unwrap();
+        let (from, to) = (root.join("a/X.java"), root.join("b/c/X.java"));
+        std::fs::write(&from, "package a;\n").unwrap();
+        let mut group = Group::new("Move X.java to b/c", Vec::new())
+            .with_moves(vec![(from.clone(), to.clone())]);
+        group.move_files(true).unwrap();
+        assert!(to.is_file() && !from.exists());
+        group.move_files(false).unwrap();
+        assert!(from.is_file() && !to.exists());
+        group.move_files(true).unwrap();
+        let _ = std::fs::remove_dir_all(&root);
+
+        group.tree_depth = Some(2);
+        let mut groups = UndoGroups::default();
+        groups.push(group);
+        // Two tree steps then the move: ⌘Z in the tree takes the move.
+        assert_eq!(groups.for_tree(false, 2, false), Some(0));
+        // A file operation came after it: that one first.
+        assert_eq!(groups.for_tree(false, 3, false), None);
+        groups.set_undone(0, true);
+        // Redo: a tree step undone after the move is redone first.
+        assert_eq!(groups.for_tree(true, 1, true), None);
+        assert_eq!(groups.for_tree(true, 2, true), Some(0));
+        assert_eq!(groups.for_tree(true, 2, false), Some(0));
+        // A group that moved nothing is the editors' alone.
+        let mut plain = UndoGroups::default();
+        plain.push(Group::new("Rename a to b", vec![part("/p/a.rs", Some(1))]));
+        assert_eq!(plain.for_tree(false, 0, false), None);
     }
 }

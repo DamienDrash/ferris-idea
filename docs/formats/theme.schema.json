@@ -3,7 +3,7 @@
   "additionalProperties": false,
   "description": "Exchange file `.idctheme` (SPEC-0303). TOML; validated on import with every problem and its key path.",
   "properties": {
-    "idecraft": {
+    "ferris-idea": {
       "additionalProperties": false,
       "properties": {
         "author": {
@@ -33,7 +33,7 @@
           "type": "string"
         },
         "min_version": {
-          "description": "Oldest IDECraft version the author expects.",
+          "description": "Oldest Ferris IDEA version the author expects.",
           "type": "string"
         },
         "name": {
@@ -56,7 +56,7 @@
           "type": "boolean"
         },
         "name": {
-          "description": "A bundled theme, e.g. \"IDECraft Light\".",
+          "description": "A bundled theme, e.g. \"Ferris IDEA Light\".",
           "type": "string"
         }
       },
@@ -67,9 +67,9 @@
     }
   },
   "required": [
-    "idecraft",
+    "ferris-idea",
     "theme"
   ],
-  "title": "IDECraft theme (kind `theme`, format 1)",
+  "title": "Ferris IDEA theme (kind `theme`, format 1)",
   "type": "object"
 }

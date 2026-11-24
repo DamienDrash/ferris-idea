@@ -1,7 +1,7 @@
-//! The shared core of the IDECraft mobile apps (`ADR-0029`, `SPEC-0326`): pair with a machine
-//! running `idecraft serve --pair`, then list and read the files of its project.
+//! The shared core of the Ferris IDEA mobile apps (`ADR-0029`, `SPEC-0326`): pair with a machine
+//! running `ferris-idea serve --pair`, then list and read the files of its project.
 //!
-//! The channel and the session are the desktop's (`idecraft-pairing`, `idecraft-session`); only
+//! The channel and the session are the desktop's (`ferris-idea-pairing`, `ferris-idea-session`); only
 //! the storage differs. Keys and pins never touch a file here: they go through [`SecretVault`],
 //! which the app implements with the platform keychain.
 
@@ -9,11 +9,11 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
-use idecraft_pairing::{
+use ferris_idea_pairing::{
     Identity, PairError, PendingPairing, connect_pinned, fingerprint, parse_link, start_pairing,
     start_pairing_with_link,
 };
-use idecraft_session::{ClientSession, ErrorCode, RpcError};
+use ferris_idea_session::{ClientSession, ErrorCode, RpcError};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use zeroize::Zeroizing;
@@ -249,7 +249,7 @@ pub fn normalize_address(text: &str) -> Result<String, MobileError> {
             .ok()
             .filter(|p| *p != 0)
             .ok_or_else(|| bad("the port must be a number from 1 to 65535"))?,
-        None => idecraft_pairing::DEFAULT_PORT,
+        None => ferris_idea_pairing::DEFAULT_PORT,
     };
     Ok(format!("{host}:{port}"))
 }
@@ -287,7 +287,7 @@ impl MobileCore {
         Ok(PairingInProgress::new(self, address, pending))
     }
 
-    /// Pairs from an `idecraft-pair://` link; the host's key must equal the link's.
+    /// Pairs from an `ferris-idea-pair://` link; the host's key must equal the link's.
     pub fn begin_pairing_link(
         self: Arc<Self>,
         link: String,
@@ -368,7 +368,7 @@ impl MobileCore {
         Ok(ClientSession::open(
             transport,
             folder,
-            concat!("idecraft-mobile ", env!("CARGO_PKG_VERSION")),
+            concat!("ferris-idea-mobile ", env!("CARGO_PKG_VERSION")),
             &format!("paired://{address}"),
             None,
         )?)

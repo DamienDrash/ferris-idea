@@ -1,5 +1,5 @@
 //! Hand tests 81, 89 and 152 (`SPEC-0155` v4 AK-8, `SPEC-0163` v2 AK-6, `SPEC-0212` v2 AK-5) in
-//! a window of the test harness, IDECraft's side with real keys where the hand test types:
+//! a window of the test harness, Ferris IDEA's side with real keys where the hand test types:
 //! Update Copyright in a Java and a Python file, twice; a properties file's duplicate key and
 //! trailing spaces marked and fixed with ⌥↩; a repeated word and a wrong article in a README fixed
 //! with ⌥↩; a word saved to the project dictionary in the reference's format and a key missing in
@@ -11,13 +11,13 @@
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
+use ferris_idea_workbench::{EditorView, WorkbenchView};
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
-use idecraft_workbench::{EditorView, WorkbenchView};
 
 fn workspace(tag: &str, files: &[(&str, &str)]) -> PathBuf {
     let root = std::env::temp_dir().join(format!(
-        "idecraft-open-plugins-{tag}-{}",
+        "ferris-idea-open-plugins-{tag}-{}",
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&root);
@@ -39,7 +39,7 @@ fn window(
     cx.update(|cx| {
         cx.set_global(IdeSettingsFile(settings.join("settings.toml")));
         cx.set_global(ThemeFile(settings.join("theme")));
-        cx.set_global(CurrentIdeSettings(idecraft_core::IdeSettings::default()));
+        cx.set_global(CurrentIdeSettings(ferris_idea_core::IdeSettings::default()));
     });
     let at = root.to_path_buf();
     let window = cx.add_window(move |_, cx| WorkbenchView::new(&at, cx));
@@ -122,7 +122,7 @@ fn hand_test_81_copyright_properties_and_grammar(cx: &mut TestAppContext) {
         "81",
         &[
             (
-                ".idecraft/copyright.txt",
+                ".ferris-idea/copyright.txt",
                 "Copyright (c) $today.year Example\n",
             ),
             ("src/Main.java", "package app;\n\nclass Main {}\n"),
@@ -132,14 +132,18 @@ fn hand_test_81_copyright_properties_and_grammar(cx: &mut TestAppContext) {
         ],
     );
     let (bench, cx) = window(&root, cx);
-    let year = idecraft_languages::copyright::current_year();
+    let year = ferris_idea_languages::copyright::current_year();
 
     // Code › Update Copyright…: the notice at the top; a second run changes nothing.
     let java = open(&bench, cx, &root.join("src/Main.java"));
+    // v5: the scope dialog first, Current file chosen; Enter runs it (SPEC-0155 v5 behaviour 11).
     let run = |cx: &mut VisualTestContext| {
         bench.update_in(cx, |b, window, cx| {
             b.menu_action("UpdateCopyright", window, cx)
         });
+        cx.run_until_parked();
+        assert!(bench.read_with(cx, |b, _| b.copyright_dialog()));
+        cx.simulate_keystrokes("enter");
         cx.run_until_parked();
     };
     run(cx);
@@ -155,7 +159,7 @@ fn hand_test_81_copyright_properties_and_grammar(cx: &mut TestAppContext) {
     run(cx);
     let once = text(&py, cx);
     assert!(
-        once.starts_with(&format!("# Copyright (c) {year} Example\n"))
+        once.starts_with(&format!("#  Copyright (c) {year} Example\n"))
             && once.ends_with("print(1)\n"),
         "{once}"
     );

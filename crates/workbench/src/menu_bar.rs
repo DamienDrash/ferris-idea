@@ -1,4 +1,4 @@
-//! The application menu bar (`SPEC-0124`): the reference's main menus with the actions IDECraft
+//! The application menu bar (`SPEC-0124`): the reference's main menus with the actions Ferris IDEA
 //! carries out, each showing its shortcut from the keymap in use.
 //!
 //! A menu item sends [`IdeAction`] with the action id; the window runs it the way Search
@@ -6,22 +6,22 @@
 //! for display, under a key context no element has, so a key press is still handled once, by the
 //! IDE's own keymap.
 
+use ferris_idea_ui::keymap::{Keystroke, Modifier, Shortcut};
+pub use ferris_idea_ui::menus::{Entry, MENUS, menu_actions};
+use ferris_idea_ui::window_layouts::MenuItem as LayoutItem;
 use gpui::{App, KeyBinding, Menu, MenuItem, SystemMenuType};
-use idecraft_ui::keymap::{Keystroke, Modifier, Shortcut};
-pub use idecraft_ui::menus::{Entry, MENUS, menu_actions};
-use idecraft_ui::window_layouts::MenuItem as LayoutItem;
 
 /// Runs a keymap action by id (sent by a menu item).
 #[derive(Clone, PartialEq, Debug, gpui::Action)]
-#[action(namespace = idecraft, no_json)]
+#[action(namespace = ferris_idea, no_json)]
 pub struct IdeAction {
     /// Keymap action id, e.g. `SaveAll`.
     pub id: String,
 }
 
-/// Quits IDECraft.
+/// Quits Ferris IDEA.
 #[derive(Clone, PartialEq, Debug, gpui::Action)]
-#[action(namespace = idecraft, no_json)]
+#[action(namespace = ferris_idea, no_json)]
 pub struct QuitIde;
 
 /// Key context of the display-only bindings; no element sets it.
@@ -88,8 +88,8 @@ pub fn toolkit_keystroke(k: &Keystroke) -> Option<String> {
 /// The status text when action `id` cannot run here: its title and its first shortcut in `keymap`,
 /// so the status says which action a key reached ("Resume Program (⌥⌘R) is not available here";
 /// hand test 8 of round 4 showed only the id).
-pub fn unavailable(id: &str, keymap: &idecraft_ui::keymap::Keymap) -> String {
-    let (title, _) = idecraft_languages::everywhere::action_title(id);
+pub fn unavailable(id: &str, keymap: &ferris_idea_ui::keymap::Keymap) -> String {
+    let (title, _) = ferris_idea_languages::everywhere::action_title(id);
     match keymap.shortcuts(id).first() {
         Some(s) => format!(
             "{title} ({}) is not available here",
@@ -110,7 +110,7 @@ pub fn menu_shortcut(id: &str) -> Option<String> {
 }
 
 /// [`menu_shortcut`] in `keymap`.
-pub fn menu_shortcut_in(keymap: &idecraft_ui::keymap::Keymap, id: &str) -> Option<String> {
+pub fn menu_shortcut_in(keymap: &ferris_idea_ui::keymap::Keymap, id: &str) -> Option<String> {
     let owner = CHORD_SHOWN_ELSEWHERE
         .iter()
         .find(|(item, _)| *item == id)
@@ -238,7 +238,7 @@ fn items(entries: &[Entry], layouts: &[LayoutItem], titles: &UndoTitles) -> Vec<
             ),
             Entry::Separator => MenuItem::separator(),
             // The saved layouts are not in the static menus.
-            Entry::Sub(name, _) if *name == idecraft_ui::menus::LAYOUTS => {
+            Entry::Sub(name, _) if *name == ferris_idea_ui::menus::LAYOUTS => {
                 MenuItem::submenu(Menu {
                     name: (*name).into(),
                     items: layout_items(layouts),
@@ -255,10 +255,10 @@ fn items(entries: &[Entry], layouts: &[LayoutItem], titles: &UndoTitles) -> Vec<
 /// The application menu: About, Settings, Services, Quit.
 fn app_menu() -> Menu {
     Menu {
-        name: "IDECraft".into(),
+        name: "Ferris IDEA".into(),
         items: vec![
             // D62 (hand test 205): name and version, as every macOS application shows them.
-            MenuItem::action("About IDECraft", IdeAction { id: "About".into() }),
+            MenuItem::action("About Ferris IDEA", IdeAction { id: "About".into() }),
             MenuItem::separator(),
             MenuItem::action(
                 "Settings…",
@@ -269,7 +269,7 @@ fn app_menu() -> Menu {
             MenuItem::separator(),
             MenuItem::os_submenu("Services", SystemMenuType::Services),
             MenuItem::separator(),
-            MenuItem::action("Quit IDECraft", QuitIde),
+            MenuItem::action("Quit Ferris IDEA", QuitIde),
         ],
     }
 }
@@ -347,8 +347,8 @@ fn set_menus(cx: &mut App) {
     let titles = cx.try_global::<UndoTitles>().cloned().unwrap_or_default();
     let layouts = match cx.try_global::<LayoutMenu>() {
         Some(menu) => menu.0.clone(),
-        None => idecraft_ui::window_layouts::layouts_file()
-            .map(|f| idecraft_ui::window_layouts::Layouts::load(&f))
+        None => ferris_idea_ui::window_layouts::layouts_file()
+            .map(|f| ferris_idea_ui::window_layouts::Layouts::load(&f))
             .unwrap_or_default()
             .menu(),
     };
@@ -440,8 +440,8 @@ mod tests {
     /// on the current one; the selected layout has a ✓ and no Delete….
     #[test]
     fn the_layouts_submenu_lists_the_saved_layouts() {
-        use idecraft_ui::tool_windows::Layout;
-        use idecraft_ui::window_layouts::{Arrangement, Layouts};
+        use ferris_idea_ui::tool_windows::Layout;
+        use ferris_idea_ui::window_layouts::{Arrangement, Layouts};
         fn shape(items: &[MenuItem]) -> Vec<String> {
             items
                 .iter()
@@ -502,16 +502,16 @@ mod tests {
             [
                 "Restore = RestoreDefaultLayout",
                 "Save Changes = StoreDefaultLayout",
-                "Rename… = IDECraft.Layout.Rename:Coding",
+                "Rename… = FerrisIDEA.Layout.Rename:Coding",
             ]
         );
         assert_eq!(
             of("Review"),
             [
-                "Apply = IDECraft.Layout.Apply:Review",
-                "Rename… = IDECraft.Layout.Rename:Review",
+                "Apply = FerrisIDEA.Layout.Apply:Review",
+                "Rename… = FerrisIDEA.Layout.Rename:Review",
                 "-",
-                "Delete… = IDECraft.Layout.Delete:Review",
+                "Delete… = FerrisIDEA.Layout.Delete:Review",
             ]
         );
         // Without saved layouts: Default has the ✓, Save Changes is left out.
@@ -527,16 +527,21 @@ mod tests {
         );
     }
 
-    /// D62 (hand test 205): the application menu starts with About IDECraft.
+    /// D62 (hand test 205): the application menu starts with About Ferris IDEA.
     #[test]
     fn app_menu_has_about() {
         let menu = app_menu();
         let first = menu.items.first();
-        assert!(matches!(first, Some(MenuItem::Action { name, .. }) if name == "About IDECraft"));
+        assert!(
+            matches!(first, Some(MenuItem::Action { name, .. }) if name == "About Ferris IDEA")
+        );
         let (title, detail) = crate::workbench_view::about_text();
-        assert_eq!(title, "IDECraft");
+        assert_eq!(title, "Ferris IDEA");
         assert!(detail.contains(env!("CARGO_PKG_VERSION")), "{detail}");
-        assert!(detail.contains(idecraft_core::release::STAGE), "{detail}");
+        assert!(
+            detail.contains(ferris_idea_core::release::STAGE),
+            "{detail}"
+        );
     }
 
     #[test]
@@ -574,7 +579,7 @@ mod tests {
     /// these keys.
     #[test]
     fn run_and_resume_keys_on_macos() {
-        use idecraft_ui::keymap::Keymap;
+        use ferris_idea_ui::keymap::Keymap;
         let mac = Keymap::bundled_macos();
         let k = |t: &str| Keystroke::parse(t).unwrap();
         assert_eq!(
@@ -613,7 +618,7 @@ mod tests {
     /// the multiple-caret one; Go to Line is ⌘L there and nothing else takes ⌃G.
     #[test]
     fn occurrence_keys_on_macos() {
-        use idecraft_ui::keymap::Keymap;
+        use ferris_idea_ui::keymap::Keymap;
         let mac = Keymap::bundled_macos();
         let k = |t: &str| Keystroke::parse(t).unwrap();
         assert_eq!(
@@ -635,7 +640,7 @@ mod tests {
             "UnselectPreviousOccurrence",
             "SelectAllOccurrences",
         ] {
-            assert!(idecraft_editor::COMMANDS.contains(&id), "{id}");
+            assert!(ferris_idea_editor::COMMANDS.contains(&id), "{id}");
         }
     }
 
@@ -647,7 +652,7 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn obs_0055_items_show_their_macos_shortcuts() {
-        use idecraft_ui::keymap::Keymap;
+        use ferris_idea_ui::keymap::Keymap;
         let mac = Keymap::bundled_macos();
         for (id, shown) in [
             ("EditorContextInfo", Some("ctrl-shift-q")),
@@ -680,7 +685,7 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn menu_shortcuts_follow_the_keyboard_layout() {
-        use idecraft_ui::keymap::{EventStrokes, Keymap};
+        use ferris_idea_ui::keymap::{EventStrokes, Keymap};
         // Apple's localization of the German layout for the keys it moves (part of gpui's table).
         let german: std::collections::HashMap<char, char> =
             [('[', 'ö'), (']', 'ä'), ('/', 'ß'), (';', 'ü')]
@@ -719,12 +724,12 @@ mod tests {
     fn every_menu_action_is_found_by_search_everywhere() {
         // Search Everywhere offers the keymap's actions and the unbound ones (IMP-0013), with the
         // keymap of either platform.
-        use idecraft_ui::keymap::Keymap;
+        use ferris_idea_ui::keymap::Keymap;
         let keymaps = [Keymap::bundled_default(), Keymap::bundled_macos()];
         let missing: Vec<&str> = menu_actions()
             .into_iter()
             .filter(|id| {
-                !idecraft_languages::everywhere::UNBOUND_ACTIONS.contains(id)
+                !ferris_idea_languages::everywhere::UNBOUND_ACTIONS.contains(id)
                     && keymaps.iter().any(|k| k.shortcuts(id).is_empty())
             })
             .collect();

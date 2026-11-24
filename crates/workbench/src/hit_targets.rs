@@ -6,8 +6,8 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use ferris_idea_ui::tool_windows::Rect;
 use gpui::{IntoElement, Styled};
-use idecraft_ui::tool_windows::Rect;
 
 static ENABLED: AtomicBool = AtomicBool::new(false);
 
@@ -51,35 +51,7 @@ pub fn mark(name: impl Into<String>) -> Option<impl IntoElement> {
     let name = name.into();
     Some(
         gpui::canvas(
-            move |b, window, _| {
-                let rect = |b: gpui::Bounds<gpui::Pixels>| Rect {
-                    x: f32::from(b.origin.x),
-                    y: f32::from(b.origin.y),
-                    w: f32::from(b.size.width),
-                    h: f32::from(b.size.height),
-                };
-                let shown = visible(rect(b), rect(window.content_mask().bounds));
-                if crate::semantics::active() {
-                    let painted = rect(b);
-                    crate::semantics::record_mark(
-                        window,
-                        &name,
-                        idecraft_uidriver::Rect::new(painted.x, painted.y, painted.w, painted.h),
-                        shown.map(|r| idecraft_uidriver::Rect::new(r.x, r.y, r.w, r.h)),
-                    );
-                }
-                if !marks {
-                    return;
-                }
-                TARGETS.with(|t| match shown {
-                    Some(r) => {
-                        t.borrow_mut().insert(name.clone(), r);
-                    }
-                    None => {
-                        t.borrow_mut().remove(&name);
-                    }
-                });
-            },
+            move |b, window, _| record(window, &name, b),
             |_, _, _, _| {},
         )
         .absolute()
@@ -87,6 +59,45 @@ pub fn mark(name: impl Into<String>) -> Option<impl IntoElement> {
         .left_0()
         .size_full(),
     )
+}
+
+/// Records `b`, painted in this frame, as the place of the control `name`, clipped by the
+/// content mask, like [`mark`] does for an element: for a spot an element paints itself, such as a
+/// usage count in the editor (`SPEC-0292` v8 behaviour 15). While the semantic tree is built, the
+/// spot is also a node with the test id `name` (`SPEC-0319` behaviour 42). Called while the frame is
+/// prepainted; nothing unless recording or the semantic tree is on.
+pub fn record(window: &gpui::Window, name: &str, b: gpui::Bounds<gpui::Pixels>) {
+    let marks = ENABLED.load(Ordering::Relaxed);
+    if !marks && !crate::semantics::active() {
+        return;
+    }
+    let rect = |b: gpui::Bounds<gpui::Pixels>| Rect {
+        x: f32::from(b.origin.x),
+        y: f32::from(b.origin.y),
+        w: f32::from(b.size.width),
+        h: f32::from(b.size.height),
+    };
+    let shown = visible(rect(b), rect(window.content_mask().bounds));
+    if crate::semantics::active() {
+        let painted = rect(b);
+        crate::semantics::record_mark(
+            window,
+            name,
+            ferris_idea_uidriver::Rect::new(painted.x, painted.y, painted.w, painted.h),
+            shown.map(|r| ferris_idea_uidriver::Rect::new(r.x, r.y, r.w, r.h)),
+        );
+    }
+    if !marks {
+        return;
+    }
+    TARGETS.with(|t| match shown {
+        Some(r) => {
+            t.borrow_mut().insert(name.to_owned(), r);
+        }
+        None => {
+            t.borrow_mut().remove(name);
+        }
+    });
 }
 
 /// The part of `r` inside `clip`, if any.

@@ -437,6 +437,7 @@ fn replace(title: String, range: std::ops::Range<usize>, with: String) -> Option
     Some(Fix {
         learn: None,
         keep: None,
+        bundle_key: None,
         action: None,
         title,
         edits: vec![TextEdit { range, text: with }],

@@ -1,6 +1,6 @@
 //! SPEC-0132 AK-2: a Kotlin program of a Gradle project stops at a breakpoint through
 //! kotlin-debug-adapter with its locals, and resume runs it to its end. SPEC-0178 AK-3: a condition,
-//! which this adapter cannot evaluate, is evaluated by IDECraft and stops only once. SPEC-0132 v4 AK-7: the values of a stop — no `this`
+//! which this adapter cannot evaluate, is evaluated by Ferris IDEA and stops only once. SPEC-0132 v4 AK-7: the values of a stop — no `this`
 //! in a top-level `main`, the sizes of collections. SPEC-0132 v5 AK-8: breakpoints in the members of classes of a second file. Skipped without the adapter (`kotlin-debug.sh install` of the reference environment) or Gradle
 //! with the Kotlin plugin in its cache.
 
@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::Duration;
 
-use idecraft_debugger::{
+use ferris_idea_debugger::{
     Breakpoint, CLIENT_SIDE_NOTE, DebugSession, EvaluatedBy, SourceBreakpoint, StopState,
     known_adapters,
 };
@@ -73,7 +73,7 @@ fn project_with(
         eprintln!("skipped: kotlin-debug-adapter is not installed");
         return None;
     };
-    let dir = std::env::temp_dir().join(format!("idecraft-{name}-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("src/main/kotlin/demo")).unwrap();
     let dir = std::fs::canonicalize(&dir).unwrap();
@@ -117,7 +117,7 @@ fn kotlin_program_stops_at_breakpoint() {
         }],
     )]);
     let (mut session, placed, state) = self::launch(&command, &launch, &conditional);
-    assert_eq!(placed[&source][0].evaluated_by, EvaluatedBy::IdeCraft);
+    assert_eq!(placed[&source][0].evaluated_by, EvaluatedBy::FerrisIdea);
     match state {
         StopState::Stopped {
             frames,
@@ -408,7 +408,7 @@ fn kotlin_breakpoints_in_class_members_of_another_file_are_hit() {
 
 /// The other places of a class file: a lambda in a member, an anonymous object, a companion
 /// object, a second class and a top-level function; a member breakpoint with a condition
-/// IDECraft evaluates (SPEC-0178) stops like a plain one.
+/// Ferris IDEA evaluates (SPEC-0178) stops like a plain one.
 #[test]
 fn kotlin_breakpoints_in_lambdas_inner_classes_and_companions_are_hit() {
     let Some((command, dir, _)) = project_with("ktinner", ZOO_MAIN, &[("Zoo.kt", ZOO)]) else {

@@ -107,7 +107,7 @@ pub fn write(root: &Path, params: &Value) -> Result<Value, RpcError> {
     let full = resolve(root, path)?;
     let mode = std::fs::metadata(&full).ok().map(|m| m.permissions());
     let mut name = full.file_name().unwrap_or_default().to_os_string();
-    name.push(format!(".idecraft-write-{}", std::process::id()));
+    name.push(format!(".ferris-idea-write-{}", std::process::id()));
     let tmp = full.with_file_name(name);
     let done = std::fs::write(&tmp, text)
         .and_then(|()| match mode {
@@ -197,7 +197,7 @@ mod tests {
 
     #[test]
     fn file_operations_stay_in_the_project() {
-        let dir = std::env::temp_dir().join(format!("idecraft-fsops-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-fsops-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("p/src")).unwrap();
         let root = std::fs::canonicalize(dir.join("p")).unwrap();

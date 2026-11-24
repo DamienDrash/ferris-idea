@@ -2,7 +2,7 @@
 //!
 //! Implements `SPEC-0310` (store profiles, URLs, TLS, browser tree, export, MCP surface),
 //! `SPEC-0311` (MongoDB console language, completion, result views, edits) and `SPEC-0312` (Redis
-//! console, value views, edits). SQL dialects stay in `idecraft-database`; this crate reuses its
+//! console, value views, edits). SQL dialects stay in `ferris-idea-database`; this crate reuses its
 //! keychain store and agent permissions.
 
 mod browse;
@@ -21,7 +21,7 @@ mod view;
 use std::collections::BTreeSet;
 use std::time::Duration;
 
-pub use idecraft_database::Permission;
+pub use ferris_idea_database::Permission;
 
 pub use browse::{BrowseItem, BrowseLevel, KEY_PAGE, browse, browse_mongo, browse_redis};
 pub use completion::{

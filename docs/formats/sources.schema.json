@@ -69,7 +69,7 @@
       },
       "type": "array"
     },
-    "idecraft": {
+    "ferris-idea": {
       "additionalProperties": false,
       "properties": {
         "author": {
@@ -99,7 +99,7 @@
           "type": "string"
         },
         "min_version": {
-          "description": "Oldest IDECraft version the author expects.",
+          "description": "Oldest Ferris IDEA version the author expects.",
           "type": "string"
         },
         "name": {
@@ -115,9 +115,9 @@
     }
   },
   "required": [
-    "idecraft",
+    "ferris-idea",
     "connection"
   ],
-  "title": "IDECraft data sources (kind `sources`, format 1)",
+  "title": "Ferris IDEA data sources (kind `sources`, format 1)",
   "type": "object"
 }

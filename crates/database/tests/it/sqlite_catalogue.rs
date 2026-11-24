@@ -6,7 +6,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use idecraft_database::{
+use ferris_idea_database::{
     ConnectionProfile, Credentials, Dialect, OnError, Outcome, Session, Table, complete,
     create_script, inspect, introspect, introspect_schema, show_ddl, show_ddl_in,
 };
@@ -27,7 +27,7 @@ impl Sample {
 
     fn empty(tag: &str) -> Self {
         let dir = std::env::temp_dir().join(format!(
-            "idecraft-sqlite-catalogue-{tag}-{}",
+            "ferris-idea-sqlite-catalogue-{tag}-{}",
             std::process::id()
         ));
         let _ = std::fs::remove_dir_all(&dir);
@@ -383,8 +383,8 @@ async fn reading_the_schema_changes_nothing_on_disk() {
         let session = sample.session("catalogue.db", false).await;
         introspect(&session).await.unwrap();
         show_ddl(&session, "indexed").await.unwrap().unwrap();
-        idecraft_database::list_schemas(&session).await.unwrap();
-        idecraft_database::schema_fingerprint(&session)
+        ferris_idea_database::list_schemas(&session).await.unwrap();
+        ferris_idea_database::schema_fingerprint(&session)
             .await
             .unwrap();
     }
@@ -394,7 +394,7 @@ async fn reading_the_schema_changes_nothing_on_disk() {
         "a file was changed or left behind"
     );
 
-    // A read-only connection is read-only for SQLite itself, not only for IDECraft's checks.
+    // A read-only connection is read-only for SQLite itself, not only for Ferris IDEA's checks.
     let session = sample.session("catalogue.db", true).await;
     for sql in [
         "create table sneaked (a)",
@@ -642,23 +642,23 @@ async fn a_relative_file_is_found_from_the_workspace_and_attached_databases_are_
         conn.execute_batch(&std::fs::read_to_string(sql).unwrap())
             .unwrap();
     }
-    std::fs::create_dir_all(sample.file(".idecraft")).unwrap();
+    std::fs::create_dir_all(sample.file(".ferris-idea")).unwrap();
     std::fs::write(
-        sample.file(".idecraft/connections.toml"),
+        sample.file(".ferris-idea/connections.toml"),
         format!(
-            "[idecraft]\nkind = \"connections\"\nformat = 1\n\n[[connection]]\nid = \"c\"\nname = \"c\"\n\
+            "[ferris-idea]\nkind = \"connections\"\nformat = 1\n\n[[connection]]\nid = \"c\"\nname = \"c\"\n\
              dialect = \"sqlite\"\npath = \"catalogue.db\"\n\n[connection.options]\n\
              startup_script = \"attach database '{}' as archive\"\n",
             sample.file("attached.db").display()
         ),
     )
     .unwrap();
-    let profiles = idecraft_database::load_profiles(&sample.0).unwrap();
+    let profiles = ferris_idea_database::load_profiles(&sample.0).unwrap();
     assert_eq!(profiles[0].path.as_deref(), Some(Path::new("catalogue.db")));
     assert_eq!(profiles[0].file_path(), sample.file("catalogue.db"));
     // Saving writes the path as it was, never the folder it was read from.
-    idecraft_database::save_profiles(&sample.0, &profiles).unwrap();
-    let written = std::fs::read_to_string(sample.file(".idecraft/connections.toml")).unwrap();
+    ferris_idea_database::save_profiles(&sample.0, &profiles).unwrap();
+    let written = std::fs::read_to_string(sample.file(".ferris-idea/connections.toml")).unwrap();
     assert!(written.contains("path = \"catalogue.db\""), "{written}");
     assert!(!written.contains("base ="), "{written}");
 

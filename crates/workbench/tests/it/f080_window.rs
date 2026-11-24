@@ -11,16 +11,16 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
+use ferris_idea_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
+use ferris_idea_workbench::settings_model::Page;
+use ferris_idea_workbench::tool_windows::ToolWindow;
+use ferris_idea_workbench::{SettingsView, WorkbenchView, semantics};
 use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext, point, px};
-use idecraft_workbench::appearance::{CurrentIdeSettings, IdeSettingsFile, ThemeFile};
-use idecraft_workbench::settings_model::Page;
-use idecraft_workbench::tool_windows::ToolWindow;
-use idecraft_workbench::{SettingsView, WorkbenchView, semantics};
 
 type Bench = Entity<WorkbenchView>;
 
 fn workspace(tag: &str, files: &[(&str, &str)]) -> PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-f080-{tag}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-f080-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     for (name, text) in files {
@@ -38,7 +38,7 @@ fn window(root: &Path, cx: &mut TestAppContext) -> (Bench, &'static mut VisualTe
     cx.update(|cx| {
         cx.set_global(IdeSettingsFile(dir.join("settings.toml")));
         cx.set_global(ThemeFile(dir.join("theme")));
-        cx.set_global(CurrentIdeSettings(idecraft_core::IdeSettings::default()));
+        cx.set_global(CurrentIdeSettings(ferris_idea_core::IdeSettings::default()));
     });
     cx.executor().allow_parking();
     let at = root.to_path_buf();
@@ -160,7 +160,7 @@ fn find_action(bench: &Bench, cx: &mut VisualTestContext, query: &str, id: &str)
 }
 
 /// A plugin module in the WebAssembly text format: the manifest at 16, `data` at their offsets,
-/// a bump allocator from 8192 and `run` as the body of `idecraft_run` (the action id at `$a`, the
+/// a bump allocator from 8192 and `run` as the body of `ferris_idea_run` (the action id at `$a`, the
 /// input at `$p` with length `$l`).
 fn module(manifest: &str, imports: &str, data: &[(u32, &str)], run: &str) -> Vec<u8> {
     let quote = |s: &str| s.replace('\\', "\\\\").replace('"', "\\\"");
@@ -174,14 +174,14 @@ fn module(manifest: &str, imports: &str, data: &[(u32, &str)], run: &str) -> Vec
   (memory (export "memory") 2)
   (global $next (mut i32) (i32.const 8192))
   (data (i32.const 16) "{manifest}")
-{data}  (func (export "idecraft_alloc") (param $len i32) (result i32)
+{data}  (func (export "ferris_idea_alloc") (param $len i32) (result i32)
     (local $at i32)
     (local.set $at (global.get $next))
     (global.set $next (i32.add (global.get $next) (local.get $len)))
     (local.get $at))
-  (func (export "idecraft_manifest") (result i64)
+  (func (export "ferris_idea_manifest") (result i64)
     (i64.or (i64.shl (i64.const 16) (i64.const 32)) (i64.const {len})))
-  (func (export "idecraft_run") (param $a i32) (param $al i32) (param $p i32) (param $l i32) (result i64)
+  (func (export "ferris_idea_run") (param $a i32) (param $al i32) (param $p i32) (param $l i32) (result i64)
     {run})
 )"#,
         manifest = quote(manifest),
@@ -225,7 +225,7 @@ fn marker_plugin(version: &str) -> Vec<u8> {
         &format!(
             r#"{{"name":"Marker","version":"{version}","permissions":["project-read"],"actions":[{{"id":"mark","title":"Mark","kind":"edit"}}]}}"#
         ),
-        r#"(import "idecraft" "read_file" (func $read (param i32 i32) (result i64)))"#,
+        r#"(import "ferris-idea" "read_file" (func $read (param i32 i32) (result i64)))"#,
         &[(1024, denied), (2048, "README.md"), (3072, marked)],
         &format!(
             r#"(if (i64.lt_s (call $read (i32.const 2048) (i32.const 9)) (i64.const 0))

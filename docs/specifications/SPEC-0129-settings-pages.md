@@ -156,19 +156,19 @@ start directory.
 
 ## Known deviations from the reference
 (v7) The reference's Font page also has typography settings (the weight of the regular and the
-bold text, which font fills in missing characters). IDECraft draws with the font's own weights and
+bold text, which font fills in missing characters). Ferris IDEA draws with the font's own weights and
 the system's fallback; a setting that only some installed fonts can honour would look as if it
 did nothing, so it is not offered. The preview is a field of its own, not a full editor with
 highlighting.
-The reference removes trailing spaces of modified lines by default; IDECraft does nothing unless
+The reference removes trailing spaces of modified lines by default; Ferris IDEA does nothing unless
 switched on and then strips the whole file except the caret line. Build Tools and Languages only
-show what IDECraft finds. Not compared side by side.
+show what Ferris IDEA finds. Not compared side by side.
 
 v4: taken from the open platform's sources, not compared with the reference IDE. The open action
-does nothing at the limits without saying so; IDECraft names the limit in the status bar. Left
+does nothing at the limits without saying so; Ferris IDEA names the limit in the status bar. Left
 out: `EditorIncreaseFontSize`, `EditorDecreaseFontSize` and `EditorResetFontSize`, which change
-the size of one editor until it is closed — IDECraft has one size for all editors and no size of
+the size of one editor until it is closed — Ferris IDEA has one size for all editors and no size of
 an editor's own; `EditorResetFontSizeGlobal`, which goes back to the size the open platform noted
-when the colour scheme was last changed, a value IDECraft does not keep. None of the four has a
-shortcut in the ported keymaps. The open action scales its step with the IDE zoom; IDECraft has
+when the colour scheme was last changed, a value Ferris IDEA does not keep. None of the four has a
+shortcut in the ported keymaps. The open action scales its step with the IDE zoom; Ferris IDEA has
 no IDE zoom.

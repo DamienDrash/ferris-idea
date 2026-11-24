@@ -1,8 +1,8 @@
-//! IDECraft's own quick fixes in Python files where pyright offers none (`SPEC-0098` v9 behaviours
+//! Ferris IDEA's own quick fixes in Python files where pyright offers none (`SPEC-0098` v9 behaviours
 //! 17–19, OBS-0034 part 14, Q1–Q3): at an unused import, at a local variable that is never read
-//! and at a name that is not defined in a function. Each comes from a finding of IDECraft's own
+//! and at a name that is not defined in a function. Each comes from a finding of Ferris IDEA's own
 //! analysis of the file — not from the server's diagnostic — whose default level is "no
-//! highlighting, only fix": pyright already marks these places, and a place IDECraft gets wrong
+//! highlighting, only fix": pyright already marks these places, and a place Ferris IDEA gets wrong
 //! is then never shown as a problem. Each fix is one undo step on the editor's text.
 //!
 //! The analysis is conservative: where Python could bind or read a name in a way the syntax does
@@ -239,6 +239,7 @@ fn edit_fix(title: String, edits: Vec<TextEdit>) -> Fix {
         edits,
         learn: None,
         keep: None,
+        bundle_key: None,
         action: None,
     }
 }
@@ -407,7 +408,7 @@ const MAX_PROJECT_FILE_BYTES: u64 = 1 << 20;
 const PROJECT_NAMES_FRESH: Duration = Duration::from_secs(10);
 
 /// The project folder of a Python file: the nearest folder above it with a `pyproject.toml`,
-/// `setup.py`, `setup.cfg`, `.git` or `.idecraft`, else the file's folder.
+/// `setup.py`, `setup.cfg`, `.git` or `.ferris-idea`, else the file's folder.
 fn project_root(file: &Path) -> Option<PathBuf> {
     let dir = file.parent()?;
     for a in dir.ancestors() {
@@ -416,7 +417,7 @@ fn project_root(file: &Path) -> Option<PathBuf> {
             "setup.py",
             "setup.cfg",
             ".git",
-            ".idecraft",
+            ".ferris-idea",
         ]
         .iter()
         .any(|m| a.join(m).exists())
@@ -604,6 +605,7 @@ fn unused_imports(path: &Path, root: Node, text: &str, out: &mut Vec<Finding>) {
                 edits: Vec::new(),
                 learn: None,
                 keep: None,
+                bundle_key: None,
                 action: Some("OptimizeImports"),
             };
             match remove {
@@ -1225,7 +1227,7 @@ mod tests {
     /// SPEC-0098 v14 AK-18: the project's modules and their names.
     #[test]
     fn project_modules_and_names() {
-        let dir = std::env::temp_dir().join(format!("idecraft-py-names-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ferris-idea-py-names-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         for (p, t) in [
             ("pyproject.toml", ""),

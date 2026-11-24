@@ -114,11 +114,11 @@ pub const UNREACHABLE: &str = "the system keychain cannot be reached in this ses
 pub fn keychain_reachable() -> bool {
     #[cfg(target_os = "linux")]
     {
-        secret_service::SecretService::connect().is_ok()
+        secret_service::SecretService::connect(APPLICATION).is_ok()
     }
     #[cfg(not(target_os = "linux"))]
     {
-        keyring::Entry::new("idecraft", "reachability-check").is_ok()
+        keyring::Entry::new("ferris-idea", "reachability-check").is_ok()
     }
 }
 
@@ -179,35 +179,58 @@ impl SecretStore for KeychainStore {
 /// versions) read once to move a password over (`SPEC-0008` v8 behaviour 18). [`KeychainStore`]
 /// is this store with [`KeyringStore`]; another `legacy` is for tests.
 #[cfg(target_os = "linux")]
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub struct SecretServiceStore<L = KeyringStore> {
     legacy: L,
+    /// The `application` attribute of the items.
+    application: &'static str,
+}
+
+#[cfg(target_os = "linux")]
+impl<L: SecretStore + Default> Default for SecretServiceStore<L> {
+    fn default() -> Self {
+        Self::with_legacy(L::default())
+    }
 }
 
 #[cfg(target_os = "linux")]
 impl<L: SecretStore> SecretServiceStore<L> {
     /// The Secret Service, moving passwords out of `legacy` when they are read.
     pub fn with_legacy(legacy: L) -> Self {
-        Self { legacy }
+        Self {
+            legacy,
+            application: APPLICATION,
+        }
     }
 
-    fn persistent(reference: &SecretRef) -> Result<secret_service::SecretService, SecretError> {
-        secret_service::SecretService::connect().map_err(|reason| unreachable(reference, &reason))
+    /// The same store for the items older versions wrote under the product's former name
+    /// (`SPEC-0356` behaviour 11).
+    pub fn with_former_name(mut self) -> Self {
+        self.application = FORMER_SERVICE;
+        self
+    }
+
+    fn persistent(
+        &self,
+        reference: &SecretRef,
+    ) -> Result<secret_service::SecretService, SecretError> {
+        secret_service::SecretService::connect(self.application)
+            .map_err(|reason| unreachable(reference, &reason))
     }
 }
 
 #[cfg(target_os = "linux")]
 impl<L: SecretStore> SecretStore for SecretServiceStore<L> {
     fn get(&self, reference: &SecretRef) -> Result<Option<Secret>, SecretError> {
-        persistent::get(Self::persistent(reference), &self.legacy, reference)
+        persistent::get(self.persistent(reference), &self.legacy, reference)
     }
 
     fn set(&self, reference: &SecretRef, secret: &Secret) -> Result<(), SecretError> {
-        persistent::set(Self::persistent(reference), &self.legacy, reference, secret)
+        persistent::set(self.persistent(reference), &self.legacy, reference, secret)
     }
 
     fn delete(&self, reference: &SecretRef) -> Result<(), SecretError> {
-        persistent::delete(Self::persistent(reference), &self.legacy, reference)
+        persistent::delete(self.persistent(reference), &self.legacy, reference)
     }
 }
 
@@ -221,7 +244,7 @@ fn unreachable(reference: &SecretRef, reason: &str) -> SecretError {
         account: reference.account.clone(),
         message: format!(
             "the Secret Service (the desktop keyring, such as GNOME Keyring or KWallet) cannot be \
-             reached in this session: {reason}. On Linux IDECraft keeps passwords only there, \
+             reached in this session: {reason}. On Linux Ferris IDEA keeps passwords only there, \
              encrypted under your login keyring, never in a file; nothing was stored or deleted. \
              Log in to a desktop session with an unlocked keyring and try again"
         ),
@@ -309,19 +332,21 @@ mod secret_service {
         // Keeps the D-Bus connection and the encrypted session open for the collection.
         _service: Service<'static>,
         collection: Collection<'static>,
-    }
-
-    fn attributes(reference: &SecretRef) -> HashMap<&str, &str> {
-        HashMap::from([
-            ("application", "idecraft"),
-            ("service", reference.service.as_str()),
-            ("account", reference.account.as_str()),
-        ])
+        application: &'static str,
     }
 
     impl SecretService {
+        fn attributes<'a>(&self, reference: &'a SecretRef) -> HashMap<&'a str, &'a str> {
+            HashMap::from([
+                ("application", self.application),
+                ("service", reference.service.as_str()),
+                ("account", reference.account.as_str()),
+            ])
+        }
+
         /// Connects and checks the default collection; the error is the reason, without values.
-        pub fn connect() -> Result<Self, String> {
+        /// Items carry `application` as their application attribute.
+        pub fn connect(application: &'static str) -> Result<Self, String> {
             block_on(async {
                 let service = Service::encrypted().await.map_err(|e| {
                     format!("no Secret Service answers on the session bus over an encrypted session ({e})")
@@ -341,6 +366,7 @@ mod secret_service {
                 Ok(Self {
                     _service: service,
                     collection,
+                    application,
                 })
             })
         }
@@ -359,7 +385,7 @@ mod secret_service {
             block_on(async {
                 let items = self
                     .collection
-                    .search_items(&attributes(reference))
+                    .search_items(&self.attributes(reference))
                     .await
                     .map_err(|e| failed(reference, &e))?;
                 let Some(item) = items.first() else {
@@ -380,10 +406,10 @@ mod secret_service {
                 self.collection
                     .create_item(
                         &format!(
-                            "IDECraft password ({}/{})",
+                            "Ferris IDEA password ({}/{})",
                             reference.service, reference.account
                         ),
-                        &attributes(reference),
+                        &self.attributes(reference),
                         oo7::Secret::text(secret.expose()),
                         true,
                         None,
@@ -398,7 +424,7 @@ mod secret_service {
             block_on(async {
                 let items = self
                     .collection
-                    .search_items(&attributes(reference))
+                    .search_items(&self.attributes(reference))
                     .await
                     .map_err(|e| failed(reference, &e))?;
                 for item in items {
@@ -418,9 +444,192 @@ fn store_error(reference: &SecretRef, error: &keyring::Error) -> SecretError {
     }
 }
 
-/// The store IDECraft uses for passwords: the operating system's credential store
+/// The `application` attribute of the product's Secret Service items (Linux).
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+const APPLICATION: &str = "ferris-idea";
+
+/// The keychain service of database passwords under the product's former name, and the start of
+/// the other services it named (`SPEC-0356` behaviour 11).
+const FORMER_SERVICE: &str = "idecraft"; // rebrand:keep
+
+/// The vault key's service under the product's former name.
+const FORMER_VAULT_KEY_SERVICE: &str = "idecraft-vault-key"; // rebrand:keep
+
+/// What follows the product's short name in the keychain services that change with it: database
+/// passwords, the API keys of AI endpoints and the vault key.
+const RENAMED_SUFFIXES: [&str; 3] = ["", "-ai", "-vault-key"];
+
+/// (former service, today's service) for every keychain service the product's new name changed
+/// (`SPEC-0356` behaviour 11); empty while the names are the same.
+pub fn renamed_services() -> Vec<(String, String)> {
+    let current = crate::KEYCHAIN_SERVICE;
+    if FORMER_SERVICE == current {
+        return Vec::new();
+    }
+    RENAMED_SUFFIXES
+        .iter()
+        .map(|s| (format!("{FORMER_SERVICE}{s}"), format!("{current}{s}")))
+        .collect()
+}
+
+/// `reference` with a service of the product's former name replaced by today's (`SPEC-0356`
+/// behaviour 11): a profile saved by an older version names the entry it keeps today.
+pub fn current_secret_ref(reference: &SecretRef) -> SecretRef {
+    let mut out = reference.clone();
+    if let Some((_, new)) = renamed_services()
+        .into_iter()
+        .find(|(old, _)| *old == reference.service)
+    {
+        out.service = new;
+    }
+    out
+}
+
+/// Whether `service` is the keychain service of the vault's key, under today's or the product's
+/// former name (`SPEC-0353` behaviour 15, `SPEC-0356` behaviour 11).
+pub fn is_vault_key_service(service: &str) -> bool {
+    service == VAULT_KEY_SERVICE || service == FORMER_VAULT_KEY_SERVICE
+}
+
+/// A store that still finds the entries older versions saved under the product's former keychain
+/// service names (`SPEC-0356` behaviour 11). `current` holds today's services, `former` the old
+/// ones (the same keychain; on Linux with the former application attribute); `renames` pairs
+/// (former, today's) service names, as [`renamed_services`] gives them.
+///
+/// Today's service is read first. An entry found only under the former service is returned and
+/// copied to today's; the former entry is removed only after the copy reads back the same value,
+/// so a failed or partial copy loses nothing. Values are never logged or put into an error.
+/// Writing goes to today's service (and removes a former entry once the write reads back);
+/// deleting removes both.
+#[derive(Debug, Clone)]
+pub struct RenamedStore<C, F> {
+    current: C,
+    former: F,
+    renames: Vec<(String, String)>,
+}
+
+impl<C: SecretStore, F: SecretStore> RenamedStore<C, F> {
+    /// A store over `current` and `former` with the service `renames`.
+    pub fn new(current: C, former: F, renames: Vec<(String, String)>) -> Self {
+        Self {
+            current,
+            former,
+            renames,
+        }
+    }
+
+    fn today(&self, reference: &SecretRef) -> SecretRef {
+        let mut out = reference.clone();
+        if let Some((_, new)) = self.renames.iter().find(|(old, _)| *old == out.service) {
+            out.service = new.clone();
+        }
+        out
+    }
+
+    fn before(&self, today: &SecretRef) -> Option<SecretRef> {
+        let (old, _) = self.renames.iter().find(|(_, new)| *new == today.service)?;
+        Some(SecretRef {
+            service: old.clone(),
+            account: today.account.clone(),
+        })
+    }
+
+    /// Whether today's entry reads back exactly `secret`.
+    fn holds(&self, today: &SecretRef, secret: &Secret) -> bool {
+        matches!(self.current.get(today), Ok(Some(found)) if found == *secret)
+    }
+}
+
+impl<C: SecretStore, F: SecretStore> SecretStore for RenamedStore<C, F> {
+    fn get(&self, reference: &SecretRef) -> Result<Option<Secret>, SecretError> {
+        let today = self.today(reference);
+        if let Some(secret) = self.current.get(&today)? {
+            return Ok(Some(secret));
+        }
+        let Some(old) = self.before(&today) else {
+            return Ok(None);
+        };
+        let Some(secret) = self.former.get(&old)? else {
+            return Ok(None);
+        };
+        if self.current.set(&today, &secret).is_ok() && self.holds(&today, &secret) {
+            // A former entry that cannot be removed stays; today's is read first from now on.
+            let _ = self.former.delete(&old);
+        }
+        Ok(Some(secret))
+    }
+
+    fn set(&self, reference: &SecretRef, secret: &Secret) -> Result<(), SecretError> {
+        let today = self.today(reference);
+        self.current.set(&today, secret)?;
+        if let Some(old) = self.before(&today)
+            && self.holds(&today, secret)
+        {
+            let _ = self.former.delete(&old);
+        }
+        Ok(())
+    }
+
+    fn delete(&self, reference: &SecretRef) -> Result<(), SecretError> {
+        let today = self.today(reference);
+        self.current.delete(&today)?;
+        if let Some(old) = self.before(&today) {
+            self.former.delete(&old)?;
+        }
+        Ok(())
+    }
+}
+
+/// The system's credential store for the entries older versions wrote under the product's former
+/// name: [`KeychainStore`] itself on macOS and Windows (only the service names differ), on Linux
+/// the Secret Service items with the former application attribute (`SPEC-0356` behaviour 11).
+#[derive(Debug, Default, Clone, Copy)]
+pub struct FormerKeychainStore;
+
+impl SecretStore for FormerKeychainStore {
+    fn get(&self, reference: &SecretRef) -> Result<Option<Secret>, SecretError> {
+        #[cfg(target_os = "linux")]
+        {
+            SecretServiceStore::with_legacy(KeyringStore)
+                .with_former_name()
+                .get(reference)
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            KeychainStore.get(reference)
+        }
+    }
+
+    fn set(&self, reference: &SecretRef, secret: &Secret) -> Result<(), SecretError> {
+        #[cfg(target_os = "linux")]
+        {
+            SecretServiceStore::with_legacy(KeyringStore)
+                .with_former_name()
+                .set(reference, secret)
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            KeychainStore.set(reference, secret)
+        }
+    }
+
+    fn delete(&self, reference: &SecretRef) -> Result<(), SecretError> {
+        #[cfg(target_os = "linux")]
+        {
+            SecretServiceStore::with_legacy(KeyringStore)
+                .with_former_name()
+                .delete(reference)
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            KeychainStore.delete(reference)
+        }
+    }
+}
+
+/// The store Ferris IDEA uses for passwords: the operating system's credential store
 /// ([`KeychainStore`]). Only in debug builds (`debug_assertions`) and only while
-/// `IDECRAFT_TEST_SECRETS_DIR` is set, a [`test_store::DirStore`] in that folder takes its place, so
+/// `FERRIS_IDEA_TEST_SECRETS_DIR` is set, a [`test_store::DirStore`] in that folder takes its place, so
 /// tests never touch (or prompt for) the keychain (SPEC-0008 v3, behaviour 14). Release builds
 /// contain neither the variable nor the folder store.
 #[derive(Debug, Default, Clone, Copy)]
@@ -428,12 +637,12 @@ pub struct SystemStore;
 
 impl SystemStore {
     /// The test secrets folder in effect: the one a test program named with
-    /// [`test_store::use_dir`], else `IDECRAFT_TEST_SECRETS_DIR`; always `None` in release builds.
+    /// [`test_store::use_dir`], else `FERRIS_IDEA_TEST_SECRETS_DIR`; always `None` in release builds.
     pub fn test_secrets_dir() -> Option<std::path::PathBuf> {
         #[cfg(debug_assertions)]
         {
             test_store::chosen_dir().or_else(|| {
-                std::env::var_os(test_store::TEST_SECRETS_ENV)
+                ferris_idea_core::product_var_os(test_store::TEST_SECRETS_ENV)
                     .filter(|dir| !dir.is_empty())
                     .map(std::path::PathBuf::from)
             })
@@ -445,29 +654,32 @@ impl SystemStore {
     }
 }
 
+/// Runs `op` on [`SystemStore`]'s store, which also finds the entries of the product's former
+/// name (`SPEC-0356` behaviour 11); debug builds with a test secrets folder use that folder.
+fn with_system_store<T>(op: impl FnOnce(&dyn SecretStore) -> T) -> T {
+    #[cfg(debug_assertions)]
+    if let Some(dir) = SystemStore::test_secrets_dir() {
+        let store = test_store::DirStore::new(dir);
+        return op(&RenamedStore::new(&store, &store, renamed_services()));
+    }
+    op(&RenamedStore::new(
+        KeychainStore,
+        FormerKeychainStore,
+        renamed_services(),
+    ))
+}
+
 impl SecretStore for SystemStore {
     fn get(&self, reference: &SecretRef) -> Result<Option<Secret>, SecretError> {
-        #[cfg(debug_assertions)]
-        if let Some(dir) = Self::test_secrets_dir() {
-            return test_store::DirStore::new(dir).get(reference);
-        }
-        KeychainStore.get(reference)
+        with_system_store(|s| s.get(reference))
     }
 
     fn set(&self, reference: &SecretRef, secret: &Secret) -> Result<(), SecretError> {
-        #[cfg(debug_assertions)]
-        if let Some(dir) = Self::test_secrets_dir() {
-            return test_store::DirStore::new(dir).set(reference, secret);
-        }
-        KeychainStore.set(reference, secret)
+        with_system_store(|s| s.set(reference, secret))
     }
 
     fn delete(&self, reference: &SecretRef) -> Result<(), SecretError> {
-        #[cfg(debug_assertions)]
-        if let Some(dir) = Self::test_secrets_dir() {
-            return test_store::DirStore::new(dir).delete(reference);
-        }
-        KeychainStore.delete(reference)
+        with_system_store(|s| s.delete(reference))
     }
 }
 
@@ -480,11 +692,11 @@ pub mod test_store {
     use crate::SecretRef;
 
     /// Names the folder of the test store; honoured only in debug builds.
-    pub const TEST_SECRETS_ENV: &str = "IDECRAFT_TEST_SECRETS_DIR";
+    pub const TEST_SECRETS_ENV: &str = "FERRIS_IDEA_TEST_SECRETS_DIR";
 
     static CHOSEN: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
 
-    /// Uses the test store in `dir` for the rest of this process, like `IDECRAFT_TEST_SECRETS_DIR`
+    /// Uses the test store in `dir` for the rest of this process, like `FERRIS_IDEA_TEST_SECRETS_DIR`
     /// but without changing the environment (test programs run their tests on several threads and
     /// may not set variables). The first folder named stays; the folder this call settled on.
     pub fn use_dir(dir: impl Into<PathBuf>) -> PathBuf {
@@ -694,6 +906,10 @@ pub enum Credentials {
     },
 }
 
+/// The keychain service of the vault's key (`SPEC-0353` behaviour 15; the same text as
+/// `ferris_idea_vault::KEY_SERVICE`).
+pub const VAULT_KEY_SERVICE: &str = "ferris-idea-vault-key";
+
 /// Looks up the password of `profile` without waiting for input.
 pub fn resolve_credentials(
     profile: &ConnectionProfile,
@@ -702,6 +918,15 @@ pub fn resolve_credentials(
     let Some(reference) = &profile.secret else {
         return Ok(Credentials::NotNeeded);
     };
+    // The vault's own key store item is never a database password, whatever a profile names
+    // (`SPEC-0353` behaviour 15).
+    if is_vault_key_service(&reference.service) {
+        return Err(SecretError {
+            service: reference.service.clone(),
+            account: reference.account.clone(),
+            message: "this keychain entry holds the key of Ferris IDEA's vault and is never used as a password".into(),
+        });
+    }
     Ok(match store.get(reference)? {
         Some(secret) => Credentials::Available(secret),
         None => Credentials::Missing {
@@ -717,7 +942,7 @@ mod tests {
 
     fn profile_with(secret: Option<SecretRef>) -> ConnectionProfile {
         let mut p =
-            ConnectionProfile::from_url("ref-pg", "postgresql://idecraft@127.0.0.1/inventory")
+            ConnectionProfile::from_url("ref-pg", "postgresql://ferris-idea@127.0.0.1/inventory")
                 .unwrap();
         p.secret = secret;
         p
@@ -725,7 +950,7 @@ mod tests {
 
     fn reference() -> SecretRef {
         SecretRef {
-            service: "idecraft-test".into(),
+            service: "ferris-idea-test".into(),
             account: "ref-pg".into(),
         }
     }
@@ -758,6 +983,242 @@ mod tests {
         assert!(store.get(&reference()).unwrap().is_none());
     }
 
+    /// SPEC-0353 behaviour 15: a profile naming the vault's key store item gets no password,
+    /// even when the store holds the item.
+    #[test]
+    fn the_vault_key_is_never_a_password() {
+        let store = MemoryStore::default();
+        let item = SecretRef {
+            service: VAULT_KEY_SERVICE.into(),
+            account: "vault-key".into(),
+        };
+        store.set(&item, &Secret::new("not-a-real-key")).unwrap();
+        let err = resolve_credentials(&profile_with(Some(item)), &store).unwrap_err();
+        assert!(err.message.contains("never used as a password"), "{err}");
+    }
+
+    /// SPEC-0356: the stores and services of the rename, for the tests below.
+    mod renamed {
+        use super::*;
+
+        pub(super) fn renames() -> Vec<(String, String)> {
+            vec![("old-svc".into(), "new-svc".into())]
+        }
+
+        pub(super) fn at(service: &str) -> SecretRef {
+            SecretRef {
+                service: service.into(),
+                account: "connection:shop".into(),
+            }
+        }
+
+        /// A store whose writes fail.
+        #[derive(Default)]
+        pub(super) struct NoWrites(pub MemoryStore);
+
+        impl SecretStore for NoWrites {
+            fn get(&self, r: &SecretRef) -> Result<Option<Secret>, SecretError> {
+                self.0.get(r)
+            }
+            fn set(&self, r: &SecretRef, _: &Secret) -> Result<(), SecretError> {
+                Err(SecretError {
+                    service: r.service.clone(),
+                    account: r.account.clone(),
+                    message: "refused".into(),
+                })
+            }
+            fn delete(&self, r: &SecretRef) -> Result<(), SecretError> {
+                self.0.delete(r)
+            }
+        }
+
+        /// A store that keeps something other than what it was given.
+        #[derive(Default)]
+        pub(super) struct Garbles(pub MemoryStore);
+
+        impl SecretStore for Garbles {
+            fn get(&self, r: &SecretRef) -> Result<Option<Secret>, SecretError> {
+                self.0.get(r)
+            }
+            fn set(&self, r: &SecretRef, s: &Secret) -> Result<(), SecretError> {
+                self.0
+                    .set(r, &Secret::new(format!("{}-cut", &s.expose()[..1])))
+            }
+            fn delete(&self, r: &SecretRef) -> Result<(), SecretError> {
+                self.0.delete(r)
+            }
+        }
+    }
+
+    /// SPEC-0356 AK-10 (behaviour 11): an entry saved under the former service is found, copied
+    /// to today's service and removed from the former one only after the copy reads back.
+    #[test]
+    fn an_entry_under_the_former_service_moves_after_a_verified_copy() {
+        use renamed::*;
+        let keychain = MemoryStore::default();
+        keychain.set(&at("old-svc"), &Secret::new("pw-1")).unwrap();
+        let store = RenamedStore::new(&keychain, &keychain, renames());
+        // Asked by today's name or by the former name a profile still carries.
+        for asked in ["new-svc", "old-svc"] {
+            assert_eq!(store.get(&at(asked)).unwrap().unwrap().expose(), "pw-1");
+        }
+        assert_eq!(
+            keychain.get(&at("new-svc")).unwrap().unwrap().expose(),
+            "pw-1"
+        );
+        assert!(keychain.get(&at("old-svc")).unwrap().is_none());
+        // Other services are left alone.
+        keychain.set(&at("other"), &Secret::new("pw-2")).unwrap();
+        assert_eq!(store.get(&at("other")).unwrap().unwrap().expose(), "pw-2");
+        assert!(store.get(&at("missing")).unwrap().is_none());
+    }
+
+    /// SPEC-0356 AK-10: today's entry wins; the former one is not read or touched.
+    #[test]
+    fn todays_entry_wins_over_the_former_one() {
+        use renamed::*;
+        let keychain = MemoryStore::default();
+        keychain.set(&at("old-svc"), &Secret::new("older")).unwrap();
+        keychain.set(&at("new-svc"), &Secret::new("newer")).unwrap();
+        let store = RenamedStore::new(&keychain, &keychain, renames());
+        assert_eq!(
+            store.get(&at("old-svc")).unwrap().unwrap().expose(),
+            "newer"
+        );
+        assert_eq!(
+            keychain.get(&at("old-svc")).unwrap().unwrap().expose(),
+            "older"
+        );
+    }
+
+    /// SPEC-0356 AK-10: a copy that fails or reads back differently keeps the former entry; the
+    /// password is still given.
+    #[test]
+    fn a_failed_or_wrong_copy_keeps_the_former_entry() {
+        use renamed::*;
+        let former = MemoryStore::default();
+        former.set(&at("old-svc"), &Secret::new("pw-3")).unwrap();
+        let refusing = NoWrites::default();
+        let store = RenamedStore::new(&refusing, &former, renames());
+        assert_eq!(store.get(&at("new-svc")).unwrap().unwrap().expose(), "pw-3");
+        assert!(former.get(&at("old-svc")).unwrap().is_some());
+
+        let garbling = Garbles::default();
+        let store = RenamedStore::new(&garbling, &former, renames());
+        assert_eq!(store.get(&at("new-svc")).unwrap().unwrap().expose(), "pw-3");
+        assert_eq!(
+            former.get(&at("old-svc")).unwrap().unwrap().expose(),
+            "pw-3"
+        );
+    }
+
+    /// SPEC-0356 AK-10: saving writes today's service and then drops the former entry; deleting
+    /// removes both; a failure of the former store is an error that names no value.
+    #[test]
+    fn saving_and_deleting_cover_both_names() {
+        use renamed::*;
+        let keychain = MemoryStore::default();
+        keychain.set(&at("old-svc"), &Secret::new("stale")).unwrap();
+        let store = RenamedStore::new(&keychain, &keychain, renames());
+        store.set(&at("old-svc"), &Secret::new("fresh")).unwrap();
+        assert_eq!(
+            keychain.get(&at("new-svc")).unwrap().unwrap().expose(),
+            "fresh"
+        );
+        assert!(keychain.get(&at("old-svc")).unwrap().is_none());
+
+        keychain.set(&at("old-svc"), &Secret::new("again")).unwrap();
+        store.delete(&at("new-svc")).unwrap();
+        assert!(keychain.get(&at("new-svc")).unwrap().is_none());
+        assert!(keychain.get(&at("old-svc")).unwrap().is_none());
+
+        struct Broken;
+        impl SecretStore for Broken {
+            fn get(&self, r: &SecretRef) -> Result<Option<Secret>, SecretError> {
+                Err(SecretError {
+                    service: r.service.clone(),
+                    account: r.account.clone(),
+                    message: "locked".into(),
+                })
+            }
+            fn set(&self, _: &SecretRef, _: &Secret) -> Result<(), SecretError> {
+                unreachable!()
+            }
+            fn delete(&self, r: &SecretRef) -> Result<(), SecretError> {
+                self.get(r).map(|_| ())
+            }
+        }
+        let empty = MemoryStore::default();
+        let store = RenamedStore::new(&empty, Broken, renames());
+        let err = store.get(&at("new-svc")).unwrap_err();
+        assert_eq!(err.service, "old-svc");
+        assert!(store.delete(&at("new-svc")).is_err());
+    }
+
+    /// SPEC-0356 AK-10: through the test store of debug builds, the copy is a private file like
+    /// any password it holds.
+    #[cfg(all(unix, debug_assertions))]
+    #[test]
+    fn the_copy_in_the_test_store_is_private() {
+        use renamed::*;
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("renamed-store-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let files = test_store::DirStore::new(&dir);
+        files.set(&at("old-svc"), &Secret::new("pw-4")).unwrap();
+        let store = RenamedStore::new(&files, &files, renames());
+        assert_eq!(store.get(&at("new-svc")).unwrap().unwrap().expose(), "pw-4");
+        let copy = dir.join("new-svc/connection:shop");
+        assert_eq!(
+            std::fs::metadata(&copy).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        assert!(!dir.join("old-svc/connection:shop").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// SPEC-0356 AK-11: the renamed services are the product's own (database passwords, AI keys,
+    /// the vault key), map onto today's names, and are none while the names are the same.
+    #[test]
+    fn the_renamed_services_are_the_products_own() {
+        assert_eq!(
+            VAULT_KEY_SERVICE,
+            format!("{}-vault-key", crate::KEYCHAIN_SERVICE)
+        );
+        let renames = renamed_services();
+        if FORMER_SERVICE == crate::KEYCHAIN_SERVICE {
+            assert!(renames.is_empty());
+        } else {
+            assert_eq!(renames.len(), 3);
+            assert!(renames.contains(&(FORMER_VAULT_KEY_SERVICE.into(), VAULT_KEY_SERVICE.into())));
+            assert!(renames.contains(&(FORMER_SERVICE.into(), crate::KEYCHAIN_SERVICE.into())));
+        }
+        let old = SecretRef {
+            service: FORMER_SERVICE.into(),
+            account: "connection:shop".into(),
+        };
+        assert_eq!(current_secret_ref(&old), crate::secret_ref("shop"));
+    }
+
+    /// SPEC-0356 AK-11 (SPEC-0353 behaviour 15): the vault's key is never a password, also when a
+    /// profile names it by the product's former service.
+    #[test]
+    fn the_vault_key_under_the_former_name_is_never_a_password() {
+        let store = MemoryStore::default();
+        let item = SecretRef {
+            service: FORMER_VAULT_KEY_SERVICE.into(),
+            account: "vault-key".into(),
+        };
+        store.set(&item, &Secret::new("not-a-real-key")).unwrap();
+        let err = resolve_credentials(&profile_with(Some(item)), &store).unwrap_err();
+        assert!(err.message.contains("never used as a password"), "{err}");
+        assert!(!err.to_string().contains("not-a-real-key"));
+        assert!(is_vault_key_service(VAULT_KEY_SERVICE));
+        assert!(!is_vault_key_service(crate::KEYCHAIN_SERVICE));
+    }
+
     #[test]
     fn secrets_never_print() {
         let secret = Secret::new("hunter2");
@@ -767,13 +1228,13 @@ mod tests {
         assert!(!format!("{available:?}").contains("hunter2"));
     }
 
-    /// AK-11: run by hand on a Mac: `cargo test -p idecraft-database -- --ignored keychain`.
+    /// AK-11: run by hand on a Mac: `cargo test -p ferris-idea-database -- --ignored keychain`.
     #[test]
     #[ignore = "touches the real system keychain"]
     fn keychain_round_trip() {
         let store = KeychainStore;
         let reference = SecretRef {
-            service: "idecraft-selftest".into(),
+            service: "ferris-idea-selftest".into(),
             account: format!("probe-{}", std::process::id()),
         };
         store.set(&reference, &Secret::new("throw-away")).unwrap();
@@ -943,14 +1404,14 @@ mod tests {
     }
 
     /// Behaviour 14: a release build neither contains nor honours the test store. Run by
-    /// `scripts/ci-local.sh` as `IDECRAFT_TEST_SECRETS_DIR=… cargo test --release … --ignored`.
+    /// `scripts/ci-local.sh` as `FERRIS_IDEA_TEST_SECRETS_DIR=… cargo test --release … --ignored`.
     #[cfg(not(debug_assertions))]
     #[test]
-    #[ignore = "needs IDECRAFT_TEST_SECRETS_DIR set; run by scripts/ci-local.sh"]
+    #[ignore = "needs FERRIS_IDEA_TEST_SECRETS_DIR set; run by scripts/ci-local.sh"]
     fn release_build_ignores_test_secrets_dir() {
         assert!(
-            std::env::var_os("IDECRAFT_TEST_SECRETS_DIR").is_some(),
-            "run with IDECRAFT_TEST_SECRETS_DIR set"
+            ferris_idea_core::product_var_os("FERRIS_IDEA_TEST_SECRETS_DIR").is_some(),
+            "run with FERRIS_IDEA_TEST_SECRETS_DIR set"
         );
         assert_eq!(SystemStore::test_secrets_dir(), None);
     }
@@ -968,7 +1429,7 @@ mod tests {
         impl Dir {
             fn new(name: &str) -> Self {
                 let path = std::env::temp_dir()
-                    .join(format!("idecraft-secrets-{name}-{}", std::process::id()));
+                    .join(format!("ferris-idea-secrets-{name}-{}", std::process::id()));
                 let _ = std::fs::remove_dir_all(&path);
                 std::fs::create_dir_all(&path).unwrap();
                 chmod(&path, 0o700);
@@ -992,7 +1453,7 @@ mod tests {
 
         fn reference(account: &str) -> SecretRef {
             SecretRef {
-                service: "idecraft-test".into(),
+                service: "ferris-idea-test".into(),
                 account: account.into(),
             }
         }
@@ -1004,9 +1465,9 @@ mod tests {
             let r = reference("refdb-pg");
             assert!(store.get(&r).unwrap().is_none());
             store.set(&r, &Secret::new("value-one")).unwrap();
-            let file = dir.0.join("idecraft-test/refdb-pg");
+            let file = dir.0.join("ferris-idea-test/refdb-pg");
             assert_eq!(mode(&file), 0o600);
-            assert_eq!(mode(&dir.0.join("idecraft-test")), 0o700);
+            assert_eq!(mode(&dir.0.join("ferris-idea-test")), 0o700);
             assert_eq!(store.get(&r).unwrap().unwrap().expose(), "value-one");
             store.delete(&r).unwrap();
             store.delete(&r).unwrap();
@@ -1018,7 +1479,7 @@ mod tests {
         #[test]
         fn a_trailing_line_break_is_not_part_of_the_password() {
             let dir = Dir::new("newline");
-            let service = dir.0.join("idecraft-test");
+            let service = dir.0.join("ferris-idea-test");
             std::fs::create_dir(&service).unwrap();
             chmod(&service, 0o700);
             std::fs::write(service.join("a"), "value-three\n").unwrap();
@@ -1033,7 +1494,7 @@ mod tests {
             let store = DirStore::new(&dir.0);
             let r = reference("a");
             store.set(&r, &Secret::new("value-two")).unwrap();
-            let file = dir.0.join("idecraft-test/a");
+            let file = dir.0.join("ferris-idea-test/a");
 
             chmod(&file, 0o644);
             let err = store.get(&r).unwrap_err().to_string();

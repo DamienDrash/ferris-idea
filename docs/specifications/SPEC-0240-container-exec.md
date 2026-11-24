@@ -19,8 +19,8 @@ run single commands there with a preview first.
    when the image has it, else `sh`, decided inside the container in one exec. `TERM` is
    `xterm-256color`. A container that is not running is not entered; the status line says to start
    it first. [GEN, STD]
-2. **Bridge without the Docker CLI:** the tab runs the IDECraft binary itself as the bridge
-   (`idecraft container-exec <engine> <container>`): it creates the exec with a TTY, starts it with
+2. **Bridge without the Docker CLI:** the tab runs the Ferris IDEA binary itself as the bridge
+   (`ferris-idea container-exec <engine> <container>`): it creates the exec with a TTY, starts it with
    the connection upgraded to a raw stream, switches its own terminal to raw mode, copies bytes both
    ways, sends the terminal size at start and whenever it changes (checked every 250 ms), and ends
    with the shell's exit code when the shell ends or the container stops. The tab keeps the output
@@ -36,7 +36,7 @@ run single commands there with a preview first.
    `container`, `command`) runs `kubectl exec <object> [-c container] -- <command>` without a TTY with
    the same limits. [STD, ADR-0008]
 6. **Preview and rights:** both tools default to `dry_run: true` and only report what would run;
-   `dry_run: false` needs the user-granted `run` right and is logged in `.idecraft/agent-log.jsonl`
+   `dry_run: false` needs the user-granted `run` right and is logged in `.ferris-idea/agent-log.jsonl`
    with tool, target and command. [SPEC-0053]
 
 ## Acceptance criteria
@@ -46,9 +46,9 @@ run single commands there with a preview first.
 - **AK-2** Against the fake Engine API: a command's output and exit code without TTY, an upgraded
   TTY session that echoes input and ends with its exit code, resizes seen, a stopped container's
   refusal (`crates/containers/tests/containers.rs`).
-- **AK-3** Live against a real Docker Engine (`IDECRAFT_TEST_DOCKER`, skipped when unset or not
+- **AK-3** Live against a real Docker Engine (`FERRIS_IDEA_TEST_DOCKER`, skipped when unset or not
   reachable): `uname -s` prints `Linux`, `sh -c 'exit 3'` gives 3, stderr is kept, an interactive TTY
-  session runs `echo` and `exit 4`; against a real cluster (`IDECRAFT_TEST_KUBECONFIG`):
+  session runs `echo` and `exit 4`; against a real cluster (`FERRIS_IDEA_TEST_KUBECONFIG`):
   `kubectl exec` into a pod prints its hostname (`crates/containers/tests/live.rs`).
 - **AK-4** MCP: preview without change, refusal without `run`, output and exit code with `run`, log
   entry (`crates/mcp/tests/it/protocol.rs`: `container_exec_tools`).
@@ -61,6 +61,6 @@ Attaching to the main process of a container (`docker attach`), copying files in
 choosing the container of a multi-container pod in the window (MCP takes `container`).
 
 ## Known deviations from the reference
-The bridge is IDECraft itself, so no Docker CLI is needed on the machine. One key opens the shell;
+The bridge is Ferris IDEA itself, so no Docker CLI is needed on the machine. One key opens the shell;
 the shell is chosen inside the container instead of failing on images without `bash` (IMP-0111).
 Not compared side by side yet.

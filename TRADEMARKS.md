@@ -39,7 +39,7 @@ How to ask: see "Asking the licensor for another licence" in [`LICENSING.md`](LI
 
 ## Icons inside the application
 
-The interface icons in `crates/ui/icons/idecraft/` are part of the software and under the
+The interface icons in `crates/ui/icons/ferris-idea/` are part of the software and under the
 project's licence. The icons, themes and keymaps taken from `JetBrains/intellij-community` are
 under the Apache License 2.0 ([`LICENSES/`](LICENSES/README.md)); that licence grants no rights in
 JetBrains' names or marks.

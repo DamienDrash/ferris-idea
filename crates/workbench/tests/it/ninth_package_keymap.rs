@@ -9,17 +9,17 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use ferris_idea_languages::find_usages::UsageSource;
+use ferris_idea_languages::insight::{Location, Range, Symbol};
+use ferris_idea_languages::safe_delete::{SafeDeletePlan, plan_from};
+use ferris_idea_workbench::WorkbenchView;
+use ferris_idea_workbench::keymap_actions::{self, ReformatOption};
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_languages::find_usages::UsageSource;
-use idecraft_languages::insight::{Location, Range, Symbol};
-use idecraft_languages::safe_delete::{SafeDeletePlan, plan_from};
-use idecraft_workbench::WorkbenchView;
-use idecraft_workbench::keymap_actions::{self, ReformatOption};
 
 const MAIN: &str = "fn main() {\n    let x = 1;\n}\n\nfn unused() {\n    2;\n}\n";
 
 fn workspace(tag: &str) -> PathBuf {
-    let root = std::env::temp_dir().join(format!("idecraft-ninth-{tag}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-ninth-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("src")).unwrap();
     std::fs::write(
@@ -261,7 +261,7 @@ fn safe_delete_in_a_closed_file_keeps_local_history(cx: &mut TestAppContext) {
         "{}",
         status(&bench, cx)
     );
-    let history = idecraft_core::LocalHistory::open(&root).unwrap();
+    let history = ferris_idea_core::LocalHistory::open(&root).unwrap();
     assert!(!history.revisions("src/b.rs").is_empty());
     assert_eq!(text(&bench, cx), MAIN, "the open file is untouched");
     let _ = std::fs::remove_dir_all(&root);
@@ -422,7 +422,7 @@ fn force_refresh_reads_a_file_with_the_same_time_stamp(cx: &mut TestAppContext) 
     let _ = std::fs::remove_dir_all(&root);
 }
 
-/// SPEC-0059 AK-18 (v9.8): after a commit made outside IDECraft the change markers follow
+/// SPEC-0059 AK-18 (v9.8): after a commit made outside Ferris IDEA the change markers follow
 /// Force Refresh.
 #[gpui::test]
 fn force_refresh_reads_head_again(cx: &mut TestAppContext) {

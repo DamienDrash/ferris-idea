@@ -412,7 +412,7 @@ fn gradle_group(root: &Path, m: &Module) -> TaskGroup {
 }
 
 /// Options applied to every run of a build tool from the window and to dependency resolution
-/// (behaviours 6, 7), kept in `.idecraft/build-tools.toml`.
+/// (behaviours 6, 7), kept in `.ferris-idea/build-tools.toml`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BuildOptions {
     /// Maven `-o`, Gradle `--offline`: use only what is in the local caches.
@@ -438,7 +438,7 @@ pub struct BuildOptions {
 impl BuildOptions {
     /// The file the options are kept in.
     pub fn file(root: &Path) -> PathBuf {
-        root.join(".idecraft/build-tools.toml")
+        root.join(".ferris-idea/build-tools.toml")
     }
 
     /// The options of the project at `root` (defaults when there are none or they are unreadable).
@@ -938,8 +938,10 @@ mod tests {
     use super::*;
 
     fn tmp(name: &str) -> PathBuf {
-        let d =
-            std::env::temp_dir().join(format!("idecraft-buildtools-{name}-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!(
+            "ferris-idea-buildtools-{name}-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d

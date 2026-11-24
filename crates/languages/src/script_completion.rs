@@ -1,5 +1,5 @@
 //! TypeScript and JavaScript completion on top of typescript-language-server (`SPEC-0072` v8
-//! behaviours 28–30): signature and type from a resolved detail, call parentheses, and IDECraft's
+//! behaviours 28–30): signature and type from a resolved detail, call parentheses, and Ferris IDEA's
 //! own postfix templates (the server has none).
 
 use crate::insight::{CompletionItem, Range};
@@ -225,7 +225,7 @@ fn escape(text: &str) -> String {
         .replace('}', "\\}")
 }
 
-/// IDECraft's postfix templates for the name typed at char `character` of line `line_no` in
+/// Ferris IDEA's postfix templates for the name typed at char `character` of line `line_no` in
 /// `line` (behaviour 30): those whose name starts with the typed name, each replacing expression
 /// and name. Empty when the name does not follow `expression.`.
 pub fn postfix_items(line: &str, line_no: u64, character: usize) -> Vec<CompletionItem> {

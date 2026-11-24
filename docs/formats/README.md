@@ -1,20 +1,20 @@
-# IDECraft file formats
+# Ferris IDEA file formats
 
-IDECraft writes TOML files that say what they are. Each starts with an `[idecraft]` table naming
-its `kind` and `format` version ([ADR-0021](../adr/0021-idecraft-file-formats.md),
-[SPEC-0303](../specifications/SPEC-0303-idecraft-file-formats.md)):
+Ferris IDEA writes TOML files that say what they are. Each starts with an `[ferris-idea]` table naming
+its `kind` and `format` version ([ADR-0021](../adr/0021-ferris-idea-file-formats.md),
+[SPEC-0303](../specifications/SPEC-0303-ferris-idea-file-formats.md)):
 
 ```toml
-[idecraft]
+[ferris-idea]
 kind = "theme"
 format = 1
 name = "Light"          # optional: id, name, author, licence, homepage, min_version
 
 [theme]
-name = "IDECraft Light"
+name = "Ferris IDEA Light"
 ```
 
-IDECraft reads every format up to its own and migrates older ones when it reads them. It refuses a
+Ferris IDEA reads every format up to its own and migrates older ones when it reads them. It refuses a
 file from a newer version and says which format it found. Import reports every problem at once,
 each with its key path.
 
@@ -43,28 +43,28 @@ Import also accepts these files renamed to `.toml`, for example `my.idckeymap.to
 
 | Kind | File | Schema |
 |---|---|---|
-| `breakpoints` | `.idecraft/breakpoints.toml` | [breakpoints.schema.json](breakpoints.schema.json) |
-| `bookmarks` | `.idecraft/bookmarks.toml` | [bookmarks.schema.json](bookmarks.schema.json) |
-| `run-configurations` | `.idecraft/run.toml` | — |
-| `connections` | `.idecraft/connections.toml` | — |
-| `sql-files` | `.idecraft/sql-files.toml` | — |
-| `python` | `.idecraft/python.toml` | — |
+| `breakpoints` | `.ferris-idea/breakpoints.toml` | [breakpoints.schema.json](breakpoints.schema.json) |
+| `bookmarks` | `.ferris-idea/bookmarks.toml` | [bookmarks.schema.json](bookmarks.schema.json) |
+| `run-configurations` | `.ferris-idea/run.toml` | — |
+| `connections` | `.ferris-idea/connections.toml` | — |
+| `sql-files` | `.ferris-idea/sql-files.toml` | — |
+| `python` | `.ferris-idea/python.toml` | — |
 | `ide-settings` | `settings.toml` in the settings folder | — |
-| `keymap` | `keymaps/IDECraft.toml` in the settings folder | [keymap.schema.json](keymap.schema.json) |
+| `keymap` | `keymaps/FerrisIDEA.toml` in the settings folder | [keymap.schema.json](keymap.schema.json) |
 
-Files from older versions are still read. The first time IDECraft writes the new form, it keeps the
+Files from older versions are still read. The first time Ferris IDEA writes the new form, it keeps the
 old file once as `<name>.bak`.
 
 ## State files
 
-State files hold what IDECraft remembers for one user. They are not made to be shared and are
-JSON with a `version` ([ADR-0021](../adr/0021-idecraft-file-formats.md)).
+State files hold what Ferris IDEA remembers for one user. They are not made to be shared and are
+JSON with a `version` ([ADR-0021](../adr/0021-ferris-idea-file-formats.md)).
 
 | File | Schema |
 |---|---|
 | `window-layouts.json` in the settings folder: the saved tool window layouts ([SPEC-0333](../specifications/SPEC-0333-named-tool-window-layouts.md)) | [window-layouts.schema.json](window-layouts.schema.json) |
 
-IDECraft does not read a state file from a newer version and does not overwrite it.
+Ferris IDEA does not read a state file from a newer version and does not overwrite it.
 
 ## Using a schema in your editor
 
@@ -76,5 +76,5 @@ against one. Put a `#:schema` comment on the first line of the file, for example
 ```
 
 The schemas are generated from the code. A test fails when they differ. To regenerate them, run
-`IDECRAFT_WRITE_SCHEMAS=1 cargo test -p idecraft-core published_schemas`, and for
-`window-layouts.schema.json` `IDECRAFT_WRITE_SCHEMAS=1 cargo test -p idecraft-ui published_schema`.
+`FERRIS_IDEA_WRITE_SCHEMAS=1 cargo test -p ferris-idea-core published_schemas`, and for
+`window-layouts.schema.json` `FERRIS_IDEA_WRITE_SCHEMAS=1 cargo test -p ferris-idea-ui published_schema`.

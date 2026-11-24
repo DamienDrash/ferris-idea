@@ -86,7 +86,7 @@ pub struct EditorSettings {
     /// When the folding arrows in the gutter are shown (`SPEC-0083` v8 behaviour 22).
     #[serde(default)]
     pub folding_arrows: FoldingArrows,
-    /// Usage counts of type declarations (`SPEC-0292` behaviour 5).
+    /// Usage counts of declarations (`SPEC-0292` behaviour 5, v8).
     pub usage_counts: bool,
     /// The usage counts on rows above the declarations instead of at the end of their lines
     /// (`SPEC-0292` v2 behaviours 4a and 5).
@@ -98,6 +98,8 @@ pub struct EditorSettings {
     pub highlight_usages_at_caret: bool,
     /// Editor Tabs (`SPEC-0059` v9 behaviour 17): `[editor.tabs]`.
     pub tabs: EditorTabSettings,
+    /// Where grammar and spelling are checked (`SPEC-0155` v8 behaviour 14): `[editor.grammar]`.
+    pub grammar: GrammarSettings,
 }
 
 impl Default for EditorSettings {
@@ -121,6 +123,70 @@ impl Default for EditorSettings {
             code_authors: true,
             highlight_usages_at_caret: true,
             tabs: EditorTabSettings::default(),
+            grammar: GrammarSettings::default(),
+        }
+    }
+}
+
+/// Where the grammar and spelling checks look in files of one type (`SPEC-0155` v8 behaviour 14).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GrammarScope {
+    /// Files of the type are checked at all.
+    pub enabled: bool,
+    /// Ordinary comments.
+    pub comments: bool,
+    /// Documentation comments (`/** … */`, `///`) and Python docstrings.
+    pub documentation: bool,
+    /// String literals; off by default, as they mostly hold keys, messages for machines and
+    /// formats.
+    pub string_literals: bool,
+}
+
+impl Default for GrammarScope {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            comments: true,
+            documentation: true,
+            string_literals: false,
+        }
+    }
+}
+
+/// The scope of the grammar and spelling checks (`SPEC-0155` v8 behaviour 14): commit messages,
+/// and per file type (the name the status bar shows, `Java`, `Markdown`, `Plain text`) the
+/// contexts checked. A file type not listed has the defaults of [`GrammarScope`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GrammarSettings {
+    /// Commit messages (`check_grammar` with the context `commit_message`).
+    pub commit_messages: bool,
+    /// File types whose scope differs from the default.
+    pub file_types: std::collections::BTreeMap<String, GrammarScope>,
+}
+
+impl Default for GrammarSettings {
+    fn default() -> Self {
+        Self {
+            commit_messages: true,
+            file_types: std::collections::BTreeMap::new(),
+        }
+    }
+}
+
+impl GrammarSettings {
+    /// The scope for files of `file_type`.
+    pub fn scope(&self, file_type: &str) -> GrammarScope {
+        self.file_types.get(file_type).copied().unwrap_or_default()
+    }
+
+    /// Sets the scope of `file_type`; a scope equal to the default is not kept.
+    pub fn set_scope(&mut self, file_type: &str, scope: GrammarScope) {
+        if scope == GrammarScope::default() {
+            self.file_types.remove(file_type);
+        } else {
+            self.file_types.insert(file_type.to_owned(), scope);
         }
     }
 }
@@ -216,7 +282,7 @@ pub struct EditorTabSettings {
     pub show_extension: bool,
     /// The parent folder after names that repeat (behaviour 3).
     pub show_folder_for_equal_names: bool,
-    /// ` *` after the name of a tab with unsaved changes (on in IDECraft, a deliberate deviation).
+    /// ` *` after the name of a tab with unsaved changes (on in Ferris IDEA, a deliberate deviation).
     pub mark_modified: bool,
     /// The full path as the tab's tooltip.
     pub path_tooltip: bool,
@@ -315,8 +381,8 @@ pub struct TerminalSettings {
 /// The bundled editor colour schemes `appearance.editor_scheme` may name (`SPEC-0337`
 /// behaviour 4), in the order the Appearance page offers them.
 pub const EDITOR_SCHEMES: [&str; 5] = [
-    "IDECraft Dark",
-    "IDECraft Light",
+    "Ferris IDEA Dark",
+    "Ferris IDEA Light",
     "Islands Dark",
     "Dark",
     "Light",
@@ -341,6 +407,9 @@ pub struct AppearanceSettings {
     /// The editor colour scheme by name (`SPEC-0337` behaviour 4); empty: the theme's own.
     #[serde(default)]
     pub editor_scheme: String,
+    /// The startup animation while start-up work runs (`SPEC-0355` v2 behaviour 23); on by
+    /// default, off shows nothing.
+    pub startup_animation: bool,
 }
 
 impl Default for AppearanceSettings {
@@ -349,10 +418,11 @@ impl Default for AppearanceSettings {
             theme: None,
             sync_with_os: false,
             // The brand themes for new installs (SPEC-0060 v6); saved names are kept.
-            dark_theme: "IDECraft Dark".into(),
-            light_theme: "IDECraft Light".into(),
+            dark_theme: "Ferris IDEA Dark".into(),
+            light_theme: "Ferris IDEA Light".into(),
             compact_mode: false,
             editor_scheme: String::new(),
+            startup_animation: true,
         }
     }
 }
@@ -361,8 +431,8 @@ impl Default for AppearanceSettings {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SystemSettings {
-    /// ⌘Q and the menu ask "Quit IDECraft?" also with nothing pending; never `quit_ide`,
-    /// `idecraft quit` or a signal. Off by default (IMP-0002).
+    /// ⌘Q and the menu ask "Quit Ferris IDEA?" also with nothing pending; never `quit_ide`,
+    /// `ferris-idea quit` or a signal. Off by default (IMP-0002).
     pub confirm_quit: bool,
     /// A start without a folder opens the most recent project; off: the folder chooser.
     pub reopen_last_project: bool,
@@ -414,6 +484,10 @@ pub struct AiSettings {
     /// `gemini` runs that provider's command line program; empty uses the endpoint and API key.
     #[serde(default)]
     pub subscription: String,
+    /// How Claude with the user's Claude plan is used (`SPEC-0160` v2 behaviour 6): behind the
+    /// chat (the default) or only as Claude Code in a terminal tab.
+    #[serde(default)]
+    pub claude_plan_mode: ClaudePlanMode,
     /// Lines of a terminal tab to attach to the chat (`SPEC-0313` behaviour 2); 0 is the
     /// default of 200.
     #[serde(default)]
@@ -422,6 +496,28 @@ pub struct AiSettings {
     /// default of 24 000.
     #[serde(default)]
     pub attachment_chars: usize,
+}
+
+/// How Claude with the user's Claude plan is used (`SPEC-0160` v2 behaviour 6).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ClaudePlanMode {
+    /// AI Chat, Explain Code and inline completion run Claude Code (`claude -p`) with the plan.
+    #[default]
+    Chat,
+    /// Claude Code runs only in a terminal tab of the project; the chat uses Claude through the
+    /// Anthropic API key, or sends nothing.
+    Terminal,
+}
+
+impl ClaudePlanMode {
+    /// The value kept in the settings file.
+    pub fn id(self) -> &'static str {
+        match self {
+            ClaudePlanMode::Chat => "chat",
+            ClaudePlanMode::Terminal => "terminal",
+        }
+    }
 }
 
 /// How Update Project brings in the upstream's commits (`SPEC-0144`).
@@ -595,7 +691,7 @@ impl Default for GitSshSettings {
 #[serde(default)]
 pub struct SshSettings {
     /// `ssh.allowOwnProxyCommand`: a `ProxyCommand` of the user's own in `~/.ssh/config` may run
-    /// for remote hosts, terminals, tunnels, Docker and Git. IDECraft cannot hold such a program to
+    /// for remote hosts, terminals, tunnels, Docker and Git. Ferris IDEA cannot hold such a program to
     /// the post-quantum key exchange, so it is off by default (security first) and the setting
     /// shows a warning; `ProxyJump` needs no exception, every hop gets the shared options.
     #[serde(rename = "allowOwnProxyCommand")]
@@ -660,8 +756,37 @@ impl Default for ProjectViewSettings {
 #[serde(default)]
 pub struct DatabaseSettings {
     /// Where "Report a problem with this database" opens a prefilled issue: an `https://` template
-    /// with `{title}` and `{body}`; empty for IDECraft's own issue template, `off` for copying only.
+    /// with `{title}` and `{body}`; empty for Ferris IDEA's own issue template, `off` for copying only.
     pub report_url: String,
+}
+
+/// Intentions of the context actions (`SPEC-0076` v11 behaviour 15): `[intentions]`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct IntentionSettings {
+    /// Titles of the language server's intentions the user turned off; ⌥↩ leaves them out.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub disabled: Vec<String>,
+}
+
+impl IntentionSettings {
+    /// Whether the intention titled `title` is turned off.
+    pub fn is_disabled(&self, title: &str) -> bool {
+        self.disabled.iter().any(|t| t == title)
+    }
+
+    /// Turns the intention titled `title` off (`false`) or on again (`true`); whether that
+    /// changed anything. The list stays sorted and holds each title once.
+    pub fn set_enabled(&mut self, title: &str, enabled: bool) -> bool {
+        let had = self.is_disabled(title);
+        if enabled {
+            self.disabled.retain(|t| t != title);
+        } else if !had {
+            self.disabled.push(title.to_owned());
+            self.disabled.sort();
+        }
+        had == enabled
+    }
 }
 
 /// All IDE settings of the user.
@@ -696,9 +821,23 @@ pub struct IdeSettings {
     pub system: SystemSettings,
     /// Notifications (`SPEC-0337`).
     pub notifications: NotificationSettings,
+    /// Intentions of the context actions (`SPEC-0076` v11).
+    pub intentions: IntentionSettings,
 }
 
 impl IdeSettings {
+    /// Theme and editor scheme names saved under the product's former name, as today's names
+    /// (`SPEC-0356` behaviour 7); saving writes today's names.
+    pub fn with_current_theme_names(mut self) -> Self {
+        let current = |s: &str| crate::takeover::current_theme_name(s).into_owned();
+        let a = &mut self.appearance;
+        a.theme = a.theme.as_deref().map(current);
+        a.dark_theme = current(&a.dark_theme);
+        a.light_theme = current(&a.light_theme);
+        a.editor_scheme = current(&a.editor_scheme);
+        self
+    }
+
     /// The settings with every value inside its range.
     pub fn clamped(mut self) -> Self {
         let e = &mut self.editor;
@@ -758,6 +897,7 @@ pub fn load_ide_settings(file: &Path) -> IdeSettings {
         })
         .unwrap_or_default()
         .clamped()
+        .with_current_theme_names()
 }
 
 /// The settings in `table`. A value of the wrong kind (a text where a number belongs, an unknown
@@ -885,6 +1025,36 @@ pub fn on_save(text: &str, settings: &EditorSettings, keep_line: Option<usize>) 
 mod tests {
     use super::*;
 
+    /// SPEC-0076 v11 AK-12: disabled intentions are kept sorted, once each, and round-trip
+    /// through the settings file; an empty list is not written.
+    #[test]
+    fn disabled_intentions_round_trip() {
+        let mut s = IdeSettings::default();
+        assert!(s.intentions.set_enabled("Generate toString()", false));
+        assert!(s.intentions.set_enabled("Add Javadoc", false));
+        assert!(
+            !s.intentions.set_enabled("Add Javadoc", false),
+            "already off"
+        );
+        assert_eq!(
+            s.intentions.disabled,
+            ["Add Javadoc", "Generate toString()"]
+        );
+        assert!(s.intentions.is_disabled("Add Javadoc"));
+        let dir =
+            std::env::temp_dir().join(format!("ferris-idea-intentions-{}", std::process::id()));
+        let file = dir.join("settings.toml");
+        save_ide_settings(&file, &s).unwrap();
+        assert_eq!(load_ide_settings(&file).intentions, s.intentions);
+        assert!(s.intentions.set_enabled("Add Javadoc", true));
+        assert!(!s.intentions.set_enabled("Add Javadoc", true), "already on");
+        s.intentions.set_enabled("Generate toString()", true);
+        save_ide_settings(&file, &s).unwrap();
+        let text = std::fs::read_to_string(&file).unwrap();
+        assert!(!text.contains("disabled ="), "{text}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// SPEC-0059 v9 behaviours 16–17, AK-11: the tab settings have the reference's defaults (the
     /// modified mark stays on), round-trip through `editor.tabs.*` and refuse unknown keys.
     #[test]
@@ -916,7 +1086,7 @@ mod tests {
         assert!(d.patched(&wrong).is_err());
         // Saved and read back as `[editor.tabs]`.
         let dir =
-            std::env::temp_dir().join(format!("idecraft-tab-settings-{}", std::process::id()));
+            std::env::temp_dir().join(format!("ferris-idea-tab-settings-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let file = dir.join("settings.toml");
         let mut all = IdeSettings::default();
@@ -932,7 +1102,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// SPEC-0337 AK-1: the system and notification settings keep IDECraft's behaviour until the
+    /// SPEC-0337 AK-1: the system and notification settings keep Ferris IDEA's behaviour until the
     /// user changes them, also for a file written before they existed.
     #[test]
     fn system_and_notification_defaults() {
@@ -965,7 +1135,7 @@ mod tests {
     fn project_view_defaults_and_loads() {
         assert!(IdeSettings::default().project_view.compact_middle_packages);
         let dir = std::env::temp_dir().join(format!(
-            "idecraft-ide-settings-project-view-{}",
+            "ferris-idea-ide-settings-project-view-{}",
             std::process::id()
         ));
         let file = dir.join("settings.toml");
@@ -998,7 +1168,7 @@ mod tests {
     fn mcp_over_http_is_off_by_default() {
         assert!(!IdeSettings::default().mcp.http);
         let dir = std::env::temp_dir().join(format!(
-            "idecraft-ide-settings-mcp-http-{}",
+            "ferris-idea-ide-settings-mcp-http-{}",
             std::process::id()
         ));
         std::fs::create_dir_all(&dir).unwrap();
@@ -1014,7 +1184,7 @@ mod tests {
     #[test]
     fn settings_round_trip_and_clamp() {
         let dir =
-            std::env::temp_dir().join(format!("idecraft-ide-settings-{}", std::process::id()));
+            std::env::temp_dir().join(format!("ferris-idea-ide-settings-{}", std::process::id()));
         let file = dir.join("settings.toml");
         assert_eq!(load_ide_settings(&file), IdeSettings::default());
         let mut s = IdeSettings::default();
@@ -1037,7 +1207,7 @@ mod tests {
     #[test]
     fn a_wrong_value_keeps_the_other_settings() {
         let dir = std::env::temp_dir().join(format!(
-            "idecraft-ide-settings-lenient-{}",
+            "ferris-idea-ide-settings-lenient-{}",
             std::process::id()
         ));
         std::fs::create_dir_all(&dir).unwrap();
@@ -1100,6 +1270,7 @@ mod tests {
             ("ai.endpoint", "http://localhost:11434/v1"),
             ("ai.model", "local"),
             ("ai.subscription", "claude"),
+            ("ai.claude_plan_mode", "terminal"),
             ("vcs.update_method", "rebase"),
             ("vcs.protected_branches", "release/*"),
             ("database.report_url", "off"),
@@ -1146,6 +1317,15 @@ mod tests {
             );
         }
         let mut changed: IdeSettings = value.try_into().unwrap();
+        changed.editor.grammar.file_types.insert(
+            "Java".into(),
+            GrammarScope {
+                enabled: true,
+                comments: false,
+                documentation: true,
+                string_literals: true,
+            },
+        );
         changed.code_style.indents.insert(
             "Python".into(),
             IndentStyle {
@@ -1162,8 +1342,10 @@ mod tests {
         let d = IdeSettings::default();
         assert_ne!(changed.editor, d.editor);
         assert_ne!(changed.code_style, d.code_style);
-        let dir =
-            std::env::temp_dir().join(format!("idecraft-ide-settings-all-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "ferris-idea-ide-settings-all-{}",
+            std::process::id()
+        ));
         let file = dir.join("settings.toml");
         save_ide_settings(&file, &changed).unwrap();
         assert_eq!(
@@ -1204,7 +1386,7 @@ mod tests {
     fn ligatures_are_off_by_default_and_a_saved_choice_stays() {
         assert!(!IdeSettings::default().editor.ligatures);
         let dir = std::env::temp_dir().join(format!(
-            "idecraft-ide-settings-ligatures-{}",
+            "ferris-idea-ide-settings-ligatures-{}",
             std::process::id()
         ));
         let file = dir.join("settings.toml");
@@ -1222,7 +1404,7 @@ mod tests {
     fn usages_at_the_caret_are_highlighted_by_default() {
         assert!(IdeSettings::default().editor.highlight_usages_at_caret);
         let dir = std::env::temp_dir().join(format!(
-            "idecraft-ide-settings-occurrences-{}",
+            "ferris-idea-ide-settings-occurrences-{}",
             std::process::id()
         ));
         let file = dir.join("settings.toml");
@@ -1245,10 +1427,10 @@ mod tests {
     #[test]
     fn appearance_defaults_to_the_brand_themes_and_keeps_saved_choices() {
         let a = AppearanceSettings::default();
-        assert_eq!(a.dark_theme, "IDECraft Dark");
-        assert_eq!(a.light_theme, "IDECraft Light");
+        assert_eq!(a.dark_theme, "Ferris IDEA Dark");
+        assert_eq!(a.light_theme, "Ferris IDEA Light");
         let dir = std::env::temp_dir().join(format!(
-            "idecraft-ide-settings-theme-{}",
+            "ferris-idea-ide-settings-theme-{}",
             std::process::id()
         ));
         let file = dir.join("settings.toml");
@@ -1261,6 +1443,12 @@ mod tests {
         let s = load_ide_settings(&file);
         assert_eq!(s.appearance.dark_theme, "Islands Dark");
         assert_eq!(s.appearance.light_theme, "Light");
+        assert!(
+            s.appearance.startup_animation,
+            "on for a file written before the setting (SPEC-0355 v2)"
+        );
+        std::fs::write(&file, "[appearance]\nstartup_animation = false\n").unwrap();
+        assert!(!load_ide_settings(&file).appearance.startup_animation);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

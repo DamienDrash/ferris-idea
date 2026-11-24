@@ -1,5 +1,5 @@
-//! SPEC-0281 AK-3: `idecraft call <folder> <tool> [<json>]` makes one MCP tool call from a shell —
-//! the decisions of IDECraft's dialogs are reachable without a window and without an MCP client.
+//! SPEC-0281 AK-3: `ferris-idea call <folder> <tool> [<json>]` makes one MCP tool call from a shell —
+//! the decisions of Ferris IDEA's dialogs are reachable without a window and without an MCP client.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -7,7 +7,7 @@ use std::process::{Command, Output};
 use serde_json::Value;
 
 fn folder(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("idecraft-call-{name}-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-call-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("src")).unwrap();
     std::fs::write(dir.join("src/a.txt"), "a\n").unwrap();
@@ -15,12 +15,12 @@ fn folder(name: &str) -> PathBuf {
     dir
 }
 
-/// Runs `idecraft` with a settings folder of its own, so the user's rights and trust never count.
-fn idecraft(config: &Path, args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_idecraft"))
+/// Runs `ferris-idea` with a settings folder of its own, so the user's rights and trust never count.
+fn ferris_idea(config: &Path, args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_ferris-idea"))
         .args(args)
-        .env("IDECRAFT_CONFIG_DIR", config)
-        .env_remove("IDECRAFT_TRUST_PROJECTS")
+        .env("FERRIS_IDEA_CONFIG_DIR", config)
+        .env_remove("FERRIS_IDEA_TRUST_PROJECTS")
         .output()
         .unwrap()
 }
@@ -41,7 +41,7 @@ fn call_prints_a_tools_answer_and_makes_a_dialogs_decision() {
     let d = dir.to_str().unwrap();
 
     // The list of dialogs, from a shell.
-    let list = json(&idecraft(&config, &["call", d, "dialog_decisions"]));
+    let list = json(&ferris_idea(&config, &["call", d, "dialog_decisions"]));
     let ids: Vec<&str> = list["dialogs"]
         .as_array()
         .unwrap()
@@ -51,13 +51,13 @@ fn call_prints_a_tools_answer_and_makes_a_dialogs_decision() {
     assert!(ids.contains(&"delete-file") && ids.contains(&"trust-project"));
 
     // The Delete question (dry run) and then the decision itself.
-    let asked = json(&idecraft(
+    let asked = json(&ferris_idea(
         &config,
         &["call", d, "delete_file", r#"{"path": "src/a.txt"}"#],
     ));
     assert_eq!(asked["question"], "Delete file \"a.txt\"?");
     assert!(dir.join("src/a.txt").exists());
-    let delete = idecraft(
+    let delete = ferris_idea(
         &config,
         &[
             "call",
@@ -76,7 +76,7 @@ fn call_prints_a_tools_answer_and_makes_a_dialogs_decision() {
     }
 
     // Trust is refused without the user's right: the decision stays the user's.
-    let refused = idecraft(
+    let refused = ferris_idea(
         &config,
         &["call", d, "trust_project", r#"{"dry_run": false}"#],
     );
@@ -93,25 +93,25 @@ fn call_reports_errors_and_wrong_usage() {
     let config = dir.with_extension("config");
     let d = dir.to_str().unwrap();
 
-    let unknown = idecraft(&config, &["call", d, "no_such_tool"]);
+    let unknown = ferris_idea(&config, &["call", d, "no_such_tool"]);
     assert_eq!(unknown.status.code(), Some(1));
-    let refused = idecraft(
+    let refused = ferris_idea(
         &config,
         &["call", d, "dialog_decisions", r#"{"id": "nope"}"#],
     );
     assert_eq!(refused.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&refused.stderr).contains("no dialog nope"));
 
-    let not_object = idecraft(&config, &["call", d, "dialog_decisions", "[1]"]);
+    let not_object = ferris_idea(&config, &["call", d, "dialog_decisions", "[1]"]);
     assert_eq!(not_object.status.code(), Some(2));
-    let missing = idecraft(
+    let missing = ferris_idea(
         &config,
-        &["call", "/nonexistent/idecraft", "workspace_info"],
+        &["call", "/nonexistent/ferris-idea", "workspace_info"],
     );
     assert_eq!(missing.status.code(), Some(2));
-    let usage = idecraft(&config, &["call", d]);
+    let usage = ferris_idea(&config, &["call", d]);
     assert_eq!(usage.status.code(), Some(2));
-    assert!(String::from_utf8_lossy(&usage.stderr).contains("idecraft call <directory> <tool>"));
+    assert!(String::from_utf8_lossy(&usage.stderr).contains("ferris-idea call <directory> <tool>"));
 
     let _ = std::fs::remove_dir_all(&dir);
     let _ = std::fs::remove_dir_all(&config);

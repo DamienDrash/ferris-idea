@@ -1,12 +1,12 @@
 //! Undo and redo of the project tree's file operations in the window (`SPEC-0275` v16 behaviours
-//! 38–43, `SPEC-0057` v8 behaviour 29): the question before a step is taken, what the window
+//! 38–43, v22 behaviours 38 and 49, `SPEC-0057` v8 behaviour 29): the question before a step is taken, what the window
 //! follows afterwards (tabs, tree, status), the Edit menu's titles, and the MCP tool
-//! `file_operation_undo`. The history itself and its checks are `idecraft_core::file_undo`.
+//! `file_operation_undo`. The history itself and its checks are `ferris_idea_core::file_undo`.
 
 use std::path::Path;
 
+use ferris_idea_core::file_undo::{StepInfo, UndoError};
 use gpui::{Context, Window};
-use idecraft_core::file_undo::{StepInfo, UndoError};
 
 use super::{DrawnFor, WorkbenchView};
 use crate::menu_bar::UndoTitles;
@@ -16,6 +16,43 @@ impl WorkbenchView {
     /// file operations; without one the status bar says so. The editor's text is never touched
     /// (`SPEC-0057` v8 behaviour 29).
     pub(super) fn tree_undo_action(&mut self, redo: bool, cx: &mut Context<Self>) {
+        // A refactoring that moved files (Move, F6) after the newest file operation is taken back
+        // as a whole, as ⌘Z in one of its editors does (`SPEC-0193` v7 behaviour 12).
+        let tree_steps = self.file_undo.steps().0.len();
+        let tree_redo = self.file_undo.next_redo().is_some();
+        if let Some(i) = self.undo_groups.for_tree(redo, tree_steps, tree_redo) {
+            // A step that would be refused asks nothing (`SPEC-0275` v22 behaviour 38).
+            let refused = self
+                .undo_groups
+                .get(i)
+                .and_then(|g| self.group_occupied(g, redo));
+            if let Some(reason) = refused {
+                self.status = Some(reason);
+                cx.notify();
+                return;
+            }
+            // Asked first, as the tree's own file operations are (`SPEC-0193` v8 behaviour 12,
+            // `SPEC-0275` v22 behaviour 49; the reference asks, OBS-0088 U1).
+            let action = if redo { "Redo" } else { "Undo" };
+            let name = self
+                .undo_groups
+                .get(i)
+                .map(|g| g.name.clone())
+                .unwrap_or_default();
+            self.drawn_question = Some((
+                crate::dialogs::DrawnQuestion {
+                    message: format!("{action} {name}?"),
+                    detail: "The files of this refactoring change back and moved files move back."
+                        .into(),
+                    buttons: vec![action.into(), "Cancel".into()],
+                    default: 0,
+                    cancel: Some(1),
+                },
+                DrawnFor::GroupUndo(i, redo),
+            ));
+            cx.notify();
+            return;
+        }
         let step = if redo {
             self.file_undo.next_redo()
         } else {
@@ -26,6 +63,13 @@ impl WorkbenchView {
             cx.notify();
             return;
         };
+        // A step that would be refused is not offered: the reason at once, no question
+        // (`SPEC-0275` v22 behaviour 38).
+        if let Err(reason) = self.file_undo_refusal(redo, cx) {
+            self.status = Some(reason);
+            cx.notify();
+            return;
+        }
         let (message, detail) = step.question(redo);
         let action = if redo { "Redo" } else { "Undo" };
         self.drawn_question = Some((
@@ -38,6 +82,38 @@ impl WorkbenchView {
             },
             DrawnFor::FileUndo(redo),
         ));
+        cx.notify();
+    }
+
+    /// The answer to the question of [`Self::tree_undo_action`]: the first button carries the
+    /// step out; either way the tree has the focus again.
+    /// Why a group's move cannot go back (or on): its place is taken (`SPEC-0193` v8).
+    pub(super) fn group_occupied(
+        &self,
+        group: &ferris_idea_languages::undo_group::Group,
+        redo: bool,
+    ) -> Option<String> {
+        let at = group.occupied(redo)?;
+        let shown = at.strip_prefix(&self.root).unwrap_or(at);
+        Some(format!(
+            "{} refused: {} already exists; nothing was touched",
+            if redo { "Redo" } else { "Undo" },
+            shown.display()
+        ))
+    }
+
+    pub(super) fn answer_group_undo(
+        &mut self,
+        i: usize,
+        redo: bool,
+        yes: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if yes {
+            self.undo_group_at(i, redo, cx);
+        }
+        window.focus(&self.tree_focus);
         cx.notify();
     }
 
@@ -62,12 +138,9 @@ impl WorkbenchView {
     /// Takes the next step of the file operations back (or makes it again) and lets the window
     /// follow: tabs of items that went close, tabs of moved items follow, the tree shows what is
     /// back. `Ok` is the status line, `Err` the reason nothing was done (behaviours 39 and 40).
-    pub(super) fn apply_file_undo(
-        &mut self,
-        redo: bool,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Result<String, String> {
+    /// Why the next undo (or redo) step would be refused, checked without touching anything:
+    /// an editor of one of its items with unsaved changes, then the checks of behaviour 40.
+    fn file_undo_refusal(&self, redo: bool, cx: &Context<Self>) -> Result<(), String> {
         let verb = if redo { "Redo" } else { "Undo" };
         // An editor with unsaved changes of an item of the step refuses it, as it refuses Rename.
         if let Some(unsaved) = self
@@ -81,6 +154,21 @@ impl WorkbenchView {
                 name_of(unsaved)
             ));
         }
+        self.file_undo.check_next(redo).map_err(|e| match e {
+            UndoError::Nothing => nothing(redo).to_owned(),
+            e => format!("{verb} refused: {e}"),
+        })
+    }
+
+    pub(super) fn apply_file_undo(
+        &mut self,
+        redo: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Result<String, String> {
+        let verb = if redo { "Redo" } else { "Undo" };
+        // Checked again: the disk may have changed while the question was open.
+        self.file_undo_refusal(redo, cx)?;
         let turned = if redo {
             self.file_undo.redo()
         } else {

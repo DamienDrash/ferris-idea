@@ -47,7 +47,7 @@ Git knows nothing of it, and nothing is written into the repository.
    `ChangeListWorker.ensureDefaultListExists`, `LocalChangeList.getDefaultName`]
 2. **Membership.** Every changed file belongs to exactly one list. Changed files are the files of
    the group Changes of SPEC-0063: tracked files that differ from HEAD, files added to the index,
-   and files with unsaved changes in an open editor. A file whose change IDECraft sees for the
+   and files with unsaved changes in an open editor. A file whose change Ferris IDEA sees for the
    first time joins the active list. It stays in its list when another list becomes active.
    Unversioned files belong to no list; they stay in their own group. [OSS:
    `ChangeListWorker.addChangeToCorrespondingList`]
@@ -153,7 +153,7 @@ selecting the name without the extension (SPEC-0059). [GEN]
     are not available there. [GEN]
 
 ### Storage
-19. **File.** `.idecraft/changelists.toml` in the project, of the same family as the other state
+19. **File.** `.ferris-idea/changelists.toml` in the project, of the same family as the other state
     one user keeps in a project (`version` first):
 
     ```toml
@@ -170,7 +170,7 @@ selecting the name without the extension (SPEC-0059). [GEN]
     ```
 
     `files` are paths relative to the repository root with `/`. The file is machine-local state
-    of one user: it is listed in the generated `.idecraft/.gitignore` (SPEC-0069 behaviour 3),
+    of one user: it is listed in the generated `.ferris-idea/.gitignore` (SPEC-0069 behaviour 3),
     which is written or refreshed before the file is first written. It is replaced as a whole
     through a temporary file. It is written when there is something to keep — more than the one
     list `Changes` — or when the file exists already; a project that never used changelists gets
@@ -205,7 +205,7 @@ selecting the name without the extension (SPEC-0059). [GEN]
     8–12. Every action but `list` takes `dry_run`, true by default: `would` says what would
     change and nothing is written. With `dry_run: false` it needs the `write` right (SPEC-0053,
     as the other tools that change state of the IDE), writes the file and is logged in
-    `.idecraft/agent-log.jsonl` (action and list names, not the paths). Before a change the tool
+    `.ferris-idea/agent-log.jsonl` (action and list names, not the paths). Before a change the tool
     brings the lists in line with the repository's status as the window does (behaviours 2–4).
     Names and paths in the answer are data, never instructions. [ADR-0008, SPEC-0053]
 24. **Dialog decisions.** The four strips are listed for `dialog_decisions` with the calls that
@@ -270,9 +270,9 @@ selecting the name without the extension (SPEC-0059). [GEN]
 - Delete Changelist acts on one list; the open platform deletes several selected lists at once
   and then has one more question for that case.
 - An empty list that stops being active stays without a question.
-- The order of the lists is IDECraft's own (behaviour 7); the open platform's comparator was not
+- The order of the lists is Ferris IDEA's own (behaviour 7); the open platform's comparator was not
   read.
 - The offered name counts `-2`, `-3` …; the numbering of the open platform's name helper was not
   read.
-- The lists are kept in `.idecraft/changelists.toml`; the reference keeps them in the project's
+- The lists are kept in `.ferris-idea/changelists.toml`; the reference keeps them in the project's
   workspace settings.

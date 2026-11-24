@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use idecraft_database::{
+use ferris_idea_database::{
     ConnectionProfile, Credentials, Dialect, OnError, Outcome, Session, introspect, rename,
 };
 
@@ -35,7 +35,7 @@ async fn ddl(s: &Session, sql: &str) {
 
 #[tokio::test]
 async fn sqlite_rename_keeps_query_results() {
-    let dir = std::env::temp_dir().join(format!("idecraft-rename-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferris-idea-rename-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let sql =
@@ -93,14 +93,15 @@ async fn sqlite_rename_keeps_query_results() {
 /// is marked as another dialect.
 #[test]
 fn sql_basic_usages_in_every_file_and_dialect() {
-    use idecraft_database::{Refactoring, file_dialect, refactor};
+    use ferris_idea_database::{Refactoring, file_dialect, refactor};
     let root =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/reference-projects/sql-basic");
     // The schema as the SQLite build of the same files reads it.
     let db = rusqlite::Connection::open_in_memory().unwrap();
     db.execute_batch(&std::fs::read_to_string(root.join("schema.sql")).unwrap())
         .unwrap();
-    let file = std::env::temp_dir().join(format!("idecraft-usages-{}.sqlite", std::process::id()));
+    let file =
+        std::env::temp_dir().join(format!("ferris-idea-usages-{}.sqlite", std::process::id()));
     let _ = std::fs::remove_file(&file);
     db.execute("vacuum into ?1", [file.display().to_string()])
         .unwrap();

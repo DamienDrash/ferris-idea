@@ -398,7 +398,7 @@ impl Handshake {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     format!(
-                        "the server chose {}; IDECraft needs TLS 1.2 or newer",
+                        "the server chose {}; Ferris IDEA needs TLS 1.2 or newer",
                         version_name(version)
                     ),
                 ));

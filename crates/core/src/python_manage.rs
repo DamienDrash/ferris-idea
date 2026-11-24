@@ -1,7 +1,7 @@
 //! Choosing the project's Python interpreter, creating a virtual environment and installing
 //! packages (`SPEC-0117`), on top of the static model of `SPEC-0050`.
 //!
-//! The choice is kept in `.idecraft/python.toml`, workspace-relative when the interpreter lies
+//! The choice is kept in `.ferris-idea/python.toml`, workspace-relative when the interpreter lies
 //! in the workspace. Commands are plain argument lists run without a shell.
 //!
 //! Every Python launch resolves its interpreter here (`SPEC-0050` v2 behaviour 8):
@@ -20,7 +20,7 @@ use crate::python::{
 use crate::run::RunConfig;
 
 /// Settings file of the chosen interpreter, relative to the workspace.
-pub const PYTHON_SETTINGS: &str = ".idecraft/python.toml";
+pub const PYTHON_SETTINGS: &str = ".ferris-idea/python.toml";
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct Settings {
@@ -478,7 +478,7 @@ mod tests {
 
     fn temp(tag: &str) -> PathBuf {
         let p =
-            std::env::temp_dir().join(format!("idecraft-pymanage-{tag}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("ferris-idea-pymanage-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&p);
         std::fs::create_dir_all(&p).unwrap();
         p
@@ -555,7 +555,7 @@ mod tests {
         save_interpreter(&root, Some(&root.join("env/bin/python"))).unwrap();
         let text = std::fs::read_to_string(&file).unwrap();
         assert!(
-            text.contains("[idecraft]\nkind = \"python\"\nformat = 1\n"),
+            text.contains("[ferris-idea]\nkind = \"python\"\nformat = 1\n"),
             "{text}"
         );
         assert!(
@@ -563,7 +563,7 @@ mod tests {
             "{text}"
         );
         assert!(
-            std::fs::read_to_string(root.join(".idecraft/python.toml.bak"))
+            std::fs::read_to_string(root.join(".ferris-idea/python.toml.bak"))
                 .unwrap()
                 .contains(".venv")
         );
@@ -680,8 +680,8 @@ mod tests {
         assert_eq!(last_line(&ok), "two");
         let bad = run_tool(&["sh".into(), "-c".into(), "exit 3".into()], &dir);
         assert_eq!((bad.ok, bad.exit_code), (false, Some(3)));
-        let missing = run_tool(&["idecraft-no-such-program".into()], &dir);
-        assert!(!missing.ok && missing.output.starts_with("idecraft-no-such-program: "));
+        let missing = run_tool(&["ferris-idea-no-such-program".into()], &dir);
+        assert!(!missing.ok && missing.output.starts_with("ferris-idea-no-such-program: "));
         let _ = std::fs::remove_dir_all(dir);
     }
 

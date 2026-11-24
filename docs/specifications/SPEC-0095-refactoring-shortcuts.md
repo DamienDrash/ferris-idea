@@ -1,6 +1,7 @@
 # SPEC-0095: Refactoring shortcuts
 
-- **Version:** 13 · **Date:** 2026-11-16 (v13: jdtls gets the file's indentation too, behaviour 3b, AK-23; the name popup and `new_name` also after Extract Field and Introduce Parameter, behaviour 8d, AK-24; a refactoring that nobody offers for the language says so, behaviour 7a, AK-25; headless check of F-073 on 2026-11-16, OBS-0072); 2026-11-14 (v12: Safe Delete of a declaration with a usage check, and of files in the Project tree, behaviours 15 and 16, AK-20 to AK-22; ninth package of docs/research/KEYMAP_COVERAGE.md); 2026-11-14 (v11: Introduce Parameter, behaviour 14, AK-19; eighth package of docs/research/KEYMAP_COVERAGE.md; v10: the status bar says from the first moment what is
+- **Version:** 14 · **Date:** 2026-11-23 (v14: Refactor This lists every refactoring that can act
+  at the place, in the reference's order, behaviours 4b and 4c, AK-26; OBS-0119 K3); 2026-11-16 (v13: jdtls gets the file's indentation too, behaviour 3b, AK-23; the name popup and `new_name` also after Extract Field and Introduce Parameter, behaviour 8d, AK-24; a refactoring that nobody offers for the language says so, behaviour 7a, AK-25; headless check of F-073 on 2026-11-16, OBS-0072); 2026-11-14 (v12: Safe Delete of a declaration with a usage check, and of files in the Project tree, behaviours 15 and 16, AK-20 to AK-22; ninth package of docs/research/KEYMAP_COVERAGE.md); 2026-11-14 (v11: Introduce Parameter, behaviour 14, AK-19; eighth package of docs/research/KEYMAP_COVERAGE.md; v10: the status bar says from the first moment what is
   asked, a language server that is still loading the project is not taken at its word and is
   asked again once when it is ready, and every request ends in a list, an edit or one status line,
   behaviours 11a, 12 and 13, AK-17 and AK-18; OBS-0027 W1b, where ⌥⌘N on a Java method showed
@@ -26,7 +27,7 @@
 - **Feature matrix rows:** F-073
 - **Script files (2026-11-09):** see SPEC-0320, which extends this spec for JavaScript and TypeScript.
 - **Python (2026-11-12):** see SPEC-0330: where the Python server offers no extraction, Extract
-  Variable and Extract Method are IDECraft's own actions, found and applied through this spec's
+  Variable and Extract Method are Ferris IDEA's own actions, found and applied through this spec's
   path (behaviours 1, 3–10); their refusals replace the message of behaviour 7.
 
 - **Java (2026-11-13, v8):** see SPEC-0122 v8 behaviours 16 and 17. The edits of jdtls's Extract
@@ -72,7 +73,7 @@ Reach the common refactorings with the reference's shortcuts instead of looking 
    lines' indents, a lone odd one aside; tabs when more lines start with a tab), else nothing (the
    server's default). Before v7 the answer was empty and TypeScript indented by four: Extract
    Variable wrote `    const newLocal = x > 3;` in a file indented by two, and Extract Function
-   indented the new function's body by four. IDECraft's own extractions take the statement's own
+   indented the new function's body by four. Ferris IDEA's own extractions take the statement's own
    indentation (SPEC-0320 v7 behaviour 26). [OBS-0028, STD]
    3b. **jdtls's indentation (v13):** jdtls asks the same before each code action and quick fix,
    as the two settings `java.format.insertSpaces` and `java.format.tabSize` of the file
@@ -85,7 +86,7 @@ Reach the common refactorings with the reference's shortcuts instead of looking 
 4. **Refactor This:** `Refactorings.QuickListPopupAction` (⌃T on macOS, Ctrl+Alt+Shift+T elsewhere)
    opens the popup with every refactoring available at the caret or selection. [GEN, OSS]
    4a. **Own entries (v5):** the server's `refactor` actions at the caret or selection come first;
-   IDECraft adds "Rename…" when the caret is on a name (or the selection is exactly one name), since
+   Ferris IDEA adds "Rename…" when the caret is on a name (or the selection is exactly one name), since
    a rename is no code action and no server lists it, and "Extract Variable…" and "Extract Method…"
    unless the server's list already has a matching action (behaviour 2). Choosing an own entry runs
    its action (`RenameElement`, `IntroduceVariable`, `ExtractMethod`), so a bare caret is widened
@@ -95,12 +96,29 @@ Reach the common refactorings with the reference's shortcuts instead of looking 
    the window run: clangd lists no refactoring on a bare name, and `s.area()` selected in
    `auto placeholder = s.area();` is a variable's whole value, which clangd does not extract. [GEN,
    STD]
+   4b. **Everything that can act here (v14):** besides the server's refactorings, Refactor This
+   lists Ferris IDEA's own refactorings, each only where the place shows it can act, read from the
+   text and the syntax tree without asking a server: Rename… on a name; Change Signature… on a
+   name that opens a parameter list (a call or a function's declaration); Extract Variable… and
+   Extract Method… in code that runs (inside a function's body, or outside every class), and in
+   Java also Extract Constant…, Extract Field… and Introduce Parameter… (jdtls offers them; other
+   servers do not, behaviour 7a); Move… and Copy… for a file of this project on this machine (they
+   move or copy the file, SPEC-0114, SPEC-0275); Safe Delete… on the name a declaration declares
+   (behaviour 15). An entry whose refactoring the server already lists is not added twice. Not
+   listed: a class's name gets no extraction and no Change Signature; a number or a selection wider
+   than a name gets no Rename; a remote document no Move or Copy. Before v14 Refactor This listed
+   four entries on `area` of `s.area()` in a Java method where the reference lists ten
+   (OBS-0119 K3). [OBS-0119, GEN]
+   4c. **Order (v14):** the rows follow the reference's order: Rename, Change Signature, the
+   extractions (variable, constant, field, parameter, method), the server's other refactorings,
+   Inline, Move, Copy, Safe Delete; a server row takes the place of its kind by the matching of
+   behaviour 2, rows of the same place keep their order. [OBS-0119]
 5. Agents use `code_actions` with `refactoring` (`extract_variable`, `extract_constant`,
    `extract_method`, `inline`, `any`) to see the places and actions behaviours 1–7 find, and the
    message of behaviour 7, then `apply_code_action` with a place's range and an action's title
    (SPEC-0041). [ADR-0008]
 6. **Bare caret:** Extract Variable, Extract Constant and Extract Method need a selection with most
-   servers (clangd offers nothing at a bare caret). When nothing matches at a bare caret, IDECraft asks
+   servers (clangd offers nothing at a bare caret). When nothing matches at a bare caret, Ferris IDEA asks
    the server for the ranges around the caret (`textDocument/selectionRange`) and tries them from inside
    out: for a variable or constant the expressions up to the enclosing statement (not across lines),
    for a function also that first whole statement; pieces that are no expression of their own (a range
@@ -114,16 +132,16 @@ Reach the common refactorings with the reference's shortcuts instead of looking 
    whole value, is not extracted." (selection shown trimmed, first line, at most 40 characters; a bare
    caret is "anything at the caret"). Inline says that not every server can inline (clangd cannot). A
    file without a language says that the refactoring needs a language server. [GEN]
-   7a. **Not available for the language (v13):** where neither the language server nor IDECraft
+   7a. **Not available for the language (v13):** where neither the language server nor Ferris IDEA
    offers the refactoring for the file's language at all — Extract Field and Introduce Parameter
    in Python, Introduce Parameter in JavaScript and TypeScript — the status bar (and `message` of
    `code_actions`) says so: "Extract Field is not available for Python files yet: the language
-   server offers none and IDECraft has no own one. Extract Variable and Extract Method are."
+   server offers none and Ferris IDEA has no own one. Extract Variable and Extract Method are."
    Before v13 it asked for "an expression inside a class" or "inside a method or function" also
    when the selection was one. [GEN]
 8. **Name right after extracting (v3):** after an Extract Variable, Extract Constant or Extract
    Method (by its shortcut, ⌃T or ⌥↩; recognised by the title as in behaviour 2) has been applied,
-   IDECraft finds the name it introduced in the file — the name the server chose, such as clangd's
+   Ferris IDEA finds the name it introduced in the file — the name the server chose, such as clangd's
    `placeholder` and `extracted` or rust-analyzer's `var_name` and `fun_name` — puts the caret on
    its declaration and opens the rename popup (SPEC-0074 behaviour 1) with that name selected, so
    the user types the name and presses Enter; every use follows through the language server's
@@ -162,9 +180,9 @@ Reach the common refactorings with the reference's shortcuts instead of looking 
    status bar shows the refactoring's name with an ellipsis ("Inline…"), and while a chosen action
    is planned the action's title with an ellipsis. Neither stays for ever: the language server has
    45 seconds in all to say where the refactoring can act, and again 45 seconds to plan the chosen
-   action. After that IDECraft stops waiting, changes nothing, and the status bar names the
+   action. After that Ferris IDEA stops waiting, changes nothing, and the status bar names the
    refactoring or action, the server and the limit: "Inline failed: jdtls: no answer within 45 s".
-   An answer that arrives later is dropped. IDECraft's own refactorings (SPEC-0330, SPEC-0320) do
+   An answer that arrives later is dropped. Ferris IDEA's own refactorings (SPEC-0330, SPEC-0320) do
    not depend on the server: when it does not answer in time they are found and planned without
    it. The limit is one for the whole question, because a question is made of several waits (the
    server's start, the document, one request per place, further requests such as those of
@@ -185,7 +203,7 @@ Reach the common refactorings with the reference's shortcuts instead of looking 
    the line says so at once: "Inline… (jdtls is still loading the project)". The line of ⌥↩ goes
    when its list opens. [GEN]
 12. **A server that is still loading (v10, OBS-0027 W1b):** a language server is *loading* while
-   IDECraft is starting it (until it is initialised and, if it reports it, ready), while one that
+   Ferris IDEA is starting it (until it is initialised and, if it reports it, ready), while one that
    reports readiness has not reported it (rust-analyzer's `experimental/serverStatus` with
    `quiescent`, jdtls's `language/status` with `ServiceReady`, the end of ruby-lsp's
    `indexing-progress`), and, for the other servers, while a `$/progress` it began with a title
@@ -206,14 +224,14 @@ Reach the common refactorings with the reference's shortcuts instead of looking 
      Owner not reachable): repeat once rather than only tell, because the user asked for exactly
      this and would otherwise have to watch for the server and press again; once, so that nothing
      loops.
-   - **Refactor This (⌃T)** lists IDECraft's own entries at once (behaviour 4a) and says beside
+   - **Refactor This (⌃T)** lists Ferris IDEA's own entries at once (behaviour 4a) and says beside
      the list "jdtls is still loading the project; try again when it is ready."; it is not
      repeated, since the list is already open.
    - **⌥↩** (SPEC-0076) with no action to list says the same line instead of "No context actions
      available here."; it is not repeated, since it would open a list under a caret the user may
      have moved on from. With own fixes its list opens as before.
    - **A chosen action** whose plan fails says the failure followed by the same line.
-   - IDECraft's own refactorings (SPEC-0330, SPEC-0320) and their refusals do not depend on the
+   - Ferris IDEA's own refactorings (SPEC-0330, SPEC-0320) and their refusals do not depend on the
      server and are final at once.
    An empty answer from a server that is not loading is said in the words of behaviour 7. [GEN, STD]
 13. **Every request ends in something visible (v10):** a refactoring's shortcut, ⌃T, ⌥↩ and a
@@ -286,7 +304,7 @@ Reach the common refactorings with the reference's shortcuts instead of looking 
 16. **Safe Delete in the Project tree (v12):** while the Project tree has the focus `SafeDelete`
     deletes the selected files the way Delete does (SPEC-0275 behaviour 6: one confirmation,
     the files kept in Local History, one undo step), after a check of their names: for each
-    selected file IDECraft looks in the project's own files (SPEC-0148 v3 behaviour 7) for
+    selected file Ferris IDEA looks in the project's own files (SPEC-0148 v3 behaviour 7) for
     whole-word occurrences of the file's name without its extension (`pricing` of
     `pricing.py`), at most 100, other than in the file itself. Without such a mention the
     tree's Delete confirmation follows; with mentions the list of behaviour 15d opens instead
@@ -300,7 +318,7 @@ Reach the common refactorings with the reference's shortcuts instead of looking 
 ## Acceptance criteria
 - **AK-1** Matching by kind and title for rust-analyzer and clangd titles, disabled and quick-fix
   actions left out, action ids (unit test `intentions_model::tests::refactorings_by_kind_and_title`).
-- **AK-2** In a real window (`idecraft ui --selftest`, with clangd): with `x * 2` selected in a C++
+- **AK-2** In a real window (`ferris-idea ui --selftest`, with clangd): with `x * 2` selected in a C++
   file, ⌥⌘V applies clangd's "Extract subexpression to variable" to the editor text.
 - **AK-3** By hand: the four shortcuts and ⌃T with rust-analyzer and clangd, next to the reference.
 - **AK-4** Against real servers (live tests, skipped when the server is missing): with clangd on the
@@ -343,7 +361,7 @@ Reach the common refactorings with the reference's shortcuts instead of looking 
   declaration `void extracted(` (line of the new function, character 5)
   (`clangd_refactoring_shortcuts`); rust-analyzer's `fun_name` is found
   (`rust_analyzer_refactoring_shortcuts`).
-- **AK-13 (v5)** In a real window (`idecraft ui --selftest`, `refactor_name_steps`): ⌘Z after the
+- **AK-13 (v5)** In a real window (`ferris-idea ui --selftest`, `refactor_name_steps`): ⌘Z after the
   rename and after the extraction names what was taken back; Escape in the name popup says the name
   was kept; ⌥⌘M on the whole line opens the name popup at `extracted` and Enter renames declaration
   and call; ⌃T on a name lists Rename and Extract Variable. Not run yet. Behaviour 8c (switching
@@ -353,7 +371,7 @@ Reach the common refactorings with the reference's shortcuts instead of looking 
   the enclosing scope only, Extract Constant both constants, Extract Method both functions,
   disabled actions none (`actions::tests::typescript_extractions_match_their_refactorings`). Live
   with the server (`crates/languages/tests/it/ts_extract.rs::typescript_language_server_extracts_variables_constants_and_functions`,
-  skipped unless IDECraft chooses typescript-language-server): one place each for `x>3` and
+  skipped unless Ferris IDEA chooses typescript-language-server): one place each for `x>3` and
   `a+b*2` with "Extract to constant in enclosing scope", applied, the introduced name found and used
   in `if(…)`; `[1,2,3]` offers the module-scope constant; a whole statement offers "Extract to
   function in module scope", applied, the new function found. MCP
@@ -428,6 +446,15 @@ Reach the common refactorings with the reference's shortcuts instead of looking 
 - **AK-25 (v13, behaviour 7a)** `actions::tests::missing_refactorings_say_so`: the message for
   Extract Field and Introduce Parameter in Python and Introduce Parameter in JavaScript and
   TypeScript, none for the refactorings that exist, the same text as the own refusal.
+- **AK-26 (v14, behaviours 4b and 4c)** Unit tests: on `area` of `s.area()` in a Java method with
+  jdtls's Inline Method the rows are Rename, Change Signature, the five extractions, Inline Method,
+  Move, Copy; jdtls's own Extract to constant takes the constant's place; a declaration adds Safe
+  Delete, another language drops constant, field and parameter; a class's name gets Rename, Move,
+  Copy, Safe Delete; nothing at all without a name, code or a project file
+  (`actions::tests::refactor_this_lists_what_acts_here_in_order`); the place's facts from a Java
+  method, a method's and a class's name, a number, a wide selection and a Python script
+  (`intentions_model::tests::the_spot_of_refactor_this_comes_from_the_text`). With jdtls in the
+  window: open.
 
 ## Out of scope
 IntelliJ's own refactoring engine (the dialogs with name suggestions, occurrences "Replace all", a list
@@ -437,9 +464,9 @@ offer (clangd has no Inline).
 
 ## Known deviations from the reference
 The reference computes these refactorings itself, asks for the name in place and offers to replace all
-occurrences; IDECraft applies what the language server offers, with the server's name for the new
+occurrences; Ferris IDEA applies what the language server offers, with the server's name for the new
 element and then asks for the name in the rename popup (behaviour 8), placed at the name (v5), rather than
-editing it in place in the text. The reference extracts any expression; IDECraft can only extract what the server accepts and
+editing it in place in the text. The reference extracts any expression; Ferris IDEA can only extract what the server accepts and
 then says what the server refused. Compared side by side for Java in OBS-0027 (2026-11-13): the
 findings J1 (default name of a constant) and J2 (no choice for Inline Method) are answered in
 SPEC-0122 v8, with what still differs named there.

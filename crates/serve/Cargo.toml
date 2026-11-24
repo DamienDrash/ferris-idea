@@ -1,6 +1,6 @@
 [package]
-name = "idecraft-serve"
-description = "The headless backend of IDECraft: `idecraft serve` without any windowing toolkit (SPEC-0317, SPEC-0321)"
+name = "ferris-idea-serve"
+description = "The headless backend of Ferris IDEA: `ferris-idea serve` without any windowing toolkit (SPEC-0317, SPEC-0321)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -12,29 +12,29 @@ publish.workspace = true
 path = "src/lib.rs"
 
 [[bin]]
-name = "idecraft-serve"
+name = "ferris-idea-serve"
 path = "src/main.rs"
 
 [dependencies]
-idecraft-core.workspace = true
-idecraft-editor.workspace = true
-idecraft-host.workspace = true
-idecraft-languages.workspace = true
-idecraft-mcp = { workspace = true, optional = true }
-idecraft-pairing.workspace = true
-idecraft-remote.workspace = true
-idecraft-session.workspace = true
-idecraft-web.workspace = true
+ferris-idea-core.workspace = true
+ferris-idea-editor.workspace = true
+ferris-idea-host.workspace = true
+ferris-idea-languages.workspace = true
+ferris-idea-mcp = { workspace = true, optional = true }
+ferris-idea-pairing.workspace = true
+ferris-idea-remote.workspace = true
+ferris-idea-session.workspace = true
+ferris-idea-web.workspace = true
 # QR codes for pairing (SPEC-0324 behaviour 3; MIT or Apache-2.0).
 qrcode = { version = "0.14", default-features = false }
 serde_json = "1"
 tokio = { workspace = true, features = ["rt-multi-thread"], optional = true }
 
 [features]
-# The host's MCP tools (`mcp.*`, `idecraft-serve mcp`). Off for Windows builds: the database stack
-# below `idecraft-mcp` does not build there yet (SPEC-0321 behaviour 2).
+# The host's MCP tools (`mcp.*`, `ferris-idea-serve mcp`). Off for Windows builds: the database stack
+# below `ferris-idea-mcp` does not build there yet (SPEC-0321 behaviour 2).
 default = ["mcp"]
-mcp = ["dep:idecraft-mcp", "dep:tokio"]
+mcp = ["dep:ferris-idea-mcp", "dep:tokio"]
 
 [lints]
 workspace = true

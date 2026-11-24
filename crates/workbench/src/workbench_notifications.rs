@@ -1,11 +1,11 @@
 //! The Notifications tool window in the workbench (`SPEC-0061` v17 behaviour 64): the notes the
 //! status bar showed in this project window, newest first, with their repeats, and Clear All.
 //!
-//! The log itself is [`idecraft_core::notifications`]; the window records a note there when it
+//! The log itself is [`ferris_idea_core::notifications`]; the window records a note there when it
 //! first shows it, the MCP tool `notifications` reads it.
 
+use ferris_idea_core::notifications::{Kind, Notification, NotificationRegistry};
 use gpui::{Context, Window, div, prelude::*, px};
-use idecraft_core::notifications::{Kind, Notification, NotificationRegistry};
 
 use super::{WorkbenchView, c};
 use crate::icon_images::icon;

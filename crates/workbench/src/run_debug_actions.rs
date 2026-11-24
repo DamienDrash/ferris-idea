@@ -2,10 +2,10 @@
 //! because the bundled keymaps bind them (`docs/research/KEYMAP_COVERAGE.md`): which tabs Rerun
 //! Tests runs again (`SPEC-0088` v4 behaviour 11) and which project window comes after or before
 //! the current one (`SPEC-0094` v2 behaviour 5). No window is needed here; the temporary line
-//! breakpoint is in `idecraft_debugger::saved` (`SPEC-0127` v8) and the chooser opened for
+//! breakpoint is in `ferris_idea_debugger::saved` (`SPEC-0127` v8) and the chooser opened for
 //! debugging in [`crate::run_list_model`] (`SPEC-0087` v8).
 
-use idecraft_core::{RunConfig, RunKind};
+use ferris_idea_core::{RunConfig, RunKind};
 
 /// One run Rerun Tests starts again.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -71,6 +71,7 @@ mod tests {
             allow_multiple: false,
             before_launch: Vec::new(),
             verbatim: false,
+            http: None,
         }
     }
 

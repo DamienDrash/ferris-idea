@@ -1,4 +1,4 @@
-//! The Docker engines IDECraft can use (`SPEC-0243` behaviours 1, 2, 5): `DOCKER_HOST`, the Docker
+//! The Docker engines Ferris IDEA can use (`SPEC-0243` behaviours 1, 2, 5): `DOCKER_HOST`, the Docker
 //! CLI's contexts, the sockets of local tools and of every Lima instance.
 
 use std::path::{Path, PathBuf};
@@ -15,7 +15,7 @@ pub struct Engine {
     pub name: String,
     /// The address as written (`unix://…`, `tcp://…`, `ssh://…`).
     pub address: String,
-    /// How to reach it; `None` when IDECraft cannot (TLS, an unknown scheme).
+    /// How to reach it; `None` when Ferris IDEA cannot (TLS, an unknown scheme).
     #[serde(skip)]
     pub host: Option<DockerHost>,
     /// Why it cannot be used, or a warning.
@@ -208,7 +208,7 @@ mod tests {
 
     #[test]
     fn order_contexts_lima_tls_and_duplicates() {
-        let home = std::env::temp_dir().join(format!("idecraft-engines-{}", std::process::id()));
+        let home = std::env::temp_dir().join(format!("ferris-idea-engines-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
         std::fs::create_dir_all(home.join(".lima/docker/sock")).unwrap();
         std::fs::create_dir_all(home.join(".lima/_config")).unwrap();

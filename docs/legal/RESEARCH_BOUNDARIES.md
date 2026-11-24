@@ -1,4 +1,4 @@
-# Forschungsgrenzen · IDECraft
+# Forschungsgrenzen · Ferris IDEA
 
 **Stand:** 2026-10-30 (Nachtrag nach anwaltlicher Beratung) · verbindlich für alle Beitragenden und Agenten · Begründung: Rechtsanalyse
 

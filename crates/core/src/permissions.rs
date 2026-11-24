@@ -9,10 +9,10 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-/// Name of the grant file inside the user's IDECraft settings folder.
+/// Name of the grant file inside the user's Ferris IDEA settings folder.
 pub const GRANT_FILE: &str = "agent-permissions.toml";
 /// Log of everything agents ran, relative to the workspace root.
-pub const AGENT_LOG: &str = ".idecraft/agent-log.jsonl";
+pub const AGENT_LOG: &str = ".ferris-idea/agent-log.jsonl";
 
 /// A right an agent can be given (behaviour 1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -45,7 +45,7 @@ pub enum Grant {
     /// Forward a port of a remote project's host to this computer's loopback (`SPEC-0318`
     /// behaviour 30).
     Ports,
-    /// Operate the IDECraft window through the UI driver (`SPEC-0319` behaviour 34); each action
+    /// Operate the Ferris IDEA window through the UI driver (`SPEC-0319` behaviour 34); each action
     /// also needs the rights of its effects.
     Ui,
     /// Read the text of files whose names commonly hold secrets (`.env`, keys, credential files,
@@ -53,13 +53,24 @@ pub enum Grant {
     /// (`SPEC-0053` v6 behaviour 10).
     #[serde(rename = "secret-read")]
     SecretRead,
-    /// Change the user's own IDECraft settings, which hold for every project: IDE settings,
+    /// Change the user's own Ferris IDEA settings, which hold for every project: IDE settings,
     /// keymap, theme, plugin grants (`SPEC-0053` v8 behaviour 12).
     Settings,
     /// Read the folders of the other projects the user opened recently, which lie outside the
     /// workspace (`SPEC-0094` v9 behaviour 23).
     #[serde(rename = "recent-projects")]
     RecentProjects,
+    /// Start, prompt and stop the agents the user configured for the agent host, read their
+    /// output and answer their permission requests (`SPEC-0348` behaviour 18).
+    Agents,
+    /// Store, generate, list and remove entries of the internal vault (`SPEC-0353` behaviour 22);
+    /// never read a value. Each use of an entry still needs the person's approval in the window.
+    Vault,
+    /// Create tickets, comment on them, edit and move them along (`SPEC-0352` behaviour 18);
+    /// closing, cancelling, priority and other people's text also need a person's confirmation
+    /// for each call (behaviour 19).
+    #[serde(rename = "ticket-write")]
+    TicketWrite,
 }
 
 impl Grant {
@@ -81,6 +92,9 @@ impl Grant {
             Grant::SecretRead => "secret-read",
             Grant::Settings => "settings",
             Grant::RecentProjects => "recent-projects",
+            Grant::Agents => "agents",
+            Grant::Vault => "vault",
+            Grant::TicketWrite => "ticket-write",
         }
     }
 
@@ -97,20 +111,29 @@ impl Grant {
             Grant::VcsWrite => {
                 "change the repository: commit, branch, switch, merge, stash, rebase, pull, push"
             }
-            Grant::Quit => "quit IDECraft or close a project's window",
+            Grant::Quit => "quit Ferris IDEA or close a project's window",
             Grant::TerminalRead => "read the output of the terminal tabs, with secrets masked",
             Grant::Ports => "forward ports of a remote project's host to this computer's loopback",
             Grant::Ui => {
-                "operate the IDECraft window: read its interface, click, type and press keys in it"
+                "operate the Ferris IDEA window: read its interface, click, type and press keys in it"
             }
             Grant::SecretRead => {
                 "read files that commonly hold secrets (.env, keys, credentials) and the private values of the HTTP client"
             }
             Grant::Settings => {
-                "change your own IDECraft settings, which hold for every project: IDE settings, keymap, theme, plugin grants"
+                "change your own Ferris IDEA settings, which hold for every project: IDE settings, keymap, theme, plugin grants"
             }
             Grant::RecentProjects => {
-                "read the folders of the other projects you opened recently in IDECraft"
+                "read the folders of the other projects you opened recently in Ferris IDEA"
+            }
+            Grant::Agents => {
+                "start the agents you configured for Ferris IDEA's agent host, send them prompts, read their output, answer their permission requests and stop them"
+            }
+            Grant::Vault => {
+                "store and generate credentials in Ferris IDEA's vault and list or remove its entries, never read a value; each use is approved by you"
+            }
+            Grant::TicketWrite => {
+                "create tickets, comment on them and move them along; closing, cancelling, priority and other people's text still need your confirmation each time"
             }
         }
     }
@@ -178,7 +201,7 @@ impl ConnectionGrants {
 
 /// Whether the grant `file` lies inside the workspace `root` after resolving links (such a file
 /// is ignored and never written).
-fn inside_workspace(file: &Path, root: &Path) -> bool {
+pub(crate) fn inside_workspace(file: &Path, root: &Path) -> bool {
     let root = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
     // A file that does not exist yet is placed by its folder, resolved as far as it exists.
     let placed = file
@@ -358,7 +381,7 @@ impl AgentPermissions {
             .map(|f| f.display().to_string())
             .unwrap_or_else(|| format!("<settings folder>/{GRANT_FILE}"));
         let mut text = format!(
-            "not granted: this workspace does not grant agents the `{}` right ({}); nobody was asked. Only the user can grant it: answer \"Always for This Workspace\" when the IDECraft window asks a client of its MCP server over HTTP, or add to {file}:\n\n[[workspace]]\npath = \"{}\"\nallow = [\"{}\"]\n\nUse dry_run to see what would happen.",
+            "not granted: this workspace does not grant agents the `{}` right ({}); nobody was asked. Only the user can grant it: answer \"Always for This Workspace\" when the Ferris IDEA window asks a client of its MCP server over HTTP, or add to {file}:\n\n[[workspace]]\npath = \"{}\"\nallow = [\"{}\"]\n\nUse dry_run to see what would happen.",
             grant.name(),
             grant.meaning(),
             root.display(),
@@ -371,16 +394,14 @@ impl AgentPermissions {
     }
 }
 
-/// The user's IDECraft settings folder: `$IDECRAFT_CONFIG_DIR`, else `$XDG_CONFIG_HOME/idecraft`,
-/// else `~/.config/idecraft`.
+/// The user's Ferris IDEA settings folder: `$FERRIS_IDEA_CONFIG_DIR`, else `$XDG_CONFIG_HOME/ferris-idea`,
+/// else `~/.config/ferris-idea`.
+/// The variable's former name is read while it is not set (`SPEC-0356` behaviour 6).
 pub fn user_config_dir() -> Option<PathBuf> {
-    if let Some(d) = std::env::var_os("IDECRAFT_CONFIG_DIR") {
+    if let Some(d) = crate::product_var_os("FERRIS_IDEA_CONFIG_DIR") {
         return Some(PathBuf::from(d));
     }
-    if let Some(d) = std::env::var_os("XDG_CONFIG_HOME") {
-        return Some(PathBuf::from(d).join("idecraft"));
-    }
-    std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config/idecraft"))
+    crate::takeover::config_home().map(|h| h.join(crate::takeover::CONFIG_DIR_NAME))
 }
 
 /// Reads the grants of `root` from `file` (behaviour 2). Paths are compared after resolving links; a
@@ -458,7 +479,7 @@ pub fn agent_permissions(root: &Path) -> AgentPermissions {
     }
 }
 
-/// Appends one JSON line describing an action an agent took to `.idecraft/agent-log.jsonl`
+/// Appends one JSON line describing an action an agent took to `.ferris-idea/agent-log.jsonl`
 /// (behaviour 5). Failures to log are returned, not hidden.
 pub fn log_agent_action(root: &Path, entry: &serde_json::Value) -> std::io::Result<()> {
     // The log is machine-local: it stays out of version control (`SPEC-0069` behaviour 3).

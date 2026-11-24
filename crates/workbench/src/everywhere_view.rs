@@ -7,13 +7,15 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use ferris_idea_core::Workspace;
+use ferris_idea_languages::endpoints::{
+    Endpoint, EndpointKind, project_endpoints, search_endpoints,
+};
+use ferris_idea_languages::everywhere::{TextOptions, search_everywhere};
 use gpui::{
     Context, Entity, EventEmitter, FocusHandle, KeyDownEvent, Subscription,
     UniformListScrollHandle, Window, div, prelude::*, px, uniform_list,
 };
-use idecraft_core::Workspace;
-use idecraft_languages::endpoints::{Endpoint, EndpointKind, project_endpoints, search_endpoints};
-use idecraft_languages::everywhere::{TextOptions, search_everywhere};
 
 use crate::EditorView;
 use crate::code_preview::{ExcerptLine, excerpt};
@@ -136,7 +138,7 @@ fn hit_mark(row: &Row, text: &str) -> Option<Range<usize>> {
 /// Whether this search lists the project's files here (not on a remote host).
 fn local_files_wanted(
     remote: &Option<crate::workbench_view::HostCall>,
-    categories: idecraft_languages::everywhere::Categories,
+    categories: ferris_idea_languages::everywhere::Categories,
 ) -> bool {
     remote.is_none() && categories.files
 }
@@ -144,11 +146,11 @@ fn local_files_wanted(
 fn host_hits(
     host: &crate::workbench_view::HostCall,
     query: &str,
-    categories: idecraft_languages::everywhere::Categories,
+    categories: ferris_idea_languages::everywhere::Categories,
     limit: usize,
     everything: bool,
     known: &[PathBuf],
-) -> Option<idecraft_languages::everywhere::Everywhere> {
+) -> Option<ferris_idea_languages::everywhere::Everywhere> {
     let mut wanted = Vec::new();
     for (on, name) in [
         (categories.files, "files"),
@@ -172,9 +174,9 @@ fn host_hits(
         }),
     )
     .ok()?;
-    let mut hits: idecraft_languages::everywhere::Everywhere = serde_json::from_value(v).ok()?;
+    let mut hits: ferris_idea_languages::everywhere::Everywhere = serde_json::from_value(v).ok()?;
     // Only paths inside the project (behaviour 3, SEC-14).
-    let inside = |p: &str| idecraft_session::paths::check_relative(p).is_ok();
+    let inside = |p: &str| ferris_idea_session::paths::check_relative(p).is_ok();
     if let Some(f) = hits.files.as_mut() {
         f.retain(|h| inside(&h.path));
     }
@@ -438,7 +440,7 @@ impl EverywhereView {
                     // search) the recent ones; with "include non-project items" every file.
                     let own = (!everything && local_files_wanted(&remote, categories)).then(|| {
                         own_files.unwrap_or_else(|| {
-                            let listing = idecraft_core::OwnSources::new(&root).listing(None);
+                            let listing = ferris_idea_core::OwnSources::new(&root).listing(None);
                             let line = listing.not_listed_line();
                             Arc::new((listing.files, line))
                         })
@@ -453,15 +455,15 @@ impl EverywhereView {
                     let keymap = crate::keymaps::current();
                     // A remote project's files, symbols and text are the host's.
                     let local = match &remote {
-                        Some(_) => idecraft_languages::everywhere::Categories {
+                        Some(_) => ferris_idea_languages::everywhere::Categories {
                             // (the files of a remote project are the host's, below)
                             actions: categories.actions,
-                            ..idecraft_languages::everywhere::Categories::NONE
+                            ..ferris_idea_languages::everywhere::Categories::NONE
                         },
                         None => categories,
                     };
                     let mut found = search_everywhere(
-                        idecraft_languages::everywhere::Sources {
+                        ferris_idea_languages::everywhere::Sources {
                             root: &root,
                             files: &files,
                             keymap: &keymap,
@@ -740,7 +742,7 @@ impl EverywhereView {
         let k = &event.keystroke;
         let m = &k.modifiers;
         let keymap = crate::keymaps::current();
-        let bound = idecraft_ui::keymap::Keystroke::from_platform(
+        let bound = ferris_idea_ui::keymap::Keystroke::from_platform(
             &k.key, m.control, m.alt, m.shift, m.platform,
         )
         .map(|s| keymap.actions_for(&s, None))
@@ -756,6 +758,19 @@ impl EverywhereView {
         self.act(key, cx);
         cx.stop_propagation();
         cx.notify();
+    }
+
+    /// Chooses the row at `index` as Return on it does (the UI driver's `choose`, SPEC-0319 v7
+    /// behaviour 51); false for a heading or an index past the end.
+    pub fn choose_row(&mut self, index: usize, cx: &mut Context<Self>) -> bool {
+        match self.results.rows.get(index) {
+            None | Some(Row::Header(_)) => return false,
+            Some(_) => {}
+        }
+        self.results.selected = Some(index);
+        self.choose(false, cx);
+        cx.notify();
+        true
     }
 
     /// Carries out one of the popup's own keymap actions by id; false for any other id (v7
@@ -823,7 +838,7 @@ impl EverywhereView {
     }
 
     /// A line of the Text tab with the match marked.
-    fn text_line(t: &idecraft_languages::everywhere::TextHit) -> gpui::AnyElement {
+    fn text_line(t: &ferris_idea_languages::everywhere::TextHit) -> gpui::AnyElement {
         let trimmed = t.text.trim_start();
         let cut = t.text.chars().count() - trimmed.chars().count();
         let positions: Vec<usize> =
@@ -985,7 +1000,7 @@ impl Render for EverywhereView {
                                     .map(|d| d.display().to_string())
                                     .unwrap_or_default();
                                 hit(row
-                                    .child(icon(idecraft_ui::icons::file_icon(&name)))
+                                    .child(icon(ferris_idea_ui::icons::file_icon(&name)))
                                     .child(Self::marked(&name, &f.positions, on))
                                     .child(div().flex_none().text_color(hint).child(dir))
                                     .child(div().flex_1()))
@@ -998,7 +1013,7 @@ impl Render for EverywhereView {
                                     && !s.container.is_empty())
                                 .then(|| format!("of {}", s.container));
                                 hit(row
-                                    .child(icon(idecraft_ui::icons::symbol_icon(&s.kind)))
+                                    .child(icon(ferris_idea_ui::icons::symbol_icon(&s.kind)))
                                     // The parameters follow the name without a gap.
                                     .child(
                                         div()
@@ -1072,7 +1087,7 @@ impl Render for EverywhereView {
                             Row::Text(t) => {
                                 let name = file_name(&t.path);
                                 hit(row
-                                    .child(icon(idecraft_ui::icons::file_icon(&name)))
+                                    .child(icon(ferris_idea_ui::icons::file_icon(&name)))
                                     .child(
                                         div().flex_1().overflow_hidden().child(Self::text_line(t)),
                                     )
@@ -1162,7 +1177,7 @@ impl Render for EverywhereView {
                 )
             })
             .child(
-                tool("ew-preview", "idecraft/preview", self.preview)
+                tool("ew-preview", "ferris-idea/preview", self.preview)
                     .tip(declared!(FIND_BAR, "ew-preview"))
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.preview = !this.preview;
@@ -1171,7 +1186,7 @@ impl Render for EverywhereView {
             )
             .when(self.filter != Filter::Actions, |d| {
                 d.child(
-                    tool("ew-filter", "idecraft/filter", self.filter_menu)
+                    tool("ew-filter", "ferris-idea/filter", self.filter_menu)
                         .tip(declared!(FIND_BAR, "ew-filter"))
                         .on_click(cx.listener(|this, _, _, cx| {
                             this.filter_menu = !this.filter_menu;
@@ -1181,7 +1196,7 @@ impl Render for EverywhereView {
             })
             .when(text_tab, |d| {
                 d.child(
-                    tool("ew-find-window", "idecraft/openInFind", false)
+                    tool("ew-find-window", "ferris-idea/openInFind", false)
                         .tip(declared!(FIND_BAR, "ew-find-window"))
                         .on_click(cx.listener(|this, _, _, cx| this.open_in_find_window(cx))),
                 )
@@ -1378,16 +1393,16 @@ impl Render for EverywhereView {
 /// behaviour 21): back to the tool window that had it when the popup opened, if that window is
 /// still shown, so an action like Stretch to Top acts on it; otherwise to the editor.
 pub fn focus_back(
-    before: Option<idecraft_ui::tool_windows::ToolWindow>,
-    shown: impl Fn(idecraft_ui::tool_windows::ToolWindow) -> bool,
-) -> Option<idecraft_ui::tool_windows::ToolWindow> {
+    before: Option<ferris_idea_ui::tool_windows::ToolWindow>,
+    shown: impl Fn(ferris_idea_ui::tool_windows::ToolWindow) -> bool,
+) -> Option<ferris_idea_ui::tool_windows::ToolWindow> {
     before.filter(|w| shown(*w))
 }
 
 #[cfg(test)]
 mod focus_back_tests {
     use super::focus_back;
-    use idecraft_ui::tool_windows::ToolWindow;
+    use ferris_idea_ui::tool_windows::ToolWindow;
 
     /// SPEC-0067 v10 AK-11: the tool window that had the focus gets it back; a window hidden in
     /// the meantime, or none, leaves it to the editor.

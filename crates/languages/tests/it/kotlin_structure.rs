@@ -6,13 +6,13 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use idecraft_languages::insight::CallNode;
-use idecraft_languages::java_marks::declaration_marks_in;
-use idecraft_languages::java_structure::{
+use ferris_idea_languages::insight::CallNode;
+use ferris_idea_languages::java_marks::declaration_marks_in;
+use ferris_idea_languages::java_structure::{
     TypeDirection, add_overridable_methods_in, method_hierarchy_in, overridable_methods_in,
     super_target_in, type_hierarchy_in,
 };
-use idecraft_languages::ts_structure::MarkKind;
+use ferris_idea_languages::ts_structure::MarkKind;
 
 const ANIMALS: &str = "package zoo
 
@@ -65,7 +65,7 @@ fun main() {
 
 /// The project of OBS-0035 in a fresh folder: (root, Animals.kt, Main.kt).
 fn project(tag: &str) -> (PathBuf, PathBuf, PathBuf) {
-    let root = std::env::temp_dir().join(format!("idecraft-kt-{tag}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("ferris-idea-kt-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     let src = root.join("src/main/kotlin/zoo");
     std::fs::create_dir_all(&src).unwrap();
@@ -172,7 +172,7 @@ async fn kotlin_hierarchies_members_and_marks_without_a_server() {
         .await
         .unwrap();
     assert_eq!(files.len(), 1);
-    let new = idecraft_languages::rename::apply_edits(ANIMALS, &files[0].edits).unwrap();
+    let new = ferris_idea_languages::rename::apply_edits(ANIMALS, &files[0].edits).unwrap();
     assert!(
         new.contains(
             "    override fun sound(): String = \"Woof\"\n\n    override val owner: String\n        get() = TODO(\"Not yet implemented\")\n}\n"
@@ -232,11 +232,11 @@ async fn kotlin_usage_counts_with_the_real_server() {
         return;
     }
     let (root, animals, main) = project("counts");
-    idecraft_core::trust::trust_for_process(&root);
+    ferris_idea_core::trust::trust_for_process(&root);
     let wait = Duration::from_secs(120);
     // Asked once: the question waits for the server's diagnostics of the file, which it
     // publishes once it has compiled it (SPEC-0042 v20 behaviour 35), whatever the load.
-    let counts = idecraft_languages::usages::usage_counts_in(&root, &animals, None, wait)
+    let counts = ferris_idea_languages::usages::usage_counts_in(&root, &animals, None, wait)
         .await
         .unwrap();
     let row = |name: &str, line: u64| {
@@ -262,7 +262,7 @@ async fn kotlin_usage_counts_with_the_real_server() {
     assert_eq!(row("Shape", 21).inheritors, 2);
     assert!(row("describe", 5).count >= 1);
     // A function at file level (OBS-0035 item 12).
-    let in_main = idecraft_languages::usages::usage_counts_in(&root, &main, None, wait)
+    let in_main = ferris_idea_languages::usages::usage_counts_in(&root, &main, None, wait)
         .await
         .unwrap();
     let total = in_main
@@ -282,10 +282,10 @@ async fn kotlin_parameter_hints_with_the_real_server() {
         return;
     }
     let (root, _, main) = project("hints");
-    idecraft_core::trust::trust_for_process(&root);
+    ferris_idea_core::trust::trust_for_process(&root);
     let wait = Duration::from_secs(120);
     // Asked once, as the tokens and counts are (SPEC-0042 v20 behaviour 35).
-    let hints = idecraft_languages::inlay::parameter_hints_in(&root, &main, None, wait)
+    let hints = ferris_idea_languages::inlay::parameter_hints_in(&root, &main, None, wait)
         .await
         .unwrap();
     let found: Vec<(u64, u64, &str)> = hints
@@ -321,26 +321,27 @@ async fn kotlin_semantic_tokens_with_the_real_server() {
         return;
     }
     let (root, animals, main) = project("tokens");
-    idecraft_core::trust::trust_for_process(&root);
+    ferris_idea_core::trust::trust_for_process(&root);
     let wait = Duration::from_secs(120);
     // Asked once: before the server has compiled the file it gives the tokens of the file's own
     // declarations only, without the references; the question waits for the diagnostics it
     // publishes after compiling (SPEC-0042 v20 behaviour 35), whatever the load.
     let ask = async |file: &std::path::Path| {
-        idecraft_languages::semantic::semantic_tokens_in(&root, file, None, wait)
+        ferris_idea_languages::semantic::semantic_tokens_in(&root, file, None, wait)
             .await
             .unwrap()
     };
-    let key = |tokens: &[idecraft_languages::semantic::SemanticToken], text: &str, needle: &str| {
-        let at = text.find(needle).unwrap_or_else(|| panic!("{needle}"));
-        let line = text[..at].matches('\n').count() as u64;
-        let start = text[..at].rsplit('\n').next().unwrap().chars().count() as u64;
-        tokens
-            .iter()
-            .find(|t| t.line == line && t.start == start)
-            .map(|t| (t.token_type.clone(), t.key))
-            .unwrap_or_else(|| panic!("no token at {needle}: {tokens:?}"))
-    };
+    let key =
+        |tokens: &[ferris_idea_languages::semantic::SemanticToken], text: &str, needle: &str| {
+            let at = text.find(needle).unwrap_or_else(|| panic!("{needle}"));
+            let line = text[..at].matches('\n').count() as u64;
+            let start = text[..at].rsplit('\n').next().unwrap().chars().count() as u64;
+            tokens
+                .iter()
+                .find(|t| t.line == line && t.start == start)
+                .map(|t| (t.token_type.clone(), t.key))
+                .unwrap_or_else(|| panic!("no token at {needle}: {tokens:?}"))
+        };
     let in_main = ask(&main).await;
     let function = |key| ("function".to_owned(), Some(key));
     assert_eq!(

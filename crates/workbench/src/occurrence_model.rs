@@ -8,8 +8,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use idecraft_languages::lsp::LspError;
-use idecraft_languages::occurrences::{Highlights, Occurrence, OccurrenceKind, neighbour};
+use ferris_idea_languages::lsp::LspError;
+use ferris_idea_languages::occurrences::{Highlights, Occurrence, OccurrenceKind, neighbour};
 
 /// How long the caret rests on a name before the server is asked (behaviour 1).
 pub const REST: Duration = Duration::from_millis(300);
@@ -513,8 +513,8 @@ pub fn status(symbol: &str, end: &End) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use idecraft_languages::insight::Encoding;
-    use idecraft_languages::occurrences::{offered, parse};
+    use ferris_idea_languages::insight::Encoding;
+    use ferris_idea_languages::occurrences::{offered, parse};
     use serde_json::{Value, json};
 
     const TEXT: &str = "int total = 0;\nint other = 1;\ntotal = total + other;\n";
@@ -1167,7 +1167,7 @@ mod tests {
         );
         // Occurrences outside the text are left out.
         let outside = Occurrence {
-            range: idecraft_languages::insight::Range {
+            range: ferris_idea_languages::insight::Range {
                 start_line: 7,
                 start_character: 0,
                 end_line: 7,

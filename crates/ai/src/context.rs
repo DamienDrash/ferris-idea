@@ -17,10 +17,10 @@ pub const DEFAULT_TERMINAL_LINES: usize = 200;
 pub const TERMINAL_LINES_RANGE: (usize, usize) = (10, 5_000);
 /// Default size budget of one attachment in characters (`ai.attachment_chars`, behaviour 7).
 pub const DEFAULT_ATTACHMENT_CHARS: usize =
-    idecraft_core::advanced_settings::DEFAULT_ATTACHMENT_CHARS;
+    ferris_idea_core::advanced_settings::DEFAULT_ATTACHMENT_CHARS;
 /// Smallest and largest budget (Settings › Advanced Settings, `SPEC-0337` behaviour 5).
 pub const ATTACHMENT_CHARS_RANGE: (usize, usize) =
-    idecraft_core::advanced_settings::ATTACHMENT_CHARS_RANGE;
+    ferris_idea_core::advanced_settings::ATTACHMENT_CHARS_RANGE;
 /// Most chips that wait at once (behaviour 1).
 pub const MAX_CHIPS: usize = 8;
 
@@ -41,7 +41,7 @@ pub fn terminal_lines(setting: usize) -> usize {
 
 /// `ai.attachment_chars` within its range; 0 (unset) is the default.
 pub fn attachment_chars(setting: usize) -> usize {
-    idecraft_core::advanced_settings::attachment_chars(setting)
+    ferris_idea_core::advanced_settings::attachment_chars(setting)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -188,9 +188,12 @@ fn mask_line(line: &str, count: &mut usize) -> String {
 }
 
 /// `text` with every secret of behaviour 6 replaced by [`MASK`], and how many were masked.
-/// Idempotent: masked text comes back unchanged with a count of 0.
+/// Idempotent: masked text comes back unchanged with a count of 0. Values the vault put in place
+/// or stored are replaced by `«vault:<name>»` first, in every encoding it registered (`SPEC-0353`
+/// behaviour 17).
 pub fn mask_secrets(text: &str) -> (String, usize) {
-    let mut count = 0;
+    let (vaulted, mut count) = ferris_idea_vault::redact::redact(text);
+    let text = vaulted.as_str();
     let mut out = Vec::new();
     let mut in_key: Option<String> = None;
     for line in text.split('\n') {
@@ -737,6 +740,20 @@ mod tests {
         // A public key or certificate is no secret.
         let cert = "-----BEGIN CERTIFICATE-----\nRkFLRQ==\n-----END CERTIFICATE-----";
         assert_eq!(mask_secrets(cert), (cert.to_owned(), 0));
+    }
+
+    /// SPEC-0353 AK-4: a value the vault registered is replaced by its entry's name in the
+    /// masking path, raw and encoded, before the other rules; masking it again changes nothing.
+    #[test]
+    fn vault_values_are_masked_by_name() {
+        let value = "dummy-mask-vault-4711";
+        ferris_idea_vault::redact::register("ctx-test", value);
+        let hex: String = value.bytes().map(|b| format!("{b:02x}")).collect();
+        let text = format!("printed {value} and {hex}");
+        let (out, n) = mask_secrets(&text);
+        assert_eq!(out, "printed «vault:ctx-test» and «vault:ctx-test»");
+        assert_eq!(n, 2);
+        assert_eq!(mask_secrets(&out), (out.clone(), 0));
     }
 
     #[test]

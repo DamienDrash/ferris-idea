@@ -9,8 +9,8 @@
 
 use std::path::{Path, PathBuf};
 
+use ferris_idea_workbench::{EditorView, WorkbenchView};
 use gpui::{Entity, TestAppContext, VisualTestContext, px};
-use idecraft_workbench::{EditorView, WorkbenchView};
 
 /// Regions by line: the class body 2–17, `total` 3–11 with the loop 5–9 and the `if` 6–8 in it,
 /// `clear` 13–16.
@@ -36,7 +36,7 @@ public class Cart {
 
 fn workspace(tag: &str) -> PathBuf {
     let root = std::env::temp_dir().join(format!(
-        "idecraft-editor-actions-{tag}-{}",
+        "ferris-idea-editor-actions-{tag}-{}",
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&root);

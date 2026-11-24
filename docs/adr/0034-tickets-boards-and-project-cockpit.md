@@ -1,6 +1,10 @@
 # ADR-0034: Tickets, boards and the project cockpit — one work item for people, agents and the task graph
 
-- **Status:** proposed · **Version:** 1 · **Date:** 2026-11-17 · written on the Project Owner's
+- **Status:** accepted · **Version:** 1 · **Date:** 2026-11-17 · accepted 2026-11-18 by the
+  coordinator under the Project Owner's general authority of 2026-11-13, with the defaults of the
+  open questions; for open question 3 the coordinator chose the safer alternative for the first
+  version (a person's confirmation in the window for every priority change and every closing by an
+  agent, no standing right that skips it; SPEC-0352) · written on the Project Owner's
   request of 2026-11-17 (ROADMAP M20, item M20.1): a cockpit per project with the relevant KPIs, a
   ticket system for agents and users, and project-management boards to choose from (Kanban, Scrum,
   Gantt, Lean, classic to-do lists with Gantt and others). Rule 12 ("security first") applies
@@ -11,8 +15,8 @@
   [ADR-0008](0008-mcp-server.md) (MCP server),
   [ADR-0012](0012-headless-core-capability-api.md) (capability layer),
   [ADR-0014](0014-orchestration-principles.md) (task graph, persisted records),
-  [ADR-0021](0021-idecraft-file-formats.md) (file formats; amended in one point, decision 3),
-  [ADR-0023](0023-idecraft-as-agent-harness.md) rules 7 and 12 (untrusted content, messages
+  [ADR-0021](0021-ferris-idea-file-formats.md) (file formats; amended in one point, decision 3),
+  [ADR-0023](0023-ferris-idea-as-agent-harness.md) rules 7 and 12 (untrusted content, messages
   between agents), [ADR-0025](0025-network-security-for-remote-connections.md) (remote paths),
   [ADR-0031](0031-project-files-never-grant-agents.md) (project files never grant),
   ADR-0033 (internal vault for agents, proposed at the same time),
@@ -30,7 +34,7 @@ Three things the Project Owner asked for share one subject, the work to be done 
   Gantt chart, an Eisenhower matrix and a roadmap timeline.
 - **A cockpit** per project with KPIs on code, build, delivery, flow, agents and databases.
 
-IDECraft already plans a fourth thing about the same subject: the persistent task graph of M12.2
+Ferris IDEA already plans a fourth thing about the same subject: the persistent task graph of M12.2
 (ADR-0014 rule 2, vision §3.2). It holds tasks with a hierarchy, dependencies, priority, owner,
 assignee, acceptance criteria and a fixed state transition table with guards, and it is the record
 agents work from. If tickets were a separate store, every task would exist twice, and the two copies
@@ -111,7 +115,7 @@ A work item is a folder of text files:
 `item.toml` is written with a fixed key order and one field per line, so Git merges two changes to
 different fields of the same item without a conflict. Lists (labels, dependencies) are written one
 entry per line, sorted. A new comment is a new file and never conflicts. Attachments are files in the
-item's folder, at most 10 MiB each, and never executed or opened by IDECraft beyond a preview of
+item's folder, at most 10 MiB each, and never executed or opened by Ferris IDEA beyond a preview of
 images and text.
 
 The same layout lives in one of three **stores**, chosen per project:
@@ -119,12 +123,12 @@ The same layout lives in one of three **stores**, chosen per project:
 | Store | Where | Sharing | History | Offline |
 |---|---|---|---|---|
 | **Private** (default) | the user's data folder, one folder per project, kept as its own small Git repository | only this user and their agents on this machine | Git log of the store | yes |
-| **Repository** | `.idecraft/work/` in the project, under the project's version control | everyone who can read the repository | Git log of the project; items follow branches | yes |
+| **Repository** | `.ferris-idea/work/` in the project, under the project's version control | everyone who can read the repository | Git log of the project; items follow branches | yes |
 | **Project room** | the server-owned room of M6.15 (SPEC-0323) | the room's roles | the room's history | no (cached read-only copy) |
 
 Why the private store is the default (rule 12): what is committed to a repository is as public as the
 repository. A bug ticket can name a security hole, a customer or an internal host before anyone thinks
-about it, and repositories become public later. IDECraft cannot
+about it, and repositories become public later. Ferris IDEA cannot
 reliably know whether a remote is public. The private store loses nothing on one machine: it has
 history, works offline and needs no server.
 
@@ -132,7 +136,7 @@ Choosing the repository store is an explicit act per project. The question names
 says that every item will be readable by everyone who can read the repository and stays in its
 history. A work item can carry `visibility = "private"`; such an item is kept in the private store
 even when the project uses the repository store, and the board shows both. Before an item is written
-to the repository or room store, IDECraft scans its text for secret patterns (the scanner of
+to the repository or room store, Ferris IDEA scans its text for secret patterns (the scanner of
 ADR-0023 rule 7) and refuses to write a match; a person can mark a false match, an agent cannot.
 
 Moving items between stores (private to repository, repository to room) is a command that shows the
@@ -145,7 +149,7 @@ queries and KPIs, rebuilt from the files at any time and never the source of tru
 
 `events.jsonl` holds one JSON object per line: id, time (UTC), actor, field, old value, new value,
 and for agents the session id and model. The project's `.gitattributes` entry for the repository
-store uses Git's built-in `union` merge for these files, which keeps the lines of both sides; IDECraft
+store uses Git's built-in `union` merge for these files, which keeps the lines of both sides; Ferris IDEA
 sorts by time on reading. No merge driver with our own code is needed, and none runs from project
 configuration (ADR-0031).
 
@@ -153,7 +157,7 @@ This amends ADR-0021 in one point: a project file of kind `work-item-events` is 
 appended lines merge with Git's own `union` driver and TOML arrays do not.
 
 When a merge leaves `item.toml` with a conflict anyway (the same field changed on two branches),
-IDECraft offers a field-wise resolution from the two event logs: for each conflicting field the later
+Ferris IDEA offers a field-wise resolution from the two event logs: for each conflicting field the later
 event wins and the other value is kept as a visible "conflict resolved" event, so nothing is lost
 silently. A person confirms; an agent with `vcs-write` may apply it, and the result is a normal commit.
 
@@ -169,13 +173,13 @@ transitions.
   that creates the item. It names the item's folder, so two branches or two machines never create the
   same folder.
 - The **key** people say and type is a project prefix and the first characters of the id's random
-  part in Crockford Base32: `IC-7K3QDX`. Six characters by default; IDECraft lengthens the key shown
+  part in Crockford Base32: `IC-7K3QDX`. Six characters by default; Ferris IDEA lengthens the key shown
   for an item when two items in the visible stores share a prefix, as Git does with short commit
   hashes. Keys are never reused.
 - **Sequential numbers** (`#123`) are only aliases, given by an authority that sees every item: the
   project room, or a synced external tracker (decision 10). Without such an authority there are no
   numbers, because two branches would hand out the same one.
-- References in commit messages, branch names and comments use the key (`IC-7K3QDX`); IDECraft links
+- References in commit messages, branch names and comments use the key (`IC-7K3QDX`); Ferris IDEA links
   them in the log, the editor and the board.
 
 ### 5. Rights of agents
@@ -220,7 +224,7 @@ Rules:
   trigger. There is no field in format 1 that names a command, a script, a model or a grant.
 - Triggers of the scheduler (M19.13) on ticket events are configured in the user's settings, not in
   the store, and run with the grants of that configuration.
-- Links in ticket text are never fetched by IDECraft on its own; an agent that wants to open one needs
+- Links in ticket text are never fetched by Ferris IDEA on its own; an agent that wants to open one needs
   its usual rights for the network.
 - Items an agent creates are untrusted for every other agent too (ADR-0023 rule 12).
 - No secrets in tickets: the scanner of decision 2 runs on every write, in every store.
@@ -288,7 +292,7 @@ Unverified items (decision 3) are left out and counted separately.
 | Build health | share of green builds on the main branch over the last 20 runs (local runs, the server CI the project configured, or a connected CI service), and time since the last green run |
 | Test health | tests passed, failed, skipped in the last run; flaky tests = tests that passed and failed on the same commit in the period; median duration |
 | Coverage | line coverage from the newest coverage report the project produces (LCOV, Cobertura, JaCoCo), with the report's date |
-| Inspections | problems by severity on the main branch from IDECraft's own inspections, new since the period start |
+| Inspections | problems by severity on the main branch from Ferris IDEA's own inspections, new since the period start |
 | Dependency vulnerabilities | known advisories by severity for the versions in the project's lockfiles, matched against a local copy of an advisory database (OSV format, which RustSec, GitHub and others publish); the copy's date is shown and the copy is refreshed only on the user's request or schedule |
 
 **Agents (from session records of M19.10 and the work items).**
@@ -301,12 +305,12 @@ Unverified items (decision 3) are left out and counted separately.
 | Cost and budget | spend per period, per item and per agent from the usage the provider program reports; for subscriptions without a per-call price, tokens and the subscription name, never an invented amount |
 | Waiting approvals | approvals waiting now and their age |
 
-**Databases.** Connections in use and slow queries from IDECraft's own query history (threshold set
+**Databases.** Connections in use and slow queries from Ferris IDEA's own query history (threshold set
 per connection).
 
 ### 9. MCP tools and command line
 
-Every function above has an MCP tool (ADR-0008) and an `idecraft` command; the window uses the same
+Every function above has an MCP tool (ADR-0008) and an `ferris-idea` command; the window uses the same
 capabilities (ADR-0012). Names are provisional for the spec:
 
 - reading: `ticket_query` (filter, full text, paged), `ticket_get`, `ticket_history`, `board_list`,
@@ -328,19 +332,19 @@ and are paged.
   (REST, Cloud and Data Center), Linear (GraphQL). No scraping, no unofficial endpoints.
 - **Credentials** come from the vault of ADR-0033 as a handle, or from the system keychain until the
   vault exists; never from a project file. The connection asks for the narrowest token scope the
-  service offers (issues of the named repository or project), and IDECraft says which scope it
+  service offers (issues of the named repository or project), and Ferris IDEA says which scope it
   needs.
-- **Import first.** The first version imports and refreshes (tracker to IDECraft). Writing back is a
+- **Import first.** The first version imports and refreshes (tracker to Ferris IDEA). Writing back is a
   second, per-tracker opt-in. Every write to an external tracker is an outward action: for agents it
   needs the right `remote` plus `ticket-write` and a person's approval per call (ADR-0023 rule 7).
 - **Mapping** of fields and states is a per-connection table with defaults; the external id and number
   are stored as aliases of the item (decision 4). A conflict (both sides changed the same field since
   the last sync) keeps the newer value and records the other as a visible event.
-- **No webhooks:** IDECraft opens no port for a tracker (ADR-0025 decision 5). Refresh is on request or
+- **No webhooks:** Ferris IDEA opens no port for a tracker (ADR-0025 decision 5). Refresh is on request or
   on the user's schedule.
 - Imported text has the trust level "external" (decision 6). Items marked `visibility = "private"` are
   never written to an external tracker.
-- IDECraft is fully usable without any external tracker.
+- Ferris IDEA is fully usable without any external tracker.
 
 ## Consequences
 
@@ -388,7 +392,7 @@ and are paged.
 - **An external tracker as the source of truth.** Needs an account and the network, puts work items
   and agent findings on a third party's servers, and cannot carry the guarded transitions. Rejected;
   sync is optional.
-- **A merge driver of our own registered from the project.** Would run IDECraft code from a project
+- **A merge driver of our own registered from the project.** Would run Ferris IDEA code from a project
   configuration on every merge (ADR-0031). Git's built-in `union` driver plus field-wise resolution in
   the window does the job. Rejected.
 - **Board-specific states** (each board defines its own columns as states). WIP, cycle time and the
@@ -414,7 +418,7 @@ and are paged.
    hosting service when the project is opened.
 6. **Advisory database for dependency vulnerabilities.** Default: downloaded only when the user asks
    (and on a schedule the user sets), from the official OSV export, stored in the user's cache folder.
-   Alternative: bundled with each IDECraft release, refreshed on request.
+   Alternative: bundled with each Ferris IDEA release, refreshed on request.
 7. **A Git ref as a fourth store** for people who want items shared through Git but outside the code
    history. Default: not in format 1.
 8. **Write-back to external trackers.** Default: import and refresh only in the first version;

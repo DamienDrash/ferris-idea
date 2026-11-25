@@ -110,7 +110,7 @@ their licence file. On GitHub the README uses GitHub's own fonts — only images
 ## 8. Badges
 
 At most three static, factual badges, each answering a question a reader has in the first seconds:
-stage (`status: 1.0`), license (`license: PolyForm Shield 1.0.0`) and the verified desktop
+stage (`status: 1.0`), license (`license: Apache-2.0`) and the verified desktop
 platform (`desktop: macOS (Apple Silicon)`). Raised from two on 2026-11-14: the platform badge
 stops a reader on another system before they try to build. Colours from the tokens (`success`
 for the stage since 1.0, earlier `warning`; `border-default` for the others), style `flat-square`, static shields.io URLs

@@ -41,5 +41,5 @@ sha256sum -c --ignore-missing ferris-idea-<version>-linux-<arch>.sha256
 
 Ferris IDEA sends no telemetry and does not look for updates by itself.
 
-Licence: `share/doc/ferris-idea/copyright` (PolyForm Shield 1.0.0), with `NOTICE`,
+Licence: `share/doc/ferris-idea/copyright` (Apache License 2.0), with `NOTICE`,
 `THIRD-PARTY-NOTICES.md` and `LICENSES/` beside it.

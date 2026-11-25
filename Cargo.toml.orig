@@ -1,0 +1,82 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+exclude = ["fuzz", "vendor/gpui"]
+
+[workspace.package]
+version = "1.2.1"
+edition = "2024"
+rust-version = "1.89"
+license = "LicenseRef-PolyForm-Shield-1.0.0"
+repository = "https://github.com/DamienDrash/ferris-idea"
+publish = false
+
+[workspace.dependencies]
+ferris-idea-core = { path = "crates/core" }
+ferris-idea-editor = { path = "crates/editor" }
+ferris-idea-languages = { path = "crates/languages" }
+ferris-idea-ai = { path = "crates/ai" }
+ferris-idea-database = { path = "crates/database" }
+ferris-idea-nosql = { path = "crates/nosql" }
+ferris-idea-mcp = { path = "crates/mcp" }
+ferris-idea-ui = { path = "crates/ui" }
+ferris-idea-workbench = { path = "crates/workbench" }
+ferris-idea-debugger = { path = "crates/debugger" }
+ferris-idea-http = { path = "crates/http" }
+ferris-idea-containers = { path = "crates/containers" }
+ferris-idea-profiler = { path = "crates/profiler" }
+ferris-idea-remote = { path = "crates/remote" }
+ferris-idea-pairing = { path = "crates/pairing" }
+ferris-idea-web = { path = "crates/web" }
+ferris-idea-serve = { path = "crates/serve" }
+ferris-idea-session = { path = "crates/session" }
+ferris-idea-host = { path = "crates/host" }
+ferris-idea-terminal = { path = "crates/terminal" }
+ferris-idea-vcs = { path = "crates/vcs" }
+ferris-idea-plugins = { path = "crates/plugins" }
+ferris-idea-formats = { path = "crates/formats" }
+ferris-idea-uidriver = { path = "crates/uidriver" }
+ferris-idea-sandbox = { path = "crates/sandbox" }
+ferris-idea-vault = { path = "crates/vault" }
+ferris-idea-claude-link = { path = "crates/claude-link" }
+mysql_async = { version = "0.37", default-features = false, features = ["minimal-rust", "native-tls-tls"] }
+native-tls = "0.2"
+postgres-native-tls = "0.5"
+# On Linux `linux-native` is the kernel keyring: session only, read once to move old passwords into
+# the Secret Service (`SPEC-0008` v8 behaviour 18); new secrets go to the Secret Service through oo7.
+keyring = { version = "3.6", features = ["apple-native", "windows-native", "linux-native"] }
+# The Secret Service on Linux (`ADR-0025` §3, `SPEC-0321` behaviour 20, `SPEC-0008` v8): one
+# release and runtime feature for every crate, the same as GPUI's Linux build (async-io, not tokio:
+# oo7 refuses both at once), so the window links one copy.
+oo7 = { version = "0.5", default-features = false, features = ["async-std", "native_crypto"] }
+futures-lite = "2"
+ropey = "1.6"
+rusqlite = { version = "0.41", features = ["bundled"] }
+duckdb = { version = "1.20000", default-features = false, features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+tokio = "1"
+tokio-postgres = "0.7"
+tiberius = { version = "0.13", default-features = false, features = ["tds80", "native-tls", "chrono"] }
+tokio-util = { version = "0.7", features = ["compat"] }
+toml = "0.9"
+toml_edit = "0.25"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+
+# SHA-256 of a backend build is computed before every remote open (SPEC-0317 behaviour 4). Built
+# unoptimised, it took 29 s for a 605 MB debug build (`sha256sum`: 1.5 s), which made the remote
+# tests slow enough to time out under load; the digest is built optimised in every profile.
+[profile.dev.package.sha2]
+opt-level = 3
+
+# The UI toolkit with one addition: a pointer event delivered into a window in process, for the
+# window self-test on Linux without the X server (SPEC-0319 behaviour 20c, UISEC-9). What differs
+# from the published crate: vendor/gpui/FERRIS_IDEA.md.
+[patch.crates-io]
+gpui = { path = "vendor/gpui" }

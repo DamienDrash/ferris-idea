@@ -26,7 +26,7 @@ what is inside.
 |---|---|---|---|
 | 1 | Head block (centred) | symbol in a `<picture>` (72 px), H1, tagline, secondary line, ≤ 3 static badges that link to their sections, link row | link row only to things that exist |
 | 2 | Hero image | main window, dark and light in one `<picture>` | real screenshot only; a slot comment until it exists |
-| 3 | Intro | three sentences: the IDE, "what we call an IDE AI harness" with three verbs an agent performs, who wrote it and what it targets; short independence line below | "source-available"; the reference only as a target; the category is "our term" |
+| 3 | Intro | three sentences: the IDE, "what we call an IDE AI harness" with three verbs an agent performs, who wrote it and what it targets; short independence line below | "open source" (Apache-2.0); the reference only as a target; the category is "our term" |
 | 4 | Status callout | `> [!WARNING]`: stage, no downloads, verified platform, rows compared side by side, no security review | no percentage against the reference on the first screen |
 | 5 | Highlights | about eight bullets, each a capability and a status word | |
 | 6 | Use It, or Not Yet | who should try it, who should not yet | in the reader's terms |

@@ -14,7 +14,7 @@
 
 <p align="center">
   <a href="#development-status"><img alt="Status: 1.0" src="https://img.shields.io/badge/status-1.0-A3BE8C?style=flat-square"></a>
-  <a href="#license"><img alt="License: PolyForm Shield 1.0.0, source-available" src="https://img.shields.io/badge/license-PolyForm%20Shield%201.0.0-4C566A?style=flat-square"></a>
+  <a href="#license"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-4C566A?style=flat-square"></a>
   <a href="#platforms-and-requirements"><img alt="Desktop window verified on macOS, Apple Silicon" src="https://img.shields.io/badge/desktop-macOS%20(Apple%20Silicon)-4C566A?style=flat-square"></a>
 </p>
 
@@ -85,8 +85,7 @@ Each line carries a status word; the words are defined under [Features](#feature
 - you need an IDE for daily work;
 - you are on Windows, or on Linux and need the window;
 - you need a screen reader;
-- you need an audited security boundary between an agent and your machine;
-- you need an OSI-approved license.
+- you need an audited security boundary between an agent and your machine.
 
 ## What an Agent Can Do with It
 
@@ -1187,18 +1186,17 @@ you switch it on) and by tools Ferris IDEA starts for you in a trusted project.
 <details>
 <summary><b>What does it cost?</b></summary>
 
-Ferris IDEA has no price, no trial and no paid tier; the [license](#license) terms apply. A separate
-license for what the terms exclude can be agreed with the licensor. The agent you bring has its
-own costs.
+Ferris IDEA has no price, no trial and no paid tier; the [license](#license) terms apply. The agent
+you bring has its own costs.
 
 </details>
 
 <details>
 <summary><b>Is it open source?</b></summary>
 
-No. It is source-available: the source is public to read, build, use and change under the
-PolyForm Shield License, which does not allow using it to provide a competing product, paid or
-free.
+Yes. Since 2026-11-25 Ferris IDEA is under the Apache License 2.0, an OSI-approved open-source
+license: you may use, change and pass it on for any purpose, a competing product included. The
+name and logo are not covered ([TRADEMARKS.md](TRADEMARKS.md)).
 
 </details>
 
@@ -1224,7 +1222,7 @@ The project owner is **Damien Frigewski**, a private person. He decides scope, p
 anything that would weaken security, and he is the licensor. Agents propose, implement and review
 under [AGENTS.md](AGENTS.md).
 
-Contact for licence requests and for anything that is not a public issue: Damien Frigewski,
+Contact for anything that is not a public issue: Damien Frigewski,
 <dfrigewski@gmail.com>. Security reports: [SECURITY.md](SECURITY.md).
 
 Development happens in a private working repository. This repository, `DamienDrash/ferris-idea`,
@@ -1240,17 +1238,16 @@ privately as [SECURITY.md](SECURITY.md) describes.
 
 ## License
 
-Ferris IDEA is **source-available** under the [PolyForm Shield License 1.0.0](LICENSE.md). In short:
-you may read, build, use, change and pass it on for any purpose, at work included, except to
-provide a product that competes with Ferris IDEA or with another product the licensor provides using
-it. A product competes even when it is free of charge. Whoever gets a copy from you must get the
-license terms and the notice line with it. Anything the license does not allow needs the
-licensor's written consent. The licensor is Damien Frigewski; ask by e-mail to
-<dfrigewski@gmail.com> (details in [LICENSING.md](LICENSING.md)). It is not open-source software. This paragraph is a summary, not the terms: the license text decides, and
-[LICENSING.md](LICENSING.md) answers common questions.
+Ferris IDEA is open source under the [Apache License 2.0](LICENSE.md) (SPDX `Apache-2.0`). In short:
+you may use, build, change and pass it on for any purpose, commercial use included. Whoever gets a
+copy from you must get the license and the [NOTICE](NOTICE) file with it, and changed files must
+say that they were changed. The license includes a patent license from each contributor. The
+licensor is Damien Frigewski; contact: <dfrigewski@gmail.com> (details in
+[LICENSING.md](LICENSING.md)). This paragraph is a summary, not the terms: the license text
+decides. Versions published before 2026-11-25 were under the PolyForm Shield License 1.0.0.
 
-Ferris IDEA comes as is, without warranty, as far as the law allows (license, "No Liability"). Keep
-backups of what you open with it.
+Ferris IDEA comes as is, without warranty, as far as the law allows (license, sections 7 and 8).
+Keep backups of what you open with it.
 
 The name and logo are not covered by the license: [TRADEMARKS.md](TRADEMARKS.md) says how the
 project wants them used. "Ferris IDEA" is not a registered trademark. Third-party parts keep their own licenses: [NOTICE](NOTICE),

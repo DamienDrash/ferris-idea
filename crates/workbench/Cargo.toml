@@ -4,7 +4,7 @@ description = "Desktop views on GPUI (ADR-0003): the editor view first"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-license = "LicenseRef-PolyForm-Shield-1.0.0 AND OFL-1.1"
+license = "Apache-2.0 AND OFL-1.1"
 repository.workspace = true
 publish.workspace = true
 

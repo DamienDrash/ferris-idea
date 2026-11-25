@@ -4,7 +4,7 @@
 <component type="desktop-application">
   <id>dev.ferrisidea.FerrisIDEA</id>
   <metadata_license>CC0-1.0</metadata_license>
-  <project_license>LicenseRef-PolyForm-Shield-1.0.0</project_license>
+  <project_license>Apache-2.0</project_license>
   <name>Ferris IDEA</name>
   <summary>Experimental Rust-native IDE for code and databases</summary>
   <description>

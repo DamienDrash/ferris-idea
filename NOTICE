@@ -1,8 +1,8 @@
 Ferris IDEA
-Required Notice: Copyright 2026 Damien Frigewski (https://github.com/DamienDrash/ferris-idea)
+Copyright 2026 Damien Frigewski (https://github.com/DamienDrash/ferris-idea)
 
-Licensed under the PolyForm Shield License 1.0.0 (LICENSE.md,
-https://polyformproject.org/licenses/shield/1.0.0). The parts listed below are
+Licensed under the Apache License, Version 2.0 (LICENSE.md,
+https://www.apache.org/licenses/LICENSE-2.0). The parts listed below are
 under other licences and keep them. Plain-language notes: LICENSING.md.
 
 This product includes material from IntelliJ IDEA Community
@@ -58,7 +58,7 @@ Third-party Rust dependencies and native libraries, with their notices and
 licence texts: THIRD-PARTY-NOTICES.md.
 
 A third-party Rust crate kept in a folder under vendor/ with changes of
-Ferris IDEA is not covered by the PolyForm Shield License: it stays under its own
+Ferris IDEA is not covered by the project's licence: it stays under its own
 licence, whose text is in that folder with the crate's own notices. The
 FERRIS_IDEA.md in the folder names the published version it was taken from and
 every change; THIRD-PARTY-NOTICES.md marks the crate as kept in vendor/.

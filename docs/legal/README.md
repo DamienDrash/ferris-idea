@@ -12,13 +12,14 @@ This page summarises them. It is not legal advice.
   circumvention are excluded. → [RESEARCH_BOUNDARIES.md](RESEARCH_BOUNDARIES.md)
 - **Open-source platform code.** Much of the IntelliJ Platform is Apache-2.0 in
   `JetBrains/intellij-community`. It may be ported to Rust with attribution: SPDX header,
-  [PROVENANCE.md](PROVENANCE.md) entry, `AND Apache-2.0` in the crate licence, upstream
-  [NOTICE](../../NOTICE). The ported files and the copied assets stay under Apache-2.0.
+  [PROVENANCE.md](PROVENANCE.md) entry, upstream [NOTICE](../../NOTICE). The ported files and the
+  copied assets stay under Apache-2.0, the licence of the whole project since 2026-11-25.
   → [APACHE_PORTING.md](APACHE_PORTING.md)
-- **The project's own licence.** Ferris IDEA is source-available under the PolyForm Shield License
-  1.0.0 ([LICENSE.md](../../LICENSE.md)); the earlier choice `MIT OR Apache-2.0` is superseded and
-  was never used for a distribution. Plain-language notes: [LICENSING.md](../../LICENSING.md);
-  decision and open questions for a lawyer: [ADR-0032](../adr/0032-source-available-licence.md).
+- **The project's own licence.** Ferris IDEA is open source under the Apache License 2.0
+  ([LICENSE.md](../../LICENSE.md)) since 2026-11-25 ([ADR-0038](../adr/0038-open-source-licence-apache-2-0.md)).
+  It replaces the PolyForm Shield License 1.0.0 of 2026-11-14 ([ADR-0032](../adr/0032-source-available-licence.md),
+  superseded), which replaced the earlier choice `MIT OR Apache-2.0` (never used for a distribution).
+  Notes: [LICENSING.md](../../LICENSING.md).
 - **Proprietary features** (database tools, JavaScript/TypeScript, Spring and others) are
   rebuilt clean-room from observation, public facts and open standards only.
 - **Names and logos.** No JetBrains or ArtCraft logos, icons or product names in the product;

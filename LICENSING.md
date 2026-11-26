@@ -1,123 +1,65 @@
 # Licensing
 
-Ferris IDEA is **source-available**. Its own code and documentation are under the
-[PolyForm Shield License 1.0.0](LICENSE.md) (<https://polyformproject.org/licenses/shield/1.0.0>).
-[`LICENSE.md`](LICENSE.md) is the unmodified text of that licence, followed by the
-`Required Notice:` line the licence provides for. Third-party parts keep their own licences.
+Ferris IDEA is **open source**. Its own code and documentation are under the
+[Apache License, Version 2.0](LICENSE.md) (<https://www.apache.org/licenses/LICENSE-2.0>, SPDX
+identifier `Apache-2.0`), an OSI-approved licence. [`LICENSE.md`](LICENSE.md) is the unmodified
+text of that licence. Third-party parts keep their own licences.
 
 This page explains the terms in plain language. It is not legal advice and it changes nothing:
-where this page and `LICENSE.md` differ, `LICENSE.md` applies. Where a paraphrase could drift, the
-licence is quoted. Decision record: [ADR-0032](docs/adr/0032-source-available-licence.md).
+where this page and `LICENSE.md` differ, `LICENSE.md` applies. Decision record:
+[ADR-0038](docs/adr/0038-open-source-licence-apache-2-0.md).
 
-Ferris IDEA is not open-source software in the sense of the Open Source Definition, because the
-licence excludes one purpose: providing a product that competes with Ferris IDEA or with another
-product the licensor provides using it.
+The licensor is **Damien Frigewski**, a private person. The choice of this licence is his.
 
-The licensor is **Damien Frigewski**, a private person, who offers these terms. The choice of
-this licence is his. `LICENSE.md` is the unmodified text of the PolyForm Shield License 1.0.0;
-the only line added is the `Required Notice:` line that names him.
+## What you may do
 
-## The rule
-
-The whole limit is one sentence of the licence ("Noncompete"):
-
-> Any purpose is a permitted purpose, except for providing any product that competes with the
-> software or any product the licensor or any of its affiliates provides using the software.
-
-And the licence says what competing means ("Competition"):
-
-> Goods and services compete even when they provide functionality through different kinds of
-> interfaces or for different technical platforms. Applications can compete with services,
-> libraries with plugins, frameworks with development tools, and so on, even if they're written in
-> different programming languages or for different computer architectures. Goods and services
-> compete even when provided free of charge. If you market a product as a practical substitute for
-> the software or another product, it definitely competes.
-
-A product, in the licence's definition, "can be a good or service, or a combination of them".
-
-## What you may do without asking
-
-For every permitted purpose the licence lets you use the software, make "changes and new works
-based on the software" and "distribute copies of the software". So, as long as you are not
-providing a product that competes in the sense above:
-
-| You want to | Allowed? |
-|---|---|
-| Read the source and build it | Yes |
-| Use Ferris IDEA privately, for study, research or a hobby project | Yes |
-| Use Ferris IDEA at your job, as a freelancer or anywhere in a company, to write software, commercial software included | Yes, as long as that software is not a product that competes with Ferris IDEA or with another product the licensor provides using it (see "What needs the licensor's consent") |
-| Change it for your own use or your team's use | Yes |
-| Pass copies on to others, changed or unchanged | Yes, with the terms and the notice line (next paragraph); see below for where passing on a copy ends and providing a competing product begins |
+The licence lets you, for any purpose, commercial use included, "reproduce, prepare Derivative
+Works of, publicly display, publicly perform, sublicense, and distribute the Work and such
+Derivative Works" (section 2). You may use Ferris IDEA privately or at work, change it, build
+products on it, and pass on copies, changed or unchanged, for free or for a fee.
 
 The licence makes no claim on the code, databases and documents you work on with Ferris IDEA.
 
-**Notice duty.** In the licence's words: "You must ensure that anyone who gets a copy of any part
-of the software from you also gets a copy of these terms or the URL for them above, as well as
-copies of any plain-text lines beginning with `Required Notice:` that the licensor provided with
-the software." Those lines are in [`LICENSE.md`](LICENSE.md) and [`NOTICE`](NOTICE).
+## What you must do when you pass it on
 
-The licence does "not allow you to sublicense or transfer any of your licenses to anyone else".
-Whoever gets a copy from you needs their own licence under the same terms.
+Section 4 of the licence, in short:
 
-The licence also contains a patent licence from the licensor. It ends if you make "any written
-claim that the software infringes or contributes to infringement of any patent".
+- give everyone who gets a copy from you a copy of the licence;
+- make changed files carry a prominent notice that you changed them;
+- keep the copyright, patent, trademark and attribution notices of the source form;
+- pass on the [`NOTICE`](NOTICE) file's attribution notices with your copy (in a `NOTICE` file,
+  the documentation, or a display of the program).
 
-## What needs the licensor's consent
+You may add your own copyright statement and other terms for your changes, as long as your use of
+the work as a whole keeps to the licence.
 
-Providing a product that competes with Ferris IDEA, or with another product the licensor or any of
-its affiliates provides using Ferris IDEA. Payment is not the test: a product competes "even when
-provided free of charge".
+## Patents
 
-How the project reads the terms. This is the licensor's own reading, not legal advice; the
-licence text decides:
+Each contributor grants a patent licence for its contributions (section 3). It ends for you if
+you start patent litigation claiming that the work infringes a patent.
 
-- Offering Ferris IDEA, or a renamed or modified build of it, to others as a development environment
-  or code editor of your own is providing a product that competes — whether you charge for it,
-  bundle it or give it away.
-- Offering a hosted or cloud development environment built on Ferris IDEA is providing a product that
-  competes.
-- Using Ferris IDEA's code in another development tool (a plugin, a database client, an editor
-  component) can be providing a product that competes: "libraries with plugins, frameworks with
-  development tools". Ask first.
-- Using Ferris IDEA as your tool to build a product that itself competes with Ferris IDEA is use for
-  the excluded purpose.
-- Using Ferris IDEA inside your company to build products that do not compete with Ferris IDEA, or with
-  another product the licensor provides using it, is a permitted purpose, whatever those products
-  earn.
-- Passing on a copy and providing a product: the licence's sentence on distribution ("The licensor
-  grants you an additional copyright license to distribute copies of the software") names no
-  purpose of its own; the limit is the excluded purpose. The project reads that as follows: giving
-  a copy to a colleague, mirroring the repository or packaging Ferris IDEA under its own name with
-  the terms and the notice line is passing on copies; presenting a copy or a build to others as
-  your own product, or as a substitute for Ferris IDEA, is providing a product that competes. Where
-  your case lies between the two, ask.
+## Name and logo
 
-Two special cases are in the licence itself ("New Products", "Discontinued Products"); read them
-there if your product comes close to Ferris IDEA's scope.
+The licence does not grant permission to use the licensor's trade names, trademarks, service marks
+or product names (section 6). The name Ferris IDEA, its logo and app icon are covered by
+[`TRADEMARKS.md`](TRADEMARKS.md), not by the licence: a changed version you pass on needs its own
+name and icon.
 
-On violations the licence says: "The first time you are notified in writing that you have violated
-any of these terms, or done anything with the software not covered by your licenses, your licenses
-can nonetheless continue if you come into full compliance with these terms, and take practical
-steps to correct past violations, within 32 days of receiving notice. Otherwise, all your licenses
-end immediately."
+## Earlier versions
 
-## Asking the licensor for another licence
+Versions published from 2026-11-14 until 2026-11-25 were under the PolyForm Shield License 1.0.0
+([ADR-0032](docs/adr/0032-source-available-licence.md), superseded). A copy you got under those
+terms keeps them; every version from 2026-11-25 on is under the Apache License 2.0.
 
-Anything these terms do not allow can be agreed separately with the licensor, for example a
-licence to provide a product built on Ferris IDEA. The licence leaves that open: its terms do not
-"prevent the licensor from granting licenses to anyone else".
+## Contact
 
 Licensor: Damien Frigewski
 
 Contact: by e-mail to Damien Frigewski, <dfrigewski@gmail.com>
 
-Say who you are, what you want to provide and which parts of Ferris IDEA it uses. Consent counts only
-when the licensor gives it in writing.
-
 ## Third-party parts
 
-The licensor can set terms only for the licensor's own work. These parts keep their own licences,
-and you may use them under those licences:
+These parts keep their own licences, and you may use them under those licences:
 
 - Keymaps, themes, colour schemes and icons from `JetBrains/intellij-community`: Apache License
   2.0. Files and sources: [`docs/legal/PROVENANCE.md`](docs/legal/PROVENANCE.md).
@@ -137,24 +79,21 @@ and you may use them under those licences:
 
 Licence texts: [`LICENSES/`](LICENSES/README.md). Upstream notices: [`NOTICE`](NOTICE).
 
-## Name and logo
+## Contributions
 
-The licence grants no rights in the name Ferris IDEA or its logo. See
-[`TRADEMARKS.md`](TRADEMARKS.md).
+Contributions are accepted under the
+[Ferris IDEA Contributor License Agreement](docs/legal/CLA.md); see
+[`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## AI-assisted development
 
 Large parts of Ferris IDEA were written with AI coding agents working under the project owner's
-direction. How far copyright protects such output is not settled and
-differs between countries. Where a part should turn out not to be protected by copyright, a
-copyright licence cannot restrict that part. The project offers the work as a whole under the
-terms above and makes no statement about individual files.
+direction. How far copyright protects such output is not settled and differs between countries.
+The project offers the work as a whole under the terms above and makes no statement about
+individual files.
 
 ## No warranty
 
-In the licence's words: "As far as the law allows, the software comes as is, without any warranty
-or condition, and the licensor will not be liable to you for any damages arising out of these terms
-or the use or nature of the software, under any kind of legal claim." Mandatory law that cannot be
-excluded stays in force.
+The licence provides the work "AS IS", without warranties or conditions of any kind (section 7), and limits liability (section 8). Mandatory law that cannot be excluded stays in force.
 
-Ferris IDEA is alpha software. Keep backups of the projects and databases you open with it.
+Keep backups of the projects and databases you open with Ferris IDEA.

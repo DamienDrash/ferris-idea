@@ -4,7 +4,7 @@
 name = "ferris-idea-fuzz-targets"
 version = "0.0.0"
 edition = "2024"
-license = "LicenseRef-PolyForm-Shield-1.0.0"
+license = "Apache-2.0"
 publish = false
 
 [package.metadata]

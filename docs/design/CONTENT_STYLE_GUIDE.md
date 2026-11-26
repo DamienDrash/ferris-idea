@@ -31,9 +31,9 @@ Bad: "The world's fastest IDE." / "A perfect IntelliJ replacement."
 - Numbers carry their kind: *measured* (with method link) or *estimated*.
 - Comparisons to the reference products describe targets, never achievements.
 - A number names the commit or date it was taken at, in the sentence or in the caption below it.
-- License wording: Ferris IDEA is **source-available**. Never "open source", "free software",
-  "FOSS" or "OSI-approved"; "free" never stands alone. A summary of the license says that it is
-  a summary and that the license text decides.
+- License wording: Ferris IDEA is **open source** under the Apache License 2.0 (since 2026-11-25,
+  ADR-0038). Never "source-available" for the current version; "free" never stands alone. A
+  summary of the license says that it is a summary and that the license text decides.
 - Agent and security wording names the mechanism and its limit, not an adjective: "rights per
   workspace", "loopback only, token per start", "no sandbox for started programs". The allowed
   and banned phrases are in BRAND_GUIDELINES §3.

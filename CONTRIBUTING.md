@@ -81,18 +81,18 @@ merges, the window self-test and its groups) is described in
 
 ## Licensing of contributions
 
-Ferris IDEA is source-available under the PolyForm Shield License 1.0.0; the terms and the answers to
-common questions are in [LICENSING.md](LICENSING.md). It is not open-source software.
+Ferris IDEA is open source under the [Apache License 2.0](LICENSE.md); notes on the terms are in
+[LICENSING.md](LICENSING.md).
 
 Contributions are accepted only under the
-[Ferris IDEA Contributor License Agreement](docs/legal/CLA.md) (CLA), version 1.1. You keep the
+[Ferris IDEA Contributor License Agreement](docs/legal/CLA.md) (CLA), version 1.2. You keep the
 copyright in your work. The CLA gives the licensor a license to ship it under any terms, now and
 later, plus a patent license. You confirm that the work is yours to give, or that its source and
 license are named.
 
 To accept it, put this sentence in the description of your first pull request:
 
-> I have read the Ferris IDEA Contributor License Agreement, version 1.1, and I accept it for all my
+> I have read the Ferris IDEA Contributor License Agreement, version 1.2, and I accept it for all my
 > contributions. — @your-login
 
 The project records the acceptance in [docs/legal/CLA_SIGNATURES.md](docs/legal/CLA_SIGNATURES.md)

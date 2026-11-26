@@ -4,7 +4,7 @@ Bundle-Name: Ferris IDEA private listener for java-debug
 Bundle-SymbolicName: dev.ferrisidea.javadebug.private;singleton:=true
 Bundle-Version: 1.0.0
 Bundle-Vendor: Ferris IDEA
-Bundle-License: LicenseRef-PolyForm-Shield-1.0.0
+Bundle-License: Apache-2.0
 Bundle-RequiredExecutionEnvironment: JavaSE-17
 Bundle-ActivationPolicy: lazy
 Import-Package: org.osgi.framework,org.osgi.framework.wiring

@@ -139,7 +139,7 @@ Erlaubt, weil Nutzung im Rahmen der Lizenz (§ 69d Abs. 3 UrhG):
 |---|---|---|---|
 | GO-1 | Beginn Phase A mit Ultimate-Funktionen | Projektinhaber | **erteilt 2026-10-30** nach anwaltlicher Beratung |
 | GO-2 | Herunterladen/Installieren (= Vertragsschluss) und Start der Testphase mit eigenem Konto | Projektinhaber | **erteilt 2026-10-30**; Anmeldung selbst durch den Projektinhaber |
-| GO-3 | Lizenz des Projekts | Projektinhaber | **erteilt 2026-10-30**, am 2026-11-14 ersetzt durch PolyForm Shield 1.0.0 ([ADR-0032](../adr/0032-source-available-licence.md)); Veröffentlichung braucht eine eigene Freigabe (GO-4) |
+| GO-3 | Lizenz des Projekts | Projektinhaber | **erteilt 2026-10-30**, am 2026-11-14 ersetzt durch PolyForm Shield 1.0.0 ([ADR-0032](../adr/0032-source-available-licence.md)), am 2026-11-25 durch Apache-2.0 ([ADR-0038](../adr/0038-open-source-licence-apache-2-0.md), Entscheidung des Projektinhabers); Veröffentlichung braucht eine eigene Freigabe (GO-4) |
 | GO-4 | Veröffentlichung des Repositorys | Projektinhaber | offen |
 
 Der Stand der Freigaben steht ausschließlich in der Statusdatei.

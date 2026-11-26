@@ -1,6 +1,7 @@
 # Name and logo
 
-**Status:** statement of intent of the licensor, Damien Frigewski, 2026-11-14. "Ferris IDEA" is not
+**Status:** statement of intent of the licensor, Damien Frigewski, 2026-11-14; unchanged by the move
+to the Apache License 2.0 on 2026-11-25 ([ADR-0038](docs/adr/0038-open-source-licence-apache-2-0.md)). "Ferris IDEA" is not
 a registered trademark, and no trademark search was made. This page says how the project wants its
 name and logo to be used; it claims no rights beyond those the law gives without registration.
 
@@ -13,8 +14,9 @@ applies to them.
 
 The name **Ferris IDEA**, the symbol, the wordmark, the horizontal logo, the app icon, the avatar and
 the social preview (`docs/design/assets/`, `packaging/icons/`) identify this project. They are not
-covered by the licence in [`LICENSE.md`](LICENSE.md): all rights in them are reserved. The PolyForm
-Shield License contains no trademark terms, so this page states the rules.
+covered by the licence in [`LICENSE.md`](LICENSE.md): all rights in them are reserved. The Apache
+License 2.0 does not grant permission to use the licensor's trade names, trademarks, service marks or
+product names (section 6), so this page states the rules.
 
 You may, without asking:
 

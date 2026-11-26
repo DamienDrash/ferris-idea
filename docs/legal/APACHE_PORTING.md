@@ -29,10 +29,11 @@ Referenz-Commit für alle Übernahmen, bis er bewusst angehoben wird:
 
    Assets (SVG, JSON, XML) behalten ihren Inhalt; die Herkunft steht in
    `PROVENANCE.md` und im Ordner-`README.md` des Ziels.
-3. **Crate-Lizenz:** Ein Crate mit übertragenem Code oder unverändert
-   übernommenen Assets trägt in `Cargo.toml`
-   `license = "LicenseRef-PolyForm-Shield-1.0.0 AND Apache-2.0"` statt
-   `license.workspace = true` (ADR-0032, 2026-11-14; vorher: nur `Apache-2.0`).
+3. **Crate-Lizenz:** Seit 2026-11-25 steht das ganze Projekt unter
+   Apache-2.0 (ADR-0038); ein Crate mit übertragenem Code oder unverändert
+   übernommenen Assets trägt `license = "Apache-2.0"` (oder
+   `license.workspace = true`). Vorher (ADR-0032, 2026-11-14):
+   `LicenseRef-PolyForm-Shield-1.0.0 AND Apache-2.0`.
    Die übertragenen Dateien und die Assets selbst bleiben unter Apache-2.0;
    der Lizenztext liegt in `LICENSES/Apache-2.0.txt`.
 4. **NOTICE:** Der NOTICE-Text von `intellij-community` steht in unserer
@@ -40,7 +41,7 @@ Referenz-Commit für alle Übernahmen, bis er bewusst angehoben wird:
 5. **Logik-Vorlage ohne Code:** Wurde nur die Arbeitsweise eines Moduls
    übernommen (eigener Code), reicht der Eintrag in `PROVENANCE.md` mit Art
    „Logik-Vorlage“; das Crate bleibt unter der Lizenz des Projekts
-   (PolyForm Shield 1.0.0, ADR-0032).
+   (Apache-2.0, ADR-0038).
 
 ## Was weiterhin clean room bleibt
 

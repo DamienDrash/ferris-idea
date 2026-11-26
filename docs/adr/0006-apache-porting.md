@@ -1,6 +1,6 @@
 # ADR-0006: Use of IntelliJ Platform sources under Apache-2.0
 
-- **Status:** accepted · 2026-10-30 (after the project owner's legal consultation) · amended by [ADR-0032](0032-source-available-licence.md) on 2026-11-14: a crate with ported code is `LicenseRef-PolyForm-Shield-1.0.0 AND Apache-2.0`, not `Apache-2.0` only; the ported files stay under Apache-2.0
+- **Status:** accepted · 2026-10-30 (after the project owner's legal consultation) · amended by [ADR-0032](0032-source-available-licence.md) on 2026-11-14: a crate with ported code is `LicenseRef-PolyForm-Shield-1.0.0 AND Apache-2.0`, not `Apache-2.0` only; the ported files stay under Apache-2.0 · since [ADR-0038](0038-open-source-licence-apache-2-0.md) (2026-11-25) the whole project is Apache-2.0, so such a crate is `Apache-2.0` again
 - **Context:** Large parts of the reference platform are open source in
   `JetBrains/intellij-community` under Apache-2.0: platform, Java, Kotlin,
   Python Community, Git, terminal, the data `grid`, the MCP server plugin,

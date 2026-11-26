@@ -1,6 +1,6 @@
 # ADR-0032: Source-available licence: PolyForm Shield 1.0.0
 
-- **Status:** accepted · **Version:** 2 · **Date:** 2026-11-14 (v2 the same day, after the fact
+- **Status:** superseded by [ADR-0038](0038-open-source-licence-apache-2-0.md) on 2026-11-25 (Apache-2.0) · was accepted · **Version:** 2 · **Date:** 2026-11-14 (v2 the same day, after the fact
   and legal review: licensor placeholder, payment and redistribution as an open decision, age of
   the legal analysis) · decided by the Project Owner on
   2026-11-14 · supersedes [ADR-0002](0002-license.md) · amends [ADR-0006](0006-apache-porting.md)

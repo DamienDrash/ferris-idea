@@ -24,8 +24,8 @@ templates, GitHub metadata, website.
 4. No JetBrains or ArtCraft logos, icons, artwork, screenshots or copied text; name those
    products only descriptively. Keep the independence notice in the README.
 5. At most three static factual badges (stage, license, verified platform; DESIGN_SYSTEM §8). No
-   fake CI, coverage, download or release links. Ferris IDEA is source-available: never write
-   "open source".
+   fake CI, coverage, download or release links. Ferris IDEA is open source under Apache-2.0
+   (ADR-0038); say so plainly, never "source-available".
 6. Two design domains: these rules do not apply to the desktop application UI, which follows
    `docs/design/APPLICATION_UI.md`, ADR-0009 and ADR-0018. Exception (ADR-0018, 2026-11-04): the
    application's colour palette (`Ferris IDEA Dark`/`Ferris IDEA Light`) and its app icon come from the

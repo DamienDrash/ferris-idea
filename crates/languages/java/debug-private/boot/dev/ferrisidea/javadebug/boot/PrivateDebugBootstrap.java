@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+// SPDX-License-Identifier: Apache-2.0
 package dev.ferrisidea.javadebug.boot;
 
 import java.io.IOException;

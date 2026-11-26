@@ -1,6 +1,6 @@
 # Licences of third-party parts
 
-Ferris IDEA's own code and documentation are under the PolyForm Shield License 1.0.0, see
+Ferris IDEA's own code and documentation are under the Apache License 2.0, see
 [`../LICENSE.md`](../LICENSE.md). The texts in this folder are **not** licences of the project as a
 whole. They belong to third-party material that is kept in this repository and keeps its own
 licence.

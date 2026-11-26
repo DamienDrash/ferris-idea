@@ -1,12 +1,16 @@
 # Ferris IDEA Contributor License Agreement
 
-**Version 1.1 · 2026-11-23**
+**Version 1.2 · 2026-11-25**
 
-Version 1.1 only renames the project: IDECraft is now called Ferris IDEA. The terms are the same as in
-version 1.0 of 2026-11-16, and "Ferris IDEA" includes the project under its former name IDECraft.
+Version 1.2 follows the move of Ferris IDEA to the Apache License 2.0 on 2026-11-25
+([ADR-0038](../adr/0038-open-source-licence-apache-2-0.md)): the licensor is now named in
+[NOTICE](../../NOTICE) and [LICENSING.md](../../LICENSING.md), because the Apache licence text names
+none. The grants are the same as in version 1.1 of 2026-11-23 (which renamed the project from
+IDECraft) and version 1.0 of 2026-11-16; an acceptance of an earlier version stays valid for the
+contributions it covers.
 
-This agreement is between you and the licensor of Ferris IDEA named in [LICENSE.md](../../LICENSE.md)
-("the licensor"). It applies to every contribution you submit to Ferris IDEA from the day you accept
+This agreement is between you and the licensor of Ferris IDEA named in [NOTICE](../../NOTICE) and
+[LICENSING.md](../../LICENSING.md) ("the licensor"). It applies to every contribution you submit to Ferris IDEA from the day you accept
 it. Read it before you open a pull request whose content you want merged.
 
 You keep the copyright in your contribution. This agreement gives the licensor the rights it needs
@@ -79,7 +83,7 @@ the pull request.
 
 Put this sentence in the description of your first pull request, with your GitHub login:
 
-> I have read the Ferris IDEA Contributor License Agreement, version 1.1, and I accept it for all my
+> I have read the Ferris IDEA Contributor License Agreement, version 1.2, and I accept it for all my
 > contributions. — @your-login
 
 Your acceptance covers your later contributions too, until a new version of this agreement is

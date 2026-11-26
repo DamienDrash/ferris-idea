@@ -19,8 +19,7 @@ allow = [
 confidence-threshold = 0.9
 
 # The allow list above is for dependencies. The workspace's own crates are under the project's
-# licence, PolyForm Shield 1.0.0 (LICENSE.md, ADR-0032), which is deliberately not in that list: a
-# dependency under it would still be rejected. They are skipped here because they are not
+# licence, Apache-2.0 (LICENSE.md, ADR-0038). They are skipped here because they are not
 # published (`publish = false` in every manifest).
 [licenses.private]
 ignore = true
